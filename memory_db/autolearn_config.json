@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "allow_web_search": true,
+  "allow_knowledge_write": true,
+  "allow_feedback_relearn": true,
+  "allow_skill_generation": false,
+  "mode": "shadow",
+  "min_query_length": 4,
+  "search_timeout_sec": 5,
+  "max_results": 5,
+  "max_summary_length": 360
+}

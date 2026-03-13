@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Nova</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;user-select:text}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#1a1a2a}
+::-webkit-scrollbar-thumb{background:#3a3a5a;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#4a4a6a}
+/* 亮色主题 */
+body.light{background:#f5f5f5;color:#1a1a1a}
+body.light .sidebar{background:#fff;box-shadow:2px 0 10px rgba(0,0,0,0.1)}
+body.light .menu{color:#333}
+body.light .menu:hover{background:#eee}
+body.light .menu.active{background:#e0e7ff;color:#4f46e5}
+body.light .chat{background:#fff}
+body.light .bubble{background:#e5e7eb;color:#1a1a1a}
+body.light .msg.user .bubble{background:#4f46e5;color:#fff}
+body.light .input{background:#fff;border-top:1px solid #e5e7eb}
+body.light .input textarea{background:#f9fafb;color:#1a1a1a;border:1px solid #d1d5db}
+body.light::-webkit-scrollbar-track{background:#f1f1f1}
+body.light::-webkit-scrollbar-thumb{background:#ccc}
+body.light::-webkit-scrollbar-thumb:hover{background:#aaa}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0f0f1a;color:#e2e8f0;height:100vh;overflow:hidden;display:flex}
+.sidebar{width:240px;background:#1a1a2a;display:flex;flex-direction:column;padding:20px 0;border-right:1px solid #2a2a3a}
+.logo{font-size:24px;font-weight:700;color:#8b5cf6;padding:0 20px 20px;display:flex;align-items:center;gap:10px}
+.logo:before{content:'✨'}
+.menu{display:flex;align-items:center;gap:12px;padding:12px 20px;color:#94a3b8;cursor:pointer;transition:all 0.2s;font-size:15px;border-left:3px solid transparent}
+.menu:hover{background:rgba(139,92,246,0.1);color:#c4b5fd}
+.menu.active{background:rgba(139,92,246,0.2);color:#8b5cf6;border-left-color:#8b5cf6}
+.menu:before{font-size:18px}
+#m1:before{content:'💬'}
+#m2:before{content:'⚡'}
+#m3:before{content:'📊'}
+#m4:before{content:'⚙️'}
+.main{flex:1;display:flex;flex-direction:column}
+.header{height:60px;background:rgba(26,26,42,0.8);backdrop-filter:blur(10px);border-bottom:1px solid #2a2a3a;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.header-title{font-size:18px;font-weight:600}
+.header-actions{display:flex;gap:12px;align-items:center}
+.header-btn{padding:8px 16px;background:rgba(139,92,246,0.2);color:#8b5cf6;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.2s}
+.header-btn:hover{background:rgba(139,92,246,0.3)}
+.content{flex:1;overflow:hidden;position:relative}
+.chat{height:100%;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+.msg{display:flex;flex-direction:column;max-width:80%}
+.msg.user{align-self:flex-end}
+.msg.user .bubble{background:#8b5cf6;color:#fff;border-radius:18px 18px 4px 18px}
+.msg .meta{font-size:12px;color:#94a3b8;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.msg .bubble{padding:12px 16px;background:rgba(42,58,90,0.5);border-radius:18px 18px 18px 4px;line-height:1.5;word-break:break-word}
+.thinking{display:inline-flex;gap:4px;margin-left:8px}
+.thinking span{width:4px;height:4px;background:#94a3b8;border-radius:50%;animation:pulse 1.4s infinite}
+.thinking span:nth-child(2){animation-delay:0.2s}
+.thinking span:nth-child(3){animation-delay:0.4s}
+@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+.input{background:rgba(26,26,42,0.8);backdrop-filter:blur(10px);border-top:1px solid #2a2a3a;padding:20px 24px}
+.input textarea{width:100%;background:rgba(42,58,90,0.3);border:none;border-radius:12px;padding:14px 16px;color:#e2e8f0;font-size:15px;resize:none;min-height:56px;max-height:120px;font-family:inherit}
+.input textarea:focus{outline:none;background:rgba(42,58,90,0.5)}
+.input textarea::placeholder{color:#64748b}
+</style>
+</head>
+<body class="dark">
+<div class="sidebar">
+ <div class="logo">NovaCore</div>
+ <div class="menu active" id="m1" onclick="show(1)">对话</div>
+ <div class="menu" id="m2" onclick="show(2)">技能矩阵</div>
+ <div class="menu" id="m3" onclick="show(3)">数据看板</div>
+ <div class="menu" id="m4" onclick="show(4)">设置</div>
+ <div style="margin-top:auto;padding:20px;font-size:12px;color:#64748b;text-align:center">
+  <div>端口: 8090</div>
+  <div>模型: MiniMax-M2.5</div>
+  <div>状态: <span id="statusText">运行中</span></div>
+ </div>
+</div>
+<div class="main">
+ <div class="header">
+  <div class="header-title" id="pageTitle">与 Nova 对话</div>
+  <div class="header-actions">
+   <button class="header-btn" onclick="toggleTheme()" id="headerThemeBtn">🌙</button>
+   <button class="header-btn" onclick="location.reload()">🔄 刷新</button>
+  </div>
+ </div>
+ <div class="content">
+  <div class="chat" id="chat"></div>
+ </div>
+ <div class="input">
+  <textarea id="inp" placeholder="输入消息... (Enter发送，Shift+Enter换行)" onkeydown="if(event.keyCode==13&&!event.shiftKey){event.preventDefault();send();}"></textarea>
+ </div>
+</div>
+<script>
+var chatHistory='';
+function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+function show(n){
+ for(var i=1;i<=4;i++)document.getElementById('m'+i).classList.remove('active');
+ document.getElementById('m'+n).classList.add('active');
+ if(n==1){chat.innerHTML=chatHistory;chat.scrollTop=chat.scrollHeight;}
+ if(n==2){
+  chat.innerHTML='<div style="padding:20px;"><h2 class="page-title">⚡ 技能矩阵</h2><div id="skillsList" style="margin-top:15px;">加载中...</div></div>';
+  fetch('/skills').then(r=>r.json()).then(function(d){
+   var isLight=document.body.classList.contains('light');
+   var titleColor=isLight?'#1a1a1a':'#e2e8f0';
+   chat.querySelector('h2').style.color=titleColor;
+   var cardBg=isLight?'#f9fafb':'rgba(30,30,40,0.8)';
+   var textColor=isLight?'#1a1a1a':'#e2e8f0';
+   var subColor=isLight?'#6b7280':'#94a3b8';
+   var headerBg=isLight?'#f3f4f6':'#1e293b';
+   // 四大技能分类
+   var categories = {
+     '信息查询': [],
+     '内容创作': [],
+     '生活娱乐': [],
+     '个人助手': []
+   };
+   if(d.skills){
+    d.skills.forEach(function(s){
+     var name = s.name || '';
+     var cat = '个人助手';
+     if(name.includes('天气') || name.includes('气温') || name.includes('温度') || name.includes('股票') || name.includes('股价') || name.includes('大盘') || name.includes('查询')) cat = '信息查询';
+     else if(name.includes('画图') || name.includes('海报') || name.includes('图片') || name.includes('生成图片') || name.includes('AI画')) cat = '内容创作';
+     else if(name.includes('故事') || name.includes('讲故事') || name.includes('创作') || name.includes('写作') || name.includes('文案')) cat = '内容创作';
+     else if(name.includes('视频') || name.includes('短视频')) cat = '生活娱乐';
+     if(!categories[cat]) categories[cat] = [];
+     categories[cat].push(s);
+    });
+   }
+   var html='<div style="display:flex;flex-direction:column;gap:6px;">';
+   Object.keys(categories).forEach(function(catName){
+    var skills=categories[catName];
+    if(skills.length>0){
+     html+='<div style="background:'+headerBg+';padding:12px 16px;border-radius:8px 8px 0 0;font-weight:500;color:'+textColor+';">'+catName+' ('+skills.length+')</div>';
+     html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:16px;background:'+cardBg+';border-radius:0 0 8px 8px;">';
+     skills.forEach(function(s){
+      var statusBg=s.status==='ready'?'#22c55e':s.status==='configuring'?'#f59e0b':'#ef4444';
+      var statusText=s.status==='ready'?'在线':s.status==='configuring'?'配置中':'离线';
+      var status='<span style="color:#fff;background:'+statusBg+';padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;">'+statusText+'</span>';
+      html+='<div style="padding:16px;background:'+(isLight?'#fff':'rgba(40,40,60,0.5)')+';border-radius:8px;border:1px solid '+(isLight?'#e5e7eb':'#2a2a3a')+';">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-weight:500;color:'+textColor+';">'+(s.name||'-')+'</span>'+status+'</div>';
+      html+='<div style="font-size:13px;color:'+subColor+';margin-bottom:8px;">'+(s.description||'-')+'</div>';
+      if(s.keywords&&s.keywords.length>0){
+       html+='<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+       s.keywords.forEach(function(kw){
+        html+='<span style="font-size:11px;color:'+(isLight?'#6b7280':'#94a3b8')+';background:'+(isLight?'#f3f4f6':'rgba(60,60,80,0.5)')+';padding:2px 6px;border-radius:4px;">'+kw+'</span>';
+       });
+       html+='</div>';
+      }
+      html+='</div>';
+     });
+     html+='</div>';
+    }
+   });
+   html+='</div>';
+   document.getElementById('skillsList').innerHTML=html;
+  });
+ }
+ if(n==3){
+  chat.innerHTML='<div style="padding:20px;"><h2 class="page-title">📊 数据看板</h2><div id="statsBox" style="margin-top:15px;">加载中...</div><div style="margin-top:30px;"><h3 style="margin-bottom:12px;color:'+(document.body.classList.contains('light')?'#1a1a1a':'#e2e8f0')+';">📈 记忆时间线</h3><div id="memoryTimeline" style="background:'+(document.body.classList.contains('light')?'#f9fafb':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:8px;">加载中...</div></div></div>';
+  fetch('/stats').then(r=>r.json()).then(function(d){
+   var isLight=document.body.classList.contains('light');
+   var titleColor=isLight?'#1a1a1a':'#e2e8f0';
+   var numColor=isLight?'#1a1a1a':'#fff';
+   var labelColor=isLight?'#666':'#888';
+   var html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">';
+   html+='<div style="background:'+(isLight?'#f3f4f6':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:12px;text-align:center;">';
+   html+='<div style="font-size:12px;color:'+labelColor+';">输入</div><div style="font-size:20px;font-weight:600;color:'+numColor+';">'+(d.stats?d.stats.input_tokens.toLocaleString():'-')+'</div></div>';
+   html+='<div style="background:'+(isLight?'#f3f4f6':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:12px;text-align:center;">';
+   html+='<div style="font-size:12px;color:'+labelColor+';">输出</div><div style="font-size:20px;font-weight:600;color:'+numColor+';">'+(d.stats?d.stats.output_tokens.toLocaleString():'-')+'</div></div>';
+   html+='<div style="background:'+(isLight?'#f3f4f6':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:12.txt;text-align:center;">';
+   html+='<div style="font-size:12px;color:'+labelColor+';">缓存命中</div><div style="font-size:20px;font-weight:600;color:'+numColor+';">'+(d.stats?d.stats.cache_hit+'%':'-')+'</div></div></div>';
+   html+='<div style="display:flex;gap:12px;margin-bottom:20px;">';
+   html+='<div style="flex:1;background:'+(isLight?'#f3f4f6':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:12px;text-align:center;">';
+   html+='<div style="font-size:12px;color:'+labelColor+';">当前模型</div><div style="font-size:18px;font-weight:600;color:'+numColor+';">'+(d.stats?d.stats.model:'-')+'</div></div>';
+   html+='<div style="flex:1;background:'+(isLight?'#f3f4f6':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:12px;text-align:center;">';
+   html+='<div style="font-size:12px;color:'+labelColor+';">API请求</div><div style="font-size:14px;font-weight:600;color:'+numColor+';">'+(d.stats?d.stats.total_requests:'-')+'</div></div></div>';
+   html+='<div style="display:flex;gap:12px;">';
+   html+='<div style="flex:1;background:'+(isLight?'#f3f4f6':'rgba(30,30,40,0.8)')+';padding:16px;border-radius:12px;text-align:center;">';
+   html+='<div style="font-size:12px;color

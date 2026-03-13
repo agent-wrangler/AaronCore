@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Nova</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;user-select:text}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#1a1a2a}
+::-webkit-scrollbar-thumb{background:#3a3a5a;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#4a4a6a}
+/* 亮色主题 */
+body.light{background:#f5f5f5;color:#1a1a1a}
+body.light .sidebar{background:#fff;box-shadow:2px 0 10px rgba(0,0,0,0.1)}
+body.light .menu{color:#333}
+body.light .menu:hover{background:#eee}
+body.light .menu.active{background:#e0e7ff;color:#4f46e5}
+body.light .chat{background:#fff}
+body.light .bubble{background:#e5e7eb;color:#1a1a1a}
+body.light .msg.user .bubble{background:#4f46e5;color:#fff}
+body.light .input{background:#fff;border-top:1px solid #e5e7eb}
+body.light .input textarea{background:#f9fafb;color:#1a1a1a;border:1px solid #d1d5db}
+body.light::-webkit-scrollbar-track{background:#f1f1f1}
+body.light::-webkit-scrollbar-thumb{background:#ccc}
+body.light::-webkit-scrollbar-thumb:hover{background:#aaa}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0f0f1a;color:#e2e8f0;height:100vh;overflow:hidden;display:flex}
+.sidebar{width:240px;background:#1a1a2a;display:flex;flex-direction:column;padding:20px 0;border-right:1px solid #2a2a3a}
+.logo{font-size:24px;font-weight:700;color:#8b5cf6;padding:0 20px 20px;display:flex;align-items:center;gap:10px}
+.logo:before{
+ content:'✦';
+ font-weight:300;
+}
+.menu{display:flex;align-items:center;gap:12px;padding:12px 20px;color:#94a3b8;cursor:pointer;transition:all 0.2s;font-size:15px;border-left:3px solid transparent}
+.menu:hover{background:rgba(139,92,246,0.1);color:#c4b5fd}
+.menu.active{background:rgba(139,92,246,0.2);color:#8b5cf6;border-left-color:#8b5cf6}
+.menu:before{
+ font-size:18px;
+ font-family:'Segoe UI Symbol',system-ui;
+}
+#m1:before{content:'💭'}
+#m2:before{content:'⚡'}
+#m3:before{content:'📈'}
+#m4:before{content:'⚙'}
+.main{flex:1;display:flex;flex-direction:column}
+.header{height:60px;background:rgba(26,26,42,0.8);backdrop-filter:blur(10px);border-bottom:1px solid #2a2a3a;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.header-title{font-size:18px;font-weight:600}
+.header-actions{display:flex;gap:12px;align-items:center}
+.header-btn{padding:8px 16px;background:rgba(139,92,246,0.2);color:#8b5cf6;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:all 0.2s}
+.header-btn:hover{background:rgba(139,92,246,0.3)}
+.content{flex:1;overflow:hidden;position:relative}
+.chat{height:100%;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+.msg{display:flex;flex-direction:column;max-width:80%}
+.msg.user{align-self:flex-end}
+.msg.user .bubble{background:#8b5cf6;color:#fff;border-radius:18px 18px 4px 18px}
+.msg .meta{font-size:12px;color:#94a3b8;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.msg .bubble{padding:12px 16px;background:rgba(42,58,90,0.5);border-radius:18px 18px 18px 4px;line-height:1.5;word-break:break-word}
+.thinking{display:inline-flex;gap:4px;margin-left:8px}
+.thinking span{width:4px;height:4px;background:#94a3b8;border-radius:50%;animation:pulse 1.4s infinite}
+.thinking span:nth-child(2){animation-delay:0.2s}
+.thinking span:nth-child(3){animation-delay:0.4s}
+@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+/* ===== 未来感输入区域 ===== */
+:root {
+  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --primary-hover: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --future-blue: #4cc9f0;
+  --future-purple: #7209b7;
+  --glow-color: rgba(76, 201, 240, 0.3);
+}
+
+.input {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 20px 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 未来感背景效果 */
+.input::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--future-blue), transparent);
+  animation: scanline 8s linear infinite;
+}
+
+@keyframes scanline {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.input-container {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  position: relative;
+  z-index: 1;
+}
+
+/* GPT风格输入框 */
+.input textarea {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  color: #f1f5f9;
+  font-size: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  resize: none;
+  min-height: 52px;
+  max-height: 160px;
+  line-height: 1.5;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.input textarea:focus {
+  outline: none;
+  background: rgba(30, 41, 59, 0.6);
+  border-color: var(--future-blue);
+  box-shadow: 
+    0 0 0 1px var(--future-blue),
+    0 4px 20px rgba(76, 201, 240, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.input textarea::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* 智能发送按钮 */
+.send-btn-wrapper {
+  position: relative;
+  height: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.send-btn {
+  width: 52px;
+  height: 52px;
+  background: var(--primary-gradient);
+  border: none;
+  border-radius: 14px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transform: scale(0.8);
+  box-shadow: 
+    0 4px 20px rgba(102, 126, 234, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.send-btn.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.send-btn:hover {
+  background: var(--primary-hover);
+  transform: scale(1.05);
+  box-shadow: 
+    0 6px 25px rgba(102, 126, 234, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.send-btn:active {
+  transform: scale(0.98);
+}
+
+.send-btn:disabled {
+  opacity: 0;
+  cursor: default;
+  transform: scale(0.8);
+}
+
+.send-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: white;
+  stroke-width: 2;
+  transition: transform 0.2s;
+}
+
+.send-btn:hover svg {
+  transform: translateX(2px);
+}
+
+/* 按钮发光效果 */
+.send-btn::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: var(--primary-gradient);
+  border-radius: 16px;
+  z-index: -1;
+  opacity: 0;
+  filter: blur(8px);
+  transition: opacity 0.3s;
+}
+
+.send-btn:hover::after {
+  opacity: 0.6;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .input {
+    padding: 16px;
+  }
+  
+  .input textarea {
+    padding: 14px 16px;
+    font-size: 16px; /* 移动端字体稍大 */
+  }
+  
+  .send-btn {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* 亮色主题适配 */
+body.light .input {
+  background: rgba(255, 255, 255, 0.9);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+body.light .input textarea {
+  background: rgba(241, 245, 249, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #1e293b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+body.light .input textarea:focus {
+  background: white;
+  border-color: #3b82f6;
+  box-shadow: 
+    0 0 0 1px #3b82f6,
+    0 4px 20px rgba(59, 130, 246, 0.1);
+}
+
+body.light .input textarea::placeholder {
+  color: #64748b;
+}
+
+body.light .send-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow: 
+    0 4px 20px rgba(59, 130, 246, 0.25),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+body.light .send-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+}
+</style>
+</head>
+<body class="dark">
+<div class="sidebar">
+ <div class="logo">NovaCore</div>
+ <div class="menu active" id="m1" onclick="show(1)">对话</div>
+ <div class="menu" id="m2" onclick="show(2)">技能矩阵</div>
+ <div class="menu" id="m3" onclick="show(3)">数据看板</div>
+ <div class="menu" id="m4" onclick="show(4)">设置</div>
+ <div style="margin-top:auto;padding:20px;font-size:12px;color:#64748b;text-align:center">
+  <div>端口: 8090</div>
+  <div>模型: MiniMax-M2.5</div>
+  <div>状态: <span id="statusText">运行中</span></div>
+ </div>
+</div>
+<div class="main">
+ <div class="header">
+  <div class="header-title" id="pageTitle">与 Nova 对话</div>
+  <div class="header-actions">
+   <button class="header-btn" onclick="toggleTheme()" id="headerThemeBtn">🌙</button>
+   <button class="header-btn" onclick="location.reload()">🔄 刷新</button>
+   <button class="header-btn" onclick="exportChat()" title="导出对话">
+    <svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+     <polyline points="7 10 12 15 17 10"/>
+     <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+   </button>
+  </div>
+ </div>
+ <div class="content">
+  <div class="chat" id="chat"></div>
+ </div>
+ <div class="input">
+  <div class="input-container">
+   <textarea id="inp" placeholder="与 Nova 对话..." onkeydown="if(event.keyCode==13&&!event.shiftKey){event.preventDefault();send();}"></textarea>
+   <div class="send-btn-wrapper">
+    <button class="send-btn" onclick="send()" id="sendBtn" title="发送消息">
+     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22 2L11 13" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+     </svg>
+    </button>
+   </div>
+  </div>
+ </div>
+</div>
+<script>
+var chatHistory='';
+var voiceEnabled=false;
+function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+function updateSendButton(){
+ var inp=document.getElementById('inp');
+ var btn=document.getElementById('sendBtn');
+ var hasText=inp.value.trim().length>0;
+ 
+ if(hasText){
+  btn.classList.add('visible');
+  btn.disabled=false;
+ }else{
+  btn.classList.remove('visible');
+  btn.disabled=true;
+ }
+}
+
+function addMessage(sender,text,type){
+ var chat=document.getElementById('chat');
+ var msgDiv=document.createElement('div');
+ msgDiv.className='msg '+(type==='user'?'user':'assistant');
+ var meta=document.createElement('div');
+ meta.className='meta';
+ meta.innerHTML='<span>'+sender+'</span> • <span>'+T()+'</span>';
+ var bubble=document.createElement('div');
+ bubble.className='bubble';
+ bubble.textContent=text;
+ msgDiv.appendChild(meta);
+ msgDiv.appendChild(bubble);
+ chat.appendChild(msgDiv);
+ chat.scrollTop=chat.scrollHeight;
+ if(type==='user'||type==='assistant'){
+  chatHistory+=msgDiv.outerHTML;
+  localStorage.setItem('nova_chat_history',chatHistory);
+ }
+}
+function send(){
+ var inp=document.getElementById('inp');
+ var text=inp.value.trim();
+ if(text==='')return;
+ 
+ // 添加用户消息
+ addMessage('你',text,'user');
+ inp.value='';
+ updateSendButton();
+ 
+ // 禁用按钮并显示思考中
+ var btn=document.getElementById('sendBtn');
+ btn.disabled=true;
+ btn.classList.remove('visible');
+ 
+ // 显示思考动画
+ var thinkingDiv=document.createElement('div');
+ thinkingDiv.className='msg assistant';
+ var meta=document.createElement('div');
+ meta.className='meta';
+ meta.innerHTML='<span>Nova</span> • <span>思考中</span><div class="thinking"><span></span><span></span><span></span></div>';
+ var bubble=document.createElement('div');
+ bubble.className='bubble';
+ bubble.textContent='正在思考...';
+ thinkingDiv.appendChild(meta);
+ thinkingDiv.appendChild(bubble);
+ 
+ var chat=document.getElementById('chat');
+ chat.appendChild(thinkingDiv);
+ chat.scrollTop=chat.scrollHeight;
+ 
+ // 模拟AI回复
+ setTimeout(function(){
+  thinkingDiv.remove();
+  
+  // 模拟不同的回复类型
+  var replies=[
+   '我理解你的想法。作为你的成长伙伴，我会一直在这里支持你。',
+   '这是一个很好的问题。让我想想如何更好地帮助你...',
+   '你的思考很有深度。我们可以一起探索更多可能性。',
+   '我感受到了你的热情。让我们一起继续前进吧！',
+   '作为你的AI伙伴，我在这里倾听并陪伴你的成长旅程。'
+  ];
+  var reply=replies[Math.floor(Math.random()*replies.length)];
+  
+  addMessage('Nova',reply,'assistant');
+  
+  // 重新启用按钮（如果有新输入会自动显示）
+  setTimeout(updateSendButton,100);
+ },1800);
+}
+function toggleTheme(){
+ var body=document.body;
+ var btn=document.getElementById('headerThemeBtn');
+ if(body.classList.contains('dark')){
+  body.classList.remove('dark');
+  body.classList.add('light');
+  btn.textContent='☀️';
+  btn.title='切换到暗色主题';
+  localStorage.setItem('nova_theme','light');
+ }else{
+  body.classList.remove('light');
+  body.classList.add('dark');
+  btn.textContent='🌙';
+  btn.title='切换到亮色主题';
+  localStorage.setItem('nova_theme','dark');
+ }
+}
+function exportChat(){
+ var content='=== NovaCore 对话导出 ===\n时间：'+new Date().toLocaleString()+'\n\n';
+ var messages=document.querySelectorAll('.msg');
+ messages.forEach(function(msg){
+  var sender=msg.querySelector('.meta span:first-child').textContent;
+  var time=msg.querySelector('.meta span:last-child').textContent;
+  var text=msg.querySelector('.bubble').textContent;
+  content+='['+time+'] '+sender+'：'+text+'\n';
+ });
+ var blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+ var url=URL.createObjectURL(blob);
+ var a=document.createElement('a');
+ a.href=url;
+ a.download='nova_chat_'+new Date().getTime()+'.txt';
+ a.click();
+ URL.revokeObjectURL(url);
+ alert('对话已导出为文本文件！');
+}
+window.onload=function(){
+ // 加载保存的主题
+ var savedTheme=localStorage.getItem('nova_theme');
+ if(savedTheme==='light'){
+  document.body.classList.remove('dark');
+  document.body.classList.add('light');
+  document.getElementById('headerThemeBtn').textContent='☀️';
+  document.getElementById('headerThemeBtn').title='切换到暗色主题';
+ }
+ 
+ // 加载聊天历史
+ var saved=localStorage.getItem('nova_chat_history');
+ if(saved){
+  chatHistory=saved;
+  document.getElementById('chat').innerHTML=saved;
+  document.getElementById('chat').scrollTop=chat.scrollHeight;
+ }
+ 
+ // 初始化输入框监听
+ var inp=document.getElementById('inp');
+ inp.addEventListener('input',updateSendButton);
+ updateSendButton();
+ 
+ // 添加欢迎消息（如果无历史记录）
+ if(!saved||saved.trim()===''){
+  setTimeout(function(){
+   addMessage('Nova','你好，我是 Nova。作为你的成长伙伴，我在这里倾听、思考并陪伴你的每一步。','assistant');
+  },300);
+ }
+};
+function show(n){
+ for(var i=1;i<=4;i++)document.getElementById('m'+i).classList.remove('active');
+ document.getElementById('m'+n).classList.add('active');
+ if(n==1){
+  document.getElementById('chat').innerHTML=chatHistory;
+  document.getElementById('chat').scrollTop=document.getElementById('chat').scrollHeight;
+ }
+ if(n==2){
+  document.getElementById('chat').innerHTML='<div style="padding:20px;"><h2>⚡ 技能矩阵</h2><div>技能页面（模拟数据）</div></div>';
+ }
+ if(n==3){
+  document.getElementById('chat').innerHTML='<div style="padding:20px;"><h2>📊 数据看板</h2><div>数据页面（模拟数据）</div></div>';
+ }
+ if(n==4){
+  document.getElementById('chat').innerHTML='<div style="padding:20px;"><h2>⚙️ 设置</h2><div>设置页面（模拟数据）</div></div>';
+ }
+}
+</script>
+</body>
+</html>

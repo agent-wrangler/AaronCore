@@ -1,0 +1,7 @@
+{
+    "name": "编程游戏",
+    "keywords": ["做个", "写个", "游戏", "编程", "代码"],
+    "description": "生成Python小游戏并运行",
+    "priority": 9,
+    "category": "工具"
+}

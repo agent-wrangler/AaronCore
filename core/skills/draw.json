@@ -1,0 +1,7 @@
+{
+  "name": "AI画图",
+  "keywords": ["海报", "画图", "生成图片", "做图", "AI画图"],
+  "description": "用 AI 生成图片或海报",
+  "priority": 8,
+  "category": "创作"
+}
