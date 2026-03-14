@@ -24,18 +24,7 @@ AUTO_APPLY_MAX_FILE_COUNT = 2
 AUTO_APPLY_MAX_EDIT_COUNT = 3
 
 
-def _load_json(path: Path, default):
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return default
-    return default
-
-
-def _write_json(path: Path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+from core.json_store import load_json as _load_json, write_json as _write_json
 
 
 def load_self_repair_reports(limit: int | None = None) -> list[dict]:

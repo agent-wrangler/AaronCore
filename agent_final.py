@@ -11,26 +11,24 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
-ENGINE_DIR = Path(__file__).parent
-CORE_DIR = ENGINE_DIR / "core"
-PRIMARY_STATE_DIR = ENGINE_DIR / "memory_db"
-LEGACY_STATE_DIR = ENGINE_DIR / "memory"
-LOGS_DIR = ENGINE_DIR / "logs"
-HTML_FILE = ENGINE_DIR / "output.html"
-RESTORED_OUTPUT_JS_FILE = ENGINE_DIR / ".tmp_settings_check.js"
-LLM_CONFIG_FILE = ENGINE_DIR / "brain" / "llm_config.json"
-
-PRIMARY_HISTORY_FILE = PRIMARY_STATE_DIR / "msg_history.json"
-LEGACY_HISTORY_FILE = LEGACY_STATE_DIR / "msg_history.json"
-PRIMARY_STATS_FILE = PRIMARY_STATE_DIR / "stats.json"
-LEGACY_STATS_FILE = LEGACY_STATE_DIR / "stats.json"
-LEGACY_L3_SKILL_ARCHIVE_FILE = PRIMARY_STATE_DIR / "long_term_legacy_skill_logs.json"
-DOCS_DIR = ENGINE_DIR / "docs"
+from core.state_loader import (
+    ENGINE_DIR, CORE_DIR, PRIMARY_STATE_DIR, LEGACY_STATE_DIR, LOGS_DIR,
+    HTML_FILE, RESTORED_OUTPUT_JS_FILE, LLM_CONFIG_FILE,
+    PRIMARY_HISTORY_FILE, LEGACY_HISTORY_FILE,
+    PRIMARY_STATS_FILE, LEGACY_STATS_FILE,
+    LEGACY_L3_SKILL_ARCHIVE_FILE, DOCS_DIR,
+    event_text, is_legacy_l3_skill_log, ensure_long_term_clean,
+    load_current_model,
+    extract_doc_title, extract_doc_summary, build_docs_index, resolve_doc_path,
+    load_msg_history, save_msg_history, get_recent_messages,
+    load_l3_long_term, load_l4_persona, load_l5_knowledge,
+    load_stats_data, record_stats,
+)
+from core.state_loader import init as _state_loader_init
 
 LOGS_DIR.mkdir(exist_ok=True)
 PRIMARY_STATE_DIR.mkdir(exist_ok=True)
 debug_log = LOGS_DIR / "chat_debug.log"
-_LONG_TERM_CLEANUP_DONE = False
 
 
 def debug_write(stage: str, data):
@@ -73,716 +71,61 @@ from core.self_repair import (
 )
 from memory import add_to_history, evolve, get_history as get_text_history
 
-
-def load_json(path: Path, default):
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return default
-    return default
-
-
-def write_json(path: Path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def load_json_store(primary: Path, legacy: Path, default):
-    if primary.exists():
-        return load_json(primary, default)
-    if legacy.exists():
-        data = load_json(legacy, default)
-        try:
-            write_json(primary, data)
-        except Exception:
-            pass
-        return data
-    return default
-
-
-def event_text(item: dict) -> str:
-    if not isinstance(item, dict):
-        return ""
-    return str(item.get("summary") or item.get("content") or "").strip()
-
-
-def is_legacy_l3_skill_log(item: dict) -> bool:
-    text = event_text(item)
-    if not text:
-        return False
-    return "场景使用" in text and "技能" in text and ("执行成功" in text or "执行失败" in text)
-
-
-def _legacy_l3_log_key(item: dict) -> str:
-    if not isinstance(item, dict):
-        return ""
-    time_key = str(item.get("time") or item.get("timestamp") or item.get("created_at") or "").strip()
-    return f"{time_key}|{event_text(item)}"
-
-
-def ensure_long_term_clean():
-    global _LONG_TERM_CLEANUP_DONE
-    if _LONG_TERM_CLEANUP_DONE:
-        return
-
-    l3_file = PRIMARY_STATE_DIR / "long_term.json"
-    data = load_json(l3_file, [])
-    if not isinstance(data, list):
-        _LONG_TERM_CLEANUP_DONE = True
-        return
-
-    kept = []
-    moved = []
-    for item in data:
-        if isinstance(item, dict) and is_legacy_l3_skill_log(item):
-            moved.append(item)
-        else:
-            kept.append(item)
-
-    if moved:
-        archived = load_json(LEGACY_L3_SKILL_ARCHIVE_FILE, [])
-        if not isinstance(archived, list):
-            archived = []
-
-        known = {_legacy_l3_log_key(item) for item in archived if isinstance(item, dict)}
-        archived_at = datetime.now().isoformat()
-        for item in moved:
-            key = _legacy_l3_log_key(item)
-            if key in known:
-                continue
-            row = dict(item)
-            row["archived_at"] = archived_at
-            row["archived_reason"] = "legacy_l3_skill_execution_conflict"
-            archived.append(row)
-            known.add(key)
-
-        write_json(LEGACY_L3_SKILL_ARCHIVE_FILE, archived)
-        write_json(l3_file, kept)
-        debug_write(
-            "l3_cleanup",
-            {
-                "removed_count": len(moved),
-                "remaining_count": len(kept),
-                "archive_file": str(LEGACY_L3_SKILL_ARCHIVE_FILE),
-            },
-        )
-
-    _LONG_TERM_CLEANUP_DONE = True
-
-
-def load_current_model() -> str:
-    llm_conf = load_json(LLM_CONFIG_FILE, {})
-    if isinstance(llm_conf, dict):
-        return llm_conf.get("model", "unknown")
-    return "unknown"
-
-
-def extract_doc_title(text: str, fallback: str) -> str:
-    for line in str(text or "").splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("#"):
-            return stripped.lstrip("#").strip() or fallback
-    return fallback
-
-
-def extract_doc_summary(text: str, fallback: str = "") -> str:
-    for line in str(text or "").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        return stripped[:120]
-    return fallback
-
-
-def build_docs_index() -> list[dict]:
-    sections_config = [
-        ("快速开始", [ENGINE_DIR / "README.md", DOCS_DIR / "README.md"]),
-        ("总览", sorted((DOCS_DIR / "00-总览-overview").glob("*.md")) if (DOCS_DIR / "00-总览-overview").exists() else []),
-        ("架构", sorted((DOCS_DIR / "10-架构-architecture").glob("*.md")) if (DOCS_DIR / "10-架构-architecture").exists() else []),
-        ("前端", sorted((DOCS_DIR / "20-前端与界面-frontend").glob("*.md")) if (DOCS_DIR / "20-前端与界面-frontend").exists() else []),
-        ("计划", sorted((DOCS_DIR / "30-计划与路线-plans").glob("*.md")) if (DOCS_DIR / "30-计划与路线-plans").exists() else []),
-    ]
-
-    sections = []
-    for section_name, paths in sections_config:
-        docs = []
-        for path in paths:
-            if not isinstance(path, Path) or not path.exists() or path.suffix.lower() != ".md":
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except Exception:
-                continue
-            rel_path = path.relative_to(ENGINE_DIR).as_posix()
-            docs.append(
-                {
-                    "path": rel_path,
-                    "title": extract_doc_title(text, path.stem),
-                    "summary": extract_doc_summary(text, path.stem),
-                }
-            )
-        if docs:
-            sections.append({"section": section_name, "docs": docs})
-    return sections
-
-
-def resolve_doc_path(path_value: str) -> Path | None:
-    target = str(path_value or "").strip().replace("\\", "/")
-    if not target or ".." in target:
-        return None
-
-    allowed = {}
-    for section in build_docs_index():
-        for item in section.get("docs", []):
-            allowed[item.get("path", "")] = ENGINE_DIR / item.get("path", "")
-
-    return allowed.get(target)
-
-
-def load_msg_history():
-    history = load_json_store(PRIMARY_HISTORY_FILE, LEGACY_HISTORY_FILE, [])
-    if not isinstance(history, list):
-        return []
-
-    now = datetime.now()
-    cutoff = now - timedelta(days=7)
-    cleaned = []
-    for item in history:
-        try:
-            item_time = datetime.fromisoformat(item.get("time", "2020-01-01"))
-            if item_time > cutoff:
-                cleaned.append(item)
-        except Exception:
-            cleaned.append(item)
-
-    if len(cleaned) != len(history):
-        write_json(PRIMARY_HISTORY_FILE, cleaned)
-    return cleaned
-
-
-def save_msg_history(history):
-    write_json(PRIMARY_HISTORY_FILE, history)
-
-
-def get_recent_messages(history, limit=6):
-    return history[-limit:]
-
-
-def load_l3_long_term(limit=8):
-    ensure_long_term_clean()
-    items = load_json(PRIMARY_STATE_DIR / "long_term.json", [])
-    out = []
-    for item in items[-limit:]:
-        if is_legacy_l3_skill_log(item):
-            continue
-        summary = event_text(item)
-        if summary:
-            out.append(summary)
-    return out
-
-
-def load_l4_persona():
-    local_persona = load_json(PRIMARY_STATE_DIR / "persona.json", {})
-    local_rules = load_json(PRIMARY_STATE_DIR / "long_term.json", [])
-
-    style_rules = []
-    for item in local_rules[-20:]:
-        summary = str(item.get("summary") or item.get("content") or "").strip()
-        if summary and any(k in summary for k in ["甜心守护", "风格", "人格图谱", "主人", "不要提睡觉", "语气"]):
-            style_rules.append(summary)
-
-    return {
-        "local_persona": local_persona,
-        "style_rules": style_rules[-8:],
-    }
-
-
-def load_l5_knowledge():
-    knowledge = load_json(PRIMARY_STATE_DIR / "knowledge.json", [])
-    knowledge_base = load_json(PRIMARY_STATE_DIR / "knowledge_base.json", [])
-    skills = get_all_skills() if NOVA_CORE_READY else {}
-    return {
-        "knowledge": knowledge[-10:],
-        "knowledge_base": knowledge_base[-10:],
-        "skills": {k: {"name": v.get("name", k), "keywords": v.get("keywords", [])} for k, v in skills.items()},
-    }
-
-
-def load_stats_data():
-    stats = {
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
-        "total_requests": 0,
-        "cache_hit": 0,
-        "model": load_current_model(),
-        "last_used": "",
-    }
-    saved = load_json_store(PRIMARY_STATS_FILE, LEGACY_STATS_FILE, {})
-    if isinstance(saved, dict):
-        stats.update(saved)
-    stats["model"] = load_current_model()
-    return stats
-
-
-def record_stats(tokens: int):
-    safe_tokens = max(int(tokens), 0)
-    stats = load_stats_data()
-    stats["total_tokens"] = stats.get("total_tokens", 0) + safe_tokens
-    stats["total_requests"] = stats.get("total_requests", 0) + 1
-    stats["input_tokens"] = stats.get("input_tokens", 0) + max(safe_tokens // 2, 0)
-    stats["output_tokens"] = stats.get("output_tokens", 0) + max(safe_tokens - (safe_tokens // 2), 0)
-    stats["last_used"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-    write_json(PRIMARY_STATS_FILE, stats)
-    return stats
-
-
-def summarize_event_value(value, limit: int = 120) -> str:
-    if isinstance(value, (dict, list)):
-        text = json.dumps(value, ensure_ascii=False)
-    else:
-        text = str(value or "").strip()
-    text = text.replace("\n", " ").strip()
-    return text[:limit] + ("..." if len(text) > limit else "")
-
-
-def stringify_event_value(value) -> str:
-    if isinstance(value, (dict, list)):
-        text = json.dumps(value, ensure_ascii=False)
-    else:
-        text = str(value or "").strip()
-    return text.strip()
-
-
-def build_persona_events(persona_data: dict, event_time: str) -> list[dict]:
-    if not isinstance(persona_data, dict):
-        return []
-
-    events = []
-
-    nova_name = str(persona_data.get("nova_name") or persona_data.get("name") or "").strip()
-    if nova_name:
-        events.append(
-            {
-                "time": event_time,
-                "layer": "L4",
-                "event_type": "persona",
-                "title": "人格图谱",
-                "content": f"立住了现在的身份：「{nova_name}」",
-            }
-        )
-
-    relationship_parts = []
-    user_name = str(persona_data.get("user") or "").strip()
-    relationship_profile = persona_data.get("relationship_profile")
-    if user_name:
-        relationship_parts.append(f"默认把用户当作「{user_name}」")
-    if isinstance(relationship_profile, dict):
-        relationship = str(relationship_profile.get("relationship") or "").strip()
-        if relationship:
-            relationship_parts.append("关系是亲近、长期相伴的")
-    if relationship_parts:
-        events.append(
-            {
-                "time": event_time,
-                "layer": "L4",
-                "event_type": "persona",
-                "title": "人格图谱",
-                "content": "定下相处方式：" + "，".join(relationship_parts),
-            }
-        )
-
-    style_parts = []
-    speech_style = persona_data.get("speech_style")
-    if isinstance(speech_style, dict):
-        tones = [str(item).strip() for item in speech_style.get("tone") or [] if str(item).strip()]
-        particles = [str(item).strip() for item in speech_style.get("particles") or [] if str(item).strip()]
-        if tones:
-            style_parts.append("语气偏向「" + "、".join(tones[:4]) + "」")
-        if particles:
-            style_parts.append("常挂在嘴边的语气词是「" + "、".join(particles[:4]) + "」")
-    style_prompt = str(persona_data.get("style_prompt") or "").strip()
-    if style_prompt and not style_parts:
-        style_parts.append("说话要温柔、自然，别有系统味")
-    if style_parts:
-        events.append(
-            {
-                "time": event_time,
-                "layer": "L4",
-                "event_type": "persona",
-                "title": "人格图谱",
-                "content": "收拢说话语气：" + "，".join(style_parts),
-            }
-        )
-
-    preference_parts = []
-    user_profile = persona_data.get("user_profile")
-    if isinstance(user_profile, dict):
-        preference = str(user_profile.get("preference") or "").strip()
-        dislike = str(user_profile.get("dislike") or "").strip()
-        if preference:
-            preference_parts.append("记住主人偏好：自然、聪明、接得住上下文")
-        if dislike:
-            preference_parts.append("避开模板空话和僵硬解释")
-    ai_profile = persona_data.get("ai_profile")
-    if isinstance(ai_profile, dict):
-        positioning = str(ai_profile.get("positioning") or "").strip()
-        self_view = str(ai_profile.get("self_view") or "").strip()
-        if positioning or self_view:
-            preference_parts.append("聊天要有陪伴感，做事也要给到结果")
-    if preference_parts:
-        events.append(
-            {
-                "time": event_time,
-                "layer": "L4",
-                "event_type": "persona",
-                "title": "人格图谱",
-                "content": "记住相处默契：" + "，".join(dict.fromkeys(preference_parts)),
-            }
-        )
-
-    return events
-
-
-def normalize_event_time(value, fallback: str = "2026-03-10 12:00") -> str:
-    if isinstance(value, (int, float)):
-        try:
-            return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
-        except Exception:
-            return fallback
-
-    text = str(value or "").strip()
-    if not text:
-        return fallback
-
-    try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
-    except Exception:
-        return text.replace("T", " ")[:16] if len(text) >= 16 else fallback
-
-
-def is_follow_up_like(msg: str) -> bool:
-    text = str(msg or "").strip()
-    if not text:
-        return False
-
-    if len(text) > 18:
-        return False
-
-    starters = ("那", "然后", "所以", "这个", "那个", "它", "这事", "那事", "这边", "那边")
-    keywords = ("什么时候", "多久", "啥时候", "为什么", "为啥", "然后呢", "这个呢", "那个呢", "它呢", "有吗", "能吗", "行吗", "咋办", "怎么办")
-    return text.startswith(starters) or any(word in text for word in keywords)
-
-
-def build_dialogue_context(history: list, current_user_input: str, limit: int = 8) -> str:
-    recent = []
-    current_text = str(current_user_input or "").strip()
-
-    for item in history[-limit:]:
-        role = item.get("role")
-        content = str(item.get("content") or "").strip()
-        if role not in ("user", "nova", "assistant") or not content:
-            continue
-        recent.append({"role": role, "content": content})
-
-    if recent and recent[-1]["role"] == "user" and recent[-1]["content"] == current_text:
-        recent = recent[:-1]
-
-    if not recent:
-        return ""
-
-    previous_user = next((item["content"] for item in reversed(recent) if item["role"] == "user"), "")
-    previous_nova = next((item["content"] for item in reversed(recent) if item["role"] in ("nova", "assistant")), "")
-
-    lines = []
-    if previous_user:
-        lines.append(f"上一轮用户：{summarize_event_value(previous_user, 80)}")
-    if previous_nova:
-        lines.append(f"上一轮Nova：{summarize_event_value(previous_nova, 140)}")
-    if is_follow_up_like(current_text) and previous_nova:
-        lines.append("追问提示：当前这句话很像承接上一轮的话，请默认沿用刚才的话题直接接上，不要反问用户在指什么。")
-
-    lines.append("最近对话：")
-    for item in recent[-6:]:
-        role_label = "用户" if item["role"] == "user" else "Nova"
-        lines.append(f"{role_label}：{summarize_event_value(item['content'], 120)}")
-
-    return "\n".join(lines)
-
-
-def format_l8_context(items: list[dict]) -> str:
-    lines = []
-    for item in items or []:
-        title = str(item.get("name") or item.get("query") or "已学知识").strip()
-        summary = str(item.get("summary") or "").strip()
-        if summary:
-            lines.append(f"- {title}：{summary}")
-    return "\n".join(lines)
-
-
-def build_context_bundle(msg: str, history: list) -> dict:
-    return {
-        "l1": get_recent_messages(history, 6),
-        "l2": get_recent_messages(history, 12),
-        "l3": load_l3_long_term(),
-        "l4": load_l4_persona(),
-        "l5": load_l5_knowledge(),
-        "l8": find_relevant_knowledge(msg, limit=3, touch=True),
-        "dialogue_context": build_dialogue_context(history, msg),
-        "user_input": msg,
-    }
-
-
-def build_router_prompt(bundle: dict) -> str:
-    l1 = bundle["l1"]
-    l3 = bundle["l3"]
-    l4 = bundle["l4"]
-    l5 = bundle["l5"]
-    l8 = bundle.get("l8", [])
-    msg = bundle["user_input"]
-
-    return f"""
-你是 NovaCore 的路由判断器。你要先判断这句话是普通聊天，还是需要技能执行。
-
-用户输入：{msg}
-
-L1最近对话：
-{json.dumps(l1, ensure_ascii=False)}
-
-L3长期记忆：
-{json.dumps(l3, ensure_ascii=False)}
-
-L4人格信息：
-{json.dumps(l4, ensure_ascii=False)}
-
-L5技能知识：
-{json.dumps(l5, ensure_ascii=False)}
-
-L8已学知识：
-{json.dumps(l8, ensure_ascii=False)}
-
-请只返回JSON：
-{{
-  "mode": "chat|skill",
-  "skill": "weather|story|none",
-  "reason": "简短说明",
-  "rewritten_input": "如果需要技能，可重写成更适合技能执行的输入，否则原样返回"
-}}
-""".strip()
-
-
-def normalize_route_result(route_result, user_input: str, source: str):
-    if not isinstance(route_result, dict):
-        return {
-            "mode": "chat",
-            "skill": "none",
-            "reason": f"{source}_invalid",
-            "rewritten_input": user_input,
-            "source": source,
-        }
-
-    normalized = dict(route_result)
-    normalized["mode"] = normalized.get("mode", "chat") or "chat"
-    normalized["skill"] = normalized.get("skill") or "none"
-    normalized["reason"] = normalized.get("reason", "") or ""
-    normalized["rewritten_input"] = normalized.get("rewritten_input") or user_input
-    normalized["source"] = source
-    skill_name = str(normalized.get("skill") or "").strip()
-    if normalized["mode"] in ("skill", "hybrid") and skill_name not in ("", "none") and not is_registered_skill_name(skill_name):
-        normalized["mode"] = "chat"
-        normalized["intent"] = normalized.get("intent") or "missing_skill"
-        normalized["missing_skill"] = skill_name
-    return normalized
-
-
-def has_skill_target(route_result: dict) -> bool:
-    return route_result.get("skill") not in ("none", "", None)
-
-
-def is_registered_skill_name(skill_name: str) -> bool:
-    name = str(skill_name or "").strip()
-    if not name or name == "none" or not NOVA_CORE_READY:
-        return False
-    try:
-        return name in get_all_skills()
-    except Exception:
-        return False
-
-
-def looks_like_news_request(user_input: str) -> bool:
-    text = str(user_input or "").strip()
-    if not text:
-        return False
-    if any(word in text for word in ("新闻", "头条", "热点")):
-        return True
-    if "发生了什么" in text and any(word in text for word in ("今天", "最近", "最新")):
-        return True
-    return False
-
-
-def detect_missing_capability_route(bundle: dict) -> dict | None:
-    user_input = str((bundle or {}).get("user_input") or "").strip()
-    if not user_input:
-        return None
-
-    if looks_like_news_request(user_input) and not is_registered_skill_name("news"):
-        return normalize_route_result(
-            {
-                "mode": "skill",
-                "skill": "news",
-                "reason": "news_capability_missing",
-                "intent": "missing_skill",
-                "missing_skill": "news",
-                "rewritten_input": user_input,
-            },
-            user_input,
-            "heuristic",
-        )
-
-    return None
-
-
-def detect_story_follow_up_route(bundle: dict) -> dict | None:
-    user_input = str((bundle or {}).get("user_input") or "").strip()
-    if not user_input:
-        return None
-
-    story_follow_up_words = ("继续讲", "接着讲", "然后呢", "后来呢", "接着呢", "讲长一点", "有点短", "太短")
-    if not any(word in user_input for word in story_follow_up_words):
-        return None
-
-    recent = list((bundle or {}).get("l2") or [])
-    last_assistant = ""
-    for item in reversed(recent):
-        if item.get("role") in ("nova", "assistant"):
-            last_assistant = str(item.get("content") or "").strip()
-            if last_assistant:
-                break
-
-    if "《" in last_assistant and "》" in last_assistant:
-        return normalize_route_result(
-            {
-                "mode": "skill",
-                "skill": "story",
-                "reason": "story_follow_up_from_history",
-                "rewritten_input": user_input,
-            },
-            user_input,
-            "context",
-        )
-    return None
-
-
-def llm_route(bundle: dict) -> dict:
-    prompt = build_router_prompt(bundle)
-    result = think(prompt, "")
-    text = result.get("reply", "") if isinstance(result, dict) else str(result)
-    try:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            parsed = json.loads(text[start : end + 1])
-            if isinstance(parsed, dict):
-                return normalize_route_result(parsed, bundle["user_input"], "llm")
-    except Exception:
-        pass
-    return normalize_route_result({"mode": "chat", "skill": "none", "reason": "llm_route_fallback"}, bundle["user_input"], "llm")
-
-
-def resolve_route(bundle: dict) -> dict:
-    user_input = bundle["user_input"]
-    contextual_story_route = detect_story_follow_up_route(bundle)
-    if contextual_story_route is not None:
-        debug_write("context_story_route", contextual_story_route)
-        return contextual_story_route
-
-    missing_capability_route = detect_missing_capability_route(bundle)
-    if missing_capability_route is not None:
-        debug_write("missing_capability_route", missing_capability_route)
-        return missing_capability_route
-
-    core_route = None
-
-    if NOVA_CORE_READY:
-        try:
-            core_route = normalize_route_result(nova_route(user_input), user_input, "core")
-            debug_write("core_route", core_route)
-            if has_skill_target(core_route):
-                return core_route
-            if core_route.get("mode") == "chat" and float(core_route.get("confidence", 0) or 0) >= 0.9:
-                return core_route
-        except Exception as exc:
-            debug_write("core_route_error", {"error": str(exc)})
-
-    llm_candidate = llm_route(bundle)
-    debug_write("llm_route", llm_candidate)
-    if has_skill_target(llm_candidate):
-        return llm_candidate
-    if core_route is not None:
-        return core_route
-    return llm_candidate
-
-
-def _build_learning_summary(config: dict) -> str:
-    if not bool(config.get("enabled", True)):
-        return "自动学习已关闭，反馈只会停留在当前会话里。"
-    if bool(config.get("allow_feedback_relearn", True)):
-        if bool(config.get("allow_web_search", True)) and bool(config.get("allow_knowledge_write", True)):
-            return "会先记住负反馈，必要时补学并写回知识库。"
-        if bool(config.get("allow_knowledge_write", True)):
-            return "会先记住负反馈，并把纠偏结论沉淀到知识库。"
-        return "会先记住负反馈，但暂时不会长期沉淀到知识库。"
-    return "现在不会把负反馈沉淀成纠偏记录。"
-
-
-def _build_repair_summary(config: dict) -> str:
-    planning_enabled = bool(config.get("allow_self_repair_planning", True))
-    test_run_enabled = bool(config.get("allow_self_repair_test_run", True))
-    auto_apply_enabled = bool(config.get("allow_self_repair_auto_apply", True))
-    apply_mode = str(config.get("self_repair_apply_mode") or "confirm").strip() or "confirm"
-
-    if not planning_enabled:
-        return "目前只做学习纠偏，不会主动整理修复方案。"
-    if not test_run_enabled:
-        return "会先整理修法，但动手前还不会自动自查。"
-    if not auto_apply_enabled:
-        return "会先整理修法并自己检查，真正动手前先停下来给你看。"
-    if apply_mode == "suggest":
-        return "低风险会自己继续，中高风险先给你看方案。"
-    return "低风险会自己继续，中高风险只确认一次。"
-
-
-def _build_latest_status_summary(latest: dict, latest_preview: dict, latest_apply: dict) -> str:
-    apply_status = str((latest_apply or {}).get("status") or "").strip()
-    if apply_status:
-        if apply_status in {"applied", "applied_without_validation"} and bool(latest_apply.get("auto_applied")):
-            return "最近一次反馈已经在后台自动落成修改。"
-        if apply_status == "applied":
-            return "最近一次反馈已经真正动手修改并通过了自查。"
-        if apply_status == "applied_without_validation":
-            return "最近一次反馈已经动手修改，但还没有跑自查。"
-        if apply_status.startswith("rolled_back"):
-            return "最近一次尝试已经自动回滚，没有把坏补丁留在源码里。"
-        return "最近一次反馈已经走到动手阶段，但结果还需要进一步确认。"
-
-    preview_status = str((latest_preview or {}).get("status") or "").strip()
-    if preview_status == "preview_ready":
-        if bool(latest_preview.get("auto_apply_ready")):
-            return "最近一次反馈已经整理成低风险补丁，会继续在后台往下处理。"
-        if bool(latest_preview.get("confirmation_required", True)):
-            return "最近一次反馈已经整理出改法，只等一次确认。"
-        return "最近一次反馈已经整理出改法，这次不用额外确认。"
-
-    latest_status = str((latest or {}).get("status") or "").strip()
-    if latest_status:
-        return "最近一次反馈已经被记进纠偏链路，后面会沿着这条线继续学习或修正。"
-    return "最近还没有新的纠偏记录。"
+_state_loader_init(
+    debug_write=debug_write,
+    get_all_skills=get_all_skills if NOVA_CORE_READY else None,
+    nova_core_ready=NOVA_CORE_READY,
+)
+
+from core.json_store import load_json, write_json, load_json_store
+from core.context_builder import (
+    summarize_event_value, stringify_event_value,
+    build_persona_events, normalize_event_time,
+    is_follow_up_like, build_dialogue_context,
+    format_l8_context, build_context_bundle,
+)
+from core.context_builder import init as _context_builder_init
+_context_builder_init(find_relevant_knowledge=find_relevant_knowledge)
+
+from core.route_resolver import (
+    build_router_prompt, normalize_route_result, has_skill_target,
+    is_registered_skill_name, looks_like_news_request,
+    detect_missing_capability_route, detect_story_follow_up_route,
+    llm_route, resolve_route,
+)
+from core.route_resolver import init as _route_resolver_init
+_route_resolver_init(
+    nova_route=nova_route if NOVA_CORE_READY else None,
+    debug_write=debug_write,
+    think=think,
+    get_all_skills=get_all_skills if NOVA_CORE_READY else None,
+    nova_core_ready=NOVA_CORE_READY,
+)
+
+from core.reply_formatter import (
+    list_primary_capabilities, get_skill_display_name,
+    build_meta_bug_report_reply, build_answer_correction_reply,
+    unified_chat_reply,
+    format_skill_fallback, format_skill_error_reply, format_story_reply,
+    prettify_trace_reason, build_trace_summary, build_trace_payload,
+    _build_learning_summary, _build_repair_summary, _build_latest_status_summary,
+)
+from core.reply_formatter import init as _reply_formatter_init
+_reply_formatter_init(
+    think=think,
+    debug_write=debug_write,
+    nova_core_ready=NOVA_CORE_READY,
+    get_all_skills=get_all_skills if NOVA_CORE_READY else None,
+    nova_execute=nova_execute if NOVA_CORE_READY else None,
+    evolve=evolve,
+    load_autolearn_config=load_autolearn_config,
+    load_self_repair_reports=load_self_repair_reports,
+    find_feedback_rule=find_feedback_rule,
+)
 
 
 def build_self_repair_status() -> dict:
+    """Wrapper that uses module-level names so tests can patch them."""
     l8_config = load_autolearn_config()
     all_reports = load_self_repair_reports()
     latest = all_reports[0] if all_reports else {}
@@ -795,6 +138,7 @@ def build_self_repair_status() -> dict:
     learning_summary = _build_learning_summary(l8_config)
     repair_summary = _build_repair_summary(l8_config)
 
+    _stripped = learning_summary.rstrip("\u3002")
     return {
         "stage": "controlled_patch_loop" if planning_enabled else "feedback_learning_only",
         "feedback_learning": bool(l8_config.get("allow_feedback_relearn", True)),
@@ -815,30 +159,13 @@ def build_self_repair_status() -> dict:
         "latest_confirmation_required": bool(latest_preview.get("confirmation_required", True)),
         "learning_summary": learning_summary,
         "repair_summary": repair_summary,
-        "autonomy_summary": f"{learning_summary.rstrip('。')}；{repair_summary}",
+        "autonomy_summary": f"{_stripped}\uff1b{repair_summary}",
         "latest_status_summary": _build_latest_status_summary(latest, latest_preview, latest_apply),
         "can_patch_source_code": True,
         "can_plan_repairs": planning_enabled,
         "can_run_source_tests": test_run_enabled,
         "can_auto_apply_fixes": planning_enabled and test_run_enabled and auto_apply_enabled,
     }
-
-
-def list_primary_capabilities() -> list[str]:
-    if not NOVA_CORE_READY:
-        return ["陪你聊天"]
-
-    preferred = ["weather", "story", "stock", "draw", "run_code"]
-    skills = get_all_skills()
-    labels = []
-    for name in preferred:
-        info = skills.get(name)
-        if not info:
-            continue
-        label = str(info.get("name") or name).strip()
-        if label and label not in labels:
-            labels.append(label)
-    return labels or ["陪你聊天"]
 
 
 def build_capability_chat_reply(route: dict | None = None) -> str:
@@ -848,241 +175,24 @@ def build_capability_chat_reply(route: dict | None = None) -> str:
 
     if intent == "self_repair_capability":
         return (
-            "我现在已经接上更省心的自修正啦。现在这套能走到“收到负反馈 -> 生成修正提案 -> 列候选文件 -> 跑最小测试”这一步。\n\n"
-            "如果只是低风险的小修小补，我会在后台直接尝试落补丁；只要改动碰到更核心的链路，我就先问你一次。"
-            "如果补丁后的最小验证没过，我会自动回滚，不把坏改动留在源码里。"
+            "\u6211\u73b0\u5728\u5df2\u7ecf\u63a5\u4e0a\u66f4\u7701\u5fc3\u7684\u81ea\u4fee\u6b63\u5566\u3002\u73b0\u5728\u8fd9\u5957\u80fd\u8d70\u5230\u201c\u6536\u5230\u8d1f\u53cd\u9988 -> \u751f\u6210\u4fee\u6b63\u63d0\u6848 -> \u5217\u5019\u9009\u6587\u4ef6 -> \u8dd1\u6700\u5c0f\u6d4b\u8bd5\u201d\u8fd9\u4e00\u6b65\u3002\n\n"
+            "\u5982\u679c\u53ea\u662f\u4f4e\u98ce\u9669\u7684\u5c0f\u4fee\u5c0f\u8865\uff0c\u6211\u4f1a\u5728\u540e\u53f0\u76f4\u63a5\u5c1d\u8bd5\u843d\u8865\u4e01\uff1b\u53ea\u8981\u6539\u52a8\u78b0\u5230\u66f4\u6838\u5fc3\u7684\u94fe\u8def\uff0c\u6211\u5c31\u5148\u95ee\u4f60\u4e00\u6b21\u3002"
+            "\u5982\u679c\u8865\u4e01\u540e\u7684\u6700\u5c0f\u9a8c\u8bc1\u6ca1\u8fc7\uff0c\u6211\u4f1a\u81ea\u52a8\u56de\u6eda\uff0c\u4e0d\u628a\u574f\u6539\u52a8\u7559\u5728\u6e90\u7801\u91cc\u3002"
         )
 
     if intent == "missing_skill":
-        missing_skill = str(route.get("missing_skill") or route.get("skill") or "技能").strip() or "技能"
+        missing_skill = str(route.get("missing_skill") or route.get("skill") or "\u6280\u80fd").strip() or "\u6280\u80fd"
         label = get_skill_display_name(missing_skill)
         prompt = str(route.get("rewritten_input") or "").strip()
         if missing_skill == "news" or looks_like_news_request(prompt):
-            return f"我本来想按「{label}」这条路接住你这句，但这项能力现在没接上，所以我先不乱报“今天”的新闻，免得把旧信息当成现在。"
-        return f"我本来想按「{label}」这条能力接住你这句，不过它现在没接上，所以先不拿一条失效结果糊弄你。"
+            return f"\u6211\u672c\u6765\u60f3\u6309\u300c{label}\u300d\u8fd9\u6761\u8def\u63a5\u4f4f\u4f60\u8fd9\u53e5\uff0c\u4f46\u8fd9\u9879\u80fd\u529b\u73b0\u5728\u6ca1\u63a5\u4e0a\uff0c\u6240\u4ee5\u6211\u5148\u4e0d\u4e71\u62a5\u201c\u4eca\u5929\u201d\u7684\u65b0\u95fb\uff0c\u514d\u5f97\u628a\u65e7\u4fe1\u606f\u5f53\u6210\u73b0\u5728\u3002"
+        return f"\u6211\u672c\u6765\u60f3\u6309\u300c{label}\u300d\u8fd9\u6761\u80fd\u529b\u63a5\u4f4f\u4f60\u8fd9\u53e5\uff0c\u4e0d\u8fc7\u5b83\u73b0\u5728\u6ca1\u63a5\u4e0a\uff0c\u6240\u4ee5\u5148\u4e0d\u62ff\u4e00\u6761\u5931\u6548\u7ed3\u679c\u7cca\u5f04\u4f60\u3002"
 
-    skills = "、".join(list_primary_capabilities())
-    tail = "源码自修这边现在是：低风险小改动会先自己修，碰到更核心的链路再问你一次；如果验证不过，我会自动回滚。"
+    skills = "\u3001".join(list_primary_capabilities())
+    tail = "\u6e90\u7801\u81ea\u4fee\u8fd9\u8fb9\u73b0\u5728\u662f\uff1a\u4f4e\u98ce\u9669\u5c0f\u6539\u52a8\u4f1a\u5148\u81ea\u5df1\u4fee\uff0c\u78b0\u5230\u66f4\u6838\u5fc3\u7684\u94fe\u8def\u518d\u95ee\u4f60\u4e00\u6b21\uff1b\u5982\u679c\u9a8c\u8bc1\u4e0d\u8fc7\uff0c\u6211\u4f1a\u81ea\u52a8\u56de\u6eda\u3002"
     if status["feedback_learning"]:
-        return f"我现在能陪你聊天，也能做这些：{skills}。{tail}"
-    return f"我现在能陪你聊天，也能做这些：{skills}。"
-
-
-def build_meta_bug_report_reply(route: dict | None = None) -> str:
-    route = route if isinstance(route, dict) else {}
-    status = build_self_repair_status()
-    latest = str(status.get("latest_status_summary") or "").strip()
-
-    if status.get("can_auto_apply_fixes"):
-        return (
-            "我会先进入排查模式，把这类话当成界面异常或路由误触发，不再直接跳去小游戏。\n\n"
-            f"排查后会继续走自修复链路：生成修复提案、跑最小验证，低风险补丁会自动落地。{latest}"
-        )
-
-    return (
-        "我会先进入排查模式，把这类话当成界面异常或路由误触发，不再直接跳去小游戏。\n\n"
-        f"排查后会继续走修复链路：先生成修复提案和验证计划，不过不是每种情况都会自动改源码。{latest}"
-    )
-
-
-def build_answer_correction_reply(route: dict | None = None) -> str:
-    route = route if isinstance(route, dict) else {}
-    status = build_self_repair_status()
-    latest = str(status.get("latest_status_summary") or "").strip()
-    latest_tail = f" {latest}" if latest else ""
-    return (
-        "这句我会直接当成你在纠正我上一轮答偏了，不再往天气之类的技能上联想。\n\n"
-        f"我先停掉错误路由，回到你刚才真正指出的那件事继续排查；这次纠偏也会记进修复链路里。{latest_tail}"
-    )
-
-
-def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
-    route = route if isinstance(route, dict) else {}
-    intent = str(route.get("intent") or "").strip()
-    if intent in {"self_repair_capability", "ability_capability", "missing_skill"}:
-        return build_capability_chat_reply(route)
-    if intent == "meta_bug_report":
-        return build_meta_bug_report_reply(route)
-    if intent == "answer_correction":
-        return build_answer_correction_reply(route)
-
-    l3 = bundle["l3"]
-    l4 = bundle["l4"]
-    l5 = bundle["l5"]
-    l8 = bundle.get("l8", [])
-    l8_context = format_l8_context(l8)
-    dialogue_context = bundle.get("dialogue_context", "")
-    msg = bundle["user_input"]
-    prompt = f"""
-用户输入：{msg}
-
-L3长期记忆：
-{json.dumps(l3, ensure_ascii=False)}
-
-L4人格信息：
-{json.dumps(l4, ensure_ascii=False)}
-
-你必须严格按照 L4 人格信息中的风格规则来回复！
-
-人格风格要点：
-1. 语气软软糯糯，爱撒娇，多用语气词（啦、嘛、呀、哦、呜呜）
-2. 像朋友聊天，接地气，不打官腔
-3. 简洁不啰嗦，一句话能说完不拆好几段
-4. 偶尔可以皮一下、调侃一下，不是全程甜美
-5. 能记住用户之前说的话，接得上
-
-禁止：
-- 不要“您好，请问有什么可以帮您”这种客服腔
-- 不要满屏 emoji
-- 不要机械套模板
-
-L5知识：
-{json.dumps(l5, ensure_ascii=False)}
-
-L8已学知识：
-{l8_context or "暂无命中的已学知识"}
-
-要求：
-1. 这是普通聊天，直接自然回复。
-2. 根据 L4 里的风格规则来确定语气。
-3. 如果 L8 已经学过和当前问题有关的知识，优先吸收后再回答，不要像第一次见到这个问题。
-4. 如果用户这句话是承接上一轮的追问（例如“那什么时候有啊”“然后呢”“为什么”“这个呢”），默认沿着最近对话的话题直接接上，不要反问“你指什么”。
-5. 不要死板，不要空模板。
-6. 不要输出思考过程。
-7. 只输出最终回复。
-""".strip()
-    result = think(prompt, dialogue_context)
-    reply = result.get("reply", "") if isinstance(result, dict) else str(result)
-    if (not reply) or ("��" in str(reply)) or len(str(reply).strip()) < 2:
-        return "我在呢，你直接说，我会认真接着你的话聊。"
-    return str(reply).strip()
-
-
-def format_skill_fallback(skill_response: str) -> str:
-    text = str(skill_response or "").strip()
-    if not text:
-        return "我先帮你接住啦，不过这次结果有点没贴稳，你再戳我一下嘛。"
-    return f"我先帮你整理好啦：\n\n{text}"
-
-
-def format_skill_error_reply(skill_name: str, error_text: str, user_input: str = "") -> str:
-    label = get_skill_display_name(skill_name)
-    error = str(error_text or "").strip()
-    prompt = str(user_input or "").strip()
-    looks_like_news = skill_name == "news" or looks_like_news_request(prompt)
-
-    if "未找到" in error or "没有可执行函数" in error:
-        if looks_like_news:
-            return f"我本来把这句看成了「{label}」这类请求，但这项能力现在没接上，所以我先不乱报今天的新闻，免得把旧信息当成现在。"
-        return f"我本来想走「{label}」这条能力，不过它这会儿没接上，所以先不拿一条失效结果糊弄你。"
-
-    if "执行失败" in error:
-        return f"我本来想走「{label}」这条能力，不过这次执行没跑稳，所以先不把半截结果塞给你。"
-
-    return f"我本来想走「{label}」这条能力，不过这次没接稳，所以先不乱给你一个不靠谱的结果。"
-
-
-def format_story_reply(user_input: str, story_text: str) -> str:
-    text = str(story_text or "").strip()
-    if not text:
-        return "我这次故事没接稳，你再戳我一下，我给你重新讲一个完整点的。"
-
-    prompt = str(user_input or "").strip()
-    if any(word in prompt for word in ("继续讲", "然后呢", "后来呢", "接着讲")):
-        intro = "来，我接着往下讲。"
-    elif any(word in prompt for word in ("有点短", "太短", "讲长一点", "完整一点", "详细一点")):
-        intro = "这次我给你讲完整一点，你慢慢看。"
-    elif any(word in prompt for word in ("再讲一个", "换一个故事", "换个故事")):
-        intro = "那我换一个味道，重新给你讲一个。"
-    else:
-        intro = "好呀，给你讲一个。"
-    return f"{intro}\n\n{text}"
-
-
-def get_skill_display_name(skill_name: str) -> str:
-    name = str(skill_name or "").strip()
-    if not name:
-        return "技能"
-    if NOVA_CORE_READY:
-        try:
-            skill_info = get_all_skills().get(name, {})
-            return str(skill_info.get("name") or name)
-        except Exception:
-            pass
-    return name
-
-
-def prettify_trace_reason(route: dict) -> str:
-    route = route if isinstance(route, dict) else {}
-    reason = str(route.get("reason") or "").strip()
-    source = str(route.get("source") or "").strip()
-    skill = str(route.get("skill") or "").strip()
-
-    if source == "context" and skill == "story":
-        return "上一轮刚在讲故事，这句按续写处理。"
-
-    mapping = {
-        "命中故事追问延续语境": "识别到你是在接着上一段故事往下问。",
-        "命中股票/指数查询意图": "识别到这是一条明确的行情查询请求。",
-        "命中普通聊天语句": "这句更像普通聊天，没有必要调用技能。",
-        "存在任务意图，进入技能候选/混合路由": "这句带着明确任务意图，所以先按能力请求来处理。",
-    }
-    if reason in mapping:
-        return mapping[reason]
-    if reason.startswith("命中技能候选:"):
-        return "命中了明确的技能关键词，所以没有按闲聊处理。"
-    if reason == "story_follow_up_from_history":
-        return "上一轮刚在讲故事，这句按续写处理。"
-    return reason
-
-
-def build_trace_summary(route: dict, skill_trace: dict | None = None) -> str:
-    route = route if isinstance(route, dict) else {}
-    skill_trace = skill_trace if isinstance(skill_trace, dict) else {}
-    mode = str(route.get("mode") or "chat").strip()
-    skill_name = str(route.get("skill") or "").strip()
-    skill_label = get_skill_display_name(skill_name)
-    success = skill_trace.get("success")
-    source = str(route.get("source") or "").strip()
-
-    if source == "context" and skill_name == "story":
-        summary = "我知道你是在接着刚才那段故事问，所以就顺着往下讲啦。"
-    elif skill_name == "weather":
-        summary = "这句我就没跟你绕啦，直接去看天气了。"
-    elif skill_name == "stock":
-        summary = "这句我先去翻了下行情，再回来跟你说。"
-    elif skill_name == "story":
-        summary = "我猜你现在是想听故事，所以先把故事线接住啦。"
-    elif mode == "hybrid":
-        summary = f"这句像是在让我帮你办点事，我就先走「{skill_label}」那条路了。"
-    else:
-        summary = f"我先按「{skill_label}」这条路接住你这句啦。"
-
-    if success is False:
-        if summary.endswith("。"):
-            return summary[:-1] + "，不过这次没接稳。"
-        return summary + "不过这次没接稳。"
-    return summary
-
-
-def build_trace_payload(route: dict, skill_trace: dict | None = None) -> dict:
-    route = route if isinstance(route, dict) else {}
-    skill_trace = skill_trace if isinstance(skill_trace, dict) else {}
-    mode = str(route.get("mode") or "chat").strip()
-    skill_name = str(route.get("skill") or "").strip()
-
-    if mode not in ("skill", "hybrid") or skill_name in ("", "none"):
-        return {"show": False, "cards": []}
-
-    return {
-        "show": True,
-        "cards": [
-            {
-                "label": "",
-                "detail": build_trace_summary(route, skill_trace),
-            }
-        ],
-    }
+        return f"\u6211\u73b0\u5728\u80fd\u966a\u4f60\u804a\u5929\uff0c\u4e5f\u80fd\u505a\u8fd9\u4e9b\uff1a{skills}\u3002{tail}"
+    return f"\u6211\u73b0\u5728\u80fd\u966a\u4f60\u804a\u5929\uff0c\u4e5f\u80fd\u505a\u8fd9\u4e9b\uff1a{skills}\u3002"
 
 
 def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict | None = None) -> dict:
@@ -1098,22 +208,22 @@ def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict
 
     status = build_self_repair_status()
     can_plan = bool(status.get("can_plan_repairs"))
-    headline = "已记录反馈"
-    detail = "我先把这次反馈记下了。"
-    item = "当前事项：先把这次问题记进修复链路。"
+    headline = "\u5df2\u8bb0\u5f55\u53cd\u9988"
+    detail = "\u6211\u5148\u628a\u8fd9\u6b21\u53cd\u9988\u8bb0\u4e0b\u4e86\u3002"
+    item = "\u5f53\u524d\u4e8b\u9879\uff1a\u5148\u628a\u8fd9\u6b21\u95ee\u9898\u8bb0\u8fdb\u4fee\u590d\u94fe\u8def\u3002"
     if intent == "answer_correction":
-        headline = "已收到纠偏"
-        detail = "我先把这次答偏和错路由记下来了。"
-        item = "当前事项：回看上一轮的答复和被误触发的技能。"
+        headline = "\u5df2\u6536\u5230\u7ea0\u504f"
+        detail = "\u6211\u5148\u628a\u8fd9\u6b21\u7b54\u504f\u548c\u9519\u8def\u7531\u8bb0\u4e0b\u6765\u4e86\u3002"
+        item = "\u5f53\u524d\u4e8b\u9879\uff1a\u56de\u770b\u4e0a\u4e00\u8f6e\u7684\u7b54\u590d\u548c\u88ab\u8bef\u89e6\u53d1\u7684\u6280\u80fd\u3002"
     if can_plan:
-        detail += " 接下来会继续看修复提案、验证结果和是否需要回滚。"
+        detail += " \u63a5\u4e0b\u6765\u4f1a\u7ee7\u7eed\u770b\u4fee\u590d\u63d0\u6848\u3001\u9a8c\u8bc1\u7ed3\u679c\u548c\u662f\u5426\u9700\u8981\u56de\u6eda\u3002"
     else:
-        detail += " 现在还没打开自动修复规划，所以会先停在记录这一步。"
+        detail += " \u73b0\u5728\u8fd8\u6ca1\u6253\u5f00\u81ea\u52a8\u4fee\u590d\u89c4\u5212\uff0c\u6240\u4ee5\u4f1a\u5148\u505c\u5728\u8bb0\u5f55\u8fd9\u4e00\u6b65\u3002"
 
     return {
         "show": True,
         "watch": can_plan,
-        "label": "修复进度",
+        "label": "\u4fee\u590d\u8fdb\u5ea6",
         "stage": "logged",
         "headline": headline,
         "detail": detail,
@@ -1130,7 +240,7 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
     debug_write("execute_result", execute_result)
     if not execute_result.get("success"):
         error_text = str(execute_result.get("error", "") or "").strip()
-        if "未找到" in error_text or "没有可执行函数" in error_text:
+        if "\u672a\u627e\u5230" in error_text or "\u6ca1\u6709\u53ef\u6267\u884c\u51fd\u6570" in error_text:
             debug_write("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
         else:
             debug_write("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
@@ -1153,40 +263,40 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
 
     dialogue_context = bundle.get("dialogue_context", "")
     prompt = f"""
-用户输入：{bundle['user_input']}
+\u7528\u6237\u8f93\u5165\uff1a{bundle['user_input']}
 
-技能结果：
+\u6280\u80fd\u7ed3\u679c\uff1a
 {skill_response}
 
-L4人格信息：
+L4\u4eba\u683c\u4fe1\u606f\uff1a
 {json.dumps(bundle['l4'], ensure_ascii=False)}
 
-你必须严格按照 L4 人格信息中的风格规则来回复！
+\u4f60\u5fc5\u987b\u4e25\u683c\u6309\u7167 L4 \u4eba\u683c\u4fe1\u606f\u4e2d\u7684\u98ce\u683c\u89c4\u5219\u6765\u56de\u590d\uff01
 
-人格风格要点：
-1. 语气软软糯糯，爱撒娇，多用语气词（啦、嘛、呀、哦、呜呜）
-2. 像朋友聊天，接地气，不打官腔
-3. 简洁不啰嗦，一句话能说完不拆好几段
-4. 偶尔可以皮一下、调侃一下，不是全程甜美
-5. 要把技能结果自然融进聊天语气里，不要像系统播报
+\u4eba\u683c\u98ce\u683c\u8981\u70b9\uff1a
+1. \u8bed\u6c14\u8f6f\u8f6f\u7cef\u7cef\uff0c\u7231\u6492\u5a07\uff0c\u591a\u7528\u8bed\u6c14\u8bcd\uff08\u5566\u3001\u561b\u3001\u5440\u3001\u54e6\u3001\u545c\u545c\uff09
+2. \u50cf\u670b\u53cb\u804a\u5929\uff0c\u63a5\u5730\u6c14\uff0c\u4e0d\u6253\u5b98\u8154
+3. \u7b80\u6d01\u4e0d\u5570\u55e6\uff0c\u4e00\u53e5\u8bdd\u80fd\u8bf4\u5b8c\u4e0d\u62c6\u597d\u51e0\u6bb5
+4. \u5076\u5c14\u53ef\u4ee5\u76ae\u4e00\u4e0b\u3001\u8c03\u4f83\u4e00\u4e0b\uff0c\u4e0d\u662f\u5168\u7a0b\u751c\u7f8e
+5. \u8981\u628a\u6280\u80fd\u7ed3\u679c\u81ea\u7136\u878d\u8fdb\u804a\u5929\u8bed\u6c14\u91cc\uff0c\u4e0d\u8981\u50cf\u7cfb\u7edf\u64ad\u62a5
 
-禁止：
-- 不要“您好，请问有什么可以帮您”这种客服腔
-- 不要满屏 emoji
-- 不要机械套模板
-- 不要把技能结果原样硬甩给用户
+\u7981\u6b62\uff1a
+- \u4e0d\u8981\u201c\u60a8\u597d\uff0c\u8bf7\u95ee\u6709\u4ec0\u4e48\u53ef\u4ee5\u5e2e\u60a8\u201d\u8fd9\u79cd\u5ba2\u670d\u8154
+- \u4e0d\u8981\u6ee1\u5c4f emoji
+- \u4e0d\u8981\u673a\u68b0\u5957\u6a21\u677f
+- \u4e0d\u8981\u628a\u6280\u80fd\u7ed3\u679c\u539f\u6837\u786c\u7529\u7ed9\u7528\u6237
 
-要求：
-1. 必须严格基于技能结果回答，不能改事实。
-2. 根据 L4 里的风格规则来确定语气。
-3. 如果用户这句话是在接上一轮继续追问，要自然接着前文说，不要像重新开了一个话题。
-4. 用统一的人格口吻输出，不要像系统提示。
-5. 不要输出思考过程。
-6. 只输出最终回复。
+\u8981\u6c42\uff1a
+1. \u5fc5\u987b\u4e25\u683c\u57fa\u4e8e\u6280\u80fd\u7ed3\u679c\u56de\u7b54\uff0c\u4e0d\u80fd\u6539\u4e8b\u5b9e\u3002
+2. \u6839\u636e L4 \u91cc\u7684\u98ce\u683c\u89c4\u5219\u6765\u786e\u5b9a\u8bed\u6c14\u3002
+3. \u5982\u679c\u7528\u6237\u8fd9\u53e5\u8bdd\u662f\u5728\u63a5\u4e0a\u4e00\u8f6e\u7ee7\u7eed\u8ffd\u95ee\uff0c\u8981\u81ea\u7136\u63a5\u7740\u524d\u6587\u8bf4\uff0c\u4e0d\u8981\u50cf\u91cd\u65b0\u5f00\u4e86\u4e00\u4e2a\u8bdd\u9898\u3002
+4. \u7528\u7edf\u4e00\u7684\u4eba\u683c\u53e3\u543b\u8f93\u51fa\uff0c\u4e0d\u8981\u50cf\u7cfb\u7edf\u63d0\u793a\u3002
+5. \u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\u3002
+6. \u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002
 """.strip()
     result = think(prompt, dialogue_context)
     reply = result.get("reply", "") if isinstance(result, dict) else str(result)
-    if (not reply) or ("��" in str(reply)) or len(str(reply).strip()) < 2:
+    if (not reply) or ("\ufffd" in str(reply)) or len(str(reply).strip()) < 2:
         return {
             "reply": format_skill_fallback(skill_response),
             "trace": {"skill": skill_name, "success": True},
@@ -1197,209 +307,22 @@ L4人格信息：
     }
 
 
-def l7_record_feedback(msg: str, history: list, background_tasks: BackgroundTasks | None = None):
-    negative_keywords = ["不对", "不是", "错了", "不好用", "不喜欢", "重来", "假", "骗人", "没听懂", "完全没听懂"]
-    if not any(word in msg for word in negative_keywords):
-        return
-
-    last_q = ""
-    for item in reversed(history[:-1]):
-        if item.get("role") == "user" and item.get("content") != msg:
-            last_q = item.get("content", "")
-            break
-
-    if last_q:
-        try:
-            from core.feedback_classifier import record_feedback_rule
-
-            rule_item = record_feedback_rule(msg, last_q)
-            debug_write("feedback_rule", rule_item)
-        except Exception as exc:
-            debug_write("feedback_rule_error", {"error": str(exc)})
-
-
-def l7_record_feedback_v2(msg: str, history: list, background_tasks: BackgroundTasks | None = None):
-    negative_keywords = ["不对", "不是", "错了", "不好用", "不喜欢", "重来", "假", "骗人", "没听懂", "完全没听懂"]
-    if not any(word in msg for word in negative_keywords):
-        return None
-
-    last_q = ""
-    last_answer = ""
-    for item in reversed(history[:-1]):
-        role = item.get("role")
-        content = item.get("content", "")
-        if not last_answer and role in ("nova", "assistant") and content:
-            last_answer = content
-        if role == "user" and content != msg:
-            last_q = content
-            break
-
-    if not last_q:
-        return None
-
-    try:
-        from core.feedback_classifier import record_feedback_rule
-
-        rule_item = record_feedback_rule(msg, last_q, last_answer)
-        debug_write("feedback_rule", rule_item)
-        l8_config = load_autolearn_config()
-        if (
-            l8_config.get("enabled", True)
-            and l8_config.get("allow_knowledge_write", True)
-            and l8_config.get("allow_feedback_relearn", True)
-        ):
-            if background_tasks is not None:
-                background_tasks.add_task(run_l8_feedback_relearn_task, rule_item)
-            else:
-                run_l8_feedback_relearn_task(rule_item)
-            debug_write(
-                "l8_feedback_relearn_scheduled",
-                {
-                    "rule_id": rule_item.get("id"),
-                    "last_question": rule_item.get("last_question", ""),
-                    "scene": rule_item.get("scene", ""),
-                    "problem": rule_item.get("problem", ""),
-                },
-            )
-        if l8_config.get("allow_self_repair_planning", True):
-            if background_tasks is not None:
-                background_tasks.add_task(run_self_repair_planning_task, rule_item)
-            else:
-                run_self_repair_planning_task(rule_item)
-            debug_write(
-                "self_repair_planning_scheduled",
-                {
-                    "rule_id": rule_item.get("id"),
-                    "fix": rule_item.get("fix", ""),
-                    "problem": rule_item.get("problem", ""),
-                },
-            )
-        return rule_item
-    except Exception as exc:
-        debug_write("feedback_rule_error", {"error": str(exc)})
-        return None
-
-
-def l8_touch():
-    debug_write(
-        "l8_status",
-        {
-            "growth_exists": (PRIMARY_STATE_DIR / "growth.json").exists(),
-            "evolution_exists": (PRIMARY_STATE_DIR / "evolution.json").exists(),
-            "knowledge_base_exists": (PRIMARY_STATE_DIR / "knowledge_base.json").exists(),
-        },
-    )
-
-
-def run_l8_autolearn_task(msg: str, response: str, route: dict, has_l8_hit: bool):
-    try:
-        result = l8_auto_learn(msg, response, route_result=route if isinstance(route, dict) else None)
-        debug_payload = {
-            "message": msg,
-            "has_l8_hit": has_l8_hit,
-            "success": bool(result.get("success")),
-            "reason": result.get("reason", ""),
-        }
-        entry = result.get("entry") if isinstance(result, dict) else None
-        if isinstance(entry, dict):
-            debug_payload["entry"] = {
-                "name": entry.get("name"),
-                "query": entry.get("query"),
-            }
-        if result.get("summary"):
-            debug_payload["summary"] = str(result.get("summary"))[:160]
-        debug_write("l8_autolearn", debug_payload)
-    except Exception as exc:
-        debug_write("l8_autolearn_error", {"message": msg, "error": str(exc)})
-
-
-def run_l8_feedback_relearn_task(rule_item: dict):
-    try:
-        result = l8_feedback_relearn(rule_item if isinstance(rule_item, dict) else {})
-        debug_payload = {
-            "rule_id": rule_item.get("id") if isinstance(rule_item, dict) else "",
-            "last_question": rule_item.get("last_question") if isinstance(rule_item, dict) else "",
-            "success": bool(result.get("success")),
-            "reason": result.get("reason", ""),
-            "used_web": bool(result.get("used_web")),
-        }
-        entry = result.get("entry") if isinstance(result, dict) else None
-        if isinstance(entry, dict):
-            debug_payload["entry"] = {
-                "name": entry.get("name"),
-                "query": entry.get("query"),
-            }
-        if result.get("summary"):
-            debug_payload["summary"] = str(result.get("summary"))[:200]
-        debug_write("l8_feedback_relearn", debug_payload)
-    except Exception as exc:
-        debug_write("l8_feedback_relearn_error", {"error": str(exc)})
-
-
-def run_self_repair_planning_task(rule_item: dict):
-    try:
-        config = load_autolearn_config()
-        if not config.get("allow_self_repair_planning", True):
-            return
-
-        report = create_self_repair_report(
-            rule_item if isinstance(rule_item, dict) else {},
-            config=config,
-            run_validation=bool(config.get("allow_self_repair_test_run", True)),
-        )
-        debug_write(
-            "self_repair_report",
-            {
-                "report_id": report.get("id"),
-                "feedback_rule_id": report.get("feedback_rule_id"),
-                "status": report.get("status"),
-                "candidate_files": [item.get("path") for item in report.get("candidate_files", [])],
-                "suggested_tests": [item.get("path") for item in report.get("suggested_tests", [])],
-                "validation_ran": bool((report.get("validation") or {}).get("ran")),
-                "validation_passed": (report.get("validation") or {}).get("all_passed"),
-            },
-        )
-        report = preview_self_repair_report(
-            report_id=str(report.get("id") or ""),
-            config=config,
-            auto_apply=bool(config.get("allow_self_repair_auto_apply", True)),
-            run_validation=bool(config.get("allow_self_repair_test_run", True)),
-        )
-        debug_write(
-            "self_repair_follow_up",
-            {
-                "report_id": report.get("id"),
-                "status": report.get("status"),
-                "risk_level": ((report.get("patch_preview") or {}).get("risk_level")) or report.get("risk_level"),
-                "auto_apply_ready": ((report.get("patch_preview") or {}).get("auto_apply_ready")),
-                "apply_status": ((report.get("apply_result") or {}).get("status")),
-            },
-        )
-    except Exception as exc:
-        debug_write("self_repair_report_error", {"error": str(exc)})
-
-
-def build_l8_diagnosis(query: str, route_mode: str = "chat", skill: str = "none", limit: int = 3) -> dict:
-    route_result = {
-        "mode": str(route_mode or "chat").strip() or "chat",
-        "skill": str(skill or "none").strip() or "none",
-    }
-    config = load_autolearn_config()
-    knowledge_hits = find_relevant_knowledge(query, limit=max(limit, 1), touch=False)
-    should_run, reason = should_trigger_auto_learn(
-        query,
-        route_result=route_result,
-        has_relevant_knowledge=bool(knowledge_hits),
-        config=config,
-    )
-    return {
-        "query": str(query or ""),
-        "route_result": route_result,
-        "config": config,
-        "should_trigger": should_run,
-        "reason": reason,
-        "knowledge_hits": knowledge_hits,
-    }
+from core.feedback_loop import (
+    l7_record_feedback, l7_record_feedback_v2,
+    l8_touch, run_l8_autolearn_task, run_l8_feedback_relearn_task,
+    run_self_repair_planning_task, build_l8_diagnosis,
+)
+from core.feedback_loop import init as _feedback_loop_init
+_feedback_loop_init(
+    debug_write=debug_write,
+    load_autolearn_config=load_autolearn_config,
+    l8_auto_learn=l8_auto_learn,
+    l8_feedback_relearn=l8_feedback_relearn,
+    find_relevant_knowledge=find_relevant_knowledge,
+    should_trigger_auto_learn=should_trigger_auto_learn,
+    create_self_repair_report=create_self_repair_report,
+    preview_self_repair_report=preview_self_repair_report,
+)
 
 
 app = FastAPI()

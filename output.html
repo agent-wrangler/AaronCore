@@ -529,6 +529,10 @@ body.light .msg-meta {
   color: #a5b4fc;
 }
 
+.thinking-bubble-label:empty {
+  display: none;
+}
+
 .thinking-bubble.done .thinking {
   display: none;
 }
@@ -1016,104 +1020,6 @@ function cleanInlineText(text, limit){
  return cleaned;
 }
 
-function extractFirstSentence(text, limit){
- var cleaned=cleanInlineText(text, limit?limit*2:220);
- if(!cleaned) return '';
- var idx=cleaned.search(/[。！？!?]/);
- var first=idx>=0?cleaned.slice(0, idx+1):cleaned;
- return cleanInlineText(first, limit||88);
-}
-
-function extractQuotedTarget(text){
- var match=String(text||'').match(/["“「『]?([A-Za-z]{2,6})["”」』]?/);
- if(match && match[1]) return match[1].toUpperCase();
- return '';
-}
-
-function extractStockOutcome(reply){
- var text=cleanInlineText(reply, 220);
- if(!text) return '';
- var symbolMatch=text.match(/\b[A-Z]{2,5}\b/);
- var priceMatch=text.match(/(\d+(?:\.\d+)?)\s*(美元|元)/);
- var changeMatch=text.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
- if(!symbolMatch && !priceMatch && !changeMatch) return '';
-
- var parts=[];
- if(symbolMatch) parts.push(symbolMatch[0]+' 报价');
- if(priceMatch) parts.push(priceMatch[1]+(priceMatch[2]||''));
- if(changeMatch){
-  var raw=changeMatch[1]||'';
-  var normalized=raw.replace(/^\+/,'');
-  parts.push((raw.startsWith('-')?'跌 ':'涨 ')+normalized+'%');
- }
- return parts.length?('这次先拿到的是 '+parts.join('，')+'。'):'';
-}
-
-function extractWeatherOutcome(reply){
- var text=cleanInlineText(reply, 220);
- if(!text) return '';
- var weatherWord=(text.match(/晴|多云|阴|小雨|中雨|大雨|暴雨|雷阵雨|雪|雾|风/g)||[]).slice(0,2);
- var temp=text.match(/(-?\d+(?:\.\d+)?)\s*(?:℃|°C|度)/);
- if(!weatherWord.length && !temp) return '';
-
- var parts=[];
- if(weatherWord.length) parts.push(weatherWord.join(' / '));
- if(temp) parts.push(temp[1]+'°C');
- return parts.length?('这次拿到的天气关键信息：'+parts.join('，')+'。'):'';
-}
-
-function buildProcessTrace(text, reply){
- var lower=String(text||'').toLowerCase();
- var replyText=cleanInlineText(reply, 220);
- if(!replyText) return [];
-
- var cards=[];
- function addCard(label, detail){
-  var normalized=cleanInlineText(detail, 96);
-  if(!normalized) return;
-  cards.push({label:label, detail:normalized});
- }
-
- if(lower.includes('股票')||lower.includes('股价')||lower.includes('行情')||lower.includes('大盘')||/[A-Z]{2,5}/.test(String(text||''))){
-  var target=lower.includes('大盘')?'大盘 / 行情':(extractQuotedTarget(text)||'行情');
-  addCard('理解', '识别到你在问 '+target+'，这不是普通闲聊。');
-  if(/还在慢慢做|目前只能|暂时|还没|还不能|功能/.test(replyText)){
-   addCard('路径', '这块能力还没完全补齐，所以这次先用当前能拿到的行情结果接你。');
-  }else{
-   addCard('路径', '这次走的是现有的行情查询能力，没有把它当成闲聊糊过去。');
-  }
-  addCard('拿到的点', extractStockOutcome(replyText)||extractFirstSentence(replyText, 96));
-  return cards.length>=2?cards:[];
- }
-
- if(lower.includes('天气')||lower.includes('气温')||lower.includes('温度')||lower.includes('下雨')||lower.includes('晴')){
-  addCard('理解', '识别到你在问天气，我会优先去找能直接用的天气信息。');
-  addCard('路径', '这次先拿天气结果，再把它收成你一眼能看的说法。');
-  addCard('拿到的点', extractWeatherOutcome(replyText)||extractFirstSentence(replyText, 96));
-  return cards.length>=2?cards:[];
- }
-
- if(lower.includes('代码')||lower.includes('脚本')||lower.includes('运行')||lower.includes('报错')||lower.includes('bug')){
-  addCard('理解', '识别到你是在问代码 / 运行问题，不是只想随便聊聊。');
-  if(/失败|报错|异常|error/i.test(replyText)){
-   addCard('路径', '这次先把问题点揪出来了，所以回复会更偏定位和修复。');
-  }else{
-   addCard('路径', '这次按可执行结果来回，不只是解释概念。');
-  }
-  addCard('拿到的点', extractFirstSentence(replyText, 96));
-  return cards.length>=2?cards:[];
- }
-
- if(lower.includes('画')||lower.includes('图片')||lower.includes('插图')||lower.includes('海报')){
-  addCard('理解', '识别到你在发创作请求，这次重点是把画面方向收清楚。');
-  addCard('路径', '这类请求我会先抓题材和风格，再给你可落地的生成结果。');
-  addCard('拿到的点', extractFirstSentence(replyText, 96));
-  return cards.length>=2?cards:[];
- }
-
- return [];
-}
-
 function createProcessBubble(card){
  var bubble=document.createElement('div');
  bubble.className='thinking-bubble done';
@@ -1203,7 +1109,8 @@ async function send(){
    });
    var data=await resp.json();
     var replyText=data.reply||'我刚刚没接好，你再发我一次嘛。';
-    var traceCards=buildProcessTrace(text, replyText);
+    var traceCards=(data.trace && data.trace.show && Array.isArray(data.trace.cards))
+     ? data.trace.cards : [];
     if(traceCards.length>=2){
      finalizePendingAssistantTrace(pendingState, traceCards, replyText);
     }else{

@@ -5,11 +5,14 @@ from agent_final import build_repair_progress_payload, build_trace_payload
 
 
 class TracePayloadTests(unittest.TestCase):
-    def test_plain_chat_hides_trace_cards(self):
+    def test_plain_chat_shows_trace_cards(self):
         trace = build_trace_payload({"mode": "chat", "skill": "none", "reason": "命中普通聊天语句"})
 
-        self.assertFalse(trace["show"])
-        self.assertEqual(trace["cards"], [])
+        self.assertTrue(trace["show"])
+        self.assertEqual(len(trace["cards"]), 2)
+        self.assertEqual(trace["cards"][0]["label"], "理解")
+        self.assertIn("普通聊天", trace["cards"][0]["detail"])
+        self.assertEqual(trace["cards"][1]["label"], "路径")
 
     def test_story_context_route_returns_soft_summary(self):
         trace = build_trace_payload(
@@ -18,19 +21,19 @@ class TracePayloadTests(unittest.TestCase):
         )
 
         self.assertTrue(trace["show"])
-        self.assertEqual(len(trace["cards"]), 1)
-        self.assertEqual(trace["cards"][0]["label"], "")
-        self.assertIn("接着刚才那段故事", trace["cards"][0]["detail"])
+        self.assertEqual(len(trace["cards"]), 2)
+        self.assertEqual(trace["cards"][0]["label"], "理解")
+        self.assertIn("接着刚才那段故事", trace["cards"][1]["detail"])
 
-    def test_weather_skill_route_returns_single_soft_summary(self):
+    def test_weather_skill_route_returns_trace_cards(self):
         trace = build_trace_payload(
             {"mode": "skill", "skill": "weather", "reason": "命中技能候选: 上海"},
             {"skill": "weather", "success": True},
         )
 
         self.assertTrue(trace["show"])
-        self.assertEqual(len(trace["cards"]), 1)
-        self.assertIn("直接去看天气", trace["cards"][0]["detail"])
+        self.assertEqual(len(trace["cards"]), 2)
+        self.assertIn("直接去看天气", trace["cards"][1]["detail"])
 
     def test_meta_bug_report_returns_repair_progress_payload(self):
         with patch("agent_final.build_self_repair_status", return_value={"can_plan_repairs": True}):

@@ -134,18 +134,7 @@ FEEDBACK_FIX_HINTS = {
 }
 
 
-def _load_json(path: Path, default):
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return default
-    return default
-
-
-def _write_json(path: Path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+from core.json_store import load_json as _load_json, write_json as _write_json
 
 
 def _normalize_query(text: str) -> str:
