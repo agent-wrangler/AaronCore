@@ -20,10 +20,42 @@ CITIES = {
     "伦敦": ("London", 51.51, -0.13),
     "巴黎": ("Paris", 48.86, 2.35),
     "首尔": ("Seoul", 37.57, 126.98),
+    "乌鲁木齐": ("Urumqi", 43.82, 87.62),
 }
 
 DEFAULT_CITY = "常州"
 HISTORY_PATH = Path(__file__).resolve().parents[2] / 'memory_db' / 'msg_history.json'
+CITY_ALIASES = {
+    "新疆维吾尔自治区": "乌鲁木齐",
+    "新疆": "乌鲁木齐",
+    "乌市": "乌鲁木齐",
+}
+FOLLOW_UP_WEATHER_HINTS = (
+    "多少度",
+    "几度",
+    "冷不冷",
+    "热不热",
+    "下雨",
+    "下雪",
+    "有雨",
+    "有雪",
+    "会不会",
+    "还冷吗",
+    "天气呢",
+    "温度呢",
+    "气温呢",
+)
+FOLLOW_UP_WEATHER_TEXTS = {
+    "",
+    "明天",
+    "后天",
+    "今天",
+    "这周",
+    "未来几天",
+    "还冷吗",
+    "会下雨吗",
+    "会下雪吗",
+}
 
 
 def _load_recent_messages(limit: int = 12):
@@ -36,14 +68,57 @@ def _load_recent_messages(limit: int = 12):
     return []
 
 
+def _resolve_city(text: str) -> str | None:
+    content = str(text or "").strip()
+    if not content:
+        return None
+
+    for alias, city in CITY_ALIASES.items():
+        if alias in content:
+            return city
+
+    for city in CITIES.keys():
+        if city in content:
+            return city
+
+    return None
+
+
+def _clean_weather_query(text: str) -> str:
+    cleaned = re.sub(r'[？?，。呀啊呢嘛吧啦哦哇呗～~、\s]', '', str(text or ''))
+    replacements = (
+        '今天天气怎么样',
+        '天气怎么样',
+        '天气如何',
+        '什么天气',
+        '天气',
+        '气温',
+        '温度',
+        '查询',
+        '查一下',
+        '查查',
+        '看一下',
+        '看看',
+        '现在',
+        '目前',
+        '多少',
+        '度',
+        '会不会',
+        '有没有',
+    )
+    for item in replacements:
+        cleaned = cleaned.replace(item, '')
+    return cleaned.strip()
+
+
 def _infer_city_from_history() -> str:
     recent = _load_recent_messages(12)
     for item in reversed(recent):
         content = str(item.get('content', ''))
-        for city in CITIES.keys():
-            if city in content:
-                return city
-    return DEFAULT_CITY
+        resolved = _resolve_city(content)
+        if resolved:
+            return resolved
+    return ""
 
 
 def get_weather(city_cn, coords):
@@ -64,27 +139,20 @@ def get_weather(city_cn, coords):
 
 def _extract_city(query: str) -> str:
     text = (query or '').strip()
+    resolved = _resolve_city(text)
+    if resolved:
+        return resolved
 
-    # 先直接命中城市名
-    for city in CITIES.keys():
-        if city in text:
-            return city
+    cleaned = _clean_weather_query(text)
+    resolved = _resolve_city(cleaned)
+    if resolved:
+        return resolved
 
-    # 清理常见无意义词，避免剩下一堆语气词
-    cleaned = re.sub(r'[？?，。呀啊呢嘛吧啦哦哇呗]', '', text)
-    cleaned = cleaned.replace('今天天气怎么样', '').replace('天气怎么样', '').replace('天气如何', '')
-    cleaned = cleaned.replace('天气', '').replace('气温', '').replace('温度', '').replace('查询', '')
-    cleaned = cleaned.strip()
-
-    for city in CITIES.keys():
-        if cleaned == city:
-            return city
-
-    # 像“明天呢 / 后天呢 / 未来几天呢”这种短追问，从最近对话继承城市
-    if any(word in text for word in ['明天', '后天', '未来', '下周', '今天', '这周']) or len(cleaned) <= 4:
+    # 只有没有新地点信息的天气追问，才从最近对话继承城市
+    if cleaned in FOLLOW_UP_WEATHER_TEXTS or (not cleaned and any(word in text for word in FOLLOW_UP_WEATHER_HINTS)):
         return _infer_city_from_history()
 
-    return DEFAULT_CITY
+    return ""
 
 
 def _extract_day_offset(query: str) -> int:
@@ -124,6 +192,9 @@ def get_forecast(city_cn, coords, day_offset: int = 0):
 
 def execute(query):
     city = _extract_city(query)
+    if not city:
+        return "你想看哪个城市呀？比如上海、北京、乌鲁木齐这样，我就能马上去查。"
+
     _, lat, lon = CITIES[city]
     day_offset = _extract_day_offset(query)
     if day_offset > 0:

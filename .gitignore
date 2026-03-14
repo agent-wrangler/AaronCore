@@ -7,3 +7,17 @@ Thumbs.db
 .env
 .venv/
 venv/
+.vscode/
+.tmp_chrome_settings_test*/
+.tmp_settings_patch_check.js
+.tmp_thinking_css_check.txt
+.tmp_settings_check.js
+.tmp_server_stdout.log
+.tmp_server_stderr.log
+memory_db/story_state.json
+memory_db/conversation_history.txt
+memory_db/msg_history.json
+memory_db/stats.json
+memory_db/evolution.json
+output.html.codex_backup
+.claude/

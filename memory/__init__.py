@@ -73,16 +73,31 @@ def get_evolution() -> dict:
         return json.loads(evolution_file.read_text(encoding="utf-8"))
     return {"skills_used": {}, "user_preferences": {}, "learning": []}
 
+
+def _can_count_skill_usage(skill_used: str) -> bool:
+    name = str(skill_used or "").strip()
+    if not name:
+        return False
+    try:
+        from core.skills import get_skill
+
+        return bool(get_skill(name))
+    except Exception:
+        return False
+
 def evolve(user_input: str, skill_used: str):
     """L8: 能力进化 - 记录并更新"""
     evo = get_evolution()
     now = datetime.now().isoformat()
+    skill_name = str(skill_used or "").strip()
+    can_count_skill = _can_count_skill_usage(skill_name)
     
     # 记录技能使用
-    if skill_used not in evo.get("skills_used", {}):
-        evo["skills_used"][skill_used] = {"count": 0, "last_used": ""}
-    evo["skills_used"][skill_used]["count"] += 1
-    evo["skills_used"][skill_used]["last_used"] = now
+    if can_count_skill:
+        if skill_name not in evo.get("skills_used", {}):
+            evo["skills_used"][skill_name] = {"count": 0, "last_used": ""}
+        evo["skills_used"][skill_name]["count"] += 1
+        evo["skills_used"][skill_name]["last_used"] = now
     
     # 检测用户偏好
     user_keywords = []
@@ -99,11 +114,11 @@ def evolve(user_input: str, skill_used: str):
         evo["user_preferences"][kw] += 1
     
     # 定期更新knowledge.json的优先级
-    if skill_used and knowledge_file.exists():
+    if can_count_skill and knowledge_file.exists():
         try:
             kb = json.loads(knowledge_file.read_text(encoding="utf-8"))
             for item in kb:
-                if item.get("触发器函数") == skill_used:
+                if item.get("触发器函数") == skill_name:
                     item["使用次数"] = item.get("使用次数", 0) + 1
             # 按使用次数排序
             kb.sort(key=lambda x: x.get("使用次数", 0), reverse=True)

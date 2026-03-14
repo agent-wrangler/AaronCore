@@ -2,15 +2,19 @@
 import subprocess
 import os
 from datetime import datetime
+from pathlib import Path
 import requests
 import json
 import sys
 
+REQUEST_TIMEOUT_SEC = 90
+
+
 def execute(user_request):
     """生成Python游戏并运行"""
     # 加载LLM配置
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'brain', 'llm_config.json')
-    if os.path.exists(config_path):
+    config_path = Path(__file__).resolve().parents[2] / "brain" / "llm_config.json"
+    if config_path.exists():
         llm_config = json.load(open(config_path, 'r', encoding='utf-8'))
     else:
         llm_config = {"api_key": "", "model": "abab6.5s-chat", "base_url": "https://api.minimax.chat/v1"}
@@ -33,8 +37,9 @@ def execute(user_request):
             f"{llm_config['base_url']}/chat/completions",
             headers={"Authorization": f"Bearer {llm_config['api_key']}", "Content-Type": "application/json"},
             json={"model": llm_config['model'], "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
-            timeout=30
+            timeout=REQUEST_TIMEOUT_SEC
         )
+        resp.raise_for_status()
         code = resp.json()["choices"][0]["message"]["content"]
         
         # 清理代码
@@ -52,7 +57,10 @@ def execute(user_request):
         
         # 运行游戏
         if os.name == 'nt':
-            subprocess.Popen([sys.executable, temp_path], detached=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            subprocess.Popen(
+                [sys.executable, temp_path],
+                creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+            )
         else:
             subprocess.Popen([sys.executable, temp_path])
         

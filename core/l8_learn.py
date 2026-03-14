@@ -21,8 +21,13 @@ DEFAULT_CONFIG = {
     "allow_web_search": True,
     "allow_knowledge_write": True,
     "allow_feedback_relearn": True,
+    "allow_self_repair_planning": True,
+    "allow_self_repair_test_run": True,
+    "allow_self_repair_auto_apply": True,
     "allow_skill_generation": False,
     "mode": "shadow",
+    "self_repair_apply_mode": "confirm",
+    "self_repair_test_timeout_sec": 45,
     "min_query_length": 4,
     "search_timeout_sec": 5,
     "max_results": 5,
@@ -163,7 +168,9 @@ def load_autolearn_config() -> dict:
             for key, value in stored.items():
                 if key in config:
                     config[key] = value
-        if not CONFIG_FILE.exists():
+        # Self-heal legacy config files that are missing newer keys so the
+        # frontend can always detect the current preset consistently.
+        if (not CONFIG_FILE.exists()) or (not isinstance(stored, dict)) or stored != config:
             _write_json(CONFIG_FILE, config)
         return config
 
@@ -236,6 +243,39 @@ def _entry_text(entry: dict) -> str:
     return " ".join(str(part or "") for part in parts).lower()
 
 
+def _normalize_tool_skill_name(skill_name: str) -> str:
+    name = str(skill_name or "").strip()
+    if name.endswith("_query"):
+        name = name[:-6]
+    return name
+
+
+def _is_registered_skill_name(skill_name: str) -> bool:
+    name = _normalize_tool_skill_name(skill_name)
+    if not name:
+        return False
+    try:
+        from core.skills import get_all_skills
+
+        return name in get_all_skills()
+    except Exception:
+        return False
+
+
+def should_surface_knowledge_entry(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+
+    primary_scene = str(entry.get("一级场景") or "").strip()
+    core_skill = str(entry.get("核心技能") or entry.get("name") or "").strip()
+
+    # 老的“工具应用”补学里混入过并不存在的伪技能，这类条目不该继续影响聊天或记忆页。
+    if primary_scene == "工具应用" and core_skill and not _is_registered_skill_name(core_skill):
+        return False
+
+    return True
+
+
 def _entry_has_topic_overlap(query: str, entry: dict) -> bool:
     keywords = extract_keywords(query)
     if not keywords:
@@ -292,6 +332,8 @@ def find_relevant_knowledge(query: str, limit: int = 3, min_score: int = 4, touc
     scored = []
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
+            continue
+        if not should_surface_knowledge_entry(entry):
             continue
         if not _entry_has_topic_overlap(query, entry):
             continue

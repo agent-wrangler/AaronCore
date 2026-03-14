@@ -24,6 +24,13 @@ STOCK_HINT_WORDS = [
 ]
 
 STOCK_QUERY_HINT_WORDS = ['多少', '怎么样', '现在', '涨跌', '查', '看下', '看一眼', '报价']
+ABILITY_QUERY_WORDS = [
+    '你会什么', '你还会什么', '你都会什么', '你能做什么', '你现在能做什么', '你能干什么', '你有哪些能力', '你会哪些技能'
+]
+SELF_REPAIR_QUERY_HINTS = [
+    '修改自己的代码', '改自己的代码', '修自己的代码', '自己修正', '自我修正', '自动修正', '自己改代码', '自己修代码',
+    '发现自己错了', '知道自己错了', '自己能修正', '自己能改', '自己能修', '自己学会修正'
+]
 
 
 def detect_relationship_mode(text: str) -> str:
@@ -113,6 +120,84 @@ def _looks_like_stock_query(text: str) -> bool:
     return False
 
 
+def _looks_like_ability_query(text: str) -> bool:
+    raw = (text or '').strip()
+    if not raw:
+        return False
+    return any(word in raw for word in ABILITY_QUERY_WORDS)
+
+
+def _looks_like_meta_bug_report(text: str) -> bool:
+    raw = (text or '').strip()
+    if not raw:
+        return False
+
+    issue_words = [
+        '有问题', '感觉有问题', '不对', '怪怪的', '尴尬', '误触发', '触发错了',
+        '老是', '总是', '一直', '又给搞了', '检查下', '看下这个路径', '看看这个路径',
+    ]
+    context_words = [
+        '路径', '窗口', '弹窗', '页面', '界面', '对话里', '聊天里', '这句', '这句话',
+        '上面那句', '只要', '一出现', '跳出来', '弹出来', '到窗口', '流程',
+    ]
+    trigger_words = ['出现', '触发', '跳出', '弹出', '打开']
+    code_words = ['代码', '小游戏', 'run_code', '编程游戏']
+
+    has_issue = any(word in raw for word in issue_words)
+    has_context = any(word in raw for word in context_words)
+    has_trigger = any(word in raw for word in trigger_words)
+    has_code_topic = any(word in raw for word in code_words)
+
+    return has_code_topic and ((has_issue and has_context) or (has_context and has_trigger))
+
+
+def _looks_like_answer_correction(text: str) -> bool:
+    raw = (text or '').strip()
+    if not raw:
+        return False
+
+    correction_words = [
+        '不是这个', '不是我刚才说的', '不是这个意思', '我说的不是这个', '答歪了',
+        '理解错了', '你理解错了', '看我问的什么', '我没说', '没让你查', '别顺着这个',
+        '你又犯傻了', '说的不是这个',
+    ]
+    context_words = [
+        '刚才', '之前', '前面', '上一句', '上句', '上一条', '前一条',
+        '你刚才', '你前面', '你发', '那句', '这句',
+    ]
+    skill_words = [
+        '天气', '故事', '股票', '图片', '画图', '代码', '小游戏',
+        'weather', 'story', 'stock', 'draw', 'run_code',
+    ]
+
+    has_correction = any(word in raw for word in correction_words)
+    has_context = any(word in raw for word in context_words)
+    has_skill_ref = any(word in raw for word in skill_words)
+
+    if any(word in raw for word in ['看我问的什么', '看清我问的什么', '我问的什么']):
+        return True
+    if '我没说' in raw and has_skill_ref:
+        return True
+    if '不是这个' in raw and (has_context or has_skill_ref):
+        return True
+    return has_correction and (has_context or has_skill_ref)
+
+
+def _looks_like_self_repair_query(text: str) -> bool:
+    raw = (text or '').strip()
+    if not raw:
+        return False
+
+    if any(word in raw for word in SELF_REPAIR_QUERY_HINTS):
+        return True
+
+    asks_about_self = any(word in raw for word in ['你自己', '自己', '自我', '自动'])
+    asks_about_code = any(word in raw for word in ['代码', '路由', '本体', '源码'])
+    asks_about_repair = any(word in raw for word in ['修改', '修正', '改', '修'])
+    asks_about_timing = any(word in raw for word in ['什么时候', '何时', '啥时候', '能不能', '会不会', '能否'])
+    return asks_about_self and asks_about_code and asks_about_repair and asks_about_timing
+
+
 def route(text: str) -> dict:
     """统一路由入口，返回标准结构"""
     role = detect_relationship_mode(text or '')
@@ -147,6 +232,20 @@ def route(text: str) -> dict:
             'emotion_score': scores['emotion_score'],
         }
 
+    if _looks_like_answer_correction(text):
+        return {
+            'mode': 'chat',
+            'skill': None,
+            'confidence': 0.97,
+            'reason': '命中上一轮纠偏/澄清反馈',
+            'intent': 'answer_correction',
+            'params': {},
+            'role': role,
+            'chat_score': max(scores['chat_score'], 1.2),
+            'skill_score': 0.0,
+            'emotion_score': scores['emotion_score'],
+        }
+
     if _looks_like_stock_query(text):
         return {
             'mode': 'skill',
@@ -157,6 +256,48 @@ def route(text: str) -> dict:
             'role': role,
             'chat_score': scores['chat_score'],
             'skill_score': max(scores['skill_score'], 2.2),
+            'emotion_score': scores['emotion_score'],
+        }
+
+    if _looks_like_meta_bug_report(text):
+        return {
+            'mode': 'chat',
+            'skill': None,
+            'confidence': 0.96,
+            'reason': '命中界面异常/误触发反馈',
+            'intent': 'meta_bug_report',
+            'params': {},
+            'role': role,
+            'chat_score': max(scores['chat_score'], 1.1),
+            'skill_score': 0.0,
+            'emotion_score': scores['emotion_score'],
+        }
+
+    if _looks_like_self_repair_query(text):
+        return {
+            'mode': 'chat',
+            'skill': None,
+            'confidence': 0.97,
+            'reason': '命中自修正能力提问',
+            'intent': 'self_repair_capability',
+            'params': {},
+            'role': role,
+            'chat_score': max(scores['chat_score'], 1.2),
+            'skill_score': 0.0,
+            'emotion_score': scores['emotion_score'],
+        }
+
+    if _looks_like_ability_query(text):
+        return {
+            'mode': 'chat',
+            'skill': None,
+            'confidence': 0.95,
+            'reason': '命中能力范围提问',
+            'intent': 'ability_capability',
+            'params': {},
+            'role': role,
+            'chat_score': max(scores['chat_score'], 1.0),
+            'skill_score': 0.0,
             'emotion_score': scores['emotion_score'],
         }
 

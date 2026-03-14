@@ -8,7 +8,7 @@ from pathlib import Path
 
 import json
 from fastapi import BackgroundTasks, FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 ENGINE_DIR = Path(__file__).parent
@@ -17,6 +17,7 @@ PRIMARY_STATE_DIR = ENGINE_DIR / "memory_db"
 LEGACY_STATE_DIR = ENGINE_DIR / "memory"
 LOGS_DIR = ENGINE_DIR / "logs"
 HTML_FILE = ENGINE_DIR / "output.html"
+RESTORED_OUTPUT_JS_FILE = ENGINE_DIR / ".tmp_settings_check.js"
 LLM_CONFIG_FILE = ENGINE_DIR / "brain" / "llm_config.json"
 
 PRIMARY_HISTORY_FILE = PRIMARY_STATE_DIR / "msg_history.json"
@@ -59,7 +60,16 @@ from core.l8_learn import (
     auto_learn_from_feedback as l8_feedback_relearn,
     find_relevant_knowledge,
     load_autolearn_config,
+    should_surface_knowledge_entry,
+    should_trigger_auto_learn,
     update_autolearn_config,
+)
+from core.self_repair import (
+    apply_self_repair_report,
+    create_self_repair_report,
+    find_feedback_rule,
+    load_self_repair_reports,
+    preview_self_repair_report,
 )
 from memory import add_to_history, evolve, get_history as get_text_history
 
@@ -339,6 +349,14 @@ def summarize_event_value(value, limit: int = 120) -> str:
     return text[:limit] + ("..." if len(text) > limit else "")
 
 
+def stringify_event_value(value) -> str:
+    if isinstance(value, (dict, list)):
+        text = json.dumps(value, ensure_ascii=False)
+    else:
+        text = str(value or "").strip()
+    return text.strip()
+
+
 def build_persona_events(persona_data: dict, event_time: str) -> list[dict]:
     if not isinstance(persona_data, dict):
         return []
@@ -572,11 +590,90 @@ def normalize_route_result(route_result, user_input: str, source: str):
     normalized["reason"] = normalized.get("reason", "") or ""
     normalized["rewritten_input"] = normalized.get("rewritten_input") or user_input
     normalized["source"] = source
+    skill_name = str(normalized.get("skill") or "").strip()
+    if normalized["mode"] in ("skill", "hybrid") and skill_name not in ("", "none") and not is_registered_skill_name(skill_name):
+        normalized["mode"] = "chat"
+        normalized["intent"] = normalized.get("intent") or "missing_skill"
+        normalized["missing_skill"] = skill_name
     return normalized
 
 
 def has_skill_target(route_result: dict) -> bool:
     return route_result.get("skill") not in ("none", "", None)
+
+
+def is_registered_skill_name(skill_name: str) -> bool:
+    name = str(skill_name or "").strip()
+    if not name or name == "none" or not NOVA_CORE_READY:
+        return False
+    try:
+        return name in get_all_skills()
+    except Exception:
+        return False
+
+
+def looks_like_news_request(user_input: str) -> bool:
+    text = str(user_input or "").strip()
+    if not text:
+        return False
+    if any(word in text for word in ("新闻", "头条", "热点")):
+        return True
+    if "发生了什么" in text and any(word in text for word in ("今天", "最近", "最新")):
+        return True
+    return False
+
+
+def detect_missing_capability_route(bundle: dict) -> dict | None:
+    user_input = str((bundle or {}).get("user_input") or "").strip()
+    if not user_input:
+        return None
+
+    if looks_like_news_request(user_input) and not is_registered_skill_name("news"):
+        return normalize_route_result(
+            {
+                "mode": "skill",
+                "skill": "news",
+                "reason": "news_capability_missing",
+                "intent": "missing_skill",
+                "missing_skill": "news",
+                "rewritten_input": user_input,
+            },
+            user_input,
+            "heuristic",
+        )
+
+    return None
+
+
+def detect_story_follow_up_route(bundle: dict) -> dict | None:
+    user_input = str((bundle or {}).get("user_input") or "").strip()
+    if not user_input:
+        return None
+
+    story_follow_up_words = ("继续讲", "接着讲", "然后呢", "后来呢", "接着呢", "讲长一点", "有点短", "太短")
+    if not any(word in user_input for word in story_follow_up_words):
+        return None
+
+    recent = list((bundle or {}).get("l2") or [])
+    last_assistant = ""
+    for item in reversed(recent):
+        if item.get("role") in ("nova", "assistant"):
+            last_assistant = str(item.get("content") or "").strip()
+            if last_assistant:
+                break
+
+    if "《" in last_assistant and "》" in last_assistant:
+        return normalize_route_result(
+            {
+                "mode": "skill",
+                "skill": "story",
+                "reason": "story_follow_up_from_history",
+                "rewritten_input": user_input,
+            },
+            user_input,
+            "context",
+        )
+    return None
 
 
 def llm_route(bundle: dict) -> dict:
@@ -597,6 +694,16 @@ def llm_route(bundle: dict) -> dict:
 
 def resolve_route(bundle: dict) -> dict:
     user_input = bundle["user_input"]
+    contextual_story_route = detect_story_follow_up_route(bundle)
+    if contextual_story_route is not None:
+        debug_write("context_story_route", contextual_story_route)
+        return contextual_story_route
+
+    missing_capability_route = detect_missing_capability_route(bundle)
+    if missing_capability_route is not None:
+        debug_write("missing_capability_route", missing_capability_route)
+        return missing_capability_route
+
     core_route = None
 
     if NOVA_CORE_READY:
@@ -619,7 +726,186 @@ def resolve_route(bundle: dict) -> dict:
     return llm_candidate
 
 
-def unified_chat_reply(bundle: dict) -> str:
+def _build_learning_summary(config: dict) -> str:
+    if not bool(config.get("enabled", True)):
+        return "自动学习已关闭，反馈只会停留在当前会话里。"
+    if bool(config.get("allow_feedback_relearn", True)):
+        if bool(config.get("allow_web_search", True)) and bool(config.get("allow_knowledge_write", True)):
+            return "会先记住负反馈，必要时补学并写回知识库。"
+        if bool(config.get("allow_knowledge_write", True)):
+            return "会先记住负反馈，并把纠偏结论沉淀到知识库。"
+        return "会先记住负反馈，但暂时不会长期沉淀到知识库。"
+    return "现在不会把负反馈沉淀成纠偏记录。"
+
+
+def _build_repair_summary(config: dict) -> str:
+    planning_enabled = bool(config.get("allow_self_repair_planning", True))
+    test_run_enabled = bool(config.get("allow_self_repair_test_run", True))
+    auto_apply_enabled = bool(config.get("allow_self_repair_auto_apply", True))
+    apply_mode = str(config.get("self_repair_apply_mode") or "confirm").strip() or "confirm"
+
+    if not planning_enabled:
+        return "目前只做学习纠偏，不会主动整理修复方案。"
+    if not test_run_enabled:
+        return "会先整理修法，但动手前还不会自动自查。"
+    if not auto_apply_enabled:
+        return "会先整理修法并自己检查，真正动手前先停下来给你看。"
+    if apply_mode == "suggest":
+        return "低风险会自己继续，中高风险先给你看方案。"
+    return "低风险会自己继续，中高风险只确认一次。"
+
+
+def _build_latest_status_summary(latest: dict, latest_preview: dict, latest_apply: dict) -> str:
+    apply_status = str((latest_apply or {}).get("status") or "").strip()
+    if apply_status:
+        if apply_status in {"applied", "applied_without_validation"} and bool(latest_apply.get("auto_applied")):
+            return "最近一次反馈已经在后台自动落成修改。"
+        if apply_status == "applied":
+            return "最近一次反馈已经真正动手修改并通过了自查。"
+        if apply_status == "applied_without_validation":
+            return "最近一次反馈已经动手修改，但还没有跑自查。"
+        if apply_status.startswith("rolled_back"):
+            return "最近一次尝试已经自动回滚，没有把坏补丁留在源码里。"
+        return "最近一次反馈已经走到动手阶段，但结果还需要进一步确认。"
+
+    preview_status = str((latest_preview or {}).get("status") or "").strip()
+    if preview_status == "preview_ready":
+        if bool(latest_preview.get("auto_apply_ready")):
+            return "最近一次反馈已经整理成低风险补丁，会继续在后台往下处理。"
+        if bool(latest_preview.get("confirmation_required", True)):
+            return "最近一次反馈已经整理出改法，只等一次确认。"
+        return "最近一次反馈已经整理出改法，这次不用额外确认。"
+
+    latest_status = str((latest or {}).get("status") or "").strip()
+    if latest_status:
+        return "最近一次反馈已经被记进纠偏链路，后面会沿着这条线继续学习或修正。"
+    return "最近还没有新的纠偏记录。"
+
+
+def build_self_repair_status() -> dict:
+    l8_config = load_autolearn_config()
+    all_reports = load_self_repair_reports()
+    latest = all_reports[0] if all_reports else {}
+    latest_preview = latest.get("patch_preview") or {}
+    latest_apply = latest.get("apply_result") or {}
+    planning_enabled = bool(l8_config.get("allow_self_repair_planning", True))
+    test_run_enabled = bool(l8_config.get("allow_self_repair_test_run", True))
+    auto_apply_enabled = bool(l8_config.get("allow_self_repair_auto_apply", True))
+    apply_mode = str(l8_config.get("self_repair_apply_mode") or "confirm").strip() or "confirm"
+    learning_summary = _build_learning_summary(l8_config)
+    repair_summary = _build_repair_summary(l8_config)
+
+    return {
+        "stage": "controlled_patch_loop" if planning_enabled else "feedback_learning_only",
+        "feedback_learning": bool(l8_config.get("allow_feedback_relearn", True)),
+        "web_learning": bool(l8_config.get("allow_web_search", True)),
+        "knowledge_write": bool(l8_config.get("allow_knowledge_write", True)),
+        "planning_enabled": planning_enabled,
+        "test_run_enabled": test_run_enabled,
+        "auto_apply_enabled": auto_apply_enabled,
+        "skill_generation": bool(l8_config.get("allow_skill_generation", False)),
+        "apply_mode": apply_mode,
+        "report_count": len(all_reports),
+        "latest_report_id": str(latest.get("id") or ""),
+        "latest_report_status": str(latest.get("status") or ""),
+        "latest_summary": str(latest.get("summary") or ""),
+        "latest_apply_status": str(latest_apply.get("status") or ""),
+        "latest_risk_level": str(latest_preview.get("risk_level") or latest.get("risk_level") or ""),
+        "latest_auto_apply_ready": bool(latest_preview.get("auto_apply_ready")),
+        "latest_confirmation_required": bool(latest_preview.get("confirmation_required", True)),
+        "learning_summary": learning_summary,
+        "repair_summary": repair_summary,
+        "autonomy_summary": f"{learning_summary.rstrip('。')}；{repair_summary}",
+        "latest_status_summary": _build_latest_status_summary(latest, latest_preview, latest_apply),
+        "can_patch_source_code": True,
+        "can_plan_repairs": planning_enabled,
+        "can_run_source_tests": test_run_enabled,
+        "can_auto_apply_fixes": planning_enabled and test_run_enabled and auto_apply_enabled,
+    }
+
+
+def list_primary_capabilities() -> list[str]:
+    if not NOVA_CORE_READY:
+        return ["陪你聊天"]
+
+    preferred = ["weather", "story", "stock", "draw", "run_code"]
+    skills = get_all_skills()
+    labels = []
+    for name in preferred:
+        info = skills.get(name)
+        if not info:
+            continue
+        label = str(info.get("name") or name).strip()
+        if label and label not in labels:
+            labels.append(label)
+    return labels or ["陪你聊天"]
+
+
+def build_capability_chat_reply(route: dict | None = None) -> str:
+    route = route if isinstance(route, dict) else {}
+    intent = str(route.get("intent") or "").strip()
+    status = build_self_repair_status()
+
+    if intent == "self_repair_capability":
+        return (
+            "我现在已经接上更省心的自修正啦。现在这套能走到“收到负反馈 -> 生成修正提案 -> 列候选文件 -> 跑最小测试”这一步。\n\n"
+            "如果只是低风险的小修小补，我会在后台直接尝试落补丁；只要改动碰到更核心的链路，我就先问你一次。"
+            "如果补丁后的最小验证没过，我会自动回滚，不把坏改动留在源码里。"
+        )
+
+    if intent == "missing_skill":
+        missing_skill = str(route.get("missing_skill") or route.get("skill") or "技能").strip() or "技能"
+        label = get_skill_display_name(missing_skill)
+        prompt = str(route.get("rewritten_input") or "").strip()
+        if missing_skill == "news" or looks_like_news_request(prompt):
+            return f"我本来想按「{label}」这条路接住你这句，但这项能力现在没接上，所以我先不乱报“今天”的新闻，免得把旧信息当成现在。"
+        return f"我本来想按「{label}」这条能力接住你这句，不过它现在没接上，所以先不拿一条失效结果糊弄你。"
+
+    skills = "、".join(list_primary_capabilities())
+    tail = "源码自修这边现在是：低风险小改动会先自己修，碰到更核心的链路再问你一次；如果验证不过，我会自动回滚。"
+    if status["feedback_learning"]:
+        return f"我现在能陪你聊天，也能做这些：{skills}。{tail}"
+    return f"我现在能陪你聊天，也能做这些：{skills}。"
+
+
+def build_meta_bug_report_reply(route: dict | None = None) -> str:
+    route = route if isinstance(route, dict) else {}
+    status = build_self_repair_status()
+    latest = str(status.get("latest_status_summary") or "").strip()
+
+    if status.get("can_auto_apply_fixes"):
+        return (
+            "我会先进入排查模式，把这类话当成界面异常或路由误触发，不再直接跳去小游戏。\n\n"
+            f"排查后会继续走自修复链路：生成修复提案、跑最小验证，低风险补丁会自动落地。{latest}"
+        )
+
+    return (
+        "我会先进入排查模式，把这类话当成界面异常或路由误触发，不再直接跳去小游戏。\n\n"
+        f"排查后会继续走修复链路：先生成修复提案和验证计划，不过不是每种情况都会自动改源码。{latest}"
+    )
+
+
+def build_answer_correction_reply(route: dict | None = None) -> str:
+    route = route if isinstance(route, dict) else {}
+    status = build_self_repair_status()
+    latest = str(status.get("latest_status_summary") or "").strip()
+    latest_tail = f" {latest}" if latest else ""
+    return (
+        "这句我会直接当成你在纠正我上一轮答偏了，不再往天气之类的技能上联想。\n\n"
+        f"我先停掉错误路由，回到你刚才真正指出的那件事继续排查；这次纠偏也会记进修复链路里。{latest_tail}"
+    )
+
+
+def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
+    route = route if isinstance(route, dict) else {}
+    intent = str(route.get("intent") or "").strip()
+    if intent in {"self_repair_capability", "ability_capability", "missing_skill"}:
+        return build_capability_chat_reply(route)
+    if intent == "meta_bug_report":
+        return build_meta_bug_report_reply(route)
+    if intent == "answer_correction":
+        return build_answer_correction_reply(route)
+
     l3 = bundle["l3"]
     l4 = bundle["l4"]
     l5 = bundle["l5"]
@@ -679,12 +965,179 @@ def format_skill_fallback(skill_response: str) -> str:
     return f"我先帮你整理好啦：\n\n{text}"
 
 
-def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> str:
+def format_skill_error_reply(skill_name: str, error_text: str, user_input: str = "") -> str:
+    label = get_skill_display_name(skill_name)
+    error = str(error_text or "").strip()
+    prompt = str(user_input or "").strip()
+    looks_like_news = skill_name == "news" or looks_like_news_request(prompt)
+
+    if "未找到" in error or "没有可执行函数" in error:
+        if looks_like_news:
+            return f"我本来把这句看成了「{label}」这类请求，但这项能力现在没接上，所以我先不乱报今天的新闻，免得把旧信息当成现在。"
+        return f"我本来想走「{label}」这条能力，不过它这会儿没接上，所以先不拿一条失效结果糊弄你。"
+
+    if "执行失败" in error:
+        return f"我本来想走「{label}」这条能力，不过这次执行没跑稳，所以先不把半截结果塞给你。"
+
+    return f"我本来想走「{label}」这条能力，不过这次没接稳，所以先不乱给你一个不靠谱的结果。"
+
+
+def format_story_reply(user_input: str, story_text: str) -> str:
+    text = str(story_text or "").strip()
+    if not text:
+        return "我这次故事没接稳，你再戳我一下，我给你重新讲一个完整点的。"
+
+    prompt = str(user_input or "").strip()
+    if any(word in prompt for word in ("继续讲", "然后呢", "后来呢", "接着讲")):
+        intro = "来，我接着往下讲。"
+    elif any(word in prompt for word in ("有点短", "太短", "讲长一点", "完整一点", "详细一点")):
+        intro = "这次我给你讲完整一点，你慢慢看。"
+    elif any(word in prompt for word in ("再讲一个", "换一个故事", "换个故事")):
+        intro = "那我换一个味道，重新给你讲一个。"
+    else:
+        intro = "好呀，给你讲一个。"
+    return f"{intro}\n\n{text}"
+
+
+def get_skill_display_name(skill_name: str) -> str:
+    name = str(skill_name or "").strip()
+    if not name:
+        return "技能"
+    if NOVA_CORE_READY:
+        try:
+            skill_info = get_all_skills().get(name, {})
+            return str(skill_info.get("name") or name)
+        except Exception:
+            pass
+    return name
+
+
+def prettify_trace_reason(route: dict) -> str:
+    route = route if isinstance(route, dict) else {}
+    reason = str(route.get("reason") or "").strip()
+    source = str(route.get("source") or "").strip()
+    skill = str(route.get("skill") or "").strip()
+
+    if source == "context" and skill == "story":
+        return "上一轮刚在讲故事，这句按续写处理。"
+
+    mapping = {
+        "命中故事追问延续语境": "识别到你是在接着上一段故事往下问。",
+        "命中股票/指数查询意图": "识别到这是一条明确的行情查询请求。",
+        "命中普通聊天语句": "这句更像普通聊天，没有必要调用技能。",
+        "存在任务意图，进入技能候选/混合路由": "这句带着明确任务意图，所以先按能力请求来处理。",
+    }
+    if reason in mapping:
+        return mapping[reason]
+    if reason.startswith("命中技能候选:"):
+        return "命中了明确的技能关键词，所以没有按闲聊处理。"
+    if reason == "story_follow_up_from_history":
+        return "上一轮刚在讲故事，这句按续写处理。"
+    return reason
+
+
+def build_trace_summary(route: dict, skill_trace: dict | None = None) -> str:
+    route = route if isinstance(route, dict) else {}
+    skill_trace = skill_trace if isinstance(skill_trace, dict) else {}
+    mode = str(route.get("mode") or "chat").strip()
+    skill_name = str(route.get("skill") or "").strip()
+    skill_label = get_skill_display_name(skill_name)
+    success = skill_trace.get("success")
+    source = str(route.get("source") or "").strip()
+
+    if source == "context" and skill_name == "story":
+        summary = "我知道你是在接着刚才那段故事问，所以就顺着往下讲啦。"
+    elif skill_name == "weather":
+        summary = "这句我就没跟你绕啦，直接去看天气了。"
+    elif skill_name == "stock":
+        summary = "这句我先去翻了下行情，再回来跟你说。"
+    elif skill_name == "story":
+        summary = "我猜你现在是想听故事，所以先把故事线接住啦。"
+    elif mode == "hybrid":
+        summary = f"这句像是在让我帮你办点事，我就先走「{skill_label}」那条路了。"
+    else:
+        summary = f"我先按「{skill_label}」这条路接住你这句啦。"
+
+    if success is False:
+        if summary.endswith("。"):
+            return summary[:-1] + "，不过这次没接稳。"
+        return summary + "不过这次没接稳。"
+    return summary
+
+
+def build_trace_payload(route: dict, skill_trace: dict | None = None) -> dict:
+    route = route if isinstance(route, dict) else {}
+    skill_trace = skill_trace if isinstance(skill_trace, dict) else {}
+    mode = str(route.get("mode") or "chat").strip()
+    skill_name = str(route.get("skill") or "").strip()
+
+    if mode not in ("skill", "hybrid") or skill_name in ("", "none"):
+        return {"show": False, "cards": []}
+
+    return {
+        "show": True,
+        "cards": [
+            {
+                "label": "",
+                "detail": build_trace_summary(route, skill_trace),
+            }
+        ],
+    }
+
+
+def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict | None = None) -> dict:
+    route = route if isinstance(route, dict) else {}
+    feedback_rule = feedback_rule if isinstance(feedback_rule, dict) else {}
+    intent = str(route.get("intent") or "").strip()
+    feedback_type = str(feedback_rule.get("type") or "").strip()
+    feedback_problem = str(feedback_rule.get("problem") or "").strip()
+
+    should_show = intent in {"meta_bug_report", "answer_correction"} or feedback_type in {"skill_route", "llm_rule", "execution_policy"}
+    if not should_show and feedback_problem not in {"wrong_skill_selected", "output_not_matching_intent", "fallback_too_generic"}:
+        return {"show": False}
+
+    status = build_self_repair_status()
+    can_plan = bool(status.get("can_plan_repairs"))
+    headline = "已记录反馈"
+    detail = "我先把这次反馈记下了。"
+    item = "当前事项：先把这次问题记进修复链路。"
+    if intent == "answer_correction":
+        headline = "已收到纠偏"
+        detail = "我先把这次答偏和错路由记下来了。"
+        item = "当前事项：回看上一轮的答复和被误触发的技能。"
+    if can_plan:
+        detail += " 接下来会继续看修复提案、验证结果和是否需要回滚。"
+    else:
+        detail += " 现在还没打开自动修复规划，所以会先停在记录这一步。"
+
+    return {
+        "show": True,
+        "watch": can_plan,
+        "label": "修复进度",
+        "stage": "logged",
+        "headline": headline,
+        "detail": detail,
+        "item": item,
+        "progress": 22,
+        "poll_ms": 1600,
+        "max_polls": 10,
+    }
+
+
+def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict:
     route_result = {"mode": "skill", "skill": skill_name, "params": {}, "role": "assistant"}
     execute_result = nova_execute(route_result, skill_input) if NOVA_CORE_READY else {"success": False}
     debug_write("execute_result", execute_result)
     if not execute_result.get("success"):
-        return execute_result.get("error", "技能执行失败")
+        error_text = str(execute_result.get("error", "") or "").strip()
+        if "未找到" in error_text or "没有可执行函数" in error_text:
+            debug_write("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
+        else:
+            debug_write("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
+        return {
+            "reply": format_skill_error_reply(skill_name, error_text, bundle.get("user_input", "")),
+            "trace": {"skill": skill_name, "success": False, "error": error_text},
+        }
 
     try:
         evolve(bundle["user_input"], skill_name)
@@ -692,6 +1145,12 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> str:
         debug_write("evolve_error", {"skill": skill_name, "error": str(exc)})
 
     skill_response = execute_result.get("response", "")
+    if skill_name == "story":
+        return {
+            "reply": format_story_reply(bundle["user_input"], skill_response),
+            "trace": {"skill": skill_name, "success": True},
+        }
+
     dialogue_context = bundle.get("dialogue_context", "")
     prompt = f"""
 用户输入：{bundle['user_input']}
@@ -728,8 +1187,14 @@ L4人格信息：
     result = think(prompt, dialogue_context)
     reply = result.get("reply", "") if isinstance(result, dict) else str(result)
     if (not reply) or ("��" in str(reply)) or len(str(reply).strip()) < 2:
-        return format_skill_fallback(skill_response)
-    return str(reply).strip()
+        return {
+            "reply": format_skill_fallback(skill_response),
+            "trace": {"skill": skill_name, "success": True},
+        }
+    return {
+        "reply": str(reply).strip(),
+        "trace": {"skill": skill_name, "success": True},
+    }
 
 
 def l7_record_feedback(msg: str, history: list, background_tasks: BackgroundTasks | None = None):
@@ -796,6 +1261,19 @@ def l7_record_feedback_v2(msg: str, history: list, background_tasks: BackgroundT
                     "problem": rule_item.get("problem", ""),
                 },
             )
+        if l8_config.get("allow_self_repair_planning", True):
+            if background_tasks is not None:
+                background_tasks.add_task(run_self_repair_planning_task, rule_item)
+            else:
+                run_self_repair_planning_task(rule_item)
+            debug_write(
+                "self_repair_planning_scheduled",
+                {
+                    "rule_id": rule_item.get("id"),
+                    "fix": rule_item.get("fix", ""),
+                    "problem": rule_item.get("problem", ""),
+                },
+            )
         return rule_item
     except Exception as exc:
         debug_write("feedback_rule_error", {"error": str(exc)})
@@ -858,6 +1336,72 @@ def run_l8_feedback_relearn_task(rule_item: dict):
         debug_write("l8_feedback_relearn_error", {"error": str(exc)})
 
 
+def run_self_repair_planning_task(rule_item: dict):
+    try:
+        config = load_autolearn_config()
+        if not config.get("allow_self_repair_planning", True):
+            return
+
+        report = create_self_repair_report(
+            rule_item if isinstance(rule_item, dict) else {},
+            config=config,
+            run_validation=bool(config.get("allow_self_repair_test_run", True)),
+        )
+        debug_write(
+            "self_repair_report",
+            {
+                "report_id": report.get("id"),
+                "feedback_rule_id": report.get("feedback_rule_id"),
+                "status": report.get("status"),
+                "candidate_files": [item.get("path") for item in report.get("candidate_files", [])],
+                "suggested_tests": [item.get("path") for item in report.get("suggested_tests", [])],
+                "validation_ran": bool((report.get("validation") or {}).get("ran")),
+                "validation_passed": (report.get("validation") or {}).get("all_passed"),
+            },
+        )
+        report = preview_self_repair_report(
+            report_id=str(report.get("id") or ""),
+            config=config,
+            auto_apply=bool(config.get("allow_self_repair_auto_apply", True)),
+            run_validation=bool(config.get("allow_self_repair_test_run", True)),
+        )
+        debug_write(
+            "self_repair_follow_up",
+            {
+                "report_id": report.get("id"),
+                "status": report.get("status"),
+                "risk_level": ((report.get("patch_preview") or {}).get("risk_level")) or report.get("risk_level"),
+                "auto_apply_ready": ((report.get("patch_preview") or {}).get("auto_apply_ready")),
+                "apply_status": ((report.get("apply_result") or {}).get("status")),
+            },
+        )
+    except Exception as exc:
+        debug_write("self_repair_report_error", {"error": str(exc)})
+
+
+def build_l8_diagnosis(query: str, route_mode: str = "chat", skill: str = "none", limit: int = 3) -> dict:
+    route_result = {
+        "mode": str(route_mode or "chat").strip() or "chat",
+        "skill": str(skill or "none").strip() or "none",
+    }
+    config = load_autolearn_config()
+    knowledge_hits = find_relevant_knowledge(query, limit=max(limit, 1), touch=False)
+    should_run, reason = should_trigger_auto_learn(
+        query,
+        route_result=route_result,
+        has_relevant_knowledge=bool(knowledge_hits),
+        config=config,
+    )
+    return {
+        "query": str(query or ""),
+        "route_result": route_result,
+        "config": config,
+        "should_trigger": should_run,
+        "reason": reason,
+        "knowledge_hits": knowledge_hits,
+    }
+
+
 app = FastAPI()
 
 
@@ -873,6 +1417,19 @@ async def home():
         except Exception:
             pass
     return "<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>服务运行中</p></body></html>"
+
+
+@app.get("/__restored_output.js")
+async def get_restored_output_js():
+    if not RESTORED_OUTPUT_JS_FILE.exists():
+        return Response(
+            content="console.error('missing restored output js');",
+            media_type="application/javascript; charset=utf-8",
+        )
+    return Response(
+        content=RESTORED_OUTPUT_JS_FILE.read_text(encoding="utf-8"),
+        media_type="application/javascript; charset=utf-8",
+    )
 
 
 @app.post("/chat")
@@ -900,6 +1457,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
     response = ""
     route = {"mode": "chat", "skill": "none", "reason": "default"}
+    trace_payload = {"show": False, "cards": []}
     try:
         route = resolve_route(bundle)
         debug_write("resolved_route", route)
@@ -908,12 +1466,20 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         rewritten_input = route.get("rewritten_input") or msg
 
         if mode in ("skill", "hybrid") and skill not in ("none", "", None) and NOVA_CORE_READY:
-            response = unified_skill_reply(bundle, skill, rewritten_input)
+            skill_result = unified_skill_reply(bundle, skill, rewritten_input)
+            if isinstance(skill_result, dict):
+                response = str(skill_result.get("reply", "") or "")
+                trace_payload = build_trace_payload(route, skill_result.get("trace"))
+            else:
+                response = str(skill_result or "")
+                trace_payload = build_trace_payload(route)
         else:
-            response = unified_chat_reply(bundle)
+            response = unified_chat_reply(bundle, route)
+            trace_payload = build_trace_payload(route)
     except Exception as exc:
         debug_write("chat_exception", {"error": str(exc)})
         response = "抱歉，出错了"
+        trace_payload = {"show": False, "cards": []}
 
     feedback_rule = l7_record_feedback_v2(msg, history, background_tasks)
     l8_touch()
@@ -924,6 +1490,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         and l8_config.get("allow_knowledge_write", True)
         and not feedback_rule
         and not bundle.get("l8")
+        and route.get("intent") != "missing_skill"
     ):
         background_tasks.add_task(run_l8_autolearn_task, msg, response, route, bool(bundle.get("l8")))
         debug_write(
@@ -931,7 +1498,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             {"message": msg, "route_mode": route.get("mode"), "skill": route.get("skill"), "has_l8_hit": bool(bundle.get("l8"))},
         )
 
-    debug_write("final_response", {"reply": response})
+    repair_payload = build_repair_progress_payload(route, feedback_rule)
+    debug_write("final_response", {"reply": response, "repair": repair_payload})
     add_to_history("nova", response)
     history.append({"role": "nova", "content": response, "time": datetime.now().isoformat()})
     save_msg_history(history)
@@ -941,7 +1509,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     except Exception as exc:
         debug_write("stats_error", {"error": str(exc)})
 
-    return {"reply": response}
+    return {"reply": response, "trace": trace_payload, "repair": repair_payload}
 
 
 @app.get("/stats")
@@ -1032,6 +1600,92 @@ async def set_autolearn_config(request: dict):
     return {"ok": True, "config": config}
 
 
+@app.get("/autolearn/diagnose")
+async def get_autolearn_diagnosis(query: str, route_mode: str = "chat", skill: str = "none", limit: int = 3):
+    return build_l8_diagnosis(query, route_mode=route_mode, skill=skill, limit=limit)
+
+
+@app.get("/self_repair/status")
+async def get_self_repair_status():
+    return {"status": build_self_repair_status()}
+
+
+@app.get("/self_repair/reports")
+async def get_self_repair_reports(limit: int = 6):
+    return {"reports": load_self_repair_reports(limit=max(limit, 1))}
+
+
+@app.post("/self_repair/propose")
+async def create_self_repair_proposal(request: dict | None = None):
+    payload = request if isinstance(request, dict) else {}
+    rule_id = str(payload.get("feedback_rule_id") or "").strip()
+    rule_item = find_feedback_rule(rule_id)
+    if not rule_item:
+        return {"ok": False, "error": "feedback_rule_not_found"}
+
+    config = load_autolearn_config()
+    run_validation = bool(payload.get("run_validation", config.get("allow_self_repair_test_run", True)))
+    report = create_self_repair_report(
+        rule_item,
+        config=config,
+        run_validation=run_validation and bool(config.get("allow_self_repair_test_run", True)),
+    )
+    return {"ok": True, "report": report}
+
+
+@app.post("/self_repair/preview")
+async def preview_self_repair_fix(request: dict | None = None):
+    payload = request if isinstance(request, dict) else {}
+    report_id = str(payload.get("report_id") or "").strip()
+    config = load_autolearn_config()
+    auto_apply = bool(payload.get("auto_apply", False))
+    run_validation = bool(payload.get("run_validation", config.get("allow_self_repair_test_run", True)))
+    try:
+        report = preview_self_repair_report(
+            report_id=report_id,
+            config=config,
+            auto_apply=auto_apply,
+            run_validation=run_validation,
+        )
+        debug_write(
+            "self_repair_preview",
+            {
+                "report_id": report.get("id"),
+                "preview_status": ((report.get("patch_preview") or {}).get("status")),
+                "preview_edit_count": len(((report.get("patch_preview") or {}).get("edits")) or []),
+                "risk_level": ((report.get("patch_preview") or {}).get("risk_level")),
+                "auto_apply_ready": ((report.get("patch_preview") or {}).get("auto_apply_ready")),
+                "apply_status": ((report.get("apply_result") or {}).get("status")),
+            },
+        )
+        return {"ok": True, "report": report}
+    except Exception as exc:
+        debug_write("self_repair_preview_error", {"error": str(exc), "report_id": report_id})
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/self_repair/apply")
+async def apply_self_repair_fix(request: dict | None = None):
+    payload = request if isinstance(request, dict) else {}
+    report_id = str(payload.get("report_id") or "").strip()
+    config = load_autolearn_config()
+    try:
+        report = apply_self_repair_report(report_id=report_id, config=config, run_validation=True)
+        debug_write(
+            "self_repair_apply",
+            {
+                "report_id": report.get("id"),
+                "status": report.get("status"),
+                "apply_status": ((report.get("apply_result") or {}).get("status")),
+                "rolled_back": ((report.get("apply_result") or {}).get("rolled_back")),
+            },
+        )
+        return {"ok": True, "report": report}
+    except Exception as exc:
+        debug_write("self_repair_apply_error", {"error": str(exc), "report_id": report_id})
+        return {"ok": False, "error": str(exc)}
+
+
 @app.get("/docs/index")
 async def get_docs_index():
     sections = build_docs_index()
@@ -1097,7 +1751,7 @@ async def get_memory():
                         "layer": "L3",
                         "event_type": item.get("category", "memory"),
                         "title": "记忆结晶",
-                        "content": f"沉淀了一段长期记忆：{content[:120]}",
+                        "content": f"沉淀了一段长期记忆：{content}",
                     }
                 )
                 counts["L3"] += 1
@@ -1140,6 +1794,8 @@ async def get_memory():
             l6_data = json.loads(l6_file.read_text(encoding="utf-8"))
             skills_used = l6_data.get("skills_used", {})
             for skill_name, data in skills_used.items():
+                if not is_registered_skill_name(skill_name):
+                    continue
                 count = data.get("count", 0)
                 tail = "越来越熟练了" if count >= 3 else "已经留下第一次执行痕迹"
                 events.append(
@@ -1185,9 +1841,11 @@ async def get_memory():
         try:
             l8_data = json.loads(l8_file.read_text(encoding="utf-8"))
             for item in l8_data:
+                if not should_surface_knowledge_entry(item):
+                    continue
                 scene = str(item.get("二级场景") or item.get("核心技能") or item.get("name") or "").strip()
                 scene_name = scene.replace("自动学习-", "") if scene else "新经验"
-                summary = summarize_event_value(item.get("summary") or item.get("应用示例") or "", 120)
+                summary = stringify_event_value(item.get("summary") or item.get("应用示例") or "")
                 content = f"习得经验：「{scene_name}」"
                 if summary:
                     content += f"：{summary}"
