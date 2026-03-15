@@ -9,7 +9,7 @@
       "天气"
     ],
     "created_at": "2026-03-16T00:53:32.992337",
-    "hit_count": 12,
+    "hit_count": 13,
     "crystallized": false
   },
   {
@@ -24,7 +24,7 @@
       "常州"
     ],
     "created_at": "2026-03-16T00:55:19.739005",
-    "hit_count": 11,
+    "hit_count": 12,
     "crystallized": true
   },
   {
@@ -48,7 +48,7 @@
       "都忘"
     ],
     "created_at": "2026-03-16T00:55:48.434008",
-    "hit_count": 10,
+    "hit_count": 11,
     "crystallized": true
   },
   {
@@ -143,7 +143,7 @@
       "什么"
     ],
     "created_at": "2026-03-16T01:37:27.770796",
-    "hit_count": 4,
+    "hit_count": 5,
     "crystallized": false
   },
   {
@@ -175,7 +175,7 @@
       "en"
     ],
     "created_at": "2026-03-16T01:38:36.318978",
-    "hit_count": 3,
+    "hit_count": 4,
     "crystallized": false
   },
   {
@@ -193,7 +193,7 @@
       "什么"
     ],
     "created_at": "2026-03-16T01:39:09.256839",
-    "hit_count": 2,
+    "hit_count": 3,
     "crystallized": false
   },
   {
@@ -213,7 +213,7 @@
       "股了"
     ],
     "created_at": "2026-03-16T01:39:47.822569",
-    "hit_count": 1,
+    "hit_count": 2,
     "crystallized": false
   },
   {
@@ -234,6 +234,32 @@
       "啥啊"
     ],
     "created_at": "2026-03-16T01:40:21.202232",
+    "hit_count": 1,
+    "crystallized": false
+  },
+  {
+    "id": "l2_1773596469783",
+    "user_text": "那有没有关于人工智能的研究呢",
+    "ai_text": "（托着下巴想）唔…关于AI的研究可多啦～比如刚才聊的MCP协议，就是让AI能调用外部工具的新标准；还有多模态模型、Agent自主决策这些方向……主人具体想了解哪一块呀？我可以帮你找找最新的论文或者技术动态～",
+    "importance": 0.6,
+    "memory_type": "general",
+    "keywords": [
+      "AI",
+      "研究",
+      "那有",
+      "有没",
+      "没有",
+      "有关",
+      "关于",
+      "于人",
+      "人工",
+      "工智",
+      "智能",
+      "能的",
+      "的研",
+      "究呢"
+    ],
+    "created_at": "2026-03-16T01:41:09.783357",
     "hit_count": 0,
     "crystallized": false
   }

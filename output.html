@@ -2354,9 +2354,9 @@ function renderSelfRepairReviewSection(config, status, reports, isLight){
  var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
  var softBg=isLight?'linear-gradient(135deg,#eef2ff,#f8fafc)':'linear-gradient(135deg,rgba(79,70,229,0.16),rgba(15,23,42,0.7))';
  var safeReports=Array.isArray(reports)?reports:[];
- var list=safeReports.slice(0,3);
+ var list=safeReports.slice(0,10);
  var activeId=settingsPanelState.activeRepairId||((list[0]&&list[0].id)||'');
- var countLabel=list.length?('最近提案 '+list.length+' 条'):'当前无提案';
+ var countLabel=safeReports.length?('最近提案 '+safeReports.length+' 条'+(safeReports.length>10?' (展示前10条)':'')):'当前无提案';
  var html='';
  html+='<div style="margin-top:16px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px;border-radius:18px;">';
  html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">';

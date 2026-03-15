@@ -300,7 +300,9 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
             trigger_self_repair_from_error("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
         else:
             debug_write("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
-            trigger_self_repair_from_error("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
+            # timeout / 网络错误等临时性故障不触发修复提案
+            if "timeout" not in error_text.lower() and "connection" not in error_text.lower():
+                trigger_self_repair_from_error("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
         return {
             "reply": format_skill_error_reply(skill_name, error_text, bundle.get("user_input", "")),
             "trace": {"skill": skill_name, "success": False, "error": error_text},

@@ -371,23 +371,31 @@ def _score_entry(query: str, entry: dict) -> int:
     if not normalized_query:
         return 0
 
-    text = _entry_text(entry)
     score = 0
 
+    # 完全匹配原始 query — 最高分
     if normalized_query == _normalize_query(entry.get("query", "")):
         score += 24
-    if normalized_query and normalized_query in text:
-        score += 12
 
-    for keyword in extract_keywords(query):
-        normalized_keyword = keyword.lower()
-        if normalized_keyword and normalized_keyword in text:
-            score += 4
+    # 关键词匹配 — 只在 keywords/trigger 里匹配（精确），不在 summary 里模糊搜
+    entry_keywords = set()
+    for k in (entry.get("keywords") or []):
+        entry_keywords.add(str(k).lower().strip())
+    for k in (entry.get("trigger") or []):
+        entry_keywords.add(str(k).lower().strip())
+
+    query_keywords = extract_keywords(query)
+    for keyword in query_keywords:
+        nk = keyword.lower().strip()
+        if len(nk) < 2:
+            continue
+        if nk in entry_keywords:
+            score += 6  # 精确命中 entry 的关键词
 
     return score
 
 
-def find_relevant_knowledge(query: str, limit: int = 3, min_score: int = 4, touch: bool = False) -> list[dict]:
+def find_relevant_knowledge(query: str, limit: int = 3, min_score: int = 6, touch: bool = False) -> list[dict]:
     entries = _load_json(KNOWLEDGE_BASE_FILE, [])
     if not isinstance(entries, list):
         return []
