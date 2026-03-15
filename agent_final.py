@@ -540,6 +540,18 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         response = ""
         route = {"mode": "chat", "skill": "none", "reason": "default"}
         try:
+            # ── Step 3.5: 检测人格模式切换 ──
+            from brain import _detect_mode_switch
+            mode_switch_reply = _detect_mode_switch(msg)
+            if mode_switch_reply:
+                response = mode_switch_reply
+                yield await _trace("\u4eba\u683c\u5207\u6362", "\u5df2\u5207\u6362\u4eba\u683c\u6a21\u5f0f")
+                yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                add_to_history("assistant", response)
+                history.append({"role": "assistant", "content": response, "time": datetime.now().isoformat()})
+                save_msg_history(history)
+                return
+
             route = resolve_route(bundle)
             debug_write("resolved_route", route)
             mode = route.get("mode", "chat")

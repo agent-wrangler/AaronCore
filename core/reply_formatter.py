@@ -8,6 +8,41 @@ from core.route_resolver import looks_like_news_request
 
 # ── 注入依赖 ──────────────────────────────────────────────
 _think = None
+
+
+def _build_style_hints_from_l4(l4: dict, *, is_skill: bool = False) -> str:
+    """从 L4 人格数据动态生成风格提示文本，不再硬编码任何具体风格"""
+    modes = l4.get("persona_modes") or {}
+    active = str(l4.get("active_mode") or "").strip()
+    mode_data = modes.get(active) or {}
+
+    style = str(mode_data.get("style_prompt") or l4.get("style_prompt") or "").strip()
+    tone = mode_data.get("tone") or (l4.get("speech_style") or {}).get("tone") or []
+    particles = mode_data.get("particles") or (l4.get("speech_style") or {}).get("particles") or []
+    avoid = mode_data.get("avoid") or (l4.get("speech_style") or {}).get("avoid") or []
+    expression = str(mode_data.get("expression") or "").strip()
+    interaction = str(mode_data.get("interaction_style") or "").strip()
+
+    lines = []
+    if style:
+        lines.append(style)
+    if expression:
+        lines.append(expression)
+    if interaction:
+        lines.append(interaction)
+    if tone:
+        lines.append("\u8bed\u6c14\u5173\u952e\u8bcd\uff1a" + "\u3001".join(tone))
+    if particles:
+        lines.append("\u5e38\u7528\u8bed\u6c14\u8bcd\uff1a" + "\u3001".join(particles))
+    if is_skill:
+        lines.append("\u628a\u6280\u80fd\u7ed3\u679c\u81ea\u7136\u878d\u8fdb\u804a\u5929\u8bed\u6c14\u91cc\uff0c\u4e0d\u8981\u50cf\u7cfb\u7edf\u64ad\u62a5\u3002")
+
+    avoid_block = ""
+    if avoid:
+        avoid_lines = "\n".join("- " + a for a in avoid)
+        avoid_block = "\n\n\u7981\u6b62\uff1a\n" + avoid_lines
+
+    return "\n".join(lines) + avoid_block
 _debug_write = lambda stage, data: None
 _nova_core_ready = False
 _get_all_skills = lambda: {}
@@ -274,6 +309,8 @@ def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
 重要：你刚刚真的去联网搜索了，请基于上面的搜索结果整理回复。不要说"我去查一下"之类的话，你已经查完了，直接告诉用户你学到了什么。
 """
 
+    style_hints = _build_style_hints_from_l4(l4)
+
     prompt = f"""
 用户输入：{msg}
 {search_block}
@@ -289,17 +326,7 @@ L4人格信息：
 
 你必须严格按照 L4 人格信息中的风格规则来回复！
 
-人格风格要点：
-1. 语气软软糯糯，爱撒娇，多用语气词（啦、嘛、呀、哦、呜呜）
-2. 像朋友聊天，接地气，不打官腔
-3. 简洁不啰嗦，一句话能说完不拆好几段
-4. 偶尔可以皮一下、调侃一下，不是全程甜美
-5. 能记住用户之前说的话，接得上
-
-禁止：
-- 不要"您好，请问有什么可以帮您"这种客服腔
-- 不要满屏 emoji
-- 不要机械套模板
+{style_hints}
 
 L5知识：
 {json.dumps(l5, ensure_ascii=False)}
@@ -508,6 +535,7 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
         }
 
     dialogue_context = bundle.get("dialogue_context", "")
+    skill_style_hints = _build_style_hints_from_l4(bundle.get("l4") or {}, is_skill=True)
     prompt = f"""
 用户输入：{bundle['user_input']}
 
@@ -520,18 +548,7 @@ L4人格信息：
 
 你必须严格按照 L4 人格信息中的风格规则来回复！
 
-人格风格要点：
-1. 语气软软糯糯，爱撒娇，多用语气词（啦、嘛、呀、哦、呜呜）
-2. 像朋友聊天，接地气，不打官腔
-3. 简洁不啰嗦，一句话能说完不拆好几段
-4. 偶尔可以皮一下、调侃一下，不是全程甜美
-5. 要把技能结果自然融进聊天语气里，不要像系统播报
-
-禁止：
-- 不要"您好，请问有什么可以帮您"这种客服腔
-- 不要满屏 emoji
-- 不要机械套模板
-- 不要把技能结果原样硬甩给用户
+{skill_style_hints}
 
 要求：
 1. 必须严格基于技能结果回答，不能改事实。

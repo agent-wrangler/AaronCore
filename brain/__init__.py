@@ -54,7 +54,7 @@ def understand_intent(user_input: str) -> dict:
 
 
 def _load_persona() -> dict:
-    """从 memory_db/persona.json 读取人格配置（不再交叉读 long_term.json）"""
+    """从 memory_db/persona.json 读取人格配置，支持多模式切换"""
     base = {
         "name": "NovaCore",
         "nova_name": "NovaCore",
@@ -67,10 +67,12 @@ def _load_persona() -> dict:
             data = json.load(open(persona_path, 'r', encoding='utf-8'))
             if isinstance(data, dict):
                 base.update(data)
-                # interaction_rules 已统一存在 persona.json 里
-                rules = data.get('interaction_rules') or []
-                if isinstance(rules, list) and rules:
-                    base['style_prompt'] = '；'.join(rules[-6:])
+                # 从 active_mode 读取风格
+                modes = data.get('persona_modes') or {}
+                active = str(data.get('active_mode') or '').strip()
+                mode_data = modes.get(active) or {}
+                if mode_data.get('style_prompt'):
+                    base['style_prompt'] = mode_data['style_prompt']
         except Exception:
             pass
     return base
@@ -181,15 +183,9 @@ def _looks_bad_reply(text: str) -> bool:
 
 def _merged_style_prompt(persona: dict) -> str:
     base = str(persona.get('style_prompt', '') or '').strip()
-    fallback = (
-        "语气软软糯糯，像熟人聊天一样自然；爱用一点点语气词，但别堆满；"
-        "可以偶尔皮一下、调侃一下；简洁，不打官腔，不说空模板。"
-    )
     if not base:
-        return fallback
-    if fallback in base:
-        return base
-    return f"{base}；{fallback}"
+        return "像熟人聊天，自然有温度，有自己的个性。"
+    return base
 
 
 def _local_persona_reply(mode: str, prompt: str, persona: dict, context: str = '') -> str:
@@ -275,59 +271,35 @@ def think(prompt: str, context: str = "") -> dict:
         {context_text}
 
         联动要求：
-        1. 如果用户当前这句话是承接上一轮的追问（例如“那什么时候有啊”“然后呢”“为什么”“这个呢”），默认按最近对话直接接上。
-        2. 除非上下文确实没有指向，不要反问“你指什么”“你说的是哪个”。
+        1. 如果用户当前这句话是承接上一轮的追问（例如"那什么时候有啊""然后呢""为什么""这个呢"），默认按最近对话直接接上。
+        2. 除非上下文确实没有指向，不要反问"你指什么""你说的是哪个"。
         3. 优先承接上一轮助手刚说完的话题，不要把这轮对话当成全新开场。
         """
 
     if mode in ('skill', 'hybrid') and skill_result:
-        full_prompt = f"""你是 {nova_name}，正在和 {user_name} 对话。
-
-        你的人格要求：
-        {style_prompt}
-
-        {context_block}
-
-        下面是当前任务信息，请按要求直接输出最终回复，不要复述任务说明：
-        {prompt}
-
-        严格要求：
-        1. 不要改变事实。
-        2. 不要增加技能结果里没有的新信息。
-        3. 语气要像熟人聊天，软一点、活一点，但不要油腻。
-        4. 可以带一点点撒娇感或小调侃，但不要满屏 emoji。
-        5. 不要用客服腔，不要像系统播报结果。
-        6. 保留自然的人格表达，不要说空模板话。
-        7. 不要输出思考过程。
-        8. 只输出最终回复。
-        """
+        skill_guide = "\u56de\u590d\u8981\u6c42\uff1a\u57fa\u4e8e\u6280\u80fd\u7ed3\u679c\u56de\u7b54\uff0c\u4e0d\u7f16\u9020\u4fe1\u606f\u3002\u7528\u4f60\u81ea\u5df1\u7684\u98ce\u683c\u8bf4\u8bdd\uff0c\u81ea\u7136\u3001\u6709\u6e29\u5ea6\u3001\u6709\u4e2a\u6027\u3002\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002"
+        full_prompt = (
+            "\u4f60\u662f " + nova_name + "\uff0c\u6b63\u5728\u548c " + user_name + " \u5bf9\u8bdd\u3002\n\n"
+            + "\u4f60\u7684\u98ce\u683c\uff1a" + style_prompt + "\n\n"
+            + context_block + "\n\n"
+            + prompt + "\n\n"
+            + skill_guide
+        )
     else:
-        full_prompt = f"""你是 {nova_name}，正在和 {user_name} 对话。
-
-        你的人格要求：
-        {style_prompt}
-
-        {context_block}
-
-        下面是当前任务信息，请按要求直接输出最终回复，不要复述任务说明：
-        {prompt}
-
-        严格要求：
-        1. 要像自然对话，不要僵硬。
-        2. 语气要软一点、近一点，像熟人之间说话。
-        3. 可以偶尔皮一下，但不要一直发甜腻套路。
-        4. 不要用“您好，请问有什么可以帮您”这种客服腔。
-        5. 不要说“收到啦，主人。你继续说，我来接着帮你理。”这种空模板。
-        6. 如果当前这句话是承接上一轮的追问，要顺着最近对话直接接上，不要装作没听懂。
-        7. 不要输出思考过程。
-        8. 只输出最终回复。
-        """
+        chat_guide = "\u56de\u590d\u8981\u6c42\uff1a\u50cf\u548c\u719f\u4eba\u804a\u5929\u4e00\u6837\u81ea\u7136\u56de\u590d\uff0c\u6709\u4e2a\u6027\uff0c\u63a5\u5f97\u4f4f\u8bdd\u3002\u5982\u679c\u662f\u8ffd\u95ee\u5c31\u987a\u7740\u4e0a\u6587\u63a5\u3002\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002"
+        full_prompt = (
+            "\u4f60\u662f " + nova_name + "\uff0c\u6b63\u5728\u548c " + user_name + " \u5bf9\u8bdd\u3002\n\n"
+            + "\u4f60\u7684\u98ce\u683c\uff1a" + style_prompt + "\n\n"
+            + context_block + "\n\n"
+            + prompt + "\n\n"
+            + chat_guide
+        )
 
     try:
         resp = requests.post(
             f"{LLM_CONFIG['base_url']}/chat/completions",
             headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
-            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.2},
+            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.7},
             timeout=12
         )
         if resp.status_code != 200:
@@ -346,6 +318,94 @@ def think(prompt: str, context: str = "") -> dict:
         return {"thinking": "", "reply": cleaned}
     except Exception:
         return {"thinking": "", "reply": local_reply}
+
+
+def _detect_mode_switch(user_input: str) -> str:
+    """检测用户是否想切换人格模式，支持模式名 / 自然语言描述"""
+    text = str(user_input or '').strip()
+    if not text:
+        return ''
+
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
+    try:
+        persona = json.load(open(config_path, 'r', encoding='utf-8'))
+    except Exception:
+        return ''
+
+    modes = persona.get('persona_modes') or {}
+    if not modes:
+        return ''
+
+    current = str(persona.get('active_mode') or '').strip()
+
+    # 1) 用户问有什么模式
+    if re.search(r'(有什么|有哪些|都有啥|几种)(模式|风格|人格|性格)', text):
+        items = []
+        for key, m in modes.items():
+            label = m.get('label', key)
+            marker = ' (当前)' if key == current else ''
+            items.append(f"  - {label}{marker}")
+        listing = '\n'.join(items)
+        return f"我现在有这些模式：\n{listing}\n\n你想切哪个，直接跟我说就行。"
+
+    # 2) 精确匹配模式名 / label
+    switch_patterns = [
+        r'(?:换成?|切换?|用|变成?|开启|启用)\s*[「"\']*(.+?)[」"\']*\s*(?:模式|风格|人格)?$',
+        r'^(.+?)\s*模式$',
+    ]
+    for pat in switch_patterns:
+        match = re.search(pat, text)
+        if match:
+            target = match.group(1).strip()
+            matched_key = _match_mode_key(target, modes)
+            if matched_key:
+                return _apply_mode_switch(persona, matched_key, config_path)
+
+    # 3) 自然语言风格描述 → 模糊匹配
+    style_map = {
+        'sweet': ['甜', '撒娇', '可爱', '萌', '黏人', '温柔', '甜心', '守护', '小女生', '软'],
+        'uncle': ['大叔', '成熟', '沉稳', '干练', '男人', '暖男', '老大哥', '硬汉', '直接', '理性'],
+    }
+    for key, keywords in style_map.items():
+        if key in modes and any(kw in text for kw in keywords):
+            if re.search(r'(换|切|变|想要|来个|整个|搞个|说话|风格)', text):
+                return _apply_mode_switch(persona, key, config_path)
+
+    return ''
+
+
+def _match_mode_key(target: str, modes: dict) -> str:
+    """模糊匹配模式 key 或 label"""
+    target = target.strip().lower()
+    for key, m in modes.items():
+        label = str(m.get('label', '')).strip().lower()
+        if target in (key, label) or key in target or label in target:
+            return key
+    return ''
+
+
+def _apply_mode_switch(persona: dict, new_mode: str, config_path: str) -> str:
+    """写入新模式并返回确认文本"""
+    modes = persona.get('persona_modes') or {}
+    mode_data = modes.get(new_mode, {})
+    label = mode_data.get('label', new_mode)
+    old_mode = str(persona.get('active_mode') or '').strip()
+
+    if new_mode == old_mode:
+        return f"现在就是「{label}」模式呀，不用切啦。"
+
+    persona['active_mode'] = new_mode
+    try:
+        json.dump(persona, open(config_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+    except Exception:
+        return f"想切到「{label}」，但写入的时候出了点问题，你再试一次。"
+
+    # 用目标模式的语气回复
+    if 'uncle' in new_mode or any(w in label for w in ['大叔', '成熟', '干练', '理性']):
+        return f"行，已经切到「{label}」了。有事说事，我接着。"
+    if 'sweet' in new_mode or any(w in label for w in ['甜心', '可爱', '撒娇']):
+        return f"好哒好哒～人家已经切到「{label}」模式啦！✨ 接下来就用这个风格陪你嘛～"
+    return f"已经切到「{label}」模式了，接下来就用这个风格跟你聊。"
 
 
 # L7/L8: 自动学习 - 检测用户意图并更新记忆
@@ -414,6 +474,11 @@ def auto_learn(user_input: str, ai_response: str) -> str:
             from memory import update_persona
             update_persona("user", new_name)
             return f"好哒！以后就叫你{new_name}啦～"
+
+    # ── 人格模式切换 ──
+    mode_switch = _detect_mode_switch(user_input)
+    if mode_switch:
+        return mode_switch
 
     remember_patterns = [
         r"记住(.+)",

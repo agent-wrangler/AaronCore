@@ -318,4 +318,3 @@ function show(n){
   return;
  }
 }
-</script>
