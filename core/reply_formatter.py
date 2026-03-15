@@ -500,12 +500,20 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
             "trace": {"skill": skill_name, "success": True},
         }
 
+    # 新闻类技能：技能已输出中文翻译+分板块的列表，直接透传
+    if skill_name == "news":
+        return {
+            "reply": skill_response,
+            "trace": {"skill": skill_name, "success": True},
+        }
+
     dialogue_context = bundle.get("dialogue_context", "")
     prompt = f"""
 用户输入：{bundle['user_input']}
 
 技能结果：
 {skill_response}
+{news_extra}
 
 L4人格信息：
 {json.dumps(bundle['l4'], ensure_ascii=False)}

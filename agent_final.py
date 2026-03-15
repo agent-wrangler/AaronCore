@@ -320,6 +320,13 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
             "trace": {"skill": skill_name, "success": True},
         }
 
+    # 新闻类技能：技能已输出中文翻译+分板块的列表，直接透传
+    if skill_name == "news":
+        return {
+            "reply": skill_response,
+            "trace": {"skill": skill_name, "success": True},
+        }
+
     dialogue_context = bundle.get("dialogue_context", "")
     prompt = f"""
 \u7528\u6237\u8f93\u5165\uff1a{bundle['user_input']}
