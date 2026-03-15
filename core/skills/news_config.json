@@ -1,0 +1,4 @@
+{
+  "newsapi_key": "",
+  "_note": "newsapi_key 留空则跳过 NewsAPI，不影响其他源"
+}

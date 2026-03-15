@@ -2,9 +2,15 @@
 # 负责：意图解析、关系模式检测、技能候选识别、路由输出
 
 import re
+import os
+import json
+import time
 
 from core.skills import get_all_skills
 from core.rule_runtime import has_rule
+
+# 文章选择状态文件
+_article_state_path = os.path.join(os.path.dirname(__file__), 'skills', '.article_state.json')
 
 
 CHAT_WORDS = [
@@ -55,6 +61,7 @@ def _score_text(text: str, skills: dict):
     emotion_score = 0.0
     matched_skill = None
     matched_keyword = None
+    matched_keyword_len = 0
 
     for w in CHAT_WORDS:
         if w in text:
@@ -77,6 +84,7 @@ def _score_text(text: str, skills: dict):
                 if matched_skill is None:
                     matched_skill = skill_name
                     matched_keyword = kw
+                    matched_keyword_len = len(kw)
 
     return {
         'chat_score': chat_score,
@@ -84,6 +92,7 @@ def _score_text(text: str, skills: dict):
         'emotion_score': emotion_score,
         'matched_skill': matched_skill,
         'matched_keyword': matched_keyword,
+        'matched_keyword_len': matched_keyword_len if matched_skill else 0,
     }
 
 
@@ -198,6 +207,42 @@ def _looks_like_self_repair_query(text: str) -> bool:
     return asks_about_self and asks_about_code and asks_about_repair and asks_about_timing
 
 
+def _looks_like_article_selection(text: str) -> bool:
+    """用户回复序号选新闻写文章（需要有未过期的文章选择状态）"""
+    raw = (text or '').strip()
+    if not raw:
+        return False
+    if not (re.match(r'^\d{1,2}$', raw) or re.search(r'第\s*\d{1,2}\s*[条个篇]', raw)):
+        return False
+    try:
+        with open(_article_state_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return time.time() - data.get("time", 0) < 600
+    except Exception:
+        return False
+
+
+def _looks_like_article_follow_up(text: str) -> bool:
+    """用户对文章的后续操作：重写、自己改、满意"""
+    raw = (text or '').strip()
+    if not raw:
+        return False
+    follow_up_words = (
+        '\u91cd\u5199', '\u4e0d\u6ee1\u610f', '\u518d\u5199\u4e00\u904d', '\u91cd\u65b0\u5199', '\u6362\u4e2a\u5199\u6cd5',
+        '\u6211\u81ea\u5df1\u6539', '\u6211\u6765\u6539', '\u81ea\u5df1\u7f16\u8f91', '\u6211\u6539',
+        '\u53ef\u4ee5', '\u6ee1\u610f', '\u4e0d\u9519', '\u631a\u597d', '\u5b9a\u7a3f',
+    )
+    if not any(w in raw for w in follow_up_words):
+        return False
+    try:
+        with open(_article_state_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return (time.time() - data.get("time", 0) < 1800
+                and data.get("last_article") is not None)
+    except Exception:
+        return False
+
+
 def route(text: str) -> dict:
     """统一路由入口，返回标准结构"""
     role = detect_relationship_mode(text or '')
@@ -243,6 +288,32 @@ def route(text: str) -> dict:
             'role': role,
             'chat_score': max(scores['chat_score'], 1.2),
             'skill_score': 0.0,
+            'emotion_score': scores['emotion_score'],
+        }
+
+    if _looks_like_article_selection(text):
+        return {
+            'mode': 'skill',
+            'skill': 'article',
+            'confidence': 0.95,
+            'reason': '命中文章选择序号（有待选新闻列表）',
+            'params': {},
+            'role': role,
+            'chat_score': scores['chat_score'],
+            'skill_score': max(scores['skill_score'], 2.5),
+            'emotion_score': scores['emotion_score'],
+        }
+
+    if _looks_like_article_follow_up(text):
+        return {
+            'mode': 'skill',
+            'skill': 'article',
+            'confidence': 0.95,
+            'reason': '\u547d\u4e2d\u6587\u7ae0\u540e\u7eed\u64cd\u4f5c\uff08\u91cd\u5199/\u81ea\u6539/\u786e\u8ba4\uff09',
+            'params': {},
+            'role': role,
+            'chat_score': scores['chat_score'],
+            'skill_score': max(scores['skill_score'], 2.5),
             'emotion_score': scores['emotion_score'],
         }
 
@@ -301,14 +372,29 @@ def route(text: str) -> dict:
             'emotion_score': scores['emotion_score'],
         }
 
-    # 技能候选保护层：只要存在明确技能候选，就不能直接降为纯聊天
+    # 技能候选层：根据关键词具体程度分级置信度
+    # 长关键词（>=3字）+ 有任务词 = 高置信度，直接走
+    # 短关键词或无任务词 = 低置信度，交给 LLM 裁决
     if scores['matched_skill'] and scores['skill_score'] >= 2.0:
-        route_type = 'hybrid' if scores['emotion_score'] > 0 else 'skill'
+        kw_len = scores.get('matched_keyword_len', 0)
+        has_task_word = scores['skill_score'] > 2.0  # 除了关键词还命中了 TASK_WORDS
+        has_emotion = scores['emotion_score'] > 0
+
+        if kw_len >= 3 and has_task_word:
+            confidence = 0.95  # "查天气""写篇文章" — 高置信度
+        elif kw_len >= 3:
+            confidence = 0.85  # "天气""新闻" — 中高置信度
+        elif has_task_word:
+            confidence = 0.7   # 短关键词 + 任务词 — 中置信度
+        else:
+            confidence = 0.5   # 短关键词，无任务词 — 低置信度，需要 LLM 确认
+
+        route_type = 'hybrid' if has_emotion else 'skill'
         return {
             'mode': route_type,
             'skill': scores['matched_skill'],
-            'confidence': 0.9,
-            'reason': f"命中技能候选: {scores['matched_keyword']}",
+            'confidence': confidence,
+            'reason': f"\u547d\u4e2d\u6280\u80fd\u5019\u9009: {scores['matched_keyword']}",
             'params': {},
             'role': role,
             'chat_score': scores['chat_score'],

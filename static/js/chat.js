@@ -1,3 +1,14 @@
+// ── textarea 自动撑高 ──
+(function(){
+ var inp=document.getElementById('inp');
+ if(!inp)return;
+ function autoResize(){
+  inp.style.height='auto';
+  inp.style.height=Math.min(inp.scrollHeight,280)+'px';
+ }
+ inp.addEventListener('input',autoResize);
+})();
+
 function addMessage(sender,text,type){
  var chat=document.getElementById('chat');
  var msgDiv=document.createElement('div');
@@ -211,6 +222,7 @@ async function send(){
 
  addMessage('\u4f60',text,'user');
  inp.value='';
+ inp.style.height='auto';
  updateSendButton();
 
  var btn=document.getElementById('sendBtn');

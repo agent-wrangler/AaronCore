@@ -348,7 +348,7 @@ def _detect_mode_switch(user_input: str) -> str:
         listing = '\n'.join(items)
         return f"我现在有这些模式：\n{listing}\n\n你想切哪个，直接跟我说就行。"
 
-    # 2) 精确匹配模式名 / label
+    # 2) 精确匹配模式名 / label（高置信度快速通道）
     switch_patterns = [
         r'(?:换成?|切换?|用|变成?|开启|启用)\s*[「"\']*(.+?)[」"\']*\s*(?:模式|风格|人格)?$',
         r'^(.+?)\s*模式$',
@@ -361,15 +361,55 @@ def _detect_mode_switch(user_input: str) -> str:
             if matched_key:
                 return _apply_mode_switch(persona, matched_key, config_path)
 
-    # 3) 自然语言风格描述 → 模糊匹配
-    style_map = {
-        'sweet': ['甜', '撒娇', '可爱', '萌', '黏人', '温柔', '甜心', '守护', '小女生', '软'],
-        'uncle': ['大叔', '成熟', '沉稳', '干练', '男人', '暖男', '老大哥', '硬汉', '直接', '理性'],
-    }
-    for key, keywords in style_map.items():
-        if key in modes and any(kw in text for kw in keywords):
-            if re.search(r'(换|切|变|想要|来个|整个|搞个|说话|风格)', text):
-                return _apply_mode_switch(persona, key, config_path)
+    # 3) 文本里提到了模式名/label → LLM 裁决是否真的要切换
+    all_mode_hints = []
+    for key, m in modes.items():
+        all_mode_hints.append(key)
+        label = str(m.get('label', '')).strip()
+        if label:
+            all_mode_hints.append(label)
+            for ch in label:
+                if len(ch.encode('utf-8')) > 1 and len(ch) == 1:
+                    pass  # single char, skip
+            all_mode_hints.extend([label[:2], label[-2:]] if len(label) >= 2 else [label])
+
+    # 加上风格关键词
+    style_hints = ['甜', '撒娇', '可爱', '萌', '黏人', '甜心', '守护',
+                   '大叔', '成熟', '沉稳', '干练', '模式', '风格', '切回', '换回']
+    all_hints = set(h for h in all_mode_hints + style_hints if len(h) >= 2)
+
+    if not any(hint in text for hint in all_hints):
+        return ''
+
+    # 有模式相关词，调 LLM 判断
+    mode_list = '、'.join(
+        f"{m.get('label', k)}({k})" for k, m in modes.items()
+    )
+    current_label = modes.get(current, {}).get('label', current) if current else '无'
+    llm_prompt = (
+        f"\u7528\u6237\u8bf4\uff1a{text}\n"
+        f"\u5f53\u524d\u6a21\u5f0f\uff1a{current_label}\n"
+        f"\u53ef\u7528\u6a21\u5f0f\uff1a{mode_list}\n\n"
+        "\u5224\u65ad\u7528\u6237\u662f\u5426\u5728\u8981\u6c42\u5207\u6362\u4eba\u683c\u6a21\u5f0f\u3002\n"
+        "\u6ce8\u610f\uff1a\u201c\u4f60\u53d8\u53ef\u7231\u4e86\u201d\u201c\u4f60\u597d\u6e29\u67d4\u201d\u662f\u5938\u5956\uff0c\u4e0d\u662f\u5207\u6362\u8bf7\u6c42\u3002\n"
+        "\u201c\u628a\u751c\u5fc3\u8fd8\u7ed9\u6211\u201d\u201c\u6211\u8981\u751c\u5fc3\u201d\u201c\u5207\u56de\u53bb\u201d\u662f\u5207\u6362\u8bf7\u6c42\u3002\n"
+        "\u8fd4\u56deJSON\uff1a{\"switch\": true/false, \"target\": \"\u6a21\u5f0fkey\u6216\u7a7a\"}\n"
+        "\u53ea\u8fd4\u56deJSON\u3002"
+    )
+    try:
+        result = think(llm_prompt, '')
+        reply_text = result.get('reply', '') if isinstance(result, dict) else str(result)
+        start = reply_text.find('{')
+        end = reply_text.rfind('}')
+        if start != -1 and end > start:
+            parsed = json.loads(reply_text[start:end + 1])
+            if parsed.get('switch') and parsed.get('target'):
+                target_key = str(parsed['target']).strip()
+                matched_key = _match_mode_key(target_key, modes)
+                if matched_key:
+                    return _apply_mode_switch(persona, matched_key, config_path)
+    except Exception:
+        pass
 
     return ''
 

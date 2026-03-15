@@ -1,7 +1,8 @@
-# 新闻抓取技能 - Google News RSS
+# 新闻抓取技能 - 多源聚合（Google News / BBC / NewsAPI / AP News）
 import requests
 import json
 import os
+import re
 import xml.etree.ElementTree as ET
 
 # 代理配置（本机翻墙代理）
@@ -20,6 +21,26 @@ TOPIC_URLS = {
     "世界": "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FtVnVHZ0pWVXlnQVAB?hl=en-US&gl=US&ceid=US:en",
 }
 
+# BBC RSS 源（英文，走代理）
+BBC_RSS = {
+    "top": "http://feeds.bbci.co.uk/news/rss.xml",
+    "科技": "http://feeds.bbci.co.uk/news/technology/rss.xml",
+    "商业": "http://feeds.bbci.co.uk/news/business/rss.xml",
+    "世界": "http://feeds.bbci.co.uk/news/world/rss.xml",
+}
+
+# AP News RSS（通过 RSS 聚合）
+AP_RSS = {
+    "top": "https://rsshub.app/apnews/topics/apf-topnews",
+    "科技": "https://rsshub.app/apnews/topics/apf-technology",
+    "商业": "https://rsshub.app/apnews/topics/apf-business",
+    "世界": "https://rsshub.app/apnews/topics/apf-WorldNews",
+}
+
+# NewsAPI（需要 API key，存在 news_config.json）
+NEWSAPI_BASE = "https://newsapi.org/v2/top-headlines"
+NEWSAPI_TOPICS = {"科技": "technology", "商业": "business", "世界": "general"}
+
 # LLM 配置
 _llm_config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
 
@@ -30,6 +51,17 @@ def _load_llm_config():
             return json.load(f)
     except Exception:
         return {"api_key": "", "model": "MiniMax-M2.5", "base_url": "https://api.minimax.chat/v1"}
+
+
+_news_config_path = os.path.join(os.path.dirname(__file__), 'news_config.json')
+
+
+def _load_news_config():
+    try:
+        with open(_news_config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def _translate_titles(titles):
@@ -58,7 +90,6 @@ def _translate_titles(titles):
         result = []
         for line in lines:
             # 去掉序号前缀 "1. " "1、" 等
-            import re
             cleaned = re.sub(r'^\d+[\.\、\)\s]+', '', line).strip()
             if cleaned:
                 result.append(cleaned)
@@ -129,6 +160,36 @@ def _parse_rss(url, limit=10):
         return None, f"抓取失败: {str(e)[:80]}"
 
 
+def _fetch_newsapi(topic=None, limit=5):
+    """从 NewsAPI 抓取新闻（需要 API key）"""
+    cfg = _load_news_config()
+    api_key = cfg.get("newsapi_key", "")
+    if not api_key:
+        return [], None  # 没配 key，静默跳过
+
+    params = {"apiKey": api_key, "language": "en", "pageSize": limit, "country": "us"}
+    if topic and topic in NEWSAPI_TOPICS:
+        params["category"] = NEWSAPI_TOPICS[topic]
+
+    try:
+        resp = requests.get(NEWSAPI_BASE, params=params, proxies=PROXIES, timeout=15)
+        if resp.status_code != 200:
+            return [], f"NewsAPI {resp.status_code}"
+        articles = resp.json().get("articles", [])
+        news_list = []
+        for art in articles[:limit]:
+            title = art.get("title", "")
+            source = (art.get("source") or {}).get("name", "NewsAPI")
+            link = art.get("url", "")
+            pub = art.get("publishedAt", "")
+            if " - " in title and source and title.endswith(source):
+                title = title[:title.rfind(" - ")].strip()
+            news_list.append({"title": title, "source": source, "link": link, "pubDate": pub})
+        return news_list, None
+    except Exception as e:
+        return [], f"NewsAPI: {str(e)[:60]}"
+
+
 def _detect_topic(query):
     """从用户输入检测话题分类"""
     q = (query or "").lower()
@@ -163,21 +224,60 @@ def _format_news(news_list, topic=None):
 
 
 def execute(query, context=None):
-    """抓取新闻主入口"""
+    """抓取新闻主入口 - 多源聚合（Google News + BBC + AP News + NewsAPI）"""
     topic = _detect_topic(query)
-    if topic and topic in TOPIC_URLS:
-        url = TOPIC_URLS[topic]
-    else:
-        url = RSS_URL
-        topic = None
+    all_news = []
+    errors = []
 
-    news_list, err = _parse_rss(url, limit=10)
-    if err:
-        return err
-    if not news_list:
-        return "没抓到新闻，可能 RSS 源暂时没数据"
+    # 1) Google News RSS
+    gn_url = TOPIC_URLS.get(topic, RSS_URL) if topic else RSS_URL
+    gn_list, gn_err = _parse_rss(gn_url, limit=4)
+    if gn_list:
+        all_news.extend(gn_list)
+    elif gn_err:
+        errors.append(f"Google: {gn_err}")
 
-    return _format_news(news_list, topic)
+    # 2) BBC RSS
+    bbc_url = BBC_RSS.get(topic, BBC_RSS["top"]) if topic else BBC_RSS["top"]
+    bbc_list, bbc_err = _parse_rss(bbc_url, limit=4)
+    if bbc_list:
+        for item in bbc_list:
+            if not item.get("source"):
+                item["source"] = "BBC"
+        all_news.extend(bbc_list)
+    elif bbc_err:
+        errors.append(f"BBC: {bbc_err}")
+
+    # 3) AP News RSS
+    ap_url = AP_RSS.get(topic, AP_RSS["top"]) if topic else AP_RSS["top"]
+    ap_list, ap_err = _parse_rss(ap_url, limit=4)
+    if ap_list:
+        for item in ap_list:
+            if not item.get("source"):
+                item["source"] = "AP News"
+        all_news.extend(ap_list)
+    elif ap_err:
+        errors.append(f"AP: {ap_err}")
+
+    # 4) NewsAPI（可选，没配 key 就跳过）
+    na_list, na_err = _fetch_newsapi(topic, limit=3)
+    if na_list:
+        all_news.extend(na_list)
+
+    if not all_news:
+        err_detail = "\n".join(errors) if errors else ""
+        return f"新闻源都没抓到数据\n{err_detail}".strip()
+
+    # 去重（标题前 20 字符）
+    seen = set()
+    unique = []
+    for item in all_news:
+        key = re.sub(r'\s+', '', item["title"][:20]).lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+
+    return _format_news(unique[:12], topic)
 
 
 if __name__ == "__main__":

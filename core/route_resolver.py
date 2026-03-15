@@ -9,11 +9,12 @@ _debug_write = lambda stage, data: None
 _think = None
 _get_all_skills = lambda: {}
 _nova_core_ready = False
+_search_l2 = None  # L2 持久记忆检索
 
 
 def init(*, nova_route=None, debug_write=None, think=None,
-         get_all_skills=None, nova_core_ready=False):
-    global _nova_route, _debug_write, _think, _get_all_skills, _nova_core_ready
+         get_all_skills=None, nova_core_ready=False, search_l2=None):
+    global _nova_route, _debug_write, _think, _get_all_skills, _nova_core_ready, _search_l2
     if nova_route:
         _nova_route = nova_route
     if debug_write:
@@ -23,6 +24,8 @@ def init(*, nova_route=None, debug_write=None, think=None,
     if get_all_skills:
         _get_all_skills = get_all_skills
     _nova_core_ready = nova_core_ready
+    if search_l2:
+        _search_l2 = search_l2
 
 
 # ── 路由 prompt ───────────────────────────────────────────
@@ -222,6 +225,109 @@ def detect_story_follow_up_route(bundle: dict) -> dict | None:
     return None
 
 
+def llm_route_lite(bundle: dict, core_route: dict = None) -> dict:
+    """轻量 LLM 意图分类 — ~200 token prompt，L2 压缩上下文"""
+    msg = bundle["user_input"]
+
+    # L2 场景摘要（已压缩）
+    l2 = bundle.get("l2") or {}
+    l2_brief = ""
+    if isinstance(l2, dict):
+        parts = []
+        topics = l2.get("topics") or []
+        if topics and topics != ["\u95f2\u804a"]:
+            parts.append("\u8bdd\u9898\uff1a" + "\u3001".join(topics))
+        mood = l2.get("mood") or ""
+        if mood and mood != "\u5e73\u7a33":
+            parts.append("\u60c5\u7eea\uff1a" + mood)
+        fu = l2.get("follow_up") or {}
+        if fu.get("is_follow_up"):
+            parts.append("\u7528\u6237\u5728\u8ffd\u95ee\u4e0a\u6587")
+        l2_brief = "\uff1b".join(parts) if parts else "\u666e\u901a\u95f2\u804a"
+
+    # L2 持久记忆检索（按关键词捞相关条目，已压缩）
+    l2_mem = ""
+    if _search_l2:
+        try:
+            hits = _search_l2(msg, limit=3)
+            if hits:
+                l2_mem = "\uff1b".join(
+                    str(h.get("user_text", ""))[:40] for h in hits if h.get("user_text")
+                )
+        except Exception:
+            pass
+
+    # 最近 2 轮对话（从 L1 取）
+    l1 = bundle.get("l1") or []
+    recent = ""
+    if l1:
+        last_items = l1[-4:] if len(l1) >= 4 else l1
+        recent = " / ".join(
+            f"{item.get('role','')}:{str(item.get('content',''))[:30]}"
+            for item in last_items if isinstance(item, dict)
+        )
+
+    # 可用技能列表
+    skill_names = []
+    try:
+        for name, info in _get_all_skills().items():
+            label = info.get("name", name)
+            skill_names.append(f"{name}({label})")
+    except Exception:
+        pass
+    skills_str = "\u3001".join(skill_names) if skill_names else "weather,story,news,article"
+
+    # 关键词路由的候选（如果有）
+    hint = ""
+    if core_route and core_route.get("skill") not in ("none", "", None):
+        hint = (
+            "\n\u5173\u952e\u8bcd\u8def\u7531\u5019\u9009\uff1a"
+            + str(core_route.get("skill", ""))
+            + "\uff08\u547d\u4e2d\u5173\u952e\u8bcd\uff1a" + str(core_route.get("reason", "")) + "\uff09"
+            + "\n\u4f46\u4e0d\u786e\u5b9a\u662f\u5426\u6b63\u786e\uff0c\u8bf7\u4f60\u5224\u65ad\u3002"
+        )
+
+    prompt = (
+        "\u4f60\u662f\u610f\u56fe\u5206\u7c7b\u5668\u3002\u5224\u65ad\u7528\u6237\u8fd9\u53e5\u8bdd\u7684\u610f\u56fe\u3002\n\n"
+        "\u7528\u6237\u8bf4\uff1a" + msg + "\n"
+        "\u6700\u8fd1\u5bf9\u8bdd\uff1a" + (recent or "\u65e0") + "\n"
+        "\u573a\u666f\uff1a" + l2_brief + "\n"
+        + ("\u76f8\u5173\u8bb0\u5fc6\uff1a" + l2_mem + "\n" if l2_mem else "")
+        + "\u53ef\u7528\u6280\u80fd\uff1a" + skills_str + "\n"
+        + hint + "\n\n"
+        "\u8fd4\u56deJSON\uff1a{\"intent\":\"chat\u6216\u6280\u80fd\u540d\",\"reason\":\"\u4e00\u53e5\u8bdd\"}\n"
+        "\u53ea\u8fd4\u56deJSON\u3002"
+    )
+
+    _debug_write("llm_route_lite_prompt", {"prompt": prompt, "tokens_est": len(prompt)})
+
+    result = _think(prompt, "")
+    text = result.get("reply", "") if isinstance(result, dict) else str(result)
+    try:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            parsed = json.loads(text[start:end + 1])
+            intent = str(parsed.get("intent", "chat")).strip().lower()
+            reason = str(parsed.get("reason", "")).strip()
+            if intent == "chat" or intent not in [s for s in (_get_all_skills() or {})]:
+                return normalize_route_result(
+                    {"mode": "chat", "skill": "none", "reason": f"llm_lite: {reason}"},
+                    msg, "llm_lite"
+                )
+            return normalize_route_result(
+                {"mode": "skill", "skill": intent, "reason": f"llm_lite: {reason}",
+                 "rewritten_input": parsed.get("rewritten_input", msg)},
+                msg, "llm_lite"
+            )
+    except Exception:
+        pass
+    return normalize_route_result(
+        {"mode": "chat", "skill": "none", "reason": "llm_lite_fallback"},
+        msg, "llm_lite"
+    )
+
+
 def llm_route(bundle: dict) -> dict:
     prompt = build_router_prompt(bundle)
     result = _think(prompt, "")
@@ -240,6 +346,8 @@ def llm_route(bundle: dict) -> dict:
 
 def resolve_route(bundle: dict) -> dict:
     user_input = bundle["user_input"]
+
+    # ── 阶段 0：硬编码上下文规则（不走 LLM）──
     contextual_story_route = detect_story_follow_up_route(bundle)
     if contextual_story_route is not None:
         _debug_write("context_story_route", contextual_story_route)
@@ -250,23 +358,57 @@ def resolve_route(bundle: dict) -> dict:
         _debug_write("missing_capability_route", missing_capability_route)
         return missing_capability_route
 
+    # ── 阶段 1：关键词路由（router.py）──
     core_route = None
-
     if _nova_core_ready:
         try:
             core_route = normalize_route_result(_nova_route(user_input), user_input, "core")
             _debug_write("core_route", core_route)
-            if has_skill_target(core_route):
+            confidence = float(core_route.get("confidence", 0) or 0)
+
+            # 高置信度（>= 0.9）：直接走，不需要 LLM 确认
+            if confidence >= 0.9:
+                _debug_write("route_decision", {"action": "core_high_conf", "confidence": confidence})
                 return core_route
-            if core_route.get("mode") == "chat" and float(core_route.get("confidence", 0) or 0) >= 0.9:
-                return core_route
+
         except Exception as exc:
             _debug_write("core_route_error", {"error": str(exc)})
 
-    llm_candidate = llm_route(bundle)
-    _debug_write("llm_route", llm_candidate)
-    if has_skill_target(llm_candidate):
-        return llm_candidate
+    # ── 阶段 2：轻量 LLM 裁决（~200 token，L2 压缩上下文）──
+    try:
+        lite_result = llm_route_lite(bundle, core_route=core_route)
+        _debug_write("llm_route_lite", lite_result)
+
+        # LLM 明确识别出技能
+        if has_skill_target(lite_result):
+            _debug_write("route_decision", {"action": "lite_skill", "skill": lite_result.get("skill")})
+            return lite_result
+
+        # LLM 说是 chat，且关键词路由也没有强候选 → 直接 chat
+        if core_route is None or not has_skill_target(core_route):
+            _debug_write("route_decision", {"action": "lite_chat"})
+            return lite_result
+
+        # LLM 说 chat，但关键词路由有候选（中低置信度）→ 信 LLM，走 chat
+        core_conf = float(core_route.get("confidence", 0) or 0)
+        if core_conf < 0.7:
+            _debug_write("route_decision", {"action": "lite_override_low_conf", "core_conf": core_conf})
+            return lite_result
+
+        # 关键词置信度 0.7-0.9 且 LLM 说 chat → 保守起见信 LLM
+        _debug_write("route_decision", {"action": "lite_override_mid_conf", "core_conf": core_conf})
+        return lite_result
+
+    except Exception as exc:
+        _debug_write("llm_route_lite_error", {"error": str(exc)})
+
+    # ── 阶段 3：兜底 ──
+    # lite 失败了，如果关键词路由有结果就用它
     if core_route is not None:
+        _debug_write("route_decision", {"action": "fallback_core"})
         return core_route
+
+    # 最后兜底：重量级 LLM 路由（完整 L1-L8 上下文）
+    llm_candidate = llm_route(bundle)
+    _debug_write("llm_route_heavy", llm_candidate)
     return llm_candidate

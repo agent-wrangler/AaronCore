@@ -147,6 +147,7 @@ _route_resolver_init(
     think=think,
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
     nova_core_ready=NOVA_CORE_READY,
+    search_l2=l2_search_relevant,
 )
 
 from core.reply_formatter import (
@@ -317,6 +318,13 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
     if skill_name == "story":
         return {
             "reply": format_story_reply(bundle["user_input"], skill_response),
+            "trace": {"skill": skill_name, "success": True},
+        }
+
+    # 文章技能：article.py 已处理文件保存和摘要，直接透传
+    if skill_name == "article":
+        return {
+            "reply": skill_response,
             "trace": {"skill": skill_name, "success": True},
         }
 
