@@ -320,10 +320,52 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
             "trace": {"skill": skill_name, "success": True},
         }
 
-    # 新闻类技能：技能已输出中文翻译+分板块的列表，直接透传
+    # 新闻类技能：新闻 → LLM排版 → 人格润色，三步分离
     if skill_name == "news":
+        dialogue_context = bundle.get("dialogue_context", "")
+        # Step 1: 干净的 LLM 调用做排版（不走 think，避免人格指令干扰）
+        format_prompt = (
+            f"下面是刚从 Google News 抓到的新闻（已翻译成中文）：\n{skill_response}\n\n"
+            "请把这些新闻整理成一份结构清晰的新闻简报：\n"
+            "1. 按话题分板块（国际局势、科技、财经、社会等），板块标题用你喜欢的样式\n"
+            "2. 每条新闻单独一行，保留来源，不要压缩或合并\n"
+            "3. 不要加开场白和结尾点评，只输出分好板块的新闻列表\n"
+            "直接输出结果。"
+        )
+        from brain import LLM_CONFIG
+        formatted = ""
+        try:
+            llm_resp = requests.post(
+                f"{LLM_CONFIG['base_url']}/chat/completions",
+                headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
+                json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": format_prompt}], "max_tokens": 2000},
+                timeout=25,
+            )
+            if llm_resp.status_code == 200:
+                formatted = llm_resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except Exception:
+            pass
+        if not formatted or len(formatted) < 20:
+            formatted = skill_response
+
+        # Step 2: 走 think() 加人格润色（开场白 + 列表 + 点评）
+        persona_prompt = (
+            f"\u7528\u6237\u8f93\u5165\uff1a{bundle['user_input']}\n\n"
+            f"\u6280\u80fd\u7ed3\u679c\uff1a\n{formatted}\n\n"
+            f"L4\u4eba\u683c\u4fe1\u606f\uff1a\n{json.dumps(bundle['l4'], ensure_ascii=False)}\n\n"
+            "\u8981\u6c42\uff1a\n"
+            "1. \u5728\u65b0\u95fb\u5217\u8868\u524d\u52a0\u4e00\u53e5\u4f60\u7684\u5f00\u573a\u767d\n"
+            "2. \u5728\u65b0\u95fb\u5217\u8868\u540e\u52a0\u4e00\u4e24\u53e5\u4f60\u7684\u70b9\u8bc4\n"
+            "3. \u65b0\u95fb\u5217\u8868\u672c\u8eab\u5fc5\u987b\u539f\u6837\u4fdd\u7559\uff0c\u4e0d\u8981\u6539\u52a8\u3001\u538b\u7f29\u6216\u5408\u5e76\n"
+            "4. \u8bed\u6c14\u81ea\u7136\uff0c\u7528\u4f60\u7684\u98ce\u683c\n"
+            "\u76f4\u63a5\u8f93\u51fa\u6700\u7ec8\u7ed3\u679c\u3002"
+        )
+        result = think(persona_prompt, dialogue_context)
+        reply = result.get("reply", "") if isinstance(result, dict) else str(result)
+        if (not reply) or ("\ufffd" in str(reply)) or len(str(reply).strip()) < 20:
+            reply = f"\u62ff\u597d\u5566\uff0c\u4eca\u5929\u7684\u65b0\u95fb\u6211\u5e2e\u4f60\u6293\u56de\u6765\u4e86\uff5e\n\n{formatted}"
         return {
-            "reply": skill_response,
+            "reply": reply.strip(),
             "trace": {"skill": skill_name, "success": True},
         }
 

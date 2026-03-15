@@ -142,7 +142,7 @@ def _detect_topic(query):
 
 
 def _format_news(news_list, topic=None):
-    """格式化新闻列表为中文可读文本，带分板块"""
+    """格式化新闻列表为中文，输出简洁的原始数据供 LLM 排版"""
     # 先翻译标题
     en_titles = [item["title"] for item in news_list]
     cn_titles = _translate_titles(en_titles)
@@ -154,21 +154,12 @@ def _format_news(news_list, topic=None):
         for item in news_list:
             item["title_cn"] = item["title"]
 
-    # 分板块
-    categorized = _classify_news(news_list)
-
+    # 输出简洁的编号列表，不做板块分类（交给 LLM）
     lines = []
-    idx = 1
-    for cat_name, items in categorized.items():
-        lines.append(f"\n📌 {cat_name}")
-        lines.append("")
-        for item in items:
-            lines.append(f"{idx}. {item['title_cn']}")
-            lines.append(f"   [{item['source']}]")
-            idx += 1
-        lines.append("")
+    for i, item in enumerate(news_list, 1):
+        lines.append(f"{i}. {item['title_cn']} [{item['source']}]")
 
-    return "\n".join(lines).strip()
+    return "\n".join(lines)
 
 
 def execute(query, context=None):
