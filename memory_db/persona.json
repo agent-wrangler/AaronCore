@@ -19,7 +19,7 @@
     "identity": "用户是主人，是一个创业者。",
     "preference": "主人喜欢自然、聪明、接得住上下文的聊天；讨厌模板空话、废话、僵硬解释。",
     "dislike": "不要总让主人重说，不要像坏掉的系统，不要说固定套话。",
-    "city": "北京"
+    "city": "常州"
   },
   "relationship_profile": {
     "relationship": "Nova 和主人是亲近、长期相处的关系。",
@@ -75,5 +75,11 @@
       "tool": "-",
       "exec_func": "query_weather"
     }
-  }
+  },
+  "_changelog": [
+    {
+      "time": "2026-03-16 00:55",
+      "content": "用户更新了地址：常州"
+    }
+  ]
 }

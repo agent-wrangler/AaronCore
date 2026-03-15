@@ -1431,7 +1431,7 @@ function addMessage(sender,text,type){
  }
 }
 
-var _thinkingLabels=["\u601d\u8003\u4e2d","\u7ffb\u9605\u8bb0\u5fc6","\u68c0\u7d22\u77e5\u8bc6","\u7406\u89e3\u610f\u56fe","\u7ec4\u7ec7\u56de\u590d"];
+var _thinkingLabels=null; // removed: no more fake rotating labels
 
 function buildPendingAssistantMessage(){
  var msgDiv=document.createElement('div');
@@ -1470,26 +1470,13 @@ function buildPendingAssistantMessage(){
  msgDiv.appendChild(avatar);
  msgDiv.appendChild(panel);
 
- // rotate status labels
- var labelIdx=0;
- var labelTimer=setInterval(function(){
-  labelIdx=(labelIdx+1)%_thinkingLabels.length;
-  var txt=status.querySelector('.thinking-status-text');
-  if(txt){
-   txt.textContent=_thinkingLabels[labelIdx];
-   txt.style.animation='none';
-   txt.offsetHeight;
-   txt.style.animation='statusFade 0.5s ease';
-  }
- }, 1200);
-
  return {
   root: msgDiv,
   panel: panel,
   stack: stack,
   status: status,
   meta: meta,
-  labelTimer: labelTimer,
+  labelTimer: null,
   persisted: false
  };
 }
@@ -1624,7 +1611,7 @@ async function send(){
   hasTrace=true;
   var statusText=pendingState.status.querySelector('.thinking-status-text');
   if(statusText){
-   statusText.textContent=(card.label||'')+'\u2002'+(card.detail||'');
+   statusText.textContent=card.detail||card.label||'';
    statusText.style.animation='none';
    statusText.offsetHeight;
    statusText.style.animation='statusFade 0.5s ease';
@@ -2944,8 +2931,10 @@ function show(n){
    var html='';
     dates.forEach(function(date){
      var label=date;
-     var today=new Date().toISOString().split('T')[0];
-     var yesterday=new Date(Date.now()-86400000).toISOString().split('T')[0];
+     var now=new Date();
+     var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+     var yd=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
+     var yesterday=yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
      if(date===today) label='今天'; else if(date===yesterday) label='昨天';
      html+='<div class="mem-date-group">';
      html+='<div class="mem-date-label" style="font-size:12px;color:'+labelColor+';margin:18px 0 8px 0;font-weight:700;letter-spacing:0.3px;">'+label+'</div>';

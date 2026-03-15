@@ -103,11 +103,22 @@ from core.self_repair import (
 )
 from memory import add_to_history, evolve, get_history as get_text_history
 from core.session_context import extract_session_context
+from core.l2_memory import (
+    add_memory as l2_add_memory,
+    search_relevant as l2_search_relevant,
+    format_l2_context,
+)
+from core.l2_memory import init as _l2_memory_init
 
 _state_loader_init(
     debug_write=debug_write,
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
     nova_core_ready=NOVA_CORE_READY,
+)
+
+_l2_memory_init(
+    debug_write=debug_write,
+    think=think,
 )
 
 from core.json_store import load_json, write_json, load_json_store
@@ -272,7 +283,15 @@ def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict
 
 def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict:
     route_result = {"mode": "skill", "skill": skill_name, "params": {}, "role": "assistant"}
-    execute_result = nova_execute(route_result, skill_input) if NOVA_CORE_READY else {"success": False}
+    # 把 L4 用户上下文传给 executor，技能可按需读取（如天气读城市）
+    skill_context = {}
+    l4 = bundle.get("l4") or {}
+    if isinstance(l4, dict):
+        up = l4.get("user_profile") or {}
+        if isinstance(up, dict):
+            skill_context["user_city"] = str(up.get("city") or "").strip()
+            skill_context["user_identity"] = str(up.get("identity") or "").strip()
+    execute_result = nova_execute(route_result, skill_input, skill_context) if NOVA_CORE_READY else {"success": False}
     debug_write("execute_result", execute_result)
     if not execute_result.get("success"):
         error_text = str(execute_result.get("error", "") or "").strip()
@@ -418,10 +437,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         # ── Step 1: 读取记忆 ──
         l1 = get_recent_messages(history, 6)
         l2 = extract_session_context(history, msg)
+        l2_memories = l2_search_relevant(msg)
         user_turns = len([m for m in l1 if isinstance(m, dict) and m.get("role") == "user"])
         mem_detail = f"\u56de\u987e\u4e86\u6700\u8fd1 {user_turns} \u8f6e\u5bf9\u8bdd" if user_turns else "\u8fd9\u662f\u7b2c\u4e00\u53e5\u5bf9\u8bdd"
         if l2.get("topics") and l2["topics"] != ["\u95f2\u804a"]:
             mem_detail += f"\uff0c\u8bdd\u9898\u6d89\u53ca{'、'.join(l2['topics'])}"
+        if l2_memories:
+            mem_detail += f"\uff0c\u5524\u9192 {len(l2_memories)} \u6761\u6301\u4e45\u8bb0\u5fc6"
         yield await _trace("\u8bfb\u53d6\u8bb0\u5fc6", mem_detail)
 
         # ── Step 2: 加载人格和知识 ──
@@ -430,11 +452,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         l5 = load_l5_knowledge()
         persona_name = ""
         if isinstance(l4, dict):
-            persona_name = str(l4.get("nova_name") or l4.get("name") or "")
+            lp = l4.get("local_persona") or l4
+            persona_name = str(lp.get("nova_name") or lp.get("name") or "")
         skill_count = len(l5.get("skills", {})) if isinstance(l5, dict) else 0
-        persona_detail = f"\u52a0\u8f7d\u4eba\u683c\u300c{persona_name}\u300d" if persona_name else "\u52a0\u8f7d\u4eba\u683c\u914d\u7f6e"
-        if skill_count:
-            persona_detail += f"\uff0c\u5df2\u6ce8\u518c {skill_count} \u4e2a\u6280\u80fd"
+        persona_detail = f"\u4eba\u683c\u8c31\u56fe\u300c{persona_name}\u300d\u5df2\u5524\u9192" if persona_name else "\u4eba\u683c\u8c31\u56fe\u5df2\u5524\u9192"
         yield await _trace("\u52a0\u8f7d\u4eba\u683c", persona_detail)
 
         # ── Step 3: 检索知识库 ──
@@ -443,16 +464,18 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             topics = [str(h.get("query") or h.get("name") or "") for h in l8[:2] if isinstance(h, dict)]
             topics = [t for t in topics if t]
             if topics:
-                yield await _trace("\u68c0\u7d22\u77e5\u8bc6", "\u547d\u4e2d\u76f8\u5173\u8bb0\u5f55\uff1a" + "\u3001".join(topics))
+                yield await _trace("\u68c0\u7d22\u77e5\u8bc6", "\u5339\u914d\u77e5\u8bc6\u5e93\uff1a" + "\u3001".join(topics))
 
         # ── Step 4: 理解意图 ──
         dialogue_context = build_dialogue_context(history, msg)
         bundle = {
-            "l1": l1, "l2": l2, "l3": l3, "l4": l4, "l5": l5, "l8": l8,
+            "l1": l1, "l2": l2, "l2_memories": l2_memories,
+            "l3": l3, "l4": l4, "l5": l5, "l8": l8,
             "dialogue_context": dialogue_context, "user_input": msg,
         }
         debug_write("context_bundle", {
-            "l1": len(l1), "l2": len(l2), "l3": len(l3),
+            "l1": len(l1), "l2": len(l2), "l2_memories": len(l2_memories),
+            "l3": len(l3),
             "l4_keys": list(l4.keys()) if isinstance(l4, dict) else [],
             "l5_skill_count": skill_count, "l8": len(l8 or []),
         })
@@ -473,7 +496,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             if mode in ("skill", "hybrid") and skill not in ("none", "", None) and NOVA_CORE_READY:
                 # ── Step 5: 调用技能 ──
                 skill_display = get_skill_display_name(skill)
-                yield await _trace("\u8c03\u7528\u6280\u80fd", f"\u6b63\u5728\u6267\u884c\u300c{skill_display}\u300d\u2026")
+                yield await _trace("\u8c03\u7528\u6280\u80fd", f"\u6b63\u5728\u8c03\u7528\u300c{skill_display}\u300d\u6280\u80fd\u2026")
 
                 skill_result = unified_skill_reply(bundle, skill, rewritten_input)
                 if isinstance(skill_result, dict):
@@ -504,6 +527,16 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     search_topic = search_topic.strip('"\'\u201c\u201d\u300c\u300d\u3010\u3011')
                     if len(search_topic) < 2 or len(search_topic) > 40:
                         search_topic = msg
+                    # 如果 LLM 没能精简搜索词（跟原文一样），做停用词清理
+                    if search_topic == msg:
+                        import re as _re
+                        _stop = ["\u5e2e\u6211","\u7ed9\u6211","\u80fd\u4e0d\u80fd","\u53ef\u4ee5","\u597d\u770b\u7684","\u6700\u65b0\u7684","\u4e00\u4e0b","\u51e0\u672c","\u4e00\u4e9b","\u4f60","\u5417","\u5440","\u5462","\u4e86","\u7684","\u70b9"]
+                        _cleaned = msg
+                        for sw in _stop:
+                            _cleaned = _cleaned.replace(sw, "")
+                        _cleaned = _re.sub(r'\s+', ' ', _cleaned).strip()
+                        if len(_cleaned) >= 2:
+                            search_topic = _cleaned
                     debug_write("extract_search_topic", {"input": msg, "topic": search_topic})
 
                     yield await _trace("\u8054\u7f51\u641c\u7d22", "\u641c\u7d22\u4e3b\u9898\uff1a" + search_topic)
@@ -526,7 +559,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         debug_write("explicit_search_failed", {"reason": search_result.get("reason", "")})
                         yield await _trace("\u7ec4\u7ec7\u56de\u590d", "\u641c\u7d22\u672a\u627e\u5230\u7ed3\u679c\uff0c\u7ed3\u5408\u5df2\u6709\u77e5\u8bc6\u56de\u590d\u2026")
                 else:
-                    yield await _trace("\u7ec4\u7ec7\u56de\u590d", "\u7ed3\u5408\u4eba\u683c\u548c\u4e0a\u4e0b\u6587\u751f\u6210\u56de\u590d\u2026")
+                    yield await _trace("\u7ec4\u7ec7\u56de\u590d", f"\u300c{persona_name or 'Nova'}\u300d\u6b63\u5728\u8ba4\u771f\u601d\u8003\u5e76\u56de\u590d\u4f60\u2026")
                 response = unified_chat_reply(bundle, route)
         except Exception as exc:
             debug_write("chat_exception", {"error": str(exc)})
@@ -573,6 +606,12 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         add_to_history("nova", response)
         history.append({"role": "nova", "content": response, "time": datetime.now().isoformat()})
         save_msg_history(history)
+
+        # L2 持久记忆入库
+        try:
+            l2_add_memory(msg, response)
+        except Exception as exc:
+            debug_write("l2_add_error", {"error": str(exc)})
 
         try:
             record_stats(len(msg) + len(response))
@@ -838,7 +877,9 @@ async def get_memory():
     if l4_file.exists():
         try:
             l4_data = json.loads(l4_file.read_text(encoding="utf-8"))
-            for item in build_persona_events(l4_data, normalize_event_time(l4_file.stat().st_mtime)):
+            # L4 人格事件用固定初始化时间，避免 persona.json 被更新时事件冒顶
+            l4_init_time = normalize_event_time(l4_data.get("created_at") or "2026-03-10 00:00")
+            for item in build_persona_events(l4_data, l4_init_time):
                 events.append(item)
                 counts["L4"] += 1
         except Exception:

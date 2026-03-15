@@ -27,6 +27,13 @@ def init(*, nova_route=None, debug_write=None, think=None,
 
 # ── 路由 prompt ───────────────────────────────────────────
 
+def _fmt_l2_for_router(l2_memories):
+    if not l2_memories:
+        return "暂无"
+    items = [m.get("user_text", "")[:50] for m in (l2_memories or [])[:3]]
+    return json.dumps(items, ensure_ascii=False)
+
+
 def build_router_prompt(bundle: dict) -> str:
     l1 = bundle["l1"]
     l2 = bundle["l2"]
@@ -35,6 +42,7 @@ def build_router_prompt(bundle: dict) -> str:
     l5 = bundle["l5"]
     l8 = bundle.get("l8", [])
     msg = bundle["user_input"]
+    l2_memories = bundle.get("l2_memories", [])
 
     # L2 提炼摘要
     l2_summary = ""
@@ -70,6 +78,9 @@ L1最近对话：
 
 L2会话理解：
 {l2_summary}
+
+L2持久记忆：
+{_fmt_l2_for_router(l2_memories)}
 
 L3长期记忆：
 {json.dumps(l3, ensure_ascii=False)}

@@ -1,11 +1,16 @@
 # Executor - 技能执行层
-# 负责：统一调用技能、处理结果、封装异常
+# 负责：统一调用技能、处理结果、封装异常、注入用户上下文
 
 from core.skills import get_skill
 
 
-def execute(skill_route: dict, user_input: str) -> dict:
-    """统一执行入口"""
+def execute(skill_route: dict, user_input: str, context: dict | None = None) -> dict:
+    """统一执行入口
+
+    skill_route: 路由结果 {"skill": "weather", ...}
+    user_input:  用户原文
+    context:     用户上下文（L4 user_profile 等），技能可按需读取
+    """
     skill_name = (skill_route or {}).get('skill')
 
     if not skill_name:
@@ -35,7 +40,13 @@ def execute(skill_route: dict, user_input: str) -> dict:
         }
 
     try:
-        result = exec_func(user_input)
+        # 优先尝试传 context，技能可选择接不接
+        import inspect
+        sig = inspect.signature(exec_func)
+        if len(sig.parameters) >= 2:
+            result = exec_func(user_input, context or {})
+        else:
+            result = exec_func(user_input)
         return {
             'success': True,
             'skill': skill_name,

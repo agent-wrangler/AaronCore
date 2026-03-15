@@ -248,6 +248,16 @@ def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
     l5 = bundle["l5"]
     l8 = bundle.get("l8", [])
     l8_context = format_l8_context(l8)
+    l2_memories = bundle.get("l2_memories", [])
+    l2_context = ""
+    if l2_memories:
+        lines = []
+        for mem in l2_memories:
+            user_text = str(mem.get("user_text", ""))[:80]
+            importance = mem.get("importance", 0)
+            marker = "\u2605" if importance >= 0.7 else "\u00b7"
+            lines.append(f"{marker} {user_text}")
+        l2_context = "\n".join(lines)
     dialogue_context = bundle.get("dialogue_context", "")
     msg = bundle["user_input"]
     search_context = bundle.get("search_context", "")
@@ -270,6 +280,9 @@ def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
 
 L3长期记忆：
 {json.dumps(l3, ensure_ascii=False)}
+
+L2持久记忆（之前对话中的重要片段）：
+{l2_context or "暂无"}
 
 L4人格信息：
 {json.dumps(l4, ensure_ascii=False)}
@@ -298,10 +311,11 @@ L8已学知识：
 1. 这是普通聊天，直接自然回复。
 2. 根据 L4 里的风格规则来确定语气。
 3. 如果 L8 已经学过和当前问题有关的知识，优先吸收后再回答，不要像第一次见到这个问题。
-4. 如果用户这句话是承接上一轮的追问（例如"那什么时候有啊""然后呢""为什么""这个呢"），默认沿着最近对话的话题直接接上，不要反问"你指什么"。
-5. 不要死板，不要空模板。
-6. 不要输出思考过程。
-7. 只输出最终回复。
+4. 如果 L2 持久记忆中有和当前话题相关的内容，自然地接上，体现你记得之前聊过的事。
+5. 如果用户这句话是承接上一轮的追问（例如"那什么时候有啊""然后呢""为什么""这个呢"），默认沿着最近对话的话题直接接上，不要反问"你指什么"。
+6. 不要死板，不要空模板。
+7. 不要输出思考过程。
+8. 只输出最终回复。
 """.strip()
     result = _think(prompt, dialogue_context)
     reply = result.get("reply", "") if isinstance(result, dict) else str(result)
@@ -453,7 +467,15 @@ def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict
 
 def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict:
     route_result = {"mode": "skill", "skill": skill_name, "params": {}, "role": "assistant"}
-    execute_result = _nova_execute(route_result, skill_input) if _nova_core_ready else {"success": False}
+    # 把 L4 用户上下文传给 executor，技能可按需读取
+    skill_context = {}
+    l4 = bundle.get("l4") or {}
+    if isinstance(l4, dict):
+        up = l4.get("user_profile") or {}
+        if isinstance(up, dict):
+            skill_context["user_city"] = str(up.get("city") or "").strip()
+            skill_context["user_identity"] = str(up.get("identity") or "").strip()
+    execute_result = _nova_execute(route_result, skill_input, skill_context) if _nova_core_ready else {"success": False}
     _debug_write("execute_result", execute_result)
     if not execute_result.get("success"):
         error_text = str(execute_result.get("error", "") or "").strip()

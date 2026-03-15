@@ -218,9 +218,16 @@ def get_forecast(city_cn, coords, day_offset: int = 0):
         return None
 
 
-def execute(query):
+def execute(query, context=None):
     city = _extract_city(query)
     if not city:
+        # 优先从 executor 传入的上下文拿城市（L5 分配的参数）
+        if isinstance(context, dict) and context.get("user_city"):
+            ctx_city = str(context["user_city"]).strip()
+            if ctx_city in CITIES:
+                city = ctx_city
+    if not city:
+        # 兜底：直接读 persona（兼容旧调用方式）
         city = _load_user_default_city()
     if not city:
         return "你想看哪个城市呀？比如上海、北京、乌鲁木齐这样，告诉我一次后面就记住啦。"

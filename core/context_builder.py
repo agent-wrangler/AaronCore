@@ -128,6 +128,20 @@ def build_persona_events(persona_data: dict, event_time: str) -> list[dict]:
             }
         )
 
+    # 动态变更日志（L2 结晶时写入的 _changelog）
+    changelog = persona_data.get("_changelog") or []
+    for entry in changelog:
+        if isinstance(entry, dict) and entry.get("content"):
+            events.append(
+                {
+                    "time": str(entry.get("time") or event_time),
+                    "layer": "L4",
+                    "event_type": "persona_update",
+                    "title": "\u4eba\u683c\u56fe\u8c31",
+                    "content": str(entry["content"]),
+                }
+            )
+
     return events
 
 

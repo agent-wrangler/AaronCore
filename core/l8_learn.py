@@ -259,7 +259,7 @@ def extract_keywords(text: str) -> list[str]:
 
     for phrase in GENERIC_QUESTION_PHRASES:
         cleaned_query = re.sub(re.escape(phrase), " ", cleaned_query, flags=re.I)
-    cleaned_query = re.sub(r"[？?，。!！、：:（）()\[\]【】“”\"'’‘]", " ", cleaned_query)
+    cleaned_query = re.sub(r"[？?，。!！、：:（）()\[\]【】""\"'’‘]", " ", cleaned_query)
     cleaned_query = re.sub(r"\s+", " ", cleaned_query).strip()
 
     for word in COMMON_KEYWORDS:
@@ -322,18 +322,18 @@ def should_surface_knowledge_entry(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
 
-    primary_scene = str(entry.get(“一级场景”) or “”).strip()
-    core_skill = str(entry.get(“核心技能”) or entry.get(“name”) or “”).strip()
+    primary_scene = str(entry.get("一级场景") or "").strip()
+    core_skill = str(entry.get("核心技能") or entry.get("name") or "").strip()
 
-    # 老的”工具应用”补学里混入过并不存在的伪技能，这类条目不该继续影响聊天或记忆页。
-    if primary_scene == “工具应用” and core_skill and not _is_registered_skill_name(core_skill):
+    # 老的"工具应用"补学里混入过并不存在的伪技能，这类条目不该继续影响聊天或记忆页。
+    if primary_scene == "工具应用" and core_skill and not _is_registered_skill_name(core_skill):
         return False
 
-    # feedback_relearn 条目质量普遍较低：query 是用户的口语抱怨（如”太短了点”
-    # “怎么还是这个纳瓦尔宝典”），keywords 是无意义碎片。这类条目不应出现在
-    # 知识检索结果里，它们的价值仅在于记录 feedback_rule，不应作为”已学知识”影响后续对话。
-    entry_type = str(entry.get(“type”) or entry.get(“source”) or “”).strip()
-    if entry_type == “feedback_relearn”:
+    # feedback_relearn 条目质量普遍较低：query 是用户的口语抱怨（如"太短了点"
+    # "怎么还是这个纳瓦尔宝典"），keywords 是无意义碎片。这类条目不应出现在
+    # 知识检索结果里，它们的价值仅在于记录 feedback_rule，不应作为"已学知识"影响后续对话。
+    entry_type = str(entry.get("type") or entry.get("source") or "").strip()
+    if entry_type == "feedback_relearn":
         return False
 
     return True
@@ -529,7 +529,7 @@ def _filter_results_by_query(query: str, results: list[dict]) -> list[dict]:
     return []
 
 
-def search_web_results(query: str, max_results: int = 5, timeout_sec: int = 5) -> list[dict]:
+def search_web_results(query: str, max_results: int = 5, timeout_sec: int = 5, skip_filter: bool = False) -> list[dict]:
     candidates = _build_search_queries(query)
     fallback = []
     has_focus_keywords = bool(extract_keywords(query))
@@ -562,14 +562,17 @@ def search_web_results(query: str, max_results: int = 5, timeout_sec: int = 5) -
             if len(raw_results) >= max_results:
                 break
 
+        # skip_filter: 跳过严格过滤，直接返回原始结果（交给 LLM 判断相关性）
+        if skip_filter and raw_results:
+            return raw_results[:max_results]
+
         filtered = _filter_results_by_query(query, raw_results)
         if filtered:
             return filtered[:max_results]
         if raw_results and not fallback:
             fallback = raw_results[:max_results]
 
-    if has_focus_keywords:
-        return []
+    # 即使过滤没命中，也返回原始结果作为 fallback（总比空结果好）
     return fallback[:max_results]
 
 
@@ -612,6 +615,7 @@ def explicit_search_and_learn(search_query: str) -> dict:
             query,
             max_results=int(config.get("max_results", 5) or 5),
             timeout_sec=int(config.get("search_timeout_sec", 5) or 5),
+            skip_filter=True,  # 用户主动搜索，交给 LLM 判断相关性
         )
     except Exception as exc:
         return {"success": False, "reason": "search_error: " + str(exc)}
