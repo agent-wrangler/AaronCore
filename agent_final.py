@@ -388,6 +388,12 @@ _feedback_loop_init(
 
 app = FastAPI()
 
+# 挂载静态文件目录（CSS/JS 模块化拆分后的资源）
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_static_dir = ENGINE_DIR / "static"
+if _static_dir.is_dir():
+    app.mount("/static", _StaticFiles(directory=str(_static_dir)), name="static")
+
 
 class ChatRequest(BaseModel):
     message: str
