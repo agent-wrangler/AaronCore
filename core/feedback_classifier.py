@@ -5,6 +5,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RULES_FILE = ROOT / "memory_db" / "feedback_rules.json"
 
+# ── L7 板块定义 ──────────────────────────────────────────────
+# 每条反馈规则归入一个板块（category），方便上层统计和设置页展示
+# 板块：内容生成 / 路由调度 / 意图理解 / 交互风格
+_PROBLEM_TO_CATEGORY = {
+    # 内容生成：创作类输出质量问题
+    ("joke", "output_not_matching_intent"): "内容生成",
+    ("story", "length_too_short"): "内容生成",
+    # 路由调度：技能选择和调度问题
+    ("routing", "wrong_skill_selected"): "路由调度",
+    # 意图理解：没听懂用户在说什么
+    ("general", "output_not_matching_intent"): "意图理解",
+    # 交互风格：回复太空泛、模板化
+    ("chat", "fallback_too_generic"): "交互风格",
+}
+
+
+def _infer_category(scene: str, problem: str) -> str:
+    """根据 scene + problem 推断板块。"""
+    cat = _PROBLEM_TO_CATEGORY.get((scene, problem))
+    if cat:
+        return cat
+    # fallback 按 scene 粗分
+    if scene in ("joke", "story"):
+        return "内容生成"
+    if scene == "routing":
+        return "路由调度"
+    if scene == "chat":
+        return "交互风格"
+    return "意图理解"
+
 
 def _load_rules():
     if RULES_FILE.exists():
@@ -25,6 +55,7 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
 
     if any(k in text for k in ["不是笑话", "这不是笑话", "不好笑"]):
         return {
+            "category": "内容生成",
             "type": "llm_rule",
             "scene": "joke",
             "problem": "output_not_matching_intent",
@@ -34,6 +65,7 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
 
     if any(k in text for k in ["太短", "有点短", "讲长一点"]):
         return {
+            "category": "内容生成",
             "type": "llm_rule",
             "scene": "story",
             "problem": "length_too_short",
@@ -53,6 +85,7 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
         ]
     ):
         return {
+            "category": "路由调度",
             "type": "skill_route",
             "scene": "routing",
             "problem": "wrong_skill_selected",
@@ -78,6 +111,7 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
         ]
     ):
         return {
+            "category": "意图理解",
             "type": "llm_rule",
             "scene": "general",
             "problem": "output_not_matching_intent",
@@ -102,6 +136,7 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
         ]
     ):
         return {
+            "category": "路由调度",
             "type": "skill_route",
             "scene": "routing",
             "problem": "wrong_skill_selected",
@@ -111,6 +146,7 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
 
     if any(k in text for k in ["你还会什么", "别回空话", "别太傻", "别套话"]):
         return {
+            "category": "交互风格",
             "type": "execution_policy",
             "scene": "chat",
             "problem": "fallback_too_generic",
@@ -118,11 +154,19 @@ def classify_feedback(user_feedback: str, last_question: str = "", last_answer: 
             "level": "short_term",
         }
 
+    # Default: generate a concrete correction note from the conversation
+    fix_note = "keep_observing_and_refine"
+    if last_answer and user_feedback:
+        short_answer = last_answer[:60].replace("\n", " ")
+        short_feedback = user_feedback[:60].replace("\n", " ")
+        fix_note = f"\u4e0a\u6b21\u56de\u590d\u300c{short_answer}\u300d\uff0c\u7528\u6237\u8bf4\u300c{short_feedback}\u300d\uff0c\u4e0b\u6b21\u8981\u6309\u7528\u6237\u7ea0\u6b63\u7684\u65b9\u5411\u8c03\u6574"
+
     return {
+        "category": _infer_category("general", "generic_feedback"),
         "type": "user_pref",
         "scene": "general",
         "problem": "generic_feedback",
-        "fix": "keep_observing_and_refine",
+        "fix": fix_note,
         "level": "session",
     }
 

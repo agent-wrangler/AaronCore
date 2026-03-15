@@ -78,6 +78,19 @@ QUESTION_HINTS = [
     "是否",
 ]
 
+# 用户主动要求 Nova 去学习/搜索的祈使句关键词
+LEARNING_HINTS = [
+    "去学", "去查", "去搜", "去找", "去研究", "去了解",
+    "学一下", "查一下", "搜一下", "找一下", "了解一下",
+    "帮我查", "帮我搜", "帮我找", "帮我学",
+    "学几本", "查几本", "找几本", "推荐几本",
+    "学点", "查点", "搜点", "找点",
+    "去看看", "去搜搜", "去查查", "去找找", "去学学",
+    "学完", "查完", "搜完",
+    "你去学", "你去查", "你去搜",
+    "自己去学", "自己去查", "自己学",
+]
+
 GENERIC_QUESTION_PHRASES = [
     "什么是",
     "什么",
@@ -132,6 +145,60 @@ FEEDBACK_FIX_HINTS = {
     "ability_queries_should_answer_capabilities_directly": "能力类问题先直接说清能做什么，不要回模板空话",
     "keep_observing_and_refine": "结合上下文把问题接住，再把回答收得更贴近用户真正想要的点",
 }
+
+# ── 一级场景推断 ──────────────────────────────────────────────
+# 原始设计的板块：工具应用 / 自主学习 / 内容创作 / 系统能力 / 人物角色 / 系统功能
+# feedback scene → 一级场景 映射
+_FEEDBACK_SCENE_TO_PRIMARY = {
+    "joke": "内容创作",
+    "story": "内容创作",
+    "routing": "系统能力",
+    "chat": "系统功能",
+    "general": "",  # 需要进一步推断
+}
+
+# 关键词 → 一级场景 的简单规则
+_SCENE_KEYWORD_RULES: list[tuple[list[str], str]] = [
+    # 工具应用：涉及已注册技能的
+    (["天气", "weather", "股票", "stock", "画", "draw", "代码", "run_code"], "工具应用"),
+    # 内容创作：创作类
+    (["故事", "笑话", "段子", "文案", "脚本", "小说", "诗", "歌词", "创作"], "内容创作"),
+    # 人物角色：人设相关
+    (["人设", "角色", "性格", "人格", "甜心", "守护"], "人物角色"),
+    # 系统能力：路由、技能调度
+    (["路由", "技能", "调用", "触发", "弹窗", "误触发"], "系统能力"),
+    # 系统功能：能力、设置
+    (["设置", "配置", "功能", "能力", "你会什么"], "系统功能"),
+]
+
+
+def _infer_primary_scene(
+    query: str = "",
+    feedback_scene: str = "",
+    route_result: dict | None = None,
+) -> str:
+    """根据上下文推断知识条目应归入哪个一级场景。"""
+    # 1. 如果有 feedback scene 且能直接映射，优先用
+    if feedback_scene:
+        mapped = _FEEDBACK_SCENE_TO_PRIMARY.get(feedback_scene, "")
+        if mapped:
+            return mapped
+
+    # 2. 如果 route 指向了某个技能，归入工具应用
+    if route_result and isinstance(route_result, dict):
+        mode = route_result.get("mode", "")
+        skill = route_result.get("skill", "")
+        if mode in ("skill", "hybrid") and skill and skill != "none":
+            return "工具应用"
+
+    # 3. 关键词匹配
+    text = str(query or "").lower()
+    for keywords, scene in _SCENE_KEYWORD_RULES:
+        if any(kw in text for kw in keywords):
+            return scene
+
+    # 4. 默认：自主学习（纯知识类问答）
+    return "自主学习"
 
 
 from core.json_store import load_json as _load_json, write_json as _write_json
@@ -255,11 +322,18 @@ def should_surface_knowledge_entry(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
 
-    primary_scene = str(entry.get("一级场景") or "").strip()
-    core_skill = str(entry.get("核心技能") or entry.get("name") or "").strip()
+    primary_scene = str(entry.get(“一级场景”) or “”).strip()
+    core_skill = str(entry.get(“核心技能”) or entry.get(“name”) or “”).strip()
 
-    # 老的“工具应用”补学里混入过并不存在的伪技能，这类条目不该继续影响聊天或记忆页。
-    if primary_scene == "工具应用" and core_skill and not _is_registered_skill_name(core_skill):
+    # 老的”工具应用”补学里混入过并不存在的伪技能，这类条目不该继续影响聊天或记忆页。
+    if primary_scene == “工具应用” and core_skill and not _is_registered_skill_name(core_skill):
+        return False
+
+    # feedback_relearn 条目质量普遍较低：query 是用户的口语抱怨（如”太短了点”
+    # “怎么还是这个纳瓦尔宝典”），keywords 是无意义碎片。这类条目不应出现在
+    # 知识检索结果里，它们的价值仅在于记录 feedback_rule，不应作为”已学知识”影响后续对话。
+    entry_type = str(entry.get(“type”) or entry.get(“source”) or “”).strip()
+    if entry_type == “feedback_relearn”:
         return False
 
     return True
@@ -510,6 +584,60 @@ def search_web(query: str):
         return None
 
 
+def is_explicit_learning_request(text: str) -> bool:
+    """判断用户是否主动要求 Nova 去学习/搜索。"""
+    return any(hint in text for hint in LEARNING_HINTS)
+
+
+def explicit_search_and_learn(search_query: str) -> dict:
+    """用户主动要求学习时调用：立即搜索 → 存入知识库 → 返回搜索结果供回复使用。
+
+    Args:
+        search_query: 已提取的搜索主题（由调用方通过 LLM 从用户原始输入中提取）。
+
+    Returns:
+        {"success": True, "results": [...], "summary": "...", "entry": {...}}
+        or {"success": False, "reason": "..."}
+    """
+    config = load_autolearn_config()
+    if not config.get("allow_web_search", True):
+        return {"success": False, "reason": "web_search_disabled"}
+
+    query = str(search_query or "").strip()
+    if len(query) < 2:
+        return {"success": False, "reason": "empty_query"}
+
+    try:
+        results = search_web_results(
+            query,
+            max_results=int(config.get("max_results", 5) or 5),
+            timeout_sec=int(config.get("search_timeout_sec", 5) or 5),
+        )
+    except Exception as exc:
+        return {"success": False, "reason": "search_error: " + str(exc)}
+
+    if not results:
+        return {"success": False, "reason": "no_results"}
+
+    summary = _build_summary(query, results, max_length=int(config.get("max_summary_length", 360) or 360))
+    if not summary:
+        return {"success": False, "reason": "empty_summary"}
+
+    # 存入知识库
+    entry = None
+    if config.get("allow_knowledge_write", True):
+        entry = save_learned_knowledge(query, summary, results)
+
+    return {
+        "success": True,
+        "query": query,
+        "results": results,
+        "summary": summary,
+        "entry": entry,
+        "result_count": len(results),
+    }
+
+
 def _build_summary(query: str, results: list[dict], max_length: int = 360) -> str:
     if not results:
         return ""
@@ -532,11 +660,25 @@ def save_learned_knowledge(
     results: list[dict],
     source: str = "bing_rss",
     extra_fields: dict | None = None,
+    feedback_scene: str = "",
+    route_result: dict | None = None,
 ) -> dict:
     now = datetime.now()
     normalized_query = _normalize_query(query)
     keywords = extract_keywords(query)
     extra = dict(extra_fields or {})
+    primary_scene = _infer_primary_scene(query, feedback_scene=feedback_scene, route_result=route_result)
+
+    # 二级场景：根据一级场景给更有意义的前缀
+    _scene_prefix_map = {
+        "工具应用": "技能学习",
+        "内容创作": "创作纠偏",
+        "系统能力": "路由修正",
+        "系统功能": "能力补充",
+        "人物角色": "人设调整",
+        "自主学习": "自动学习",
+    }
+    scene_prefix = _scene_prefix_map.get(primary_scene, "自动学习")
 
     with _FILE_LOCK:
         data = _load_json(KNOWLEDGE_BASE_FILE, [])
@@ -562,8 +704,8 @@ def save_learned_knowledge(
                 "created_at": now.isoformat(),
                 "last_used": now.isoformat(),
                 "hit_count": 0,
-                "一级场景": "自主学习",
-                "二级场景": f"自动学习-{_clean_text(query, 12)}",
+                "一级场景": primary_scene,
+                "二级场景": f"{scene_prefix}-{_clean_text(query, 12)}",
                 "核心技能": _clean_text(query, 18) or "新知识",
                 "应用示例": summary,
                 "最近使用时间": now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -612,21 +754,24 @@ def _feedback_fix_text(fix: str) -> str:
 
 
 def _build_feedback_summary(rule_item: dict, web_summary: str = "", max_length: int = 360) -> str:
+    """Build a fact-based summary from feedback, not a reflection template."""
     question = _clean_text(rule_item.get("last_question") or "", 72)
     feedback = _clean_text(rule_item.get("user_feedback") or "", 60)
-    problem_text = _feedback_problem_text(rule_item.get("problem"))
-    fix_text = _feedback_fix_text(rule_item.get("fix"))
+    last_answer = _clean_text(rule_item.get("last_answer") or "", 120)
 
     parts = []
-    if question:
-        parts.append(f"这类问题之前问过「{question}」")
-    parts.append(problem_text)
-    if feedback:
-        parts.append(f"用户后来明确说了「{feedback}」")
-    parts.append(f"下次优先按这个方向收回答：{fix_text}")
+    # Extract the factual correction from the conversation
+    if question and feedback:
+        parts.append(f"\u7528\u6237\u95ee\u300c{question}\u300d")
+        if last_answer:
+            parts.append(f"Nova\u56de\u590d\u4e86\u300c{last_answer}\u300d")
+        parts.append(f"\u7528\u6237\u7ea0\u6b63\u8bf4\u300c{feedback}\u300d")
+        parts.append("\u4e0b\u6b21\u9047\u5230\u7c7b\u4f3c\u95ee\u9898\u8981\u6309\u7528\u6237\u7ea0\u6b63\u7684\u65b9\u5411\u56de\u7b54")
+    elif question:
+        parts.append(f"\u7528\u6237\u95ee\u8fc7\u300c{question}\u300d\uff0c\u4e0a\u6b21\u56de\u7b54\u4e0d\u591f\u597d")
     if web_summary:
-        parts.append(f"这次补学到的关键信息：{_clean_text(web_summary, 140)}")
-    return _clean_text("；".join(parts), max_length)
+        parts.append(f"\u8865\u5145\u4fe1\u606f\uff1a{_clean_text(web_summary, 140)}")
+    return _clean_text("\uff1b".join(parts), max_length)
 
 
 def auto_learn_from_feedback(rule_item: dict) -> dict:
@@ -657,12 +802,14 @@ def auto_learn_from_feedback(rule_item: dict) -> dict:
     }
 
     base_summary = _build_feedback_summary(rule_item, max_length=max_length)
+    feedback_scene = str(rule_item.get("scene") or "")
     entry = save_learned_knowledge(
         query,
         base_summary,
         [],
         source="feedback_relearn",
         extra_fields=extra_fields,
+        feedback_scene=feedback_scene,
     )
 
     if not config.get("allow_web_search", True):
@@ -725,6 +872,7 @@ def auto_learn_from_feedback(rule_item: dict) -> dict:
         results,
         source="feedback_relearn",
         extra_fields=extra_fields,
+        feedback_scene=feedback_scene,
     )
     return {
         "success": True,
@@ -759,7 +907,8 @@ def should_trigger_auto_learn(user_input: str, route_result: dict | None = None,
         return False, "handled_by_skill"
 
     is_question_like = any(hint in lowered or hint in text for hint in QUESTION_HINTS)
-    if not is_question_like:
+    is_learning_request = any(hint in text for hint in LEARNING_HINTS)
+    if not is_question_like and not is_learning_request:
         return False, "not_question_like"
 
     return True, "eligible"
@@ -793,7 +942,7 @@ def auto_learn(user_input: str, ai_response: str = "", route_result: dict | None
     if not summary:
         return {"success": False, "reason": "empty_summary"}
 
-    entry = save_learned_knowledge(user_input, summary, results)
+    entry = save_learned_knowledge(user_input, summary, results, route_result=route_result)
     return {
         "success": True,
         "type": "knowledge",

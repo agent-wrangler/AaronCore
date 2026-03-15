@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Nova</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;user-select:text}
@@ -318,6 +318,8 @@ body.light .nova-logo{
   padding: 14px 18px;
   line-height: 1.5;
   word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
   border-radius: 18px;
   position: relative;
   box-shadow: 0 8px 24px rgba(2, 6, 23, 0.16);
@@ -409,6 +411,8 @@ body.light .msg-meta {
   padding: 14px 18px;
   line-height: 1.5;
   word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
   border-radius: 18px;
   position: relative;
   box-shadow: 0 10px 28px rgba(2, 6, 23, 0.18);
@@ -524,8 +528,7 @@ body.light .msg-meta {
 .thinking-bubble-label {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: #a5b4fc;
 }
 
@@ -563,15 +566,22 @@ body.light .msg-meta {
   margin-bottom: 2px;
 }
 
-.assistant-pending .bubble.pending-bubble {
-  min-width: 112px;
-  display: inline-flex;
+.thinking-status {
+  display: flex;
   align-items: center;
   gap: 10px;
+  padding: 10px 14px;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
-.assistant-pending .bubble.pending-bubble .thinking {
-  margin-left: 0;
+.thinking-status-text {
+  animation: statusFade 0.5s ease;
+}
+
+@keyframes statusFade {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .thinking span {
@@ -650,6 +660,243 @@ body.light .thinking-bubble-text {
   --future-blue: #4cc9f0;
   --future-purple: #7209b7;
   --glow-color: rgba(76, 201, 240, 0.3);
+}
+
+.repair-bar {
+  padding: 0 24px;
+  margin-bottom: 0;
+}
+
+.repair-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 10px 10px 0 0;
+  background: rgba(99, 102, 241, 0.10);
+  border: 1px solid rgba(129, 140, 248, 0.18);
+  border-bottom: none;
+  color: #c7d2fe;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.repair-bar-icon {
+  flex-shrink: 0;
+  color: #a5b4fc;
+  display: flex;
+  align-items: center;
+}
+
+.repair-bar-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.repair-bar-headline {
+  font-weight: 600;
+  color: #e0e7ff;
+  white-space: nowrap;
+}
+
+.repair-bar-detail {
+  color: #a5b4fc;
+  font-size: 12px;
+}
+
+.repair-bar-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.repair-bar-close:hover {
+  color: #e2e8f0;
+}
+
+.repair-bar-progress {
+  height: 2px;
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+}
+
+.repair-bar-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+  width: 0%;
+}
+
+body.light .repair-bar-inner {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: rgba(99, 102, 241, 0.15);
+  color: #4338ca;
+}
+
+body.light .repair-bar-headline {
+  color: #312e81;
+}
+
+body.light .repair-bar-detail {
+  color: #6366f1;
+}
+
+body.light .repair-bar-close {
+  color: #94a3b8;
+}
+
+body.light .repair-bar-progress {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* ============================================
+   轻感知状态层 — Awareness Bar
+   ============================================ */
+.awareness-bar {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  padding: 0 24px;
+  min-height: 0;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--bg-chat, #0f172a);
+}
+.awareness-bar.has-balls {
+  padding: 4px 24px 6px;
+}
+.awareness-ball {
+  pointer-events: auto;
+}
+
+/* 球体基础样式 */
+.awareness-ball {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  opacity: 0;
+  background: radial-gradient(circle at 35% 35%,
+    rgba(255,255,255,0.5), rgba(100,200,255,0.8));
+  box-shadow: 0 0 6px rgba(100,200,255,0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.awareness-ball:hover {
+  transform: scale(1.6);
+  z-index: 10;
+}
+
+/* L7 反馈规则 — 琥珀色 */
+.awareness-ball.l7 {
+  background: radial-gradient(circle at 35% 35%,
+    rgba(255,255,255,0.6), rgba(251,191,36,0.85));
+  box-shadow: 0 0 6px rgba(251,191,36,0.4);
+}
+.awareness-ball.l7:hover {
+  box-shadow: 0 0 12px rgba(251,191,36,0.7);
+}
+
+/* L8 主动学习 — 青蓝色 */
+.awareness-ball.l8-learn {
+  background: radial-gradient(circle at 35% 35%,
+    rgba(255,255,255,0.6), rgba(56,189,248,0.85));
+  box-shadow: 0 0 6px rgba(56,189,248,0.4);
+}
+.awareness-ball.l8-learn:hover {
+  box-shadow: 0 0 12px rgba(56,189,248,0.7);
+}
+
+/* L8 反馈重学 — 紫色 */
+.awareness-ball.l8-relearn {
+  background: radial-gradient(circle at 35% 35%,
+    rgba(255,255,255,0.6), rgba(167,139,250,0.85));
+  box-shadow: 0 0 6px rgba(167,139,250,0.4);
+}
+.awareness-ball.l8-relearn:hover {
+  box-shadow: 0 0 12px rgba(167,139,250,0.7);
+}
+
+/* 滚入动画 */
+@keyframes ballRollIn {
+  0%   { opacity: 0; transform: translateX(-60vw) rotate(0deg); }
+  10%  { opacity: 1; }
+  100% { opacity: 1; transform: translateX(0) rotate(720deg); }
+}
+.awareness-ball.rolling-in {
+  animation: ballRollIn 1.8s cubic-bezier(0.25,0.46,0.45,0.94) forwards;
+}
+
+/* 落定后呼吸光效 */
+@keyframes ballBreath {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.3); }
+}
+.awareness-ball.settled {
+  animation: ballBreath 3s ease-in-out infinite;
+  opacity: 1;
+}
+
+/* 午夜清除动画 */
+@keyframes ballFadeOut {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0); }
+}
+.awareness-ball.clearing {
+  animation: ballFadeOut 0.5s ease-out forwards;
+}
+
+/* 纯CSS tooltip */
+.awareness-ball::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 50%;
+  transform: translateX(50%);
+  background: rgba(15,23,42,0.95);
+  color: rgba(255,255,255,0.9);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  border: 1px solid rgba(255,255,255,0.1);
+  z-index: 100;
+}
+.awareness-ball:hover::after {
+  opacity: 1;
+}
+
+/* Light theme */
+body.light .awareness-bar {
+  background: #f8fafc;
+}
+body.light .awareness-ball::after {
+  background: rgba(255,255,255,0.95);
+  color: #1e293b;
+  border: 1px solid rgba(0,0,0,0.08);
 }
 
 .input {
@@ -881,7 +1128,21 @@ body.light .send-btn:hover {
  <div class="content">
   <div class="chat" id="chat"></div>
  </div>
+ <div class="awareness-bar" id="awarenessBar"></div>
  <div class="input">
+  <div class="repair-bar" id="repairBar" style="display:none;">
+   <div class="repair-bar-inner">
+    <div class="repair-bar-icon">
+     <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.75" fill="currentColor"/></svg>
+    </div>
+    <div class="repair-bar-text">
+     <span class="repair-bar-headline" id="repairHeadline"></span>
+     <span class="repair-bar-detail" id="repairDetail"></span>
+    </div>
+    <button class="repair-bar-close" onclick="hideRepairBar()" title="关闭">&times;</button>
+   </div>
+   <div class="repair-bar-progress"><div class="repair-bar-progress-fill" id="repairProgress"></div></div>
+  </div>
   <div class="input-container">
    <textarea id="inp" placeholder="与 Nova 对话..." onkeydown="if(event.keyCode==13&&!event.shiftKey){event.preventDefault();send();}"></textarea>
    <div class="send-btn-wrapper">
@@ -897,8 +1158,21 @@ body.light .send-btn:hover {
 </div>
 <script>
 var chatHistory='';
+var CHAT_HISTORY_MAX=60;
 var voiceEnabled=false;
 function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+
+function trimChatHistory(){
+ var tmp=document.createElement('div');
+ tmp.innerHTML=chatHistory;
+ var msgs=tmp.querySelectorAll('.msg');
+ if(msgs.length>CHAT_HISTORY_MAX){
+  var remove=msgs.length-CHAT_HISTORY_MAX;
+  for(var i=0;i<remove;i++) msgs[i].parentNode.removeChild(msgs[i]);
+  chatHistory=tmp.innerHTML;
+ }
+}
+
 function updateSendButton(){
  var inp=document.getElementById('inp');
  var btn=document.getElementById('sendBtn');
@@ -906,6 +1180,200 @@ function updateSendButton(){
  
  btn.disabled=!hasText;
 }
+
+function formatBubbleText(text){
+ var div=document.createElement('div');
+ div.textContent=String(text||'');
+ var escaped=div.innerHTML;
+ escaped=escaped.replace(/\n\n+/g,'<br><br>');
+ escaped=escaped.replace(/\n/g,'<br>');
+ return escaped;
+}
+
+// ============================================
+// 轻感知状态层 — AwarenessManager
+// ============================================
+var AwarenessManager=(function(){
+ var STORAGE_KEY='awareness_balls';
+ var POLL_INTERVAL=5000;
+ var POLL_MAX=6;
+ var STAGGER_DELAY=300;
+ var MAX_BALLS=50;
+ var pollTimer=null;
+ var pollCount=0;
+ var lastPollTs=null;
+
+ var TYPE_CLASS={'l7_feedback':'l7','l8_learn':'l8-learn','l8_relearn':'l8-relearn'};
+ var TYPE_LABEL={'l7_feedback':'\u53cd\u9988\u8c03\u6574','l8_learn':'\u5b66\u4e60','l8_relearn':'\u91cd\u5b66'};
+
+ function todayKey(){return new Date().toISOString().slice(0,10);}
+
+ function loadBalls(){
+  try{
+   var raw=localStorage.getItem(STORAGE_KEY);
+   if(!raw) return [];
+   var data=JSON.parse(raw);
+   if(data.date!==todayKey()){localStorage.removeItem(STORAGE_KEY);return [];}
+   return data.balls||[];
+  }catch(e){return [];}
+ }
+
+ function saveBalls(balls){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify({date:todayKey(),balls:balls}));
+ }
+
+ function addBallToStorage(ballData){
+  var balls=loadBalls();
+  if(balls.length>=MAX_BALLS) return false;
+  for(var i=0;i<balls.length;i++){
+   if(balls[i].ts===ballData.ts && balls[i].type===ballData.type) return false;
+  }
+  balls.push(ballData);
+  saveBalls(balls);
+  return true;
+ }
+
+ function getBar(){return document.getElementById('awarenessBar');}
+
+ function updateBarClass(){
+  var bar=getBar();
+  if(!bar) return;
+  if(bar.querySelectorAll('.awareness-ball').length>0){
+   bar.classList.add('has-balls');
+  }else{
+   bar.classList.remove('has-balls');
+  }
+ }
+
+ function createBallEl(ballData,animate){
+  var el=document.createElement('div');
+  var cls=TYPE_CLASS[ballData.type]||'l8-learn';
+  el.className='awareness-ball '+cls;
+  var label=TYPE_LABEL[ballData.type]||'\u8c03\u6574';
+  var time='';
+  if(ballData.ts){
+   try{var d=new Date(ballData.ts);time=d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}catch(e){}
+  }
+  // 从 summary 中去掉和 label 重复的前缀
+  var desc=(ballData.summary||'').replace(/^.*[:：]\s*/,'').slice(0,30);
+  var tip=label+(desc?' · '+desc:'')+(time?' · '+time:'');
+  el.setAttribute('data-tooltip',tip.trim());
+  el.setAttribute('data-type',ballData.type);
+  el.setAttribute('data-ts',ballData.ts||'');
+
+  if(animate){
+   el.classList.add('rolling-in');
+   el.addEventListener('animationend',function(){
+    el.classList.remove('rolling-in');
+    el.classList.add('settled');
+   },{once:true});
+  }else{
+   el.classList.add('settled');
+   el.style.opacity='1';
+  }
+  return el;
+ }
+
+ function renderBall(ballData,animate){
+  var bar=getBar();
+  if(!bar) return;
+  var el=createBallEl(ballData,animate);
+  bar.prepend(el);
+  updateBarClass();
+ }
+
+ function init(){
+  var bar=getBar();
+  if(!bar) return;
+  var saved=loadBalls();
+  for(var i=0;i<saved.length;i++) renderBall(saved[i],false);
+  scheduleMidnightClear();
+  console.log('[awareness] init, restored '+saved.length+' balls');
+ }
+
+ function handleEvent(evtData){
+  var ballData={
+   type:evtData.type,
+   summary:evtData.summary||'',
+   ts:evtData.ts||new Date().toISOString(),
+   detail:evtData.detail||{}
+  };
+  var isNew=addBallToStorage(ballData);
+  if(!isNew) return;
+  renderBall(ballData,true);
+ }
+
+ function handleEvents(arr){
+  if(!Array.isArray(arr)||arr.length===0) return;
+  for(var i=0;i<arr.length;i++){
+   (function(idx){
+    setTimeout(function(){handleEvent(arr[idx]);},idx*STAGGER_DELAY);
+   })(i);
+  }
+ }
+
+ function startPolling(){
+  stopPolling();
+  pollCount=0;
+  lastPollTs=new Date().toISOString();
+  pollTimer=setInterval(function(){
+   pollCount++;
+   if(pollCount>POLL_MAX){stopPolling();return;}
+   var url='/awareness/pending'+(lastPollTs?'?since='+encodeURIComponent(lastPollTs):'');
+   fetch(url).then(function(r){return r.json();}).then(function(data){
+    if(data.server_ts) lastPollTs=data.server_ts;
+    if(data.events && data.events.length>0){
+     handleEvents(data.events);
+     pollCount=Math.max(0,pollCount-2);
+    }
+   }).catch(function(){});
+  },POLL_INTERVAL);
+ }
+
+ function stopPolling(){
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  pollCount=0;
+ }
+
+ function scheduleMidnightClear(){
+  var now=new Date();
+  var midnight=new Date(now);
+  midnight.setHours(24,0,0,0);
+  var ms=midnight-now;
+  setTimeout(function(){
+   clearAllBalls();
+   scheduleMidnightClear();
+  },ms);
+ }
+
+ function clearAllBalls(){
+  var bar=getBar();
+  if(!bar) return;
+  var balls=bar.querySelectorAll('.awareness-ball');
+  for(var i=0;i<balls.length;i++){
+   (function(el,idx){
+    setTimeout(function(){
+     el.classList.remove('settled');
+     el.classList.add('clearing');
+     el.addEventListener('animationend',function(){
+      el.remove();
+      updateBarClass();
+     },{once:true});
+    },idx*80);
+   })(balls[i],i);
+  }
+  localStorage.removeItem(STORAGE_KEY);
+ }
+
+ return {
+  init:init,
+  handleEvent:handleEvent,
+  handleEvents:handleEvents,
+  startPolling:startPolling,
+  stopPolling:stopPolling,
+  clearAllBalls:clearAllBalls
+ };
+})();
 
 function addMessage(sender,text,type){
  var chat=document.getElementById('chat');
@@ -932,7 +1400,7 @@ function addMessage(sender,text,type){
  // 创建气泡
  var bubble=document.createElement('div');
  bubble.className='bubble';
- bubble.textContent=text;
+ bubble.innerHTML=formatBubbleText(text);
  
  // 创建元信息（昵称+时间）
  var msgMeta=document.createElement('div');
@@ -958,13 +1426,16 @@ function addMessage(sender,text,type){
  // 保存到历史
  if(type==='user'||type==='assistant'){
   chatHistory+=msgDiv.outerHTML;
+  trimChatHistory();
   localStorage.setItem('nova_chat_history',chatHistory);
  }
 }
 
+var _thinkingLabels=["\u601d\u8003\u4e2d","\u7ffb\u9605\u8bb0\u5fc6","\u68c0\u7d22\u77e5\u8bc6","\u7406\u89e3\u610f\u56fe","\u7ec4\u7ec7\u56de\u590d"];
+
 function buildPendingAssistantMessage(){
  var msgDiv=document.createElement('div');
- msgDiv.className='msg assistant assistant-pending';
+ msgDiv.className='msg assistant thinking-msg';
 
  var avatar=document.createElement('div');
  avatar.className='avatar';
@@ -972,45 +1443,131 @@ function buildPendingAssistantMessage(){
  avatar.title='Nova AI';
  avatar.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 
- var msgContent=document.createElement('div');
- msgContent.className='msg-content';
+ var panel=document.createElement('div');
+ panel.className='thinking-panel';
 
-  var bubble=document.createElement('div');
-  bubble.className='bubble pending-bubble';
-  bubble.innerHTML='<span class="thinking-bubble-text">我在看这件事...</span><div class="thinking"><span></span><span></span><span></span></div>';
+ var stack=document.createElement('div');
+ stack.className='thinking-stack';
 
- var msgMeta=document.createElement('div');
- msgMeta.className='msg-meta';
+ var status=document.createElement('div');
+ status.className='thinking-status';
+ status.innerHTML='<div class="thinking"><span></span><span></span><span></span></div><span class="thinking-status-text">\u601d\u8003\u4e2d</span>';
+
+ var meta=document.createElement('div');
+ meta.className='msg-meta';
  var nameSpan=document.createElement('span');
  nameSpan.className='msg-name';
  nameSpan.textContent='Nova';
  var timeSpan=document.createElement('span');
  timeSpan.className='msg-time';
  timeSpan.textContent=T();
- msgMeta.appendChild(nameSpan);
- msgMeta.appendChild(timeSpan);
+ meta.appendChild(nameSpan);
+ meta.appendChild(timeSpan);
 
- msgContent.appendChild(bubble);
- msgContent.appendChild(msgMeta);
+ panel.appendChild(stack);
+ panel.appendChild(status);
+ panel.appendChild(meta);
  msgDiv.appendChild(avatar);
- msgDiv.appendChild(msgContent);
+ msgDiv.appendChild(panel);
+
+ // rotate status labels
+ var labelIdx=0;
+ var labelTimer=setInterval(function(){
+  labelIdx=(labelIdx+1)%_thinkingLabels.length;
+  var txt=status.querySelector('.thinking-status-text');
+  if(txt){
+   txt.textContent=_thinkingLabels[labelIdx];
+   txt.style.animation='none';
+   txt.offsetHeight;
+   txt.style.animation='statusFade 0.5s ease';
+  }
+ }, 1200);
 
  return {
   root: msgDiv,
-  bubble: bubble,
+  panel: panel,
+  stack: stack,
+  status: status,
+  meta: meta,
+  labelTimer: labelTimer,
   persisted: false
  };
 }
 
 function finalizePendingAssistantMessage(pendingState, replyText){
- if(!pendingState || !pendingState.root || !pendingState.bubble) return;
- pendingState.bubble.className='bubble';
- pendingState.bubble.textContent=replyText;
+ if(!pendingState || !pendingState.root) return;
+ if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
+ // Convert to simple message bubble
+ var root=pendingState.root;
+ var avatar=root.querySelector('.avatar');
+ var panel=root.querySelector('.thinking-panel');
+ if(panel) root.removeChild(panel);
+ root.className='msg assistant';
+ var msgContent=document.createElement('div');
+ msgContent.className='msg-content';
+ var bubble=document.createElement('div');
+ bubble.className='bubble';
+ bubble.innerHTML=formatBubbleText(replyText);
+ var meta=document.createElement('div');
+ meta.className='msg-meta';
+ var nameSpan=document.createElement('span');
+ nameSpan.className='msg-name';
+ nameSpan.textContent='Nova';
+ var timeSpan=document.createElement('span');
+ timeSpan.className='msg-time';
+ timeSpan.textContent=T();
+ meta.appendChild(nameSpan);
+ meta.appendChild(timeSpan);
+ msgContent.appendChild(bubble);
+ msgContent.appendChild(meta);
+ root.appendChild(msgContent);
  if(!pendingState.persisted){
-  chatHistory+=pendingState.root.outerHTML;
+  chatHistory+=root.outerHTML;
+  trimChatHistory();
   localStorage.setItem('nova_chat_history',chatHistory);
   pendingState.persisted=true;
-  }
+ }
+}
+
+function showRepairBar(repair){
+ if(!repair || !repair.show) return;
+ var bar=document.getElementById('repairBar');
+ var headline=document.getElementById('repairHeadline');
+ var detail=document.getElementById('repairDetail');
+ var progress=document.getElementById('repairProgress');
+ if(!bar||!headline||!detail||!progress) return;
+
+ if(bar._repairTimer){ clearInterval(bar._repairTimer); bar._repairTimer=null; }
+ headline.textContent=repair.headline||'\u5df2\u8bb0\u5f55\u53cd\u9988';
+ detail.textContent=repair.detail||'';
+ progress.style.width=(repair.progress||20)+'%';
+ bar.style.display='';
+
+ if(repair.watch && repair.poll_ms && repair.max_polls){
+  var polls=0;
+  var maxPolls=repair.max_polls||10;
+  var interval=repair.poll_ms||1600;
+  bar._repairTimer=setInterval(function(){
+   polls++;
+   var pct=Math.min(22+Math.round((polls/maxPolls)*68), 90);
+   progress.style.width=pct+'%';
+   if(polls>=maxPolls){
+    clearInterval(bar._repairTimer); bar._repairTimer=null;
+    progress.style.width='100%';
+    detail.textContent='\u540e\u53f0\u5b66\u4e60\u4efb\u52a1\u5df2\u5b8c\u6210\u3002';
+    setTimeout(function(){ hideRepairBar(); }, 3000);
+   }
+  }, interval);
+ }else{
+  setTimeout(function(){ hideRepairBar(); }, 6000);
+ }
+}
+
+function hideRepairBar(){
+ var bar=document.getElementById('repairBar');
+ if(!bar) return;
+ if(bar._repairTimer){ clearInterval(bar._repairTimer); bar._repairTimer=null; }
+ bar.style.display='none';
 }
 
 function cleanInlineText(text, limit){
@@ -1041,89 +1598,144 @@ function createProcessBubble(card){
  return bubble;
 }
 
-function finalizePendingAssistantTrace(pendingState, traceCards, replyText){
- if(!pendingState || !pendingState.root || !pendingState.bubble || !traceCards || !traceCards.length) {
-  finalizePendingAssistantMessage(pendingState, replyText);
-  return;
- }
-
- var root=pendingState.root;
- var avatar=root.querySelector('.avatar');
- var oldContent=root.querySelector('.msg-content');
- var meta=root.querySelector('.msg-meta');
- if(!avatar || !oldContent || !meta){
-  finalizePendingAssistantMessage(pendingState, replyText);
-  return;
- }
-
- var panel=document.createElement('div');
- panel.className='thinking-panel';
-
- var stack=document.createElement('div');
- stack.className='thinking-stack';
- traceCards.forEach(function(card){
-  stack.appendChild(createProcessBubble(card));
- });
-
- var finalBubble=document.createElement('div');
- finalBubble.className='bubble thinking-final-bubble';
- finalBubble.textContent=replyText;
-
- panel.appendChild(stack);
- panel.appendChild(finalBubble);
- panel.appendChild(meta);
-
- root.className='msg assistant thinking-msg';
- root.removeChild(oldContent);
- root.appendChild(panel);
-
- if(!pendingState.persisted){
-  chatHistory+=root.outerHTML;
-  localStorage.setItem('nova_chat_history',chatHistory);
-  pendingState.persisted=true;
- }
-}
-
 async function send(){
+ AwarenessManager.stopPolling();
  var inp=document.getElementById('inp');
  var text=inp.value.trim();
  if(text==='')return;
- 
- addMessage('你',text,'user');
+
+ addMessage('\u4f60',text,'user');
  inp.value='';
  updateSendButton();
- 
-  var btn=document.getElementById('sendBtn');
-  btn.disabled=true;
-  var pendingState=buildPendingAssistantMessage();
-  var chat=document.getElementById('chat');
-  chat.appendChild(pendingState.root);
-  chat.scrollTop=chat.scrollHeight;
-  
-  try{
-   var payload = JSON.stringify({ message: String(text) });
-   var resp=await fetch('/chat',{
-    method:'POST',
-    headers:{'Content-Type':'application/json; charset=utf-8','Accept':'application/json'},
-    body: payload
-   });
-   var data=await resp.json();
-    var replyText=data.reply||'我刚刚没接好，你再发我一次嘛。';
-    var traceCards=(data.trace && data.trace.show && Array.isArray(data.trace.cards))
-     ? data.trace.cards : [];
-    if(traceCards.length>=2){
-     finalizePendingAssistantTrace(pendingState, traceCards, replyText);
-    }else{
-     finalizePendingAssistantMessage(pendingState, replyText);
-    }
-    chat.scrollTop=chat.scrollHeight;
-  }catch(e){
-   finalizePendingAssistantMessage(pendingState, '后端连接失败啦，请稍后再试试。');
-   chat.scrollTop=chat.scrollHeight;
+
+ var btn=document.getElementById('sendBtn');
+ btn.disabled=true;
+ var pendingState=buildPendingAssistantMessage();
+ var chat=document.getElementById('chat');
+ chat.appendChild(pendingState.root);
+ chat.scrollTop=chat.scrollHeight;
+
+ var replyText='';
+ var repairData=null;
+ var hasTrace=false;
+
+ function addTraceCard(card){
+  if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
+  hasTrace=true;
+  var statusText=pendingState.status.querySelector('.thinking-status-text');
+  if(statusText){
+   statusText.textContent=(card.label||'')+'\u2002'+(card.detail||'');
+   statusText.style.animation='none';
+   statusText.offsetHeight;
+   statusText.style.animation='statusFade 0.5s ease';
   }
- 
+  chat.scrollTop=chat.scrollHeight;
+ }
+
+ function showFinalReply(text){
+  if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
+  if(pendingState.status && pendingState.status.parentNode){
+   pendingState.status.parentNode.removeChild(pendingState.status);
+  }
+  // convert thinking panel to normal reply bubble
+  var panel=pendingState.panel;
+  if(panel) panel.parentNode.removeChild(panel);
+  pendingState.root.className='msg assistant';
+  var msgContent=document.createElement('div');
+  msgContent.className='msg-content';
+  var bubble=document.createElement('div');
+  bubble.className='bubble';
+  bubble.style.opacity='0';
+  bubble.innerHTML=formatBubbleText(text);
+  var meta=document.createElement('div');
+  meta.className='msg-meta';
+  var nameSpan=document.createElement('span');
+  nameSpan.className='msg-name';
+  nameSpan.textContent='Nova';
+  var timeSpan=document.createElement('span');
+  timeSpan.className='msg-time';
+  timeSpan.textContent=T();
+  meta.appendChild(nameSpan);
+  meta.appendChild(timeSpan);
+  msgContent.appendChild(bubble);
+  msgContent.appendChild(meta);
+  pendingState.root.appendChild(msgContent);
+  requestAnimationFrame(function(){
+   bubble.style.transition='opacity 0.4s ease';
+   bubble.style.opacity='1';
+   chat.scrollTop=chat.scrollHeight;
+   if(!pendingState.persisted){
+    bubble.style.removeProperty('transition');
+    chatHistory+=pendingState.root.outerHTML;
+    trimChatHistory();
+    localStorage.setItem('nova_chat_history',chatHistory);
+    pendingState.persisted=true;
+   }
+  });
+ }
+
+ try{
+  var resp=await fetch('/chat',{
+   method:'POST',
+   headers:{'Content-Type':'application/json; charset=utf-8','Accept':'text/event-stream'},
+   body:JSON.stringify({message:String(text)})
+  });
+
+  var reader=resp.body.getReader();
+  var decoder=new TextDecoder();
+  var buffer='';
+
+  while(true){
+   var result=await reader.read();
+   if(result.done) break;
+   buffer+=decoder.decode(result.value, {stream:true});
+
+   var lines=buffer.split('\n');
+   buffer=lines.pop();
+
+   var currentEvent='';
+   var currentData='';
+   for(var i=0;i<lines.length;i++){
+    var line=lines[i].trim();
+    if(line.startsWith('event:')){
+     currentEvent=line.slice(6).trim();
+    }else if(line.startsWith('data:')){
+     currentData=line.slice(5).trim();
+    }else if(line===''){
+     if(currentEvent && currentData){
+      try{
+       var parsed=JSON.parse(currentData);
+       if(currentEvent==='trace'){
+        addTraceCard(parsed);
+       }else if(currentEvent==='reply'){
+        replyText=parsed.reply||'\u6211\u521a\u521a\u6ca1\u63a5\u597d\uff0c\u4f60\u518d\u53d1\u6211\u4e00\u6b21\u561b\u3002';
+       }else if(currentEvent==='repair'){
+        repairData=parsed;
+       }else if(currentEvent==='awareness'){
+        AwarenessManager.handleEvent(parsed);
+       }
+      }catch(e){}
+     }
+     currentEvent='';
+     currentData='';
+    }
+   }
+  }
+
+  if(replyText){
+   showFinalReply(replyText);
+  }else{
+   finalizePendingAssistantMessage(pendingState, '\u6211\u521a\u521a\u6ca1\u63a5\u597d\uff0c\u4f60\u518d\u53d1\u6211\u4e00\u6b21\u561b\u3002');
+  }
+  if(repairData && repairData.show){ showRepairBar(repairData); }
+  AwarenessManager.startPolling();
+ }catch(e){
+  finalizePendingAssistantMessage(pendingState, '\u540e\u7aef\u8fde\u63a5\u5931\u8d25\u5566\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u8bd5\u3002');
+ }
+ chat.scrollTop=chat.scrollHeight;
  setTimeout(updateSendButton,100);
 }
+
 function toggleTheme(){
  var body=document.body;
  var currentMenu=document.querySelector('.menu.active');
@@ -1227,9 +1839,25 @@ window.onload=function(){
  // 加载聊天历史
  var saved=localStorage.getItem('nova_chat_history');
  if(saved){
-  chatHistory=saved;
-  document.getElementById('chat').innerHTML=saved;
-  document.getElementById('chat').scrollTop=chat.scrollHeight;
+  // 修复历史数据中残留的 opacity:0
+  var tmp=document.createElement('div');
+  tmp.innerHTML=saved;
+  tmp.querySelectorAll('.bubble').forEach(function(b){
+   if(b.style.opacity==='0') b.style.removeProperty('opacity');
+   b.style.removeProperty('transition');
+  });
+  tmp.querySelectorAll('.thinking-bubble').forEach(function(b){
+   b.style.removeProperty('opacity');
+   b.style.removeProperty('transform');
+   b.style.removeProperty('transition');
+  });
+  var cleaned=tmp.innerHTML;
+  chatHistory=cleaned;
+  document.getElementById('chat').innerHTML=cleaned;
+  document.getElementById('chat').scrollTop=document.getElementById('chat').scrollHeight;
+  // 回写修复后的数据
+  if(cleaned!==saved) localStorage.setItem('nova_chat_history',cleaned);
+  console.log('[Nova] 恢复聊天历史，消息数:', tmp.querySelectorAll('.msg').length);
  }
  
  // 初始化输入框监听
@@ -1237,7 +1865,8 @@ window.onload=function(){
  inp.addEventListener('input',updateSendButton);
  updateSendButton();
  setInputVisible(true);
- 
+ AwarenessManager.init();
+
  // 读取模型名
  fetch('/stats').then(r=>r.json()).then(function(d){
   var stats=d.stats||d||{};
@@ -1541,7 +2170,7 @@ function renderSettingsActionButton(label, action, key, isLight, emphasis, disab
   ? (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)')
   : (primary?'linear-gradient(135deg,#6366f1,#8b5cf6)':(isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)'));
  var color=disabled?'#94a3b8':(primary?'#fff':(isLight?'#334155':'#e2e8f0'));
- return '<button type=”button” data-settings-action=”'+action+'”'+(key?' data-settings-key=”'+escapeHtml(key)+'”':'')+' style=”position:relative;z-index:1;padding:10px 12px;border:none;border-radius:12px;background:'+bg+';color:'+color+';font-size:13px;font-weight:700;cursor:'+(disabled?'default':'pointer')+';'+(disabled?'opacity:0.68;pointer-events:none;':'')+'”>'+escapeHtml(label)+'</button>';
+ return '<button type="button" data-settings-action="'+action+'"'+(key?' data-settings-key="'+escapeHtml(key)+'"':'')+' style="position:relative;z-index:1;padding:10px 12px;border:none;border-radius:12px;background:'+bg+';color:'+color+';font-size:13px;font-weight:700;cursor:'+(disabled?'default':'pointer')+';'+(disabled?'opacity:0.68;pointer-events:none;':'')+'">'+escapeHtml(label)+'</button>';
 }
 
 function renderSettingsMetaPill(label, tone, isLight){
@@ -1553,7 +2182,7 @@ function renderSettingsMetaPill(label, tone, isLight){
   muted:isLight?['rgba(148,163,184,0.12)','#475569']:['rgba(148,163,184,0.14)','#cbd5e1']
  };
  var picked=palette[tone]||palette.muted;
- return '<span style=”padding:6px 10px;border-radius:999px;background:'+picked[0]+';color:'+picked[1]+';font-size:12px;font-weight:700;”>'+escapeHtml(label)+'</span>';
+ return '<span style="padding:6px 10px;border-radius:999px;background:'+picked[0]+';color:'+picked[1]+';font-size:12px;font-weight:700;">'+escapeHtml(label)+'</span>';
 }
 
 function selfRepairFlowSummary(config){

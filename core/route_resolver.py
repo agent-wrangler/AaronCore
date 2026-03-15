@@ -29,11 +29,36 @@ def init(*, nova_route=None, debug_write=None, think=None,
 
 def build_router_prompt(bundle: dict) -> str:
     l1 = bundle["l1"]
+    l2 = bundle["l2"]
     l3 = bundle["l3"]
     l4 = bundle["l4"]
     l5 = bundle["l5"]
     l8 = bundle.get("l8", [])
     msg = bundle["user_input"]
+
+    # L2 提炼摘要
+    l2_summary = ""
+    if isinstance(l2, dict):
+        parts = []
+        topics = l2.get("topics") or []
+        if topics and topics != ["闲聊"]:
+            parts.append(f"当前话题：{'、'.join(topics)}")
+        mood = l2.get("mood") or ""
+        if mood and mood != "平稳":
+            parts.append(f"用户情绪：{mood}")
+        intents = l2.get("intents") or []
+        if intents and intents != ["自由对话"]:
+            parts.append(f"意图模式：{'→'.join(intents)}")
+        follow_up = l2.get("follow_up") or {}
+        if follow_up.get("is_correction"):
+            parts.append("用户正在纠正上一轮回复")
+        if follow_up.get("is_follow_up"):
+            parts.append("用户在追问上文")
+        if follow_up.get("story_title"):
+            parts.append(f"上文在讲故事《{follow_up['story_title']}》")
+        l2_summary = "；".join(parts) if parts else "普通闲聊"
+    else:
+        l2_summary = json.dumps(l2, ensure_ascii=False)
 
     return f"""
 你是 NovaCore 的路由判断器。你要先判断这句话是普通聊天，还是需要技能执行。
@@ -42,6 +67,9 @@ def build_router_prompt(bundle: dict) -> str:
 
 L1最近对话：
 {json.dumps(l1, ensure_ascii=False)}
+
+L2会话理解：
+{l2_summary}
 
 L3长期记忆：
 {json.dumps(l3, ensure_ascii=False)}
@@ -145,15 +173,10 @@ def detect_story_follow_up_route(bundle: dict) -> dict | None:
     if not any(word in user_input for word in story_follow_up_words):
         return None
 
-    recent = list((bundle or {}).get("l2") or [])
-    last_assistant = ""
-    for item in reversed(recent):
-        if item.get("role") in ("nova", "assistant"):
-            last_assistant = str(item.get("content") or "").strip()
-            if last_assistant:
-                break
-
-    if "《" in last_assistant and "》" in last_assistant:
+    # L2 提炼结果里有 story_title 说明上文在讲故事
+    l2 = (bundle or {}).get("l2") or {}
+    follow_up = l2.get("follow_up") or {} if isinstance(l2, dict) else {}
+    if follow_up.get("story_title"):
         return normalize_route_result(
             {
                 "mode": "skill",
@@ -164,6 +187,27 @@ def detect_story_follow_up_route(bundle: dict) -> dict | None:
             user_input,
             "context",
         )
+
+    # 兼容：如果 l2 还是原始消息列表，走旧逻辑
+    if isinstance(l2, list):
+        last_assistant = ""
+        for item in reversed(l2):
+            if isinstance(item, dict) and item.get("role") in ("nova", "assistant"):
+                last_assistant = str(item.get("content") or "").strip()
+                if last_assistant:
+                    break
+        if "《" in last_assistant and "》" in last_assistant:
+            return normalize_route_result(
+                {
+                    "mode": "skill",
+                    "skill": "story",
+                    "reason": "story_follow_up_from_history",
+                    "rewritten_input": user_input,
+                },
+                user_input,
+                "context",
+            )
+
     return None
 
 

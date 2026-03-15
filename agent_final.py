@@ -2,13 +2,16 @@
 NovaCore Agent Engine - Unified Entry
 当前唯一主入口：8090 本地服务
 """
+import asyncio
 import sys
-from datetime import datetime, timedelta
+import threading
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import json
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 
 from core.state_loader import (
@@ -39,6 +42,33 @@ def debug_write(stage: str, data):
         pass
 
 
+# ── 轻感知状态层：内存事件队列 ──────────────────────────────
+_awareness_lock = threading.Lock()
+_awareness_events: list = []
+
+
+def awareness_push(event: dict):
+    """L7/L8 处理完成后调用，将事件暂存到队列供前端拉取。"""
+    event.setdefault("ts", datetime.now().isoformat())
+    event.setdefault("date", date.today().isoformat())
+    with _awareness_lock:
+        _awareness_events.append(event)
+    debug_write("awareness_push", {"type": event.get("type"), "summary": event.get("summary", "")})
+
+
+def awareness_pull(since_ts: str = None) -> list:
+    """取出待推送事件。只返回今日事件，已取出则移除。"""
+    today = date.today().isoformat()
+    with _awareness_lock:
+        result = [e for e in _awareness_events
+                  if e.get("date") == today and (not since_ts or e["ts"] > since_ts)]
+        for e in result:
+            if e in _awareness_events:
+                _awareness_events.remove(e)
+        _awareness_events[:] = [e for e in _awareness_events if e.get("date") == today]
+        return result
+
+
 try:
     sys.path.insert(0, str(CORE_DIR))
     from router import route as nova_route
@@ -61,6 +91,8 @@ from core.l8_learn import (
     should_surface_knowledge_entry,
     should_trigger_auto_learn,
     update_autolearn_config,
+    is_explicit_learning_request,
+    explicit_search_and_learn,
 )
 from core.self_repair import (
     apply_self_repair_report,
@@ -70,6 +102,7 @@ from core.self_repair import (
     preview_self_repair_report,
 )
 from memory import add_to_history, evolve, get_history as get_text_history
+from core.session_context import extract_session_context
 
 _state_loader_init(
     debug_write=debug_write,
@@ -85,7 +118,10 @@ from core.context_builder import (
     format_l8_context, build_context_bundle,
 )
 from core.context_builder import init as _context_builder_init
-_context_builder_init(find_relevant_knowledge=find_relevant_knowledge)
+_context_builder_init(
+    find_relevant_knowledge=find_relevant_knowledge,
+    extract_session_context=extract_session_context,
+)
 
 from core.route_resolver import (
     build_router_prompt, normalize_route_result, has_skill_target,
@@ -107,7 +143,7 @@ from core.reply_formatter import (
     build_meta_bug_report_reply, build_answer_correction_reply,
     unified_chat_reply,
     format_skill_fallback, format_skill_error_reply, format_story_reply,
-    prettify_trace_reason, build_trace_summary, build_trace_payload,
+    prettify_trace_reason, build_trace_summary,
     _build_learning_summary, _build_repair_summary, _build_latest_status_summary,
 )
 from core.reply_formatter import init as _reply_formatter_init
@@ -242,8 +278,10 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
         error_text = str(execute_result.get("error", "") or "").strip()
         if "\u672a\u627e\u5230" in error_text or "\u6ca1\u6709\u53ef\u6267\u884c\u51fd\u6570" in error_text:
             debug_write("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
+            trigger_self_repair_from_error("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
         else:
             debug_write("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
+            trigger_self_repair_from_error("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
         return {
             "reply": format_skill_error_reply(skill_name, error_text, bundle.get("user_input", "")),
             "trace": {"skill": skill_name, "success": False, "error": error_text},
@@ -311,6 +349,7 @@ from core.feedback_loop import (
     l7_record_feedback, l7_record_feedback_v2,
     l8_touch, run_l8_autolearn_task, run_l8_feedback_relearn_task,
     run_self_repair_planning_task, build_l8_diagnosis,
+    trigger_self_repair_from_error,
 )
 from core.feedback_loop import init as _feedback_loop_init
 _feedback_loop_init(
@@ -322,6 +361,7 @@ _feedback_loop_init(
     should_trigger_auto_learn=should_trigger_auto_learn,
     create_self_repair_report=create_self_repair_report,
     preview_self_repair_report=preview_self_repair_report,
+    awareness_push=awareness_push,
 )
 
 
@@ -365,79 +405,192 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     history.append({"role": "user", "content": msg, "time": datetime.now().isoformat()})
     save_msg_history(history)
 
-    bundle = build_context_bundle(msg, history)
-    debug_write(
-        "context_bundle",
-        {
-            "l1": len(bundle["l1"]),
-            "l2": len(bundle["l2"]),
-            "l3": len(bundle["l3"]),
-            "l4_keys": list(bundle["l4"].keys()),
-            "l5_skill_count": len(bundle["l5"].get("skills", {})),
-            "l8": len(bundle.get("l8", [])),
-        },
-    )
+    async def event_stream():
+        async def _trace(label, detail):
+            await asyncio.sleep(0.3)
+            return {"event": "trace", "data": json.dumps({"label": label, "detail": detail}, ensure_ascii=False)}
 
-    response = ""
-    route = {"mode": "chat", "skill": "none", "reason": "default"}
-    trace_payload = {"show": False, "cards": []}
-    try:
-        route = resolve_route(bundle)
-        debug_write("resolved_route", route)
-        mode = route.get("mode", "chat")
-        skill = route.get("skill", "none")
-        rewritten_input = route.get("rewritten_input") or msg
+        # ── Step 0: 推送上次积攒的感知事件（L8 后台完成的） ──
+        pending_awareness = awareness_pull()
+        for evt in pending_awareness:
+            yield {"event": "awareness", "data": json.dumps(evt, ensure_ascii=False)}
 
-        if mode in ("skill", "hybrid") and skill not in ("none", "", None) and NOVA_CORE_READY:
-            skill_result = unified_skill_reply(bundle, skill, rewritten_input)
-            if isinstance(skill_result, dict):
-                response = str(skill_result.get("reply", "") or "")
-                trace_payload = build_trace_payload(route, skill_result.get("trace"))
+        # ── Step 1: 读取记忆 ──
+        l1 = get_recent_messages(history, 6)
+        l2 = extract_session_context(history, msg)
+        user_turns = len([m for m in l1 if isinstance(m, dict) and m.get("role") == "user"])
+        mem_detail = f"\u56de\u987e\u4e86\u6700\u8fd1 {user_turns} \u8f6e\u5bf9\u8bdd" if user_turns else "\u8fd9\u662f\u7b2c\u4e00\u53e5\u5bf9\u8bdd"
+        if l2.get("topics") and l2["topics"] != ["\u95f2\u804a"]:
+            mem_detail += f"\uff0c\u8bdd\u9898\u6d89\u53ca{'、'.join(l2['topics'])}"
+        yield await _trace("\u8bfb\u53d6\u8bb0\u5fc6", mem_detail)
+
+        # ── Step 2: 加载人格和知识 ──
+        l3 = load_l3_long_term()
+        l4 = load_l4_persona()
+        l5 = load_l5_knowledge()
+        persona_name = ""
+        if isinstance(l4, dict):
+            persona_name = str(l4.get("nova_name") or l4.get("name") or "")
+        skill_count = len(l5.get("skills", {})) if isinstance(l5, dict) else 0
+        persona_detail = f"\u52a0\u8f7d\u4eba\u683c\u300c{persona_name}\u300d" if persona_name else "\u52a0\u8f7d\u4eba\u683c\u914d\u7f6e"
+        if skill_count:
+            persona_detail += f"\uff0c\u5df2\u6ce8\u518c {skill_count} \u4e2a\u6280\u80fd"
+        yield await _trace("\u52a0\u8f7d\u4eba\u683c", persona_detail)
+
+        # ── Step 3: 检索知识库 ──
+        l8 = find_relevant_knowledge(msg, limit=3, touch=True)
+        if l8:
+            topics = [str(h.get("query") or h.get("name") or "") for h in l8[:2] if isinstance(h, dict)]
+            topics = [t for t in topics if t]
+            if topics:
+                yield await _trace("\u68c0\u7d22\u77e5\u8bc6", "\u547d\u4e2d\u76f8\u5173\u8bb0\u5f55\uff1a" + "\u3001".join(topics))
+
+        # ── Step 4: 理解意图 ──
+        dialogue_context = build_dialogue_context(history, msg)
+        bundle = {
+            "l1": l1, "l2": l2, "l3": l3, "l4": l4, "l5": l5, "l8": l8,
+            "dialogue_context": dialogue_context, "user_input": msg,
+        }
+        debug_write("context_bundle", {
+            "l1": len(l1), "l2": len(l2), "l3": len(l3),
+            "l4_keys": list(l4.keys()) if isinstance(l4, dict) else [],
+            "l5_skill_count": skill_count, "l8": len(l8 or []),
+        })
+
+        response = ""
+        route = {"mode": "chat", "skill": "none", "reason": "default"}
+        try:
+            route = resolve_route(bundle)
+            debug_write("resolved_route", route)
+            mode = route.get("mode", "chat")
+            skill = route.get("skill", "none")
+            rewritten_input = route.get("rewritten_input") or msg
+
+            reason_text = prettify_trace_reason(route)
+            if reason_text:
+                yield await _trace("\u7406\u89e3\u610f\u56fe", reason_text)
+
+            if mode in ("skill", "hybrid") and skill not in ("none", "", None) and NOVA_CORE_READY:
+                # ── Step 5: 调用技能 ──
+                skill_display = get_skill_display_name(skill)
+                yield await _trace("\u8c03\u7528\u6280\u80fd", f"\u6b63\u5728\u6267\u884c\u300c{skill_display}\u300d\u2026")
+
+                skill_result = unified_skill_reply(bundle, skill, rewritten_input)
+                if isinstance(skill_result, dict):
+                    response = str(skill_result.get("reply", "") or "")
+                else:
+                    response = str(skill_result or "")
             else:
-                response = str(skill_result or "")
-                trace_payload = build_trace_payload(route)
-        else:
-            response = unified_chat_reply(bundle, route)
-            trace_payload = build_trace_payload(route)
-    except Exception as exc:
-        debug_write("chat_exception", {"error": str(exc)})
-        response = "抱歉，出错了"
-        trace_payload = {"show": False, "cards": []}
+                # ── Step 5: 生成回复 ──
+                # 检测用户是否主动要求学习/搜索
+                if is_explicit_learning_request(msg):
+                    yield await _trace("\u8054\u7f51\u641c\u7d22", "\u6b63\u5728\u5206\u6790\u641c\u7d22\u4e3b\u9898\u2026")
 
-    feedback_rule = l7_record_feedback_v2(msg, history, background_tasks)
-    l8_touch()
-    l8_config = load_autolearn_config()
-    if (
-        l8_config.get("enabled", True)
-        and l8_config.get("allow_web_search", True)
-        and l8_config.get("allow_knowledge_write", True)
-        and not feedback_rule
-        and not bundle.get("l8")
-        and route.get("intent") != "missing_skill"
-    ):
-        background_tasks.add_task(run_l8_autolearn_task, msg, response, route, bool(bundle.get("l8")))
-        debug_write(
-            "l8_autolearn_scheduled",
-            {"message": msg, "route_mode": route.get("mode"), "skill": route.get("skill"), "has_l8_hit": bool(bundle.get("l8"))},
-        )
+                    # 用 LLM 从用户原话+上下文中提取真正要搜的主题
+                    extract_result = think(
+                        "\u7528\u6237\u8bf4\u4e86\u4e0b\u9762\u8fd9\u53e5\u8bdd\uff0c\u8bf7\u4ece\u4e2d\u63d0\u53d6\u51fa\u4ed6\u771f\u6b63\u60f3\u641c\u7d22/\u5b66\u4e60\u7684\u4e3b\u9898\u5173\u952e\u8bcd\u3002"
+                        "\u5982\u679c\u7528\u6237\u6ca1\u6709\u6307\u5b9a\u5177\u4f53\u4e3b\u9898\uff08\u6bd4\u5982\u53ea\u8bf4\u201c\u53bb\u5b66\u70b9\u4e1c\u897f\u201d\uff09\uff0c"
+                        "\u5c31\u6839\u636e\u4e4b\u524d\u7684\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff0c\u9009\u4e00\u4e2a\u7528\u6237\u53ef\u80fd\u611f\u5174\u8da3\u7684\u4e3b\u9898\u3002"
+                        "\u53ea\u8f93\u51fa\u641c\u7d22\u5173\u952e\u8bcd\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u52a0\u5f15\u53f7\uff0c\u4e0d\u8d85\u8fc715\u4e2a\u5b57\u3002\n\n"
+                        f"\u7528\u6237\u539f\u8bdd\uff1a{msg}\n"
+                        f"\u6700\u8fd1\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff1a{bundle.get('dialogue_context', '')[:300]}",
+                        ""
+                    )
+                    search_topic = ""
+                    if isinstance(extract_result, dict):
+                        search_topic = str(extract_result.get("reply", "")).strip()
+                    else:
+                        search_topic = str(extract_result or "").strip()
+                    search_topic = search_topic.strip('"\'\u201c\u201d\u300c\u300d\u3010\u3011')
+                    if len(search_topic) < 2 or len(search_topic) > 40:
+                        search_topic = msg
+                    debug_write("extract_search_topic", {"input": msg, "topic": search_topic})
 
-    repair_payload = build_repair_progress_payload(route, feedback_rule)
-    debug_write("final_response", {"reply": response, "repair": repair_payload})
-    add_to_history("nova", response)
-    history.append({"role": "nova", "content": response, "time": datetime.now().isoformat()})
-    save_msg_history(history)
+                    yield await _trace("\u8054\u7f51\u641c\u7d22", "\u641c\u7d22\u4e3b\u9898\uff1a" + search_topic)
+                    search_result = explicit_search_and_learn(search_topic)
+                    debug_write("explicit_search", {
+                        "topic": search_topic,
+                        "success": search_result.get("success"),
+                        "reason": search_result.get("reason", ""),
+                        "result_count": search_result.get("result_count", 0),
+                    })
+                    if search_result.get("success"):
+                        # 把搜索结果注入 bundle，让 LLM 基于真实数据生成回复
+                        search_context = "\u3010\u5b9e\u65f6\u641c\u7d22\u7ed3\u679c\u3011\n"
+                        for i, r in enumerate(search_result.get("results", [])[:5], 1):
+                            search_context += f"{i}. {r.get('title', '')}\n   {r.get('snippet', '')}\n"
+                        bundle["search_context"] = search_context
+                        bundle["search_summary"] = search_result.get("summary", "")
+                        yield await _trace("\u6574\u7406\u7ed3\u679c", "搜到 " + str(search_result.get("result_count", 0)) + " \u6761\u7ed3\u679c\uff0c\u6b63\u5728\u6574\u7406\u2026")
+                    else:
+                        debug_write("explicit_search_failed", {"reason": search_result.get("reason", "")})
+                        yield await _trace("\u7ec4\u7ec7\u56de\u590d", "\u641c\u7d22\u672a\u627e\u5230\u7ed3\u679c\uff0c\u7ed3\u5408\u5df2\u6709\u77e5\u8bc6\u56de\u590d\u2026")
+                else:
+                    yield await _trace("\u7ec4\u7ec7\u56de\u590d", "\u7ed3\u5408\u4eba\u683c\u548c\u4e0a\u4e0b\u6587\u751f\u6210\u56de\u590d\u2026")
+                response = unified_chat_reply(bundle, route)
+        except Exception as exc:
+            debug_write("chat_exception", {"error": str(exc)})
+            trigger_self_repair_from_error("chat_exception", {"message": msg, "error": str(exc)}, background_tasks)
+            response = "\u62b1\u6b49\uff0c\u51fa\u9519\u4e86"
 
-    try:
-        record_stats(len(msg) + len(response))
-    except Exception as exc:
-        debug_write("stats_error", {"error": str(exc)})
+        # ── 最终回复 ──
+        await asyncio.sleep(0.05)
+        yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
 
-    return {"reply": response, "trace": trace_payload, "repair": repair_payload}
+        # ── 后台任务 ──
+        feedback_rule = l7_record_feedback_v2(msg, history, background_tasks)
+        if feedback_rule:
+            awareness_evt = {
+                "type": "l7_feedback",
+                "summary": "记录反馈规则: " + feedback_rule.get("category", "未分类"),
+                "detail": {
+                    "id": feedback_rule.get("id"),
+                    "scene": feedback_rule.get("scene", ""),
+                    "problem": feedback_rule.get("problem", ""),
+                    "category": feedback_rule.get("category", ""),
+                    "fix": feedback_rule.get("fix", ""),
+                },
+            }
+            awareness_push(awareness_evt)
+            yield {"event": "awareness", "data": json.dumps(awareness_evt, ensure_ascii=False)}
+        l8_touch()
+        l8_config = load_autolearn_config()
+        if (
+            l8_config.get("enabled", True)
+            and l8_config.get("allow_web_search", True)
+            and l8_config.get("allow_knowledge_write", True)
+            and not feedback_rule
+            and not (l8 or [])
+            and route.get("intent") != "missing_skill"
+        ):
+            background_tasks.add_task(run_l8_autolearn_task, msg, response, route, bool(l8))
+
+        repair_payload = build_repair_progress_payload(route, feedback_rule)
+        if repair_payload.get("show"):
+            yield {"event": "repair", "data": json.dumps(repair_payload, ensure_ascii=False)}
+
+        debug_write("final_response", {"reply": response, "repair": repair_payload})
+        add_to_history("nova", response)
+        history.append({"role": "nova", "content": response, "time": datetime.now().isoformat()})
+        save_msg_history(history)
+
+        try:
+            record_stats(len(msg) + len(response))
+        except Exception as exc:
+            debug_write("stats_error", {"error": str(exc)})
+
+    return EventSourceResponse(event_stream())
 
 
 @app.get("/stats")
 async def get_stats():
     return {"stats": load_stats_data()}
+
+
+@app.get("/awareness/pending")
+async def get_awareness_pending(since: str = None):
+    """前端短期轮询端点：获取待推送的 L7/L8 感知事件。"""
+    return {"events": awareness_pull(since_ts=since), "server_ts": datetime.now().isoformat()}
 
 
 @app.post("/stats")

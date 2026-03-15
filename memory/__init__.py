@@ -55,13 +55,13 @@ def get_long_term() -> list:
         return json.loads(long_term_file.read_text(encoding="utf-8"))
     return []
 
-def add_long_term(content: str, category: str = "fact"):
-    """添加长期记忆"""
+def add_long_term(content: str, category: str = "event"):
+    """添加长期记忆（L3 只存经历类数据：event / milestone）"""
     data = get_long_term()
     data.append({
-        "content": content,
-        "category": category,
-        "timestamp": datetime.now().isoformat()
+        "summary": content,
+        "type": category,
+        "created_at": datetime.now().isoformat()
     })
     with open(long_term_file, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

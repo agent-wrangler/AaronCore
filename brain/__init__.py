@@ -54,7 +54,7 @@ def understand_intent(user_input: str) -> dict:
 
 
 def _load_persona() -> dict:
-    """统一从 memory_db/persona.json + long_term.json 读取人格真源"""
+    """从 memory_db/persona.json 读取人格配置（不再交叉读 long_term.json）"""
     base = {
         "name": "NovaCore",
         "nova_name": "NovaCore",
@@ -67,23 +67,10 @@ def _load_persona() -> dict:
             data = json.load(open(persona_path, 'r', encoding='utf-8'))
             if isinstance(data, dict):
                 base.update(data)
-        except Exception:
-            pass
-
-    long_term_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'long_term.json')
-    if os.path.exists(long_term_path):
-        try:
-            items = json.load(open(long_term_path, 'r', encoding='utf-8'))
-            if isinstance(items, list):
-                summaries = []
-                for item in items:
-                    summary = str(item.get('summary', '')).strip()
-                    if not summary:
-                        continue
-                    if any(k in summary for k in ['甜心守护', '说话', '语气', '人格图谱', '主人', '不要提睡觉']):
-                        summaries.append(summary)
-                if summaries:
-                    base['style_prompt'] = '；'.join(summaries[-6:])
+                # interaction_rules 已统一存在 persona.json 里
+                rules = data.get('interaction_rules') or []
+                if isinstance(rules, list) and rules:
+                    base['style_prompt'] = '；'.join(rules[-6:])
         except Exception:
             pass
     return base
@@ -440,7 +427,7 @@ def auto_learn(user_input: str, ai_response: str) -> str:
         if match:
             content = match.group(1)
             from memory import add_long_term
-            add_long_term(content, "fact")
+            add_long_term(content, "event")
             return f"记住啦！{content}～"
 
     try:

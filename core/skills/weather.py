@@ -25,6 +25,7 @@ CITIES = {
 
 DEFAULT_CITY = "常州"
 HISTORY_PATH = Path(__file__).resolve().parents[2] / 'memory_db' / 'msg_history.json'
+PERSONA_PATH = Path(__file__).resolve().parents[2] / 'memory_db' / 'persona.json'
 CITY_ALIASES = {
     "新疆维吾尔自治区": "乌鲁木齐",
     "新疆": "乌鲁木齐",
@@ -56,6 +57,33 @@ FOLLOW_UP_WEATHER_TEXTS = {
     "会下雨吗",
     "会下雪吗",
 }
+
+
+def _load_user_default_city() -> str:
+    """从 persona.json 的 user_profile.city 读取用户默认城市"""
+    try:
+        if PERSONA_PATH.exists():
+            data = json.loads(PERSONA_PATH.read_text(encoding='utf-8'))
+            city = str((data.get('user_profile') or {}).get('city') or '').strip()
+            if city and city in CITIES:
+                return city
+    except Exception:
+        pass
+    return ""
+
+
+def _save_user_default_city(city: str):
+    """把用户查过的城市存入 persona.json 的 user_profile.city"""
+    try:
+        data = {}
+        if PERSONA_PATH.exists():
+            data = json.loads(PERSONA_PATH.read_text(encoding='utf-8'))
+        if not isinstance(data.get('user_profile'), dict):
+            data['user_profile'] = {}
+        data['user_profile']['city'] = city
+        PERSONA_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    except Exception:
+        pass
 
 
 def _load_recent_messages(limit: int = 12):
@@ -193,7 +221,12 @@ def get_forecast(city_cn, coords, day_offset: int = 0):
 def execute(query):
     city = _extract_city(query)
     if not city:
-        return "你想看哪个城市呀？比如上海、北京、乌鲁木齐这样，我就能马上去查。"
+        city = _load_user_default_city()
+    if not city:
+        return "你想看哪个城市呀？比如上海、北京、乌鲁木齐这样，告诉我一次后面就记住啦。"
+
+    # 记住用户查过的城市作为默认
+    _save_user_default_city(city)
 
     _, lat, lon = CITIES[city]
     day_offset = _extract_day_offset(query)

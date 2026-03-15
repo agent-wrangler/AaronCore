@@ -10,12 +10,15 @@ from core.state_loader import (
 
 # ── 注入依赖 ──────────────────────────────────────────────
 _find_relevant_knowledge = lambda msg, limit=3, touch=True: []
+_extract_session_context = lambda history, current_input="": {"topics": [], "mood": "平稳", "intents": [], "follow_up": {}}
 
 
-def init(*, find_relevant_knowledge=None):
-    global _find_relevant_knowledge
+def init(*, find_relevant_knowledge=None, extract_session_context=None):
+    global _find_relevant_knowledge, _extract_session_context
     if find_relevant_knowledge:
         _find_relevant_knowledge = find_relevant_knowledge
+    if extract_session_context:
+        _extract_session_context = extract_session_context
 
 
 # ── 事件值格式化 ──────────────────────────────────────────
@@ -211,7 +214,7 @@ def format_l8_context(items: list[dict]) -> str:
 def build_context_bundle(msg: str, history: list) -> dict:
     return {
         "l1": get_recent_messages(history, 6),
-        "l2": get_recent_messages(history, 12),
+        "l2": _extract_session_context(history, msg),
         "l3": load_l3_long_term(),
         "l4": load_l4_persona(),
         "l5": load_l5_knowledge(),

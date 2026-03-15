@@ -250,8 +250,23 @@ def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
     l8_context = format_l8_context(l8)
     dialogue_context = bundle.get("dialogue_context", "")
     msg = bundle["user_input"]
+    search_context = bundle.get("search_context", "")
+    search_summary = bundle.get("search_summary", "")
+
+    # 如果有实时搜索结果，构建增强 prompt
+    search_block = ""
+    if search_context:
+        search_block = f"""
+实时联网搜索结果（刚刚搜到的，必须基于这些真实内容回复，不要编造）：
+{search_context}
+搜索摘要：{search_summary}
+
+重要：你刚刚真的去联网搜索了，请基于上面的搜索结果整理回复。不要说"我去查一下"之类的话，你已经查完了，直接告诉用户你学到了什么。
+"""
+
     prompt = f"""
 用户输入：{msg}
+{search_block}
 
 L3长期记忆：
 {json.dumps(l3, ensure_ascii=False)}
@@ -396,37 +411,14 @@ def build_trace_summary(route: dict, skill_trace: dict | None = None) -> str:
     return summary
 
 
-def build_trace_payload(route: dict, skill_trace: dict | None = None) -> dict:
-    route = route if isinstance(route, dict) else {}
-    skill_trace = skill_trace if isinstance(skill_trace, dict) else {}
-    mode = str(route.get("mode") or "chat").strip()
-    skill_name = str(route.get("skill") or "").strip()
-
-    cards = []
-
-    # Card 1: 理解 — 路由判断结果
-    reason_text = prettify_trace_reason(route)
-    if reason_text:
-        cards.append({"label": "\u7406\u89e3", "detail": reason_text})
-
-    # Card 2: 路径 — 走了什么链路
-    if mode in ("skill", "hybrid") and skill_name not in ("", "none"):
-        cards.append({"label": "\u8def\u5f84", "detail": build_trace_summary(route, skill_trace)})
-    else:
-        cards.append({"label": "\u8def\u5f84", "detail": "\u8fd9\u53e5\u6309\u666e\u901a\u804a\u5929\u63a5\u4f4f\uff0c\u6ca1\u6709\u8c03\u7528\u6280\u80fd\u3002"})
-
-    return {"show": len(cards) >= 2, "cards": cards}
-
 
 def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict | None = None) -> dict:
     route = route if isinstance(route, dict) else {}
     feedback_rule = feedback_rule if isinstance(feedback_rule, dict) else {}
     intent = str(route.get("intent") or "").strip()
     feedback_type = str(feedback_rule.get("type") or "").strip()
-    feedback_problem = str(feedback_rule.get("problem") or "").strip()
 
-    should_show = intent in {"meta_bug_report", "answer_correction"} or feedback_type in {"skill_route", "llm_rule", "execution_policy"}
-    if not should_show and feedback_problem not in {"wrong_skill_selected", "output_not_matching_intent", "fallback_too_generic"}:
+    if not feedback_type and intent not in {"meta_bug_report", "answer_correction"}:
         return {"show": False}
 
     status = build_self_repair_status()

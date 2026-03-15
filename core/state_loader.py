@@ -223,9 +223,17 @@ def get_recent_messages(history, limit=6):
 def load_l3_long_term(limit=8):
     ensure_long_term_clean()
     items = load_json(PRIMARY_STATE_DIR / "long_term.json", [])
+    # L3 只存经历：发生过的事件、里程碑、重要时刻。
+    # 用户事实/偏好/交互规则 → L4 persona.json
+    # 知识内容 → L8 knowledge_base.json
+    # 这里用白名单，只有经历类 type 才会被加载到 prompt 里。
+    ALLOWED_TYPES = {"event", "milestone", "general"}
     out = []
     for item in items[-limit:]:
         if is_legacy_l3_skill_log(item):
+            continue
+        item_type = str(item.get("type") or "").strip()
+        if item_type and item_type not in ALLOWED_TYPES:
             continue
         summary = event_text(item)
         if summary:
@@ -235,17 +243,14 @@ def load_l3_long_term(limit=8):
 
 def load_l4_persona():
     local_persona = load_json(PRIMARY_STATE_DIR / "persona.json", {})
-    local_rules = load_json(PRIMARY_STATE_DIR / "long_term.json", [])
 
-    style_rules = []
-    for item in local_rules[-20:]:
-        summary = str(item.get("summary") or item.get("content") or "").strip()
-        if summary and any(k in summary for k in ["甜心守护", "风格", "人格图谱", "主人", "不要提睡觉", "语气"]):
-            style_rules.append(summary)
+    # interaction_rules 已经直接存在 persona.json 里了，
+    # 不再从 long_term.json 交叉抽取 style 规则，避免 L3/L4 职责混淆。
+    interaction_rules = local_persona.get("interaction_rules") or []
 
     return {
         "local_persona": local_persona,
-        "style_rules": style_rules[-8:],
+        "style_rules": interaction_rules[-8:] if isinstance(interaction_rules, list) else [],
     }
 
 
