@@ -174,7 +174,16 @@ def web_chat(site: str, message: str, port: int = 9333) -> str:
         )
         if result.returncode != 0:
             return f"浏览器操作失败：{result.stderr[:200]}"
-        data = json.loads(result.stdout.strip())
+        # stdout 可能包含 Node.js 的 warning，只取最后一行 JSON
+        stdout_lines = [l.strip() for l in result.stdout.strip().splitlines() if l.strip()]
+        json_line = ""
+        for line in reversed(stdout_lines):
+            if line.startswith("{"):
+                json_line = line
+                break
+        if not json_line:
+            return f"浏览器操作失败：无法解析返回结果"
+        data = json.loads(json_line)
         if data.get("ok"):
             return f"「{site}」回复：{data['reply']}"
         else:
@@ -201,10 +210,26 @@ def execute(user_input: str) -> str:
     text = (user_input or "").strip()
 
     # 调试日志
+    import traceback
+    def _log(msg):
+        try:
+            with open("memory_db/cu_debug.log", "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except: pass
+
+    _log(f"[input] {text}")
+
     try:
-        with open("memory_db/computer_use_debug.log", "a", encoding="utf-8") as f:
-            f.write(f"[execute] input: {text}\n")
-    except: pass
+        result = _do_execute(text)
+        _log(f"[result] {result[:200] if result else 'None'}")
+        return result
+    except Exception as e:
+        _log(f"[error] {traceback.format_exc()}")
+        return f"执行失败：{e}"
+
+
+def _do_execute(text: str) -> str:
+    """实际执行逻辑。"""
 
     # QQ 发消息
     qq_send_match = re.search(r'(?:在|去)(?:QQ|qq).*?[「""](.+?)[」""].*?(?:发|说|回复)[：:]?\s*(.+)', text)
