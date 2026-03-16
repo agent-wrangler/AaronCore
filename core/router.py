@@ -705,6 +705,22 @@ def route(text: str) -> dict:
             'emotion_score': scores['emotion_score'],
         }
 
+    # Computer Use 检测
+    _cu_words = ('问豆包', '去豆包', '问chatgpt', '问kimi', '去QQ', '发QQ', 'QQ群', '在QQ', '帮我在QQ', '帮我发QQ', '桌面上有什么', '什么窗口')
+    if any(w in text for w in _cu_words):
+        return {
+            'mode': 'skill',
+            'skill': 'computer_use',
+            'confidence': 0.95,
+            'reason': '命中桌面代理意图',
+            'params': {},
+            'role': role,
+            'stage': 'request', 'tone': 'command',
+            'chat_score': 0.0,
+            'skill_score': 3.0,
+            'emotion_score': 0.0,
+        }
+
     if _looks_like_meta_bug_report(text):
         return {
             'mode': 'chat',

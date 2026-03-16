@@ -540,6 +540,13 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
             "trace": {"skill": skill_name, "success": True},
         }
 
+    # Computer Use：桌面代理结果直接透传，不需要 LLM 润色
+    if skill_name == "computer_use":
+        return {
+            "reply": skill_response,
+            "trace": {"skill": skill_name, "success": True},
+        }
+
     dialogue_context = bundle.get("dialogue_context", "")
     skill_style_hints = _build_style_hints_from_l4(bundle.get("l4") or {}, is_skill=True)
     prompt = f"""

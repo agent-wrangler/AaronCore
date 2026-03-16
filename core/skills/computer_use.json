@@ -1,7 +1,8 @@
 {
   "name": "Computer Use",
-  "keywords": ["帮我发", "帮我在", "去QQ", "发消息", "帮我问豆包", "帮我聊", "打开浏览器", "桌面操作"],
+  "keywords": ["帮我发", "帮我在", "去QQ", "QQ群", "发消息", "问豆包", "帮我问豆包", "帮我聊", "打开浏览器", "桌面操作", "在QQ", "问chatgpt", "问kimi", "去豆包", "什么窗口", "发QQ", "在群里"],
   "anti_keywords": ["帮我查天气", "帮我画", "帮我写"],
+  "high_confidence_keywords": ["问豆包", "去豆包", "问chatgpt", "问kimi", "发QQ", "去QQ", "QQ群"],
   "description": "操控桌面应用和浏览器，代替用户完成操作",
   "priority": 3,
   "category": "桌面代理",

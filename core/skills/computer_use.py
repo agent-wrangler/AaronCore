@@ -13,6 +13,7 @@ Computer Use 技能 — 桌面代理 v1
 """
 
 import os
+import sys
 import time
 import json
 import re
@@ -151,6 +152,9 @@ def _connect_browser(port: int = 9333):
     os.environ['no_proxy'] = 'localhost,127.0.0.1'
 
     try:
+        # 绕过代理（Clash 等会拦截 localhost）
+        os.environ['NO_PROXY'] = 'localhost,127.0.0.1'
+        os.environ['no_proxy'] = 'localhost,127.0.0.1'
         pw = sync_playwright().start()
         browser = pw.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
         return pw, browser, None
@@ -159,64 +163,26 @@ def _connect_browser(port: int = 9333):
 
 
 def web_chat(site: str, message: str, port: int = 9333) -> str:
-    """在网页版 AI（豆包等）发送消息并获取回复。"""
-    pw, browser, err = _connect_browser(port)
-    if err:
-        return err
-
+    """在网页版 AI（豆包等）发送消息并获取回复。用子进程执行避免 async 冲突。"""
+    import subprocess
+    worker = os.path.join(os.path.dirname(__file__), '_web_chat_worker.py')
     try:
-        # 找到目标页面
-        page = None
-        for ctx in browser.contexts:
-            for p in ctx.pages:
-                if site.lower() in p.url.lower() or site in p.title():
-                    page = p
-                    break
-
-        if not page:
-            return f"没找到包含「{site}」的页面，请先在浏览器中打开"
-
-        # 找输入框
-        textarea = page.locator('textarea').first
-        textarea.click()
-        time.sleep(0.2)
-
-        # 输入并发送
-        textarea.fill(message)
-        time.sleep(0.2)
-        page.keyboard.press('Enter')
-
-        # 等待回复（最多等 30 秒）
-        time.sleep(5)
-        for _ in range(25):
-            # 检查是否还在生成（有停止按钮说明还在生成）
-            stop_btns = page.locator('[aria-label*="stop"], [class*="stop"]').count()
-            if stop_btns == 0:
-                break
-            time.sleep(1)
-
-        time.sleep(1)
-
-        # 读取回复
-        result = page.evaluate('''() => {
-            const all = document.querySelectorAll('[class*="markdown"], [class*="message-content"]');
-            const texts = [];
-            all.forEach(el => {
-                const t = el.innerText.trim();
-                if (t && t.length > 10) texts.push(t);
-            });
-            return texts.length ? texts[texts.length - 1] : "";
-        }''')
-
-        if result:
-            return f"「{site}」回复：{result[:500]}"
+        result = subprocess.run(
+            [sys.executable, worker, site, message, str(port)],
+            capture_output=True, text=True, timeout=45,
+            env={**os.environ, 'NO_PROXY': 'localhost,127.0.0.1', 'no_proxy': 'localhost,127.0.0.1'},
+        )
+        if result.returncode != 0:
+            return f"浏览器操作失败：{result.stderr[:200]}"
+        data = json.loads(result.stdout.strip())
+        if data.get("ok"):
+            return f"「{site}」回复：{data['reply']}"
         else:
-            return f"消息已发送，但未能读取回复"
-
+            return f"浏览器操作失败：{data.get('error', '未知错误')}"
+    except subprocess.TimeoutExpired:
+        return "浏览器操作超时，豆包可能还在回复中"
     except Exception as e:
-        return f"网页操作失败：{e}"
-    finally:
-        pw.stop()
+        return f"浏览器操作失败：{e}"
 
 
 def desktop_list_windows() -> str:
@@ -233,6 +199,12 @@ def desktop_list_windows() -> str:
 def execute(user_input: str) -> str:
     """Computer Use 技能入口。解析用户意图，分发到具体操作。"""
     text = (user_input or "").strip()
+
+    # 调试日志
+    try:
+        with open("memory_db/computer_use_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"[execute] input: {text}\n")
+    except: pass
 
     # QQ 发消息
     qq_send_match = re.search(r'(?:在|去)(?:QQ|qq).*?[「""](.+?)[」""].*?(?:发|说|回复)[：:]?\s*(.+)', text)
