@@ -980,6 +980,21 @@ def should_trigger_auto_learn(user_input: str, route_result: dict | None = None,
     if any(c in text for c in _casual):
         return False, "casual_chat"
 
+    # 排除自指话题：讨论 AI/系统/记忆本身的不是知识
+    _self_ref = ['\u8bb0\u5fc6\u91cc', '\u77e5\u8bc6\u5e93', '\u77e5\u8bc6\u70b9', 'L2', 'L3', 'L4', 'L7', 'L8',
+                 '\u4e2d\u67a2', '\u6253\u5206', '\u8def\u7531', '\u7cfb\u7edf\u901a', '\u540e\u53f0',
+                 '\u7ed3\u6676', '\u6c89\u6dc0', '\u5b58\u5230', '\u5b58\u8fdb']
+    if any(s in text for s in _self_ref):
+        return False, "self_referential"
+
+    # 排除质疑/吐槽 AI 的反问（以"你"开头的短句）
+    _ai_challenge = ['\u4f60\u786e\u5b9a', '\u4f60\u7ec8\u4e8e', '\u4f60\u600e\u4e48\u8fd8',
+                     '\u4f60\u4e0d\u662f', '\u4f60\u53c8', '\u4f60\u8001\u662f',
+                     '\u95ee\u4e86\u4f60', '\u4f60\u90fd\u4e0d\u77e5\u9053',
+                     '\u4ece\u54ea\u91cc\u67e5', '\u54ea\u91cc\u641c', '\u54ea\u91cc\u627e']
+    if any(c in text for c in _ai_challenge):
+        return False, "ai_challenge"
+
     is_question_like = any(hint in lowered or hint in text for hint in QUESTION_HINTS)
     is_learning_request = any(hint in text for hint in LEARNING_HINTS)
     if not is_question_like and not is_learning_request:

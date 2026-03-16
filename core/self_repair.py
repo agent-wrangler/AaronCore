@@ -850,6 +850,29 @@ def apply_self_repair_report(
     backup_info = _create_backup_snapshot(str(report.get("id") or ""), originals)
     apply_result["backup_root"] = str(backup_info.get("backup_root") or "")
 
+    # 语法预检：写入前验证文件内容合法性（可扩展）
+    import ast as _ast
+    for rel_path, content in updated.items():
+        syntax_err = None
+        if rel_path.endswith(".py"):
+            try:
+                _ast.parse(content, filename=rel_path)
+            except SyntaxError as e:
+                syntax_err = f"{rel_path}:{e.lineno}: {e.msg}"
+        elif rel_path.endswith(".json"):
+            try:
+                json.loads(content)
+            except (json.JSONDecodeError, ValueError) as e:
+                syntax_err = f"{rel_path}: invalid JSON: {e}"
+        # 扩展点：未来加 .js/.html 等语言的验证放这里
+        if syntax_err:
+            apply_result["status"] = "syntax_error_before_write"
+            apply_result["error"] = syntax_err
+            report["apply_result"] = apply_result
+            report["status"] = "needs_attention"
+            report["updated_at"] = datetime.now().isoformat()
+            return save_self_repair_report(report)
+
     try:
         _write_updated_files(updated)
         validation = {"ran": False, "all_passed": None, "test_runs": [], "duration_ms": 0}

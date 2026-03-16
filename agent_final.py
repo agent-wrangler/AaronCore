@@ -192,6 +192,12 @@ _l8_learn_init(
     debug_write=debug_write,
 )
 
+from core.feedback_classifier import init as _feedback_classifier_init, search_relevant_rules
+_feedback_classifier_init(
+    llm_call=_raw_llm_call,
+    debug_write=debug_write,
+)
+
 from core.json_store import load_json, write_json, load_json_store
 from core.context_builder import (
     summarize_event_value, stringify_event_value,
@@ -658,7 +664,9 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         dialogue_context = build_dialogue_context(history, msg)
         bundle = {
             "l1": l1, "l2": l2, "l2_memories": l2_memories,
-            "l3": l3, "l4": l4, "l5": l5, "l8": l8,
+            "l3": l3, "l4": l4, "l5": l5,
+            "l7": search_relevant_rules(msg, limit=3),
+            "l8": l8,
             "dialogue_context": dialogue_context, "user_input": msg,
         }
         debug_write("context_bundle", {
@@ -914,6 +922,44 @@ async def set_autolearn_config(request: dict):
 @app.get("/autolearn/diagnose")
 async def get_autolearn_diagnosis(query: str, route_mode: str = "chat", skill: str = "none", limit: int = 3):
     return build_l8_diagnosis(query, route_mode=route_mode, skill=skill, limit=limit)
+
+
+@app.get("/l7/stats")
+async def get_l7_stats():
+    from core.feedback_classifier import _load_rules as _l7_load_rules
+    rules = _l7_load_rules()
+    total = len(rules)
+    with_constraint = sum(1 for r in rules if r.get("constraint"))
+    categories = {}
+    for r in rules:
+        cat = r.get("category", "\u672a\u5206\u7c7b")
+        categories[cat] = categories.get(cat, 0) + 1
+    latest = None
+    if rules:
+        rules_sorted = sorted(rules, key=lambda x: x.get("created_at", ""), reverse=True)
+        if rules_sorted:
+            lt = rules_sorted[0]
+            latest = {
+                "fix": str(lt.get("fix", ""))[:60],
+                "category": lt.get("category", ""),
+                "created_at": lt.get("created_at", ""),
+            }
+    l8_data = load_json(PRIMARY_STATE_DIR / "knowledge_base.json", [])
+    l8_count = len([e for e in l8_data if isinstance(e, dict) and e.get("type") != "feedback_relearn"])
+    repair_reports = []
+    try:
+        from core.self_repair import load_self_repair_reports
+        repair_reports = load_self_repair_reports()
+    except Exception:
+        pass
+    return {
+        "l7_rule_count": total,
+        "l7_constraint_count": with_constraint,
+        "l7_categories": categories,
+        "l7_latest": latest,
+        "l8_knowledge_count": l8_count,
+        "repair_report_count": len(repair_reports),
+    }
 
 
 @app.get("/self_repair/status")

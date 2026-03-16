@@ -127,6 +127,10 @@ def normalize_route_result(route_result, user_input: str, source: str):
     normalized["reason"] = normalized.get("reason", "") or ""
     normalized["rewritten_input"] = normalized.get("rewritten_input") or user_input
     normalized["source"] = source
+    # 透传 v2 新字段（交互阶段 + 语气）
+    for field in ("stage", "tone"):
+        if field in route_result:
+            normalized[field] = route_result[field]
     skill_name = str(normalized.get("skill") or "").strip()
     if normalized["mode"] in ("skill", "hybrid") and skill_name not in ("", "none") and not is_registered_skill_name(skill_name):
         normalized["mode"] = "chat"
@@ -389,6 +393,11 @@ def resolve_route(bundle: dict) -> dict:
             core_route = normalize_route_result(_nova_route(user_input), user_input, "core")
             _debug_write("core_route", core_route)
             confidence = float(core_route.get("confidence", 0) or 0)
+
+            # 纠偏优先短路：correct 阶段直接返回，不让 LLM 翻盘
+            if core_route.get("stage") == "correct":
+                _debug_write("route_decision", {"action": "correct_priority", "stage": "correct"})
+                return core_route
 
             # 高置信度（>= 0.9）：直接走，不需要 LLM 确认
             if confidence >= 0.9:

@@ -4,6 +4,7 @@
 import json
 
 from core.context_builder import format_l8_context, summarize_event_value
+from core.feedback_classifier import format_l7_context
 from core.route_resolver import looks_like_news_request
 
 # ── 注入依赖 ──────────────────────────────────────────────
@@ -281,6 +282,8 @@ def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
     l3 = bundle["l3"]
     l4 = bundle["l4"]
     l5 = bundle["l5"]
+    l7 = bundle.get("l7", [])
+    l7_context = format_l7_context(l7)
     l8 = bundle.get("l8", [])
     l8_context = format_l8_context(l8)
     l2_memories = bundle.get("l2_memories", [])
@@ -330,6 +333,9 @@ L4人格信息：
 
 L5知识：
 {json.dumps(l5, ensure_ascii=False)}
+
+L7经验教训（之前犯过的错，务必避免重犯）：
+{l7_context or "暂无"}
 
 L8已学知识：
 {l8_context or "暂无命中的已学知识"}

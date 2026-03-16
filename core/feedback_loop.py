@@ -49,9 +49,20 @@ def init(*, debug_write=None, load_autolearn_config=None,
 
 # ── 反馈记录 ──────────────────────────────────────────────
 
+def _is_negative_feedback(msg: str) -> bool:
+    """用 v2 路由分类判断是否为真正的负反馈/纠偏，替代粗暴的关键词列表。"""
+    try:
+        from core.router import classify_stage, classify_tone
+        stage = classify_stage(msg, {})
+        tone = classify_tone(msg)
+        return stage == 'correct' or tone in ('correct', 'complaint')
+    except Exception:
+        # fallback: 如果路由模块不可用，退回最小关键词集
+        return any(w in msg for w in ["\u4e0d\u5bf9", "\u9519\u4e86", "\u4e0d\u597d\u7528", "\u7406\u89e3\u9519\u4e86"])
+
+
 def l7_record_feedback(msg: str, history: list, background_tasks=None):
-    negative_keywords = ["\u4e0d\u5bf9", "\u4e0d\u662f", "\u9519\u4e86", "\u4e0d\u597d\u7528", "\u4e0d\u559c\u6b22", "\u91cd\u6765", "\u5047", "\u9a97\u4eba", "\u6ca1\u542c\u61c2", "\u5b8c\u5168\u6ca1\u542c\u61c2"]
-    if not any(word in msg for word in negative_keywords):
+    if not _is_negative_feedback(msg):
         return
 
     last_q = ""
@@ -70,9 +81,9 @@ def l7_record_feedback(msg: str, history: list, background_tasks=None):
             _debug_write("feedback_rule_error", {"error": str(exc)})
 
 
-# ── self-repair：仅从系统故障事件触发 ────────────────────
-# 用户反馈（"不对""错了"）走 L7+L8，不触发 self-repair
-# self-repair 只接收：技能执行异常、路由报错、未处理异常等代码级故障
+# ── self-repair：系统故障 + 用户反馈中的代码级问题 ────────
+# 代码级问题（路由调度等）需要真正改代码才能修，仅靠 prompt 提示不够
+_SELF_REPAIR_CATEGORIES = {"路由调度", "系统故障"}
 
 
 def trigger_self_repair_from_error(
@@ -122,9 +133,72 @@ def trigger_self_repair_from_error(
     return rule_item
 
 
+def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tasks=None):
+    """效果追踪：如果有旧规则最近命中过但用户仍不满意，升级处理强度。
+    L1(prompt) fail>=2 → 补生成 L2 约束
+    L2(约束) fail>=2 → 触发 L3 self-repair
+    """
+    from core.feedback_classifier import _load_rules, _save_rules, _extract_routing_constraint
+    from datetime import datetime, timedelta
+
+    rules = _load_rules()
+    now = datetime.now()
+    cutoff = (now - timedelta(hours=24)).isoformat()
+    dirty = False
+
+    for rule in rules:
+        if not isinstance(rule, dict) or not rule.get("enabled", True):
+            continue
+        # 只看最近 24 小时内命中过的规则
+        last_hit = rule.get("last_hit_at", "")
+        if not last_hit or last_hit < cutoff:
+            continue
+        # 检查旧规则的 last_question 和新反馈的 last_question 是否相似
+        old_q = str(rule.get("last_question", ""))
+        if not old_q or len(old_q) < 2:
+            continue
+        if old_q[:4] not in last_q and last_q[:4] not in old_q:
+            continue
+
+        # 命中了：这条旧规则没能阻止问题再次发生
+        rule["fail_count"] = (rule.get("fail_count") or 0) + 1
+        dirty = True
+        fail_count = rule["fail_count"]
+
+        _debug_write("l7_rule_failed", {
+            "rule_id": rule.get("id"), "fail_count": fail_count,
+            "has_constraint": bool(rule.get("constraint")),
+        })
+
+        # L1 → L2 升级：prompt 提醒失败 2 次，补生成路由约束
+        if fail_count >= 2 and not rule.get("constraint"):
+            constraint = _extract_routing_constraint(
+                rule.get("user_feedback", ""),
+                rule.get("last_question", ""),
+                rule.get("last_answer", ""),
+                rule,
+            )
+            if constraint:
+                rule["constraint"] = constraint
+                _debug_write("l7_escalate_l1_to_l2", {"rule_id": rule.get("id")})
+
+        # L2 → L3 升级：路由约束也失败 2 次，触发 self-repair
+        elif fail_count >= 4 and rule.get("constraint"):
+            l8_config = _load_autolearn_config()
+            conf = float((rule.get("constraint") or {}).get("confidence", 0) or 0)
+            if conf >= 0.8 and l8_config.get("allow_self_repair_planning", True):
+                _debug_write("l7_escalate_l2_to_l3", {"rule_id": rule.get("id")})
+                if background_tasks is not None:
+                    background_tasks.add_task(run_self_repair_planning_task, rule)
+                else:
+                    run_self_repair_planning_task(rule)
+
+    if dirty:
+        _save_rules(rules)
+
+
 def l7_record_feedback_v2(msg: str, history: list, background_tasks=None):
-    negative_keywords = ["\u4e0d\u5bf9", "\u4e0d\u662f", "\u9519\u4e86", "\u4e0d\u597d\u7528", "\u4e0d\u559c\u6b22", "\u91cd\u6765", "\u5047", "\u9a97\u4eba", "\u6ca1\u542c\u61c2", "\u5b8c\u5168\u6ca1\u542c\u61c2"]
-    if not any(word in msg for word in negative_keywords):
+    if not _is_negative_feedback(msg):
         return None
 
     last_q = ""
@@ -142,30 +216,36 @@ def l7_record_feedback_v2(msg: str, history: list, background_tasks=None):
         return None
 
     try:
-        from core.feedback_classifier import record_feedback_rule
+        from core.feedback_classifier import record_feedback_rule, _load_rules, _save_rules
 
         rule_item = record_feedback_rule(msg, last_q, last_answer)
         _debug_write("feedback_rule", rule_item)
-        l8_config = _load_autolearn_config()
-        if (
-            l8_config.get("enabled", True)
-            and l8_config.get("allow_knowledge_write", True)
-            and l8_config.get("allow_feedback_relearn", True)
-        ):
-            if background_tasks is not None:
-                background_tasks.add_task(run_l8_feedback_relearn_task, rule_item)
-            else:
-                run_l8_feedback_relearn_task(rule_item)
-            _debug_write(
-                "l8_feedback_relearn_scheduled",
-                {
+
+        # ── 效果追踪：检查是否有已命中但仍失败的旧规则 → 升级处理 ──
+        try:
+            _check_and_escalate_failed_rules(last_q, rule_item, background_tasks)
+        except Exception as esc_err:
+            _debug_write("l7_escalate_error", {"error": str(esc_err)})
+
+        # L7 反馈分流：
+        # - 内容生成/交互风格/意图理解 → 留在 L7，通过 prompt 提示影响下次回复
+        # - 路由调度/系统故障 → 同时触发 self-repair，需要真正改代码
+        category = rule_item.get("category", "")
+        confidence = float((rule_item.get("constraint") or {}).get("confidence", 0) or 0)
+        if category in _SELF_REPAIR_CATEGORIES and confidence >= 0.8:
+            l8_config = _load_autolearn_config()
+            if l8_config.get("allow_self_repair_planning", True):
+                _debug_write("l7_to_self_repair", {
                     "rule_id": rule_item.get("id"),
-                    "last_question": rule_item.get("last_question", ""),
+                    "category": category,
                     "scene": rule_item.get("scene", ""),
                     "problem": rule_item.get("problem", ""),
-                },
-            )
-        # self-repair 不再从用户反馈触发，改由系统故障事件触发（见 trigger_self_repair_from_error）
+                })
+                if background_tasks is not None:
+                    background_tasks.add_task(run_self_repair_planning_task, rule_item)
+                else:
+                    run_self_repair_planning_task(rule_item)
+
         return rule_item
     except Exception as exc:
         _debug_write("feedback_rule_error", {"error": str(exc)})
@@ -257,6 +337,7 @@ def run_l8_feedback_relearn_task(rule_item: dict):
 
 
 def run_self_repair_planning_task(rule_item: dict):
+    MAX_REPAIR_RETRIES = 1
     try:
         config = _load_autolearn_config()
         if not config.get("allow_self_repair_planning", True):
@@ -279,12 +360,31 @@ def run_self_repair_planning_task(rule_item: dict):
                 "validation_passed": (report.get("validation") or {}).get("all_passed"),
             },
         )
-        report = _preview_self_repair_report(
-            report_id=str(report.get("id") or ""),
-            config=config,
-            auto_apply=bool(config.get("allow_self_repair_auto_apply", True)),
-            run_validation=bool(config.get("allow_self_repair_test_run", True)),
-        )
+
+        # preview + 可能 auto_apply，失败时有限重试
+        for attempt in range(1 + MAX_REPAIR_RETRIES):
+            report = _preview_self_repair_report(
+                report_id=str(report.get("id") or ""),
+                config=config,
+                auto_apply=bool(config.get("allow_self_repair_auto_apply", True)),
+                run_validation=bool(config.get("allow_self_repair_test_run", True)),
+            )
+            status = str(report.get("status") or "")
+            apply_status = str((report.get("apply_result") or {}).get("status") or "")
+            # 成功或等待审核 → 不需要重试
+            if status in ("applied", "applied_without_validation", "awaiting_confirmation", "proposal_ready"):
+                break
+            # 可重试的失败：语法错误、patch 匹配失败、patch 生成失败
+            retryable = apply_status in ("syntax_error_before_write", "edit_validation_failed", "patch_plan_failed")
+            preview_failed = str((report.get("patch_preview") or {}).get("status") or "") == "preview_failed"
+            if (retryable or preview_failed) and attempt < MAX_REPAIR_RETRIES:
+                _debug_write("self_repair_retry", {
+                    "report_id": report.get("id"), "attempt": attempt + 1,
+                    "reason": apply_status or "preview_failed",
+                })
+                continue
+            break
+
         _debug_write(
             "self_repair_follow_up",
             {

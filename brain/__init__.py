@@ -506,6 +506,17 @@ def _apply_mode_switch(persona: dict, new_mode: str, config_path: str) -> str:
 
 
 # L7/L8: 自动学习 - 检测用户意图并更新记忆
+def _sync_name_in_persona(persona: dict, new_name: str):
+    """改名后同步更新 ai_profile 和 relationship_profile 中的名字引用。"""
+    ai = persona.get('ai_profile')
+    if isinstance(ai, dict):
+        ai['identity'] = f'\u6211\u662f{new_name}\uff0c\u662f\u4e3b\u4eba\u7684\u672c\u5730\u667a\u80fd\u52a9\u624b\uff0c\u4e0d\u662f\u666e\u901a\u5ba2\u670d\u578bAI\u3002'
+    rel = persona.get('relationship_profile')
+    if isinstance(rel, dict):
+        rel['relationship'] = f'{new_name}\u548c\u4e3b\u4eba\u662f\u4eb2\u8fd1\u3001\u957f\u671f\u76f8\u5904\u7684\u5173\u7cfb\u3002'
+        rel['goal'] = f'\u8ba9\u4e3b\u4eba\u611f\u89c9\u662f\u5728\u548c\u719f\u6089\u7684{new_name}\u5bf9\u8bdd\uff0c\u800c\u4e0d\u662f\u5728\u5bf9\u7740\u4e00\u5957\u6a21\u677f\u7cfb\u7edf\u3002'
+
+
 def auto_learn(user_input: str, ai_response: str) -> str:
     """自动检测是否需要更新记忆"""
     nova_rename_patterns = [
@@ -513,26 +524,34 @@ def auto_learn(user_input: str, ai_response: str) -> str:
         r"你改名叫(.+)",
         r"你叫(.+)吧",
         r"以后你叫(.+)",
+    ]
+    nova_rename_ask_patterns = [
         r"想给你改个名字",
         r"给你起个名字",
-        r"人家想了几个"
     ]
 
+    # 直接带名字的：直接改
     for pattern in nova_rename_patterns:
+        match = re.search(pattern, user_input)
+        if match:
+            new_name = match.group(1).strip().rstrip("吧啊呀嘛")
+            if new_name and len(new_name) <= 20:
+                config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
+                try:
+                    persona = {}
+                    if os.path.exists(config_path):
+                        persona = json.load(open(config_path, 'r', encoding='utf-8'))
+                    persona['nova_name'] = new_name
+                    _sync_name_in_persona(persona, new_name)
+                    json.dump(persona, open(config_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+                return f"好呀！以后叫我{new_name}就行啦～"
+
+    # 不带名字的：让用户直接说
+    for pattern in nova_rename_ask_patterns:
         if re.search(pattern, user_input):
-            import random
-            names = ["小可爱", "Nova酱", "阿Nova", "甜心", "小 Nova"]
-            chosen = random.sample(names, 3)
-            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
-            try:
-                persona = {}
-                if os.path.exists(config_path):
-                    persona = json.load(open(config_path, 'r', encoding='utf-8'))
-                persona['waiting_name'] = chosen
-                json.dump(persona, open(config_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
-            except Exception:
-                pass
-            return f"好呀好呀～你想让人家叫什么呀？人家想了几个：\n1. {chosen[0]}\n2. {chosen[1]}\n3. {chosen[2]}\n\n告诉我嘛～"
+            return "好呀，你想叫我什么？直接说就行～"
 
     select_patterns = [r"^1$", r"^2$", r"^3$", r"^(小可爱|Nova酱|阿Nova|甜心|小\s*Nova)$"]
     for pattern in select_patterns:
@@ -552,6 +571,7 @@ def auto_learn(user_input: str, ai_response: str) -> str:
                             new_name = persona['waiting_name'][2]
                         persona['nova_name'] = new_name
                         del persona['waiting_name']
+                        _sync_name_in_persona(persona, new_name)
                         json.dump(persona, open(config_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
                         return f"好呀好呀～以后人家就叫{new_name}啦！✨"
                 except Exception:

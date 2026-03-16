@@ -7,6 +7,7 @@ from datetime import datetime
 from core.state_loader import (
     get_recent_messages, load_l3_long_term, load_l4_persona, load_l5_knowledge,
 )
+from core.feedback_classifier import search_relevant_rules
 
 # ── 注入依赖 ──────────────────────────────────────────────
 _find_relevant_knowledge = lambda msg, limit=3, touch=True: []
@@ -232,6 +233,7 @@ def build_context_bundle(msg: str, history: list) -> dict:
         "l3": load_l3_long_term(),
         "l4": load_l4_persona(),
         "l5": load_l5_knowledge(),
+        "l7": search_relevant_rules(msg, limit=3),
         "l8": _find_relevant_knowledge(msg, limit=3, touch=True),
         "dialogue_context": build_dialogue_context(history, msg),
         "user_input": msg,

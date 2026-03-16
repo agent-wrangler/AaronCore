@@ -406,6 +406,42 @@ def _to_l7(text, ai_text):
     except Exception as e:
         _debug_write("l2_crystal_l7_err", {"err": str(e)})
 
+def _condense_knowledge(user_text: str, ai_text: str) -> str:
+    """用 LLM 从对话中凝结纯知识，同时过滤非知识内容。
+    返回凝结后的知识摘要；如果不含可复用知识则返回空字符串。"""
+    if not _llm_call or not ai_text:
+        return ""
+    try:
+        prompt = (
+            "\u4f60\u662f\u77e5\u8bc6\u51dd\u7ed3\u5668\u3002\u4ee5\u4e0b\u662f\u4e00\u6bb5\u5bf9\u8bdd\uff1a\n"
+            f"\u7528\u6237\u95ee\uff1a\u300c{user_text[:200]}\u300d\n"
+            f"AI\u56de\u590d\uff1a\u300c{ai_text[:500]}\u300d\n\n"
+            "\u5224\u65ad\u8fd9\u6bb5\u5bf9\u8bdd\u91cc\u662f\u5426\u5305\u542b\u53ef\u72ec\u7acb\u590d\u7528\u7684\u4e8b\u5b9e/\u6982\u5ff5/\u539f\u7406\u3002\n"
+            "\u4ee5\u4e0b\u60c5\u51b5\u4e0d\u662f\u77e5\u8bc6\uff1a\n"
+            "- \u8ba8\u8bbaAI\u7cfb\u7edf\u672c\u8eab\uff08\u8bb0\u5fc6/\u8def\u7531/L2/L3\u7b49\uff09\n"
+            "- \u7eaf\u60c5\u7eea\u4e92\u52a8/\u95f2\u804a/\u89d2\u8272\u626e\u6f14\n"
+            "- \u7528\u6237\u5410\u69fd/\u62b1\u6028/\u8bc4\u4ef7AI\u8868\u73b0\n\n"
+            "\u5982\u679c\u6709\u77e5\u8bc6\uff0c\u7528\u7b80\u6d01\u4e2d\u6587\u63d0\u53d62-3\u53e5\uff0c"
+            "\u53bb\u6389\u8868\u60c5/\u8bed\u6c14\u8bcd/\u89d2\u8272\u626e\u6f14\u8bed\u53e5\uff0c\u53ea\u4fdd\u7559\u77e5\u8bc6\u672c\u8eab\u3002\n"
+            "\u5982\u679c\u6ca1\u6709\u53ef\u590d\u7528\u77e5\u8bc6\uff0c\u53ea\u8fd4\u56de\u4e24\u4e2a\u5b57\uff1a\u65e0\u77e5\u8bc6"
+        )
+        result = _llm_call(prompt)
+        if not result:
+            return ""
+        result = result.strip()
+        # LLM 判断无知识
+        if result in ("\u65e0\u77e5\u8bc6", "\u65e0", ""):
+            _debug_write("l2_condense_skip", {"user": user_text[:40], "reason": "no_knowledge"})
+            return ""
+        if len(result) < 8:
+            return ""
+        _debug_write("l2_condense_ok", {"user": user_text[:40], "len": len(result)})
+        return result[:360]
+    except Exception as e:
+        _debug_write("l2_condense_err", {"err": str(e)})
+        return ""
+
+
 def _to_l8(text, ai_text):
     """L2→L8：知识类对话沉淀到知识库，Nova下次就记住了"""
     try:
@@ -416,6 +452,15 @@ def _to_l8(text, ai_text):
                 existing_q = str(item.get("query", ""))
                 if text[:20] in existing_q or existing_q in text:
                     return
+        # LLM 凝结：从对话中提取纯知识，同时过滤非知识内容
+        summary = _condense_knowledge(text, ai_text)
+        if not summary:
+            # LLM 判断无可复用知识，或 LLM 不可用时 fallback 存原文
+            if not _llm_call:
+                summary = ai_text[:500] if ai_text else ""
+            else:
+                _debug_write("l2_crystal_l8_filtered", {"text": text[:50]})
+                return
         # 上限500条（和L8原有逻辑一致）
         if len(l8) >= 500:
             l8 = l8[-499:]
@@ -426,7 +471,7 @@ def _to_l8(text, ai_text):
             "type": "knowledge",
             "query": text,
             "name": text[:30],
-            "summary": ai_text[:500] if ai_text else "",
+            "summary": summary,
             "keywords": kws[:10],
             "hit_count": 0,
             "created_at": datetime.now().isoformat(),
@@ -466,22 +511,43 @@ def _auto_summary(cfg, store):
     _save_cfg(cfg)
     _debug_write("l2_summary", {"rounds":f"{last+1}-{total}"})
 
+def _clean_summary(text: str) -> str:
+    """清理摘要中的表情、角色扮演语句、过长内容。"""
+    import re
+    t = str(text or "").strip()
+    # 去除 emoji 和特殊符号
+    t = re.sub(r'[\U0001f300-\U0001f9ff\u2728\u2705\u274c\u2764\u2b50\u26a1\u2600-\u26ff\u2700-\u27bf]', '', t)
+    # 去除角色扮演动作描述（括号开头的）
+    t = re.sub(r'[\uff08\(][^\uff09\)]{0,30}[\uff09\)]', '', t)
+    # 去除 markdown 加粗
+    t = re.sub(r'\*\*([^*]+)\*\*', r'\1', t)
+    t = t.strip()
+    # 截断到 100 字
+    if len(t) > 100:
+        t = t[:100]
+    return t
+
+
 def _gen_summary(mems, start, end):
     # 优先用裸 LLM，fallback 到 think
     dialog = ""
     for m in mems[-SUMMARY_INTERVAL:]:
-        dialog += f"\u7528\u6237: {m.get('user_text','')}\nNova: {m.get('ai_text','')[:100]}\n\n"
+        dialog += f"\u7528\u6237: {m.get('user_text','')}\nAI: {m.get('ai_text','')[:100]}\n\n"
     prompt = (
         f"\u4ee5\u4e0b\u662f\u7b2c{start}\u8f6e\u5230\u7b2c{end}\u8f6e\u7684\u5bf9\u8bdd\u8bb0\u5f55\uff0c"
-        "\u8bf7\u75281-2\u53e5\u8bdd\u63d0\u70bc\u8981\u70b9\uff08\u5173\u6ce8\u7528\u6237\u63d0\u5230\u7684\u4e8b\u5b9e\u3001\u504f\u597d\u3001\u91cd\u8981\u4e8b\u4ef6\uff09\uff0c"
-        "\u4e0d\u8981\u5217\u6e05\u5355\uff0c\u7528\u81ea\u7136\u7684\u53d9\u8ff0\u8bed\u6c14\uff1a\n\n"
+        "\u8bf7\u75281-2\u53e5\u8bdd\u63d0\u70bc\u7528\u6237\u7684\u884c\u4e3a\u548c\u5173\u6ce8\u70b9\uff08\u7528\u6237\u505a\u4e86\u4ec0\u4e48\u3001\u95ee\u4e86\u4ec0\u4e48\u3001\u8868\u8fbe\u4e86\u4ec0\u4e48\u504f\u597d\uff09\u3002\n"
+        "\u8981\u6c42\uff1a\n"
+        "1. \u53ea\u5173\u6ce8\u7528\u6237\u884c\u4e3a\uff0c\u4e0d\u8981\u590d\u8ff0AI\u7684\u56de\u590d\u5185\u5bb9\n"
+        "2. \u4e0d\u8981\u7528\u8868\u60c5/\u8bed\u6c14\u8bcd/\u89d2\u8272\u626e\u6f14\u8bed\u53e5\n"
+        "3. \u7528\u7b80\u6d01\u7684\u9648\u8ff0\u53e5\uff0c\u4e0d\u8981\u5217\u6e05\u5355\n"
+        "4. \u63a7\u5236\u5728 50 \u5b57\u5185\n\n"
         + dialog[:2000]
     )
     if _llm_call:
         try:
             txt = (_llm_call(prompt) or "").strip()
             if len(txt) > 5:
-                return txt
+                return _clean_summary(txt)
         except Exception:
             pass
     if _think:
@@ -492,7 +558,7 @@ def _gen_summary(mems, start, end):
             else:
                 txt = str(result or "").strip()
             if len(txt) > 5:
-                return txt
+                return _clean_summary(txt)
         except Exception:
             pass
     # fallback: 关键词提取

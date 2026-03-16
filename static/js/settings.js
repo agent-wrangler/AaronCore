@@ -7,7 +7,8 @@ var settingsPanelState={
  selfRepairReports:[],
  activeRepairId:'',
  repairActionBusy:'',
- showAdvancedLearning:false
+ showAdvancedLearning:false,
+ l7Stats:null
 };
 
 function defaultAutolearnConfig(){
@@ -72,9 +73,9 @@ function renderSettingsToggleCard(title, desc, key, value, isLight){
 
 function autolearnPresets(){
  return {
-  basic:{label:'基础',desc:'会记住明显的负反馈，把经验沉淀下来。不联网补学，不整理修复提案，不跑验证，不自动落地补丁。',patch:{enabled:true,allow_feedback_relearn:true,allow_knowledge_write:true,allow_web_search:false,allow_self_repair_planning:false,allow_self_repair_test_run:false,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
-  advanced:{label:'进阶',desc:'会记住负反馈，会联网补学相关知识，会整理修复提案，会先跑最小验证。真正改代码前先停下来给用户看。',patch:{enabled:true,allow_feedback_relearn:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
-  deep:{label:'深度',desc:'包含进阶档的全部能力。低风险问题允许后台继续自动落地，中高风险改动仍然会停下来。',patch:{enabled:true,allow_feedback_relearn:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:true,self_repair_apply_mode:'confirm'}}
+  basic:{label:'基础',desc:'不联网学新知识，不整理修复提案。反馈记忆始终开启，AI Agent 会记住你说过的纠正。',patch:{enabled:true,allow_knowledge_write:true,allow_web_search:false,allow_self_repair_planning:false,allow_self_repair_test_run:false,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
+  advanced:{label:'进阶',desc:'会联网补学知识，会整理修复提案并先跑验证。真正改代码前先停下来给你看。',patch:{enabled:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
+  deep:{label:'深度',desc:'包含进阶的全部能力，低风险问题允许后台自动落地，中高风险改动仍然会停下来。',patch:{enabled:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:true,self_repair_apply_mode:'confirm'}}
  };
 }
 
@@ -336,22 +337,19 @@ function renderSelfRepairReviewSection(config, status, reports, isLight){
  var subColor=isLight?'#64748b':'#94a3b8';
  var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.78)';
  var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
- var softBg=isLight?'linear-gradient(135deg,#eef2ff,#f8fafc)':'linear-gradient(135deg,rgba(79,70,229,0.16),rgba(15,23,42,0.7))';
  var safeReports=Array.isArray(reports)?reports:[];
  var list=safeReports.slice(0,10);
  var activeId=settingsPanelState.activeRepairId||((list[0]&&list[0].id)||'');
- var countLabel=safeReports.length?('最近提案 '+safeReports.length+' 条'+(safeReports.length>10?' (展示前10条)':'')):'当前无提案';
  var html='';
- html+='<div style="margin-top:16px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px;border-radius:18px;">';
- html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
- html+='<div><div style="font-size:18px;font-weight:800;color:'+textColor+';margin-bottom:4px;">修复提案审核</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';max-width:760px;">审批入口放回这里了。以后只要进入修复链路，就在这里看提案、看预览、再决定是否应用。</div></div>';
- html+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+renderSettingsMetaPill(countLabel,list.length?'accent':'muted',isLight)+renderSettingsActionButton('刷新提案','self-repair-refresh','',isLight,'secondary',!!settingsPanelState.repairActionBusy)+(config.allow_self_repair_planning?'':renderSettingsActionButton('开启提案整理','toggle','allow_self_repair_planning',isLight,'primary',!!settingsPanelState.repairActionBusy))+'</div>';
+ html+='<div style="margin-top:14px;background:'+cardBg+';border:1px solid '+borderColor+';padding:16px 18px;border-radius:14px;">';
+ html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
+ html+='<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:15px;font-weight:700;color:'+textColor+';">\u4fee\u590d\u63d0\u6848</span><span style="font-size:12px;color:'+subColor+';">'+(list.length?(list.length+'\u6761'):'暂无')+'</span></div>';
+ html+='<div style="display:flex;gap:8px;">'+renderSettingsActionButton('\u5237\u65b0','self-repair-refresh','',isLight,'secondary',!!settingsPanelState.repairActionBusy)+'</div>';
  html+='</div>';
- html+='<div style="margin-top:14px;padding:16px;border-radius:16px;background:'+softBg+';border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">当前审批节奏</div><div style="font-size:14px;line-height:1.85;color:'+textColor+';max-width:860px;">'+escapeHtml(selfRepairFlowSummary(config))+'</div></div>';
  if(!list.length){
-  html+='<div style="margin-top:14px;padding:16px;border-radius:16px;background:'+(isLight?'#f8fafc':'rgba(15,23,42,0.38)')+';border:1px dashed '+borderColor+';font-size:13px;line-height:1.85;color:'+subColor+';">现在还没有待审核的修复提案。后续一旦有新的修法方案，会直接出现在这里。</div>';
+  html+='<div style="margin-top:10px;font-size:12px;color:'+subColor+';"> AI Agent \u53d1\u73b0\u95ee\u9898\u65f6\u4f1a\u81ea\u52a8\u751f\u6210\u4fee\u590d\u63d0\u6848\uff0c\u5728\u8fd9\u91cc\u5ba1\u6838\u3002</div>';
  }else{
-  html+='<div style="margin-top:14px;display:grid;gap:12px;">'+list.map(function(report){
+  html+='<div style="margin-top:12px;display:grid;gap:10px;">'+list.map(function(report){
    return renderSelfRepairReportCard(report,isLight,String(report&&report.id||'')===String(activeId||''));
   }).join('')+'</div>';
  }
@@ -386,78 +384,38 @@ document.addEventListener('change',function(event){
 function renderSettingsPage(isLight){
  var box=document.getElementById('settingsBox');
  if(!box) return;
- var stats=settingsPanelState.stats||{};
  var config=mergeAutolearnConfig(settingsPanelState.config||{});
  var selfRepairStatus=settingsPanelState.selfRepairStatus||{};
  var selfRepairReports=Array.isArray(settingsPanelState.selfRepairReports)?settingsPanelState.selfRepairReports:[];
- var presetInfo=currentAutolearnPreset(config);
- var presetKey=presetInfo.key;
- var presets=autolearnPresets();
- var outcome=selfRepairOutcome(selfRepairStatus);
+ var l7s=settingsPanelState.l7Stats||{};
+ var notice=settingsPanelState.error||settingsPanelState.notice||'';
+ var noticeColor=settingsPanelState.error?'#ef4444':(isLight?'#4338ca':'#c7d2fe');
  var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.78)';
- var softBg=isLight?'#f8fafc':'rgba(15,23,42,0.38)';
  var textColor=isLight?'#0f172a':'#e2e8f0';
  var subColor=isLight?'#64748b':'#94a3b8';
  var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
- var notice=settingsPanelState.error||settingsPanelState.notice||'';
- var noticeColor=settingsPanelState.error?'#ef4444':(isLight?'#4338ca':'#c7d2fe');
  var html='';
 
- html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">';
- html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">当前模型</div><div style="font-size:16px;font-weight:700;color:'+textColor+';">'+(stats.model||'未知')+'</div></div>';
- html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">服务端口</div><div style="font-size:16px;font-weight:700;color:'+textColor+';">8090</div></div>';
- html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">当前主题</div><div style="font-size:16px;font-weight:700;color:'+textColor+';">'+(isLight?'亮色':'深色')+'</div></div>';
- html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">当前这一档</div><div style="font-size:16px;font-weight:700;color:'+textColor+';">'+(config.enabled?presetInfo.label:'已暂停学习')+'</div></div>';
+ // ── 区块1：状态总览（4个数字）──
+ html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">';
+ html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">\u7ea0\u9519\u8bb0\u5fc6</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.l7_rule_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">\u6761</span></div></div>';
+ html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">\u884c\u4e3a\u4fee\u6b63</div><div style="font-size:22px;font-weight:800;color:'+(l7s.l7_constraint_count?'#10b981':textColor)+';">'+(l7s.l7_constraint_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">\u6761</span></div></div>';
+ html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">\u5df2\u5b66\u77e5\u8bc6</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.l8_knowledge_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">\u6761</span></div></div>';
+ html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">\u4fee\u590d\u63d0\u6848</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.repair_report_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">\u6761</span></div></div>';
  html+='</div>';
 
- html+='<div style="width:100%;margin-top:16px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px;border-radius:18px;">';
- html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div><div style="font-size:18px;font-weight:800;color:'+textColor+';margin-bottom:4px;">自主学习</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';max-width:760px;">控制 Nova 会不会把这次反馈继续带出当前会话。关掉之后，它会先停在眼前这次对话里。</div></div><div style="font-size:12px;color:'+noticeColor+';min-height:18px;">'+notice+'</div></div>';
- html+='<div style="margin-top:14px;padding:16px;border-radius:16px;background:'+(isLight?'linear-gradient(135deg,#eff6ff,#f8fafc)':'linear-gradient(135deg,rgba(15,23,42,0.52),rgba(30,41,59,0.72))')+';border:1px solid '+borderColor+';">';
- html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div><div style="font-size:24px;font-weight:800;color:'+textColor+';line-height:1.2;">'+(config.enabled?'正在学习':'已暂停学习')+'</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';margin-top:8px;max-width:760px;">'+(config.enabled?('当前这一档是「'+presetInfo.label+'」。'+presetInfo.desc):'现在它不会继续积累新的学习结果，也不会继续往后生成修法。')+'</div></div><span style="padding:6px 10px;border-radius:999px;background:'+(config.enabled?(isLight?'rgba(16,185,129,0.12)':'rgba(16,185,129,0.18)'):(isLight?'rgba(148,163,184,0.12)':'rgba(148,163,184,0.12)'))+';color:'+(config.enabled?(isLight?'#047857':'#86efac'):(isLight?'#475569':'#cbd5e1'))+';font-size:12px;font-weight:700;">'+(config.enabled?'已开启':'已暂停')+'</span></div>';
- html+='<div style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div style="font-size:12px;line-height:1.7;color:'+subColor+';">'+(config.enabled?'现在它会把明确反馈带进后续学习和修复链路。':'先暂停时，它只会在当前聊天里把话接住，不再继续积累。')+'</div><button type="button" data-settings-action="toggle" data-settings-key="enabled" style="position:relative;z-index:1;padding:10px 14px;border:none;border-radius:12px;background:'+(config.enabled?'linear-gradient(135deg,#64748b,#475569)':'linear-gradient(135deg,#0ea5e9,#2563eb)')+';color:#fff;font-size:13px;font-weight:700;cursor:pointer;">'+(config.enabled?'先暂停学习':'重新开始学习')+'</button></div>';
- html+='</div></div>';
+ // ── 区块2：持续进化 ──
+ var _evo=config.enabled;
+ if(!document.getElementById('nova-spin-style')){var _ss=document.createElement('style');_ss.id='nova-spin-style';_ss.textContent='@keyframes nova-spin{to{transform:rotate(360deg)}}';document.head.appendChild(_ss);}
+ var _dotHtml=_evo?'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2.5px solid '+(isLight?'#7c3aed':'#a78bfa')+';border-top-color:transparent;animation:nova-spin 1s linear infinite;vertical-align:middle;margin-right:10px;"></span>':'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+(isLight?'#cbd5e1':'#475569')+';vertical-align:middle;margin-right:10px;"></span>';
+ html+='<div style="margin-top:14px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px 20px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;">';
+ html+='<div><div style="display:flex;align-items:center;"><span style="font-size:16px;font-weight:700;color:'+textColor+';">'+_dotHtml+(_evo?'\u6301\u7eed\u8fdb\u5316\u4e2d':'\u8fdb\u5316\u5df2\u6682\u505c')+'</span></div><div style="font-size:12px;color:'+subColor+';margin-top:6px;">'+(_evo?'AI Agent \u4f1a\u81ea\u4e3b\u5b66\u4e60\u65b0\u77e5\u8bc6\u3001\u8bb0\u4f4f\u4f60\u7684\u7ea0\u6b63\u3001\u4e3b\u52a8\u4fee\u590d\u53d1\u73b0\u7684\u95ee\u9898':'\u5df2\u6682\u505c\u81ea\u4e3b\u5b66\u4e60\u548c\u81ea\u6211\u4fee\u590d\uff0cAI Agent \u4e0d\u4f1a\u79ef\u7d2f\u65b0\u7ecf\u9a8c')+'</div></div>';
+ html+='<div data-settings-action="toggle" data-settings-key="enabled" style="flex-shrink:0;width:44px;height:24px;border-radius:12px;background:'+(_evo?(isLight?'#10b981':'#34d399'):(isLight?'#cbd5e1':'#475569'))+';cursor:pointer;position:relative;transition:background 0.2s;"><span style="position:absolute;top:2px;'+(_evo?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.2s;"></span></div>';
+ html+='</div>';
 
- html+='<div style="margin-top:16px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px;border-radius:18px;">';
- html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div><div style="font-size:18px;font-weight:800;color:'+textColor+';margin-bottom:4px;">学习强度</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';max-width:760px;">它最多会继续处理到哪一步，用基础 / 进阶 / 深度来收口，不再让你对着一堆底层开关猜。</div></div><span style="padding:6px 10px;border-radius:999px;background:'+(presetKey==='custom'?(isLight?'rgba(251,191,36,0.12)':'rgba(251,191,36,0.16)'):(isLight?'rgba(79,70,229,0.12)':'rgba(99,102,241,0.18)'))+';color:'+(presetKey==='custom'?(isLight?'#b45309':'#fde68a'):(isLight?'#4338ca':'#c7d2fe'))+';font-size:12px;font-weight:700;">'+(presetKey==='custom'?'当前是自定义组合':'当前档位已对齐')+'</span></div>';
- html+='<div style="margin-top:14px;padding:16px;border-radius:16px;background:'+(isLight?'linear-gradient(135deg,#fff7ed,#f8fafc)':'linear-gradient(135deg,rgba(51,65,85,0.52),rgba(15,23,42,0.66))')+';border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">当前这一档</div><div style="font-size:24px;font-weight:800;color:'+textColor+';line-height:1.3;">'+presetInfo.label+'</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';margin-top:8px;max-width:760px;">'+presetInfo.desc+'</div></div>';
- html+='<div style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">';
- html+=renderAutolearnPresetCard('basic',presets.basic,presetKey,isLight);
- html+=renderAutolearnPresetCard('advanced',presets.advanced,presetKey,isLight);
- html+=renderAutolearnPresetCard('deep',presets.deep,presetKey,isLight);
- html+='</div></div>';
-
- html+='<div style="margin-top:16px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px;border-radius:18px;">';
- html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div><div style="font-size:18px;font-weight:800;color:'+textColor+';margin-bottom:4px;">知识转化</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';max-width:760px;">最近一次学习最后落成了什么，就在这里直接看，不用自己猜它现在是只记反馈、已经出方案，还是已经真正改过。</div></div><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(14,165,233,0.12)':'rgba(14,165,233,0.16)')+';color:'+(isLight?'#0369a1':'#7dd3fc')+';font-size:12px;font-weight:700;">'+outcome.label+'</span></div>';
- html+='<div style="margin-top:14px;padding:16px;border-radius:16px;background:'+(isLight?'linear-gradient(135deg,#eff6ff,#f8fafc)':'linear-gradient(135deg,rgba(15,23,42,0.52),rgba(30,41,59,0.72))')+';border:1px solid '+borderColor+';">';
- html+='<div style="font-size:24px;font-weight:800;color:'+textColor+';line-height:1.2;">'+outcome.title+'</div>';
- html+='<div style="font-size:13px;line-height:1.8;color:'+subColor+';margin-top:10px;max-width:760px;">'+outcome.desc+'</div>';
- html+='</div></div>';
-
+ // ── 区块3：修复提案审核 ──
  html+=renderSelfRepairReviewSection(config,selfRepairStatus,selfRepairReports,isLight);
 
- html+='<div style="margin-top:16px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px;border-radius:18px;">';
- html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div><div style="font-size:16px;font-weight:700;color:'+textColor+';margin-bottom:4px;">开发者细调</div><div style="font-size:13px;line-height:1.7;color:'+subColor+';">这里才是底层开关和诊断节奏。日常不用碰，只有在你想精调手感或排查链路时再展开。</div></div><button type="button" data-settings-action="advanced-toggle" style="position:relative;z-index:1;padding:10px 14px;border:none;border-radius:12px;background:'+(isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)')+';color:'+(isLight?'#334155':'#e2e8f0')+';font-size:13px;font-weight:700;cursor:pointer;">'+(settingsPanelState.showAdvancedLearning?'收起底层区':'展开底层区')+'</button></div>';
- if(settingsPanelState.showAdvancedLearning){
-  html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">';
-  html+=renderSettingsToggleCard('联网补学','需要外部信息时，后台搜索公开资料并做轻量摘要。','allow_web_search',!!config.allow_web_search,isLight);
-  html+=renderSettingsToggleCard('写入知识库','把补学结论沉淀进 knowledge_base，下次相关问题直接回流。','allow_knowledge_write',!!config.allow_knowledge_write,isLight);
-  html+=renderSettingsToggleCard('负反馈纠偏补学','当用户说"答歪了/没听懂"时，先记纠偏笔记，再按需定向补学。','allow_feedback_relearn',!!config.allow_feedback_relearn,isLight);
-  html+=renderSettingsToggleCard('整理修复提案','收到明显负反馈后，继续把修法方案和候选文件整理出来。','allow_self_repair_planning',!!config.allow_self_repair_planning,isLight);
-  html+=renderSettingsToggleCard('先跑最小验证','在真正动手前先做一次最小自查，减少直接改崩的概率。','allow_self_repair_test_run',!!config.allow_self_repair_test_run,isLight);
-  html+=renderSettingsToggleCard('低风险自动落地','低风险补丁允许在后台继续落地；风险升高时仍然会停下来。','allow_self_repair_auto_apply',!!config.allow_self_repair_auto_apply,isLight);
-  html+=renderSettingsToggleCard('自动生成技能','高权限能力，默认继续关着。只有你真想放开自动扩展时再开。','allow_skill_generation',!!config.allow_skill_generation,isLight);
-  html+='</div>';
-  html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">';
-  html+='<label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:'+subColor+';">最短触发字数<input id="autolearnMinQuery" type="number" min="2" max="30" value="'+config.min_query_length+'" style="padding:11px 12px;border-radius:12px;border:1px solid '+borderColor+';background:'+softBg+';color:'+textColor+';outline:none;"></label>';
-  html+='<label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:'+subColor+';">搜索超时（秒）<input id="autolearnTimeout" type="number" min="3" max="20" value="'+config.search_timeout_sec+'" style="padding:11px 12px;border-radius:12px;border:1px solid '+borderColor+';background:'+softBg+';color:'+textColor+';outline:none;"></label>';
-  html+='<label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:'+subColor+';">结果条数上限<input id="autolearnMaxResults" type="number" min="1" max="10" value="'+config.max_results+'" style="padding:11px 12px;border-radius:12px;border:1px solid '+borderColor+';background:'+softBg+';color:'+textColor+';outline:none;"></label>';
-  html+='<label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:'+subColor+';">摘要长度上限<input id="autolearnSummaryLimit" type="number" min="120" max="800" value="'+config.max_summary_length+'" style="padding:11px 12px;border-radius:12px;border:1px solid '+borderColor+';background:'+softBg+';color:'+textColor+';outline:none;"></label>';
-  html+='<label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:'+subColor+';">自查超时（秒）<input id="selfRepairTestTimeout" type="number" min="10" max="120" value="'+config.self_repair_test_timeout_sec+'" style="padding:11px 12px;border-radius:12px;border:1px solid '+borderColor+';background:'+softBg+';color:'+textColor+';outline:none;"></label>';
-  html+='<label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:'+subColor+';">中高风险改动怎么处理<select id="selfRepairApplyMode" data-settings-change="self-repair-mode" style="padding:11px 12px;border-radius:12px;border:1px solid '+borderColor+';background:'+softBg+';color:'+textColor+';outline:none;"><option value="suggest"'+((config.self_repair_apply_mode||'confirm')==='suggest'?' selected':'')+'>先给我看方案</option><option value="confirm"'+((config.self_repair_apply_mode||'confirm')==='confirm'?' selected':'')+'>只确认一次</option></select></label>';
-  html+='</div>';
-  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;"><div style="font-size:12px;line-height:1.7;color:'+subColor+';">底层参数改完会优先按你手动设的节奏来走。这里修的是手感，不是外部展示文案。</div><button type="button" data-settings-action="advanced-save" style="position:relative;z-index:1;padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">保存底层参数</button></div>';
- }
- html+='</div>';
  box.innerHTML=html;
 }
 
@@ -466,16 +424,19 @@ function refreshSettingsData(isLight, noticeText){
   fetch('/stats').then(function(r){return r.json();}),
   fetch('/autolearn/config').then(function(r){return r.json();}),
   fetch('/self_repair/status').then(function(r){return r.json();}),
-  fetch('/self_repair/reports?limit=6').then(function(r){return r.json();}).catch(function(){return {reports:[]};})
+  fetch('/self_repair/reports?limit=6').then(function(r){return r.json();}).catch(function(){return {reports:[]};}),
+  fetch('/l7/stats').then(function(r){return r.json();}).catch(function(){return {};})
  ]).then(function(values){
   var statsResp=values[0]||{};
   var configResp=values[1]||{};
   var statusResp=values[2]||{};
   var reportsResp=values[3]||{};
+  var l7Resp=values[4]||{};
   settingsPanelState.stats=statsResp.stats||statsResp||{};
   settingsPanelState.config=mergeAutolearnConfig((configResp&&configResp.config)||settingsPanelState.config||{});
   settingsPanelState.selfRepairStatus=(statusResp&&statusResp.status)||settingsPanelState.selfRepairStatus||{};
   settingsPanelState.selfRepairReports=Array.isArray(reportsResp&&reportsResp.reports)?reportsResp.reports:[];
+  settingsPanelState.l7Stats=l7Resp;
   if(settingsPanelState.activeRepairId){
    var stillExists=settingsPanelState.selfRepairReports.some(function(item){return String((item||{}).id||'')===String(settingsPanelState.activeRepairId||'');});
    if(!stillExists) settingsPanelState.activeRepairId=(settingsPanelState.selfRepairReports[0]&&settingsPanelState.selfRepairReports[0].id)||'';
@@ -518,13 +479,26 @@ function saveAutolearnConfigPatch(patch, noticeText){
 }
 
 function toggleAutolearnSetting(key){
- var config=mergeAutolearnConfig(settingsPanelState.config||{});
- var next=!config[key];
- var note='已更新开关';
- if(key==='allow_skill_generation'&&next) note='已开启自动生成技能，请留意这属于更高权限能力';
- if(key==='allow_feedback_relearn'&&next) note='L7 负反馈现在会联动 L8 做纠偏补学';
- if(key==='allow_self_repair_auto_apply') note=next?'低风险补丁现在允许继续自动落地':'低风险补丁现在会先停在提案阶段';
- saveAutolearnConfigPatch((function(){var patch={};patch[key]=next;return patch;})(),note);
+ if(!settingsPanelState.config) settingsPanelState.config={};
+ var next=!mergeAutolearnConfig(settingsPanelState.config)[key];
+ settingsPanelState.config[key]=next;
+ console.log('[settings] toggle', key, '->', next, 'config.enabled=', settingsPanelState.config.enabled);
+ var isLight=document.body.classList.contains('light');
+ settingsPanelState.notice='';
+ settingsPanelState.error='';
+ renderSettingsPage(isLight);
+ var patch={};patch[key]=next;
+ fetch('/autolearn/config',{
+  method:'POST',
+  headers:{'Content-Type':'application/json; charset=utf-8','Accept':'application/json'},
+  body:JSON.stringify(patch)
+ }).then(function(r){return r.json();}).then(function(data){
+  settingsPanelState.config=mergeAutolearnConfig((data&&data.config)||settingsPanelState.config||{});
+  return refreshSettingsData(isLight,next?'已开启':'已关闭');
+ }).catch(function(){
+  settingsPanelState.error='保存失败';
+  renderSettingsPage(isLight);
+ });
 }
 
 function applyAutolearnPreset(key){
