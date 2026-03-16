@@ -1,7 +1,9 @@
 {
   "name": "AI画图",
   "keywords": ["海报", "画图", "生成图片", "做图", "AI画图"],
+  "anti_keywords": ["海报设计", "海报尺寸", "画图工具", "画图软件", "怎么画", "如果要画"],
   "description": "用 AI 生成图片或海报",
   "priority": 8,
-  "category": "创作"
+  "category": "内容创作",
+  "icon": "🎨"
 }

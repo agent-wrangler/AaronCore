@@ -16,6 +16,15 @@ KNOWLEDGE_BASE_FILE = STATE_DIR / "knowledge_base.json"
 CONFIG_FILE = STATE_DIR / "autolearn_config.json"
 _FILE_LOCK = threading.Lock()
 
+# ── 依赖注入 ──
+_llm_call = None  # 裸 LLM 调用（不带人格），由 agent_final.py 注入
+_debug_write = lambda stage, data: None
+
+def init(*, llm_call=None, debug_write=None):
+    global _llm_call, _debug_write
+    if llm_call: _llm_call = llm_call
+    if debug_write: _debug_write = debug_write
+
 DEFAULT_CONFIG = {
     "enabled": True,
     "allow_web_search": True,
@@ -58,23 +67,28 @@ GREETING_WORDS = [
 QUESTION_HINTS = [
     "?",
     "？",
-    "什么",
+    "什么是",
+    "是什么",
     "为啥",
     "为什么",
-    "怎么",
+    "怎么办",
+    "怎么用",
+    "怎么做",
+    "怎么回事",
     "如何",
     "怎样",
     "区别",
-    "原理",
-    "意思",
+    "什么原理",
+    "原理是",
+    "什么意思",
+    "意思是什么",
     "教程",
     "步骤",
     "办法",
-    "能不能",
-    "可不可以",
     "哪里",
     "哪个",
     "谁是",
+    "是谁",
     "是否",
 ]
 
@@ -654,6 +668,7 @@ def _build_summary(query: str, results: list[dict], max_length: int = 360) -> st
     if not results:
         return ""
 
+    # 先拼原始素材
     snippets = []
     for item in results[:3]:
         title = _clean_text(item.get("title"), 48)
@@ -662,7 +677,28 @@ def _build_summary(query: str, results: list[dict], max_length: int = 360) -> st
             snippets.append(f"{title}：{snippet}")
         elif title:
             snippets.append(title)
-    summary = "；".join(snippets)
+    raw_material = "\n".join(snippets)
+
+    # 尝试用 LLM 凝结成高质量知识摘要
+    if _llm_call and raw_material:
+        try:
+            prompt = (
+                f"\u4f60\u662f\u77e5\u8bc6\u51dd\u7ed3\u5668\u3002\u7528\u6237\u95ee\u4e86\uff1a\u300c{query}\u300d\n"
+                f"\u4ee5\u4e0b\u662f\u641c\u7d22\u7ed3\u679c\uff1a\n{raw_material}\n\n"
+                f"\u8bf7\u7528\u7b80\u6d01\u7684\u4e2d\u6587\u603b\u7ed3\u6838\u5fc3\u7b54\u6848\uff0c\u8981\u6c42\uff1a\n"
+                f"1. \u53ea\u4fdd\u7559\u6700\u6709\u4ef7\u503c\u7684\u4fe1\u606f\uff0c\u53bb\u6389\u5e7f\u544a\u3001\u65e0\u5173\u5185\u5bb9\u3001\u975e\u4e2d\u6587\u5185\u5bb9\n"
+                f"2. \u63a7\u5236\u5728 2-3 \u53e5\u8bdd\u5185\n"
+                f"3. \u76f4\u63a5\u8f93\u51fa\u6458\u8981\uff0c\u4e0d\u8981\u52a0\u524d\u7f00"
+            )
+            condensed = _llm_call(prompt)
+            if condensed and len(condensed) > 10:
+                _debug_write("l8_condense_ok", {"query": query[:30], "len": len(condensed)})
+                return _clean_text(condensed, max_length)
+        except Exception as e:
+            _debug_write("l8_condense_err", {"err": str(e)})
+
+    # fallback：原始拼接
+    summary = "\uff1b".join(snippets)
     return _clean_text(summary, max_length)
 
 
@@ -678,6 +714,25 @@ def save_learned_knowledge(
     now = datetime.now()
     normalized_query = _normalize_query(query)
     keywords = extract_keywords(query)
+    # LLM 提取更精准的关键词（补充到规则提取结果中）
+    if _llm_call and summary:
+        try:
+            kw_prompt = (
+                f"\u4ece\u4ee5\u4e0b\u77e5\u8bc6\u6458\u8981\u4e2d\u63d0\u53d6 3-5 \u4e2a\u6700\u91cd\u8981\u7684\u4e2d\u6587\u5173\u952e\u8bcd\uff0c\u7528\u4e8e\u540e\u7eed\u68c0\u7d22\u3002\n"
+                f"\u95ee\u9898\uff1a{query}\n\u6458\u8981\uff1a{summary[:200]}\n"
+                f"\u76f4\u63a5\u8f93\u51fa\u5173\u952e\u8bcd\uff0c\u7528\u9017\u53f7\u5206\u9694\uff0c\u4e0d\u8981\u52a0\u5176\u4ed6\u5185\u5bb9"
+            )
+            kw_result = _llm_call(kw_prompt)
+            if kw_result:
+                seen = set(k.lower() for k in keywords)
+                for kw in re.split(r'[,\uff0c\u3001\s]+', kw_result.strip()):
+                    kw = kw.strip()
+                    if kw and len(kw) <= 18 and kw.lower() not in seen:
+                        keywords.append(kw)
+                        seen.add(kw.lower())
+                keywords = keywords[:10]
+        except Exception:
+            pass
     extra = dict(extra_fields or {})
     primary_scene = _infer_primary_scene(query, feedback_scene=feedback_scene, route_result=route_result)
 
@@ -917,6 +972,13 @@ def should_trigger_auto_learn(user_input: str, route_result: dict | None = None,
 
     if route_result and route_result.get("mode") in ("skill", "hybrid") and route_result.get("skill") not in ("none", "", None):
         return False, "handled_by_skill"
+
+    # 排除闲聊/感叹/评价类短句
+    _casual = ['有意思','没意思','不错','还行','厉害','好玩','无聊',
+               '哈哈','嘿嘿','呵呵','嗯嗯','好的','知道了','明白',
+               '懂了','可以','牛','真的吗','是吗','对吧']
+    if any(c in text for c in _casual):
+        return False, "casual_chat"
 
     is_question_like = any(hint in lowered or hint in text for hint in QUESTION_HINTS)
     is_learning_request = any(hint in text for hint in LEARNING_HINTS)

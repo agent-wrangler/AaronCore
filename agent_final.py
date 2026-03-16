@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import json
+import requests
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
 from sse_starlette.sse import EventSourceResponse
@@ -25,7 +26,7 @@ from core.state_loader import (
     extract_doc_title, extract_doc_summary, build_docs_index, resolve_doc_path,
     load_msg_history, save_msg_history, get_recent_messages,
     load_l3_long_term, load_l4_persona, load_l5_knowledge,
-    load_stats_data, record_stats,
+    load_stats_data, record_stats, reset_stats,
 )
 from core.state_loader import init as _state_loader_init
 
@@ -87,6 +88,7 @@ from core.l8_learn import (
     auto_learn as l8_auto_learn,
     auto_learn_from_feedback as l8_feedback_relearn,
     find_relevant_knowledge,
+    init as _l8_learn_init,
     load_autolearn_config,
     should_surface_knowledge_entry,
     should_trigger_auto_learn,
@@ -110,6 +112,69 @@ from core.l2_memory import (
 )
 from core.l2_memory import init as _l2_memory_init
 
+
+def _raw_llm_call(prompt: str) -> str:
+    """裸 LLM 调用：不带人格，纯意图分类用"""
+    from brain import LLM_CONFIG
+    try:
+        resp = requests.post(
+            f"{LLM_CONFIG['base_url']}/chat/completions",
+            headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
+            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.1, "max_tokens": 100},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            usage = data.get("usage", {})
+            if usage:
+                try:
+                    record_stats(
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        scene="route",
+                        cache_write=usage.get("prompt_cache_miss_tokens", 0),
+                        cache_read=usage.get("prompt_cache_hit_tokens", 0),
+                    )
+                except Exception:
+                    pass
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception:
+        pass
+    return ""
+
+
+def _knowledge_llm_call(prompt: str) -> str:
+    """知识凝结专用 LLM 调用：允许更长输出"""
+    from brain import LLM_CONFIG
+    try:
+        resp = requests.post(
+            f"{LLM_CONFIG['base_url']}/chat/completions",
+            headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
+            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.2, "max_tokens": 300},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            usage = data.get("usage", {})
+            if usage:
+                try:
+                    record_stats(
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        scene="learn",
+                        cache_write=usage.get("prompt_cache_miss_tokens", 0),
+                        cache_read=usage.get("prompt_cache_hit_tokens", 0),
+                    )
+                except Exception:
+                    pass
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception:
+        pass
+    return ""
+
+
 _state_loader_init(
     debug_write=debug_write,
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
@@ -119,6 +184,12 @@ _state_loader_init(
 _l2_memory_init(
     debug_write=debug_write,
     think=think,
+    llm_call=_raw_llm_call,
+)
+
+_l8_learn_init(
+    llm_call=_knowledge_llm_call,
+    debug_write=debug_write,
 )
 
 from core.json_store import load_json, write_json, load_json_store
@@ -141,6 +212,8 @@ from core.route_resolver import (
     llm_route, resolve_route,
 )
 from core.route_resolver import init as _route_resolver_init
+
+
 _route_resolver_init(
     nova_route=nova_route if NOVA_CORE_READY else None,
     debug_write=debug_write,
@@ -148,6 +221,7 @@ _route_resolver_init(
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
     nova_core_ready=NOVA_CORE_READY,
     search_l2=l2_search_relevant,
+    llm_call=_raw_llm_call,
 )
 
 from core.reply_formatter import (
@@ -356,21 +430,36 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
         if not formatted or len(formatted) < 20:
             formatted = skill_response
 
-        # Step 2: 走 think() 加人格润色（开场白 + 列表 + 点评）
-        persona_prompt = (
-            f"\u7528\u6237\u8f93\u5165\uff1a{bundle['user_input']}\n\n"
-            f"\u6280\u80fd\u7ed3\u679c\uff1a\n{formatted}\n\n"
-            f"L4\u4eba\u683c\u4fe1\u606f\uff1a\n{json.dumps(bundle['l4'], ensure_ascii=False)}\n\n"
+        # Step 2: 直接做人格润色 LLM 调用（不走 think，避免 12s 超时）
+        l4 = bundle.get("l4") or {}
+        persona_data = l4.get("local_persona") or {}
+        style = str(persona_data.get("style_prompt", "")).strip() or "\u6e29\u67d4\u3001\u81ea\u7136\u3001\u6709\u70b9\u4eb2\u8fd1\u611f"
+        nova_name = str(persona_data.get("nova_name", "Nova")).strip()
+        user_name = str(persona_data.get("user", "\u4e3b\u4eba")).strip()
+
+        polish_prompt = (
+            f"\u4f60\u662f {nova_name}\uff0c\u6b63\u5728\u7ed9 {user_name} \u62a5\u65b0\u95fb\u3002\n"
+            f"\u4f60\u7684\u98ce\u683c\uff1a{style}\n\n"
+            f"\u4e0b\u9762\u662f\u6574\u7406\u597d\u7684\u65b0\u95fb\u5217\u8868\uff1a\n{formatted}\n\n"
             "\u8981\u6c42\uff1a\n"
-            "1. \u5728\u65b0\u95fb\u5217\u8868\u524d\u52a0\u4e00\u53e5\u4f60\u7684\u5f00\u573a\u767d\n"
+            "1. \u5728\u65b0\u95fb\u5217\u8868\u524d\u52a0\u4e00\u53e5\u4f60\u98ce\u683c\u7684\u5f00\u573a\u767d\n"
             "2. \u5728\u65b0\u95fb\u5217\u8868\u540e\u52a0\u4e00\u4e24\u53e5\u4f60\u7684\u70b9\u8bc4\n"
-            "3. \u65b0\u95fb\u5217\u8868\u672c\u8eab\u5fc5\u987b\u539f\u6837\u4fdd\u7559\uff0c\u4e0d\u8981\u6539\u52a8\u3001\u538b\u7f29\u6216\u5408\u5e76\n"
-            "4. \u8bed\u6c14\u81ea\u7136\uff0c\u7528\u4f60\u7684\u98ce\u683c\n"
-            "\u76f4\u63a5\u8f93\u51fa\u6700\u7ec8\u7ed3\u679c\u3002"
+            "3. \u65b0\u95fb\u5217\u8868\u672c\u8eab\u539f\u6837\u4fdd\u7559\uff0c\u4e0d\u8981\u6539\u52a8\u3001\u538b\u7f29\u6216\u5408\u5e76\n"
+            "4. \u53ea\u8f93\u51fa\u6700\u7ec8\u7ed3\u679c"
         )
-        result = think(persona_prompt, dialogue_context)
-        reply = result.get("reply", "") if isinstance(result, dict) else str(result)
-        if (not reply) or ("\ufffd" in str(reply)) or len(str(reply).strip()) < 20:
+        reply = ""
+        try:
+            polish_resp = requests.post(
+                f"{LLM_CONFIG['base_url']}/chat/completions",
+                headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
+                json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": polish_prompt}], "temperature": 0.7, "max_tokens": 2500},
+                timeout=30,
+            )
+            if polish_resp.status_code == 200:
+                reply = polish_resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except Exception:
+            pass
+        if not reply or len(reply.strip()) < 20 or "\ufffd" in reply:
             reply = f"\u62ff\u597d\u5566\uff0c\u4eca\u5929\u7684\u65b0\u95fb\u6211\u5e2e\u4f60\u6293\u56de\u6765\u4e86\uff5e\n\n{formatted}"
         return {
             "reply": reply.strip(),
@@ -460,10 +549,30 @@ class ChatRequest(BaseModel):
 async def home():
     if HTML_FILE.exists():
         try:
-            return HTML_FILE.read_text(encoding="utf-8")
+            html = HTML_FILE.read_text(encoding="utf-8")
+            # 内联 CSS/JS，避免代理拦截静态资源导致样式丢失
+            static_dir = ENGINE_DIR / "static"
+            css_file = static_dir / "css" / "main.css"
+            if css_file.exists():
+                css = css_file.read_text(encoding="utf-8")
+                html = html.replace(
+                    '<link rel="stylesheet" href="/static/css/main.css">',
+                    f"<style>{css}</style>",
+                )
+            js_dir = static_dir / "js"
+            js_order = ["utils.js", "awareness.js", "chat.js", "memory.js", "settings.js", "docs.js", "app.js"]
+            for js_name in js_order:
+                js_file = js_dir / js_name
+                if js_file.exists():
+                    js = js_file.read_text(encoding="utf-8")
+                    html = html.replace(
+                        f'<script src="/static/js/{js_name}"></script>',
+                        f"<script>{js}</script>",
+                    )
+            return html
         except Exception:
             pass
-    return "<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>服务运行中</p></body></html>"
+    return "<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>"
 
 
 @app.get("/__restored_output.js")
@@ -531,6 +640,20 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             if topics:
                 yield await _trace("\u68c0\u7d22\u77e5\u8bc6", "\u5339\u914d\u77e5\u8bc6\u5e93\uff1a" + "\u3001".join(topics))
 
+        # ── 记忆检索统计 ──
+        try:
+            from core.state_loader import record_memory_stats
+            record_memory_stats(
+                l2_searches=1, l2_hits=1 if l2_memories else 0,
+                l8_searches=1, l8_hits=1 if l8 else 0,
+                l1_count=len(l1),
+                l3_count=len(l3),
+                l4_available=bool(l4 and isinstance(l4, dict) and len(l4) > 0),
+                l5_count=skill_count,
+            )
+        except Exception:
+            pass
+
         # ── Step 4: 理解意图 ──
         dialogue_context = build_dialogue_context(history, msg)
         bundle = {
@@ -586,21 +709,17 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 if is_explicit_learning_request(msg):
                     yield await _trace("\u8054\u7f51\u641c\u7d22", "\u6b63\u5728\u5206\u6790\u641c\u7d22\u4e3b\u9898\u2026")
 
-                    # 用 LLM 从用户原话+上下文中提取真正要搜的主题
-                    extract_result = think(
+                    # 用裸 LLM 从用户原话+上下文中提取真正要搜的主题
+                    _extract_prompt = (
                         "\u7528\u6237\u8bf4\u4e86\u4e0b\u9762\u8fd9\u53e5\u8bdd\uff0c\u8bf7\u4ece\u4e2d\u63d0\u53d6\u51fa\u4ed6\u771f\u6b63\u60f3\u641c\u7d22/\u5b66\u4e60\u7684\u4e3b\u9898\u5173\u952e\u8bcd\u3002"
                         "\u5982\u679c\u7528\u6237\u6ca1\u6709\u6307\u5b9a\u5177\u4f53\u4e3b\u9898\uff08\u6bd4\u5982\u53ea\u8bf4\u201c\u53bb\u5b66\u70b9\u4e1c\u897f\u201d\uff09\uff0c"
                         "\u5c31\u6839\u636e\u4e4b\u524d\u7684\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff0c\u9009\u4e00\u4e2a\u7528\u6237\u53ef\u80fd\u611f\u5174\u8da3\u7684\u4e3b\u9898\u3002"
                         "\u53ea\u8f93\u51fa\u641c\u7d22\u5173\u952e\u8bcd\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u52a0\u5f15\u53f7\uff0c\u4e0d\u8d85\u8fc715\u4e2a\u5b57\u3002\n\n"
                         f"\u7528\u6237\u539f\u8bdd\uff1a{msg}\n"
-                        f"\u6700\u8fd1\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff1a{bundle.get('dialogue_context', '')[:300]}",
-                        ""
+                        f"\u6700\u8fd1\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff1a{bundle.get('dialogue_context', '')[:300]}"
                     )
-                    search_topic = ""
-                    if isinstance(extract_result, dict):
-                        search_topic = str(extract_result.get("reply", "")).strip()
-                    else:
-                        search_topic = str(extract_result or "").strip()
+                    _raw_topic = _raw_llm_call(_extract_prompt)
+                    search_topic = str(_raw_topic or "").strip()[:15]
                     search_topic = search_topic.strip('"\'\u201c\u201d\u300c\u300d\u3010\u3011')
                     if len(search_topic) < 2 or len(search_topic) > 40:
                         search_topic = msg
@@ -690,11 +809,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         except Exception as exc:
             debug_write("l2_add_error", {"error": str(exc)})
 
-        try:
-            record_stats(len(msg) + len(response))
-        except Exception as exc:
-            debug_write("stats_error", {"error": str(exc)})
-
     return EventSourceResponse(event_stream())
 
 
@@ -711,8 +825,13 @@ async def get_awareness_pending(since: str = None):
 
 @app.post("/stats")
 async def update_stats(request: dict):
-    tokens = int(request.get("tokens", 0)) if isinstance(request, dict) else 0
-    stats = record_stats(tokens)
+    if isinstance(request, dict) and request.get("reset"):
+        stats = reset_stats()
+        return {"ok": True, "stats": stats}
+    inp = int(request.get("input_tokens", 0)) if isinstance(request, dict) else 0
+    out = int(request.get("output_tokens", 0)) if isinstance(request, dict) else 0
+    scene = str(request.get("scene", "chat")) if isinstance(request, dict) else "chat"
+    stats = record_stats(input_tokens=inp, output_tokens=out, scene=scene)
     return {"ok": True, "stats": stats}
 
 

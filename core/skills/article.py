@@ -213,7 +213,11 @@ def _is_number_selection(query):
     match = re.match(r'^\s*(\d{1,2})\s*$', query.strip())
     if match:
         return int(match.group(1))
-    match = re.search(r'第\s*(\d{1,2})\s*[条个篇]', query)
+    match = re.search(r'\u7b2c\s*(\d{1,2})\s*[\u6761\u4e2a\u7bc7]', query)
+    if match:
+        return int(match.group(1))
+    # "帮我把1写成文章""把3号写一篇""1写成文章"
+    match = re.search(r'[\u628a\u5c06]?\s*(\d{1,2})\s*[\u53f7\u6761]?\s*[\u5199\u751f\u6210]', query)
     if match:
         return int(match.group(1))
     return None

@@ -10,11 +10,13 @@ _think = None
 _get_all_skills = lambda: {}
 _nova_core_ready = False
 _search_l2 = None  # L2 持久记忆检索
+_llm_call = None   # 裸 LLM 调用（不带人格，用于意图分类）
 
 
 def init(*, nova_route=None, debug_write=None, think=None,
-         get_all_skills=None, nova_core_ready=False, search_l2=None):
-    global _nova_route, _debug_write, _think, _get_all_skills, _nova_core_ready, _search_l2
+         get_all_skills=None, nova_core_ready=False, search_l2=None,
+         llm_call=None):
+    global _nova_route, _debug_write, _think, _get_all_skills, _nova_core_ready, _search_l2, _llm_call
     if nova_route:
         _nova_route = nova_route
     if debug_write:
@@ -26,6 +28,8 @@ def init(*, nova_route=None, debug_write=None, think=None,
     _nova_core_ready = nova_core_ready
     if search_l2:
         _search_l2 = search_l2
+    if llm_call:
+        _llm_call = llm_call
 
 
 # ── 路由 prompt ───────────────────────────────────────────
@@ -267,19 +271,24 @@ def llm_route_lite(bundle: dict, core_route: dict = None) -> dict:
             for item in last_items if isinstance(item, dict)
         )
 
-    # 可用技能列表
+    # 可用技能列表（含简要描述，帮 LLM 判断）
     skill_names = []
     try:
         for name, info in _get_all_skills().items():
             label = info.get("name", name)
-            skill_names.append(f"{name}({label})")
+            desc = info.get("description", "")
+            if desc:
+                skill_names.append(f"{name}({label}: {desc[:30]})")
+            else:
+                skill_names.append(f"{name}({label})")
     except Exception:
         pass
     skills_str = "\u3001".join(skill_names) if skill_names else "weather,story,news,article"
 
-    # 关键词路由的候选（如果有）
+    # 关键词路由的候选（只传中高置信度的，低置信度的别带偏 LLM）
     hint = ""
-    if core_route and core_route.get("skill") not in ("none", "", None):
+    core_conf = float((core_route or {}).get("confidence", 0) or 0) if core_route else 0
+    if core_route and core_route.get("skill") not in ("none", "", None) and core_conf >= 0.7:
         hint = (
             "\n\u5173\u952e\u8bcd\u8def\u7531\u5019\u9009\uff1a"
             + str(core_route.get("skill", ""))
@@ -301,8 +310,16 @@ def llm_route_lite(bundle: dict, core_route: dict = None) -> dict:
 
     _debug_write("llm_route_lite_prompt", {"prompt": prompt, "tokens_est": len(prompt)})
 
-    result = _think(prompt, "")
-    text = result.get("reply", "") if isinstance(result, dict) else str(result)
+    # 用裸 LLM 调用（不走 think 的人格层），fallback 到 think
+    text = ""
+    if _llm_call:
+        try:
+            text = _llm_call(prompt) or ""
+        except Exception:
+            pass
+    if not text and _think:
+        result = _think(prompt, "")
+        text = result.get("reply", "") if isinstance(result, dict) else str(result)
     try:
         start = text.find("{")
         end = text.rfind("}")
@@ -330,8 +347,15 @@ def llm_route_lite(bundle: dict, core_route: dict = None) -> dict:
 
 def llm_route(bundle: dict) -> dict:
     prompt = build_router_prompt(bundle)
-    result = _think(prompt, "")
-    text = result.get("reply", "") if isinstance(result, dict) else str(result)
+    text = ""
+    if _llm_call:
+        try:
+            text = _llm_call(prompt) or ""
+        except Exception:
+            pass
+    if not text and _think:
+        result = _think(prompt, "")
+        text = result.get("reply", "") if isinstance(result, dict) else str(result)
     try:
         start = text.find("{")
         end = text.rfind("}")
@@ -371,6 +395,19 @@ def resolve_route(bundle: dict) -> dict:
                 _debug_write("route_decision", {"action": "core_high_conf", "confidence": confidence})
                 return core_route
 
+            # 意图分类明确为非任务（discuss/inform）→ 直接走 chat，不让 LLM 翻盘
+            core_intent = core_route.get("intent", "")
+            if core_intent in ("discuss", "inform") and confidence >= 0.75:
+                _debug_write("route_decision", {"action": "intent_gate_chat", "intent": core_intent, "confidence": confidence})
+                return core_route
+
+            # chat 意图 + 无技能信号 → 也不让 LLM 翻盘（防止 LLM 被历史上下文带偏）
+            if core_intent == "chat" and not has_skill_target(core_route):
+                core_skill_score = float(core_route.get("skill_score", 0) or 0)
+                if core_skill_score <= 0:
+                    _debug_write("route_decision", {"action": "intent_gate_pure_chat", "confidence": confidence})
+                    return core_route
+
         except Exception as exc:
             _debug_write("core_route_error", {"error": str(exc)})
 
@@ -402,11 +439,19 @@ def resolve_route(bundle: dict) -> dict:
     except Exception as exc:
         _debug_write("llm_route_lite_error", {"error": str(exc)})
 
-    # ── 阶段 3：兜底 ──
-    # lite 失败了，如果关键词路由有结果就用它
+    # ── 阶段 3：兜底（保守回退）──
+    # lite 失败了，保守处理：只有高置信度关键词结果才保留，否则走 chat
     if core_route is not None:
-        _debug_write("route_decision", {"action": "fallback_core"})
-        return core_route
+        core_conf = float(core_route.get("confidence", 0) or 0)
+        if core_conf >= 0.85:
+            _debug_write("route_decision", {"action": "fallback_core_high_conf", "confidence": core_conf})
+            return core_route
+        # 低置信度 → 不确定时宁可不执行
+        _debug_write("route_decision", {"action": "fallback_conservative_chat", "core_conf": core_conf})
+        return normalize_route_result(
+            {"mode": "chat", "skill": "none", "reason": "llm_failed_conservative_fallback"},
+            user_input, "fallback"
+        )
 
     # 最后兜底：重量级 LLM 路由（完整 L1-L8 上下文）
     llm_candidate = llm_route(bundle)

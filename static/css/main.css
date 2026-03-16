@@ -610,13 +610,14 @@ body.light .msg.assistant .bubble {
   background: #ffffff;
   color: #1e293b;
   border: 1px solid rgba(148, 163, 184, 0.32);
+  box-shadow: none;
 }
 
 body.light .msg.user .bubble {
   background: rgba(238, 242, 255, 0.96);
   color: #1e293b;
   border: 1px solid rgba(99, 102, 241, 0.16);
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.16);
+  box-shadow: none;
 }
 
 body.light .thinking-panel .msg-name {
@@ -1090,3 +1091,310 @@ body.light .send-btn {
 body.light .send-btn:hover {
   background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
 }
+
+/* ===== 技能商店 ===== */
+.skill-store {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.skill-store-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e5eefb;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.skill-store-title svg {
+  width: 22px;
+  height: 22px;
+  stroke: #8b5cf6;
+  stroke-width: 1.8;
+  fill: none;
+}
+
+.skill-category {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.skill-category + .skill-category {
+  margin-top: 20px;
+}
+
+.skill-category-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.skill-category-header svg {
+  width: 18px;
+  height: 18px;
+  stroke: #94a3b8;
+  stroke-width: 1.8;
+  fill: none;
+}
+
+.skill-category-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.03em;
+}
+
+.skill-category-count {
+  display: none;
+}
+
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 12px;
+}
+
+.skill-card {
+  background: rgba(30,41,59,0.5);
+  border: 1px solid rgba(148,163,184,0.1);
+  border-radius: 14px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  cursor: default;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.skill-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(139,92,246,0) 0%, rgba(139,92,246,0) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: background 0.3s ease;
+  pointer-events: none;
+}
+
+.skill-card:hover {
+  background: rgba(30,41,59,0.75);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.skill-card:hover::before {
+  background: linear-gradient(135deg, rgba(139,92,246,0.4) 0%, rgba(99,102,241,0.2) 100%);
+}
+
+.skill-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(139,92,246,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skill-card-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: #a78bfa;
+  stroke-width: 1.6;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.skill-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.3;
+}
+
+.skill-card-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.skill-card-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #475569;
+  margin-top: auto;
+}
+
+.skill-card-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34,197,94,0.4);
+}
+
+.skill-card-status .dot.offline {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239,68,68,0.4);
+}
+
+/* 亮色主题 - 技能商店 */
+body.light .skill-store-title { color: #0f172a; }
+body.light .skill-category + .skill-category { }
+body.light .skill-category-header svg { stroke: #64748b; }
+body.light .skill-category-name { color: #64748b; }
+body.light .skill-category-count { color: #94a3b8; }
+
+body.light .skill-card {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(148,163,184,0.2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+body.light .skill-card:hover {
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.1);
+  border-color: rgba(99,102,241,0.2);
+}
+
+body.light .skill-card:hover::before {
+  background: linear-gradient(135deg, rgba(99,102,241,0.3) 0%, rgba(139,92,246,0.15) 100%);
+}
+
+body.light .skill-card-icon {
+  background: rgba(99,102,241,0.08);
+}
+
+body.light .skill-card-icon svg { stroke: #6366f1; }
+body.light .skill-card-name { color: #1e293b; }
+body.light .skill-card-desc { color: #64748b; }
+body.light .skill-card-status { color: #94a3b8; }
+
+/* ── 统计页面 ─────────────────────────────────────── */
+.stats-page { padding: 20px; }
+.stats-page .page-title { margin-bottom: 18px; }
+
+.stats-section { margin-bottom: 32px; }
+.stats-section-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: #94a3b8;
+  margin-bottom: 14px; letter-spacing: 0.5px;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.stats-card {
+  background: rgba(30,41,59,0.78);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 18px 14px;
+  text-align: center;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.stats-card:hover {
+  border-color: rgba(99,102,241,0.3);
+  transform: translateY(-2px);
+}
+.stats-label {
+  font-size: 12px; color: #94a3b8;
+  margin-bottom: 6px;
+}
+.stats-number {
+  font-size: 22px; font-weight: 700; color: #f8fafc;
+}
+.stats-number.model-name {
+  font-size: 15px; font-weight: 600;
+}
+
+/* 场景分布条形图 */
+.stats-bars { display: flex; flex-direction: column; gap: 10px; }
+.stats-bar-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.stats-bar-label {
+  width: 42px; font-size: 12px; color: #94a3b8; text-align: right; flex-shrink: 0;
+}
+.stats-bar-track {
+  flex: 1; height: 22px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px; overflow: hidden;
+}
+.stats-bar-fill {
+  height: 100%; border-radius: 6px;
+  transition: width 0.6s ease;
+}
+.stats-bar-fill.chat   { background: linear-gradient(90deg, #4f46e5, #6366f1); }
+.stats-bar-fill.route  { background: linear-gradient(90deg, #06b6d4, #67e8f9); }
+.stats-bar-fill.skill  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.stats-bar-fill.learn  { background: linear-gradient(90deg, #10b981, #34d399); }
+
+/* 缓存命中率高亮 */
+.stats-highlight { color: #10b981; }
+.stats-bar-pct {
+  width: 70px; font-size: 12px; color: #cbd5e1; text-align: left; flex-shrink: 0; white-space: nowrap;
+}
+
+/* 底部 */
+.stats-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 24px; padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.stats-footer-info { font-size: 12px; color: #64748b; }
+.stats-reset-btn {
+  font-size: 12px; color: #94a3b8; cursor: pointer;
+  background: none; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; padding: 6px 14px;
+  transition: border-color 0.2s, color 0.2s;
+}
+.stats-reset-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+/* 亮色主题 */
+body.light .stats-section-title { color: #64748b; }
+body.light .stats-card {
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.06);
+  backdrop-filter: none;
+}
+body.light .stats-card:hover { border-color: rgba(99,102,241,0.3); }
+body.light .stats-label { color: #64748b; }
+body.light .stats-number { color: #0f172a; }
+body.light .stats-bar-label { color: #64748b; }
+body.light .stats-bar-track { background: rgba(0,0,0,0.06); }
+body.light .stats-bar-fill.chat { background: linear-gradient(90deg, #4338ca, #4f46e5); }
+body.light .stats-bar-fill.route { background: linear-gradient(90deg, #0891b2, #06b6d4); }
+body.light .stats-bar-fill.skill { background: linear-gradient(90deg, #d97706, #f59e0b); }
+body.light .stats-bar-fill.learn { background: linear-gradient(90deg, #059669, #10b981); }
+body.light .stats-highlight { color: #059669; }
+body.light .stats-bar-pct { color: #475569; }
+body.light .stats-footer { border-top-color: rgba(0,0,0,0.06); }
+body.light .stats-footer-info { color: #94a3b8; }
+body.light .stats-reset-btn {
+  color: #64748b; border-color: rgba(0,0,0,0.1);
+}
+body.light .stats-reset-btn:hover { border-color: #ef4444; color: #ef4444; }

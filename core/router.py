@@ -22,8 +22,29 @@ EMOTION_WORDS = [
 ]
 
 TASK_WORDS = [
-    '查', '做', '生成', '画', '写', '打开', '搜索', '搜', '讲', '看', '帮我', '给我', '来个', '想听', '想看', '想要', '再来一个', '换一个', '长一点', '继续讲'
+    '查', '生成', '画', '打开', '搜索', '搜', '帮我', '给我',
+    '再来一个', '换一个', '长一点', '继续讲',
 ]
+# 弱任务词：单独出现不加分，需要搭配技能关键词才有效
+WEAK_TASK_WORDS = ['做', '写', '讲', '看', '来个', '想听', '想看', '想要']
+
+# 请求结构词：表达"请你帮我做某事"的句式
+REQUEST_STRUCTURE = ['帮我', '给我', '请你', '帮忙', '一下', '能不能帮', '可以帮']
+
+# 自述模式：用户在陈述自身信息，不是下达任务
+INFORM_PATTERNS = ['我在', '我叫', '我是', '我住', '人在', '定居']
+
+# 讨论弱化词（扩展版）：命中时压制技能触发
+DISCUSS_WORDS = [
+    '或者', '都可以', '都行', '也行', '也可以',
+    '好不好', '你觉得', '你说呢', '要不要',
+    '还是说', '比如说', '比如', '什么的',
+    # 新增：假设/探询/讨论句式
+    '是不是', '我觉得', '如果', '假如', '万一',
+]
+
+# 探询词：单独出现是讨论，但搭配任务词时是请求
+INQUIRY_WORDS = ['有没有', '能不能', '可不可以', '怎么样']
 
 STOCK_HINT_WORDS = [
     '股票', '股价', '行情', '报价', '大盘', '指数', '纳指', '标普', '道指', '沪指', '深成指', '创业板', '上证', '美股', 'a股'
@@ -54,6 +75,129 @@ def detect_relationship_mode(text: str) -> str:
     return 'assistant'
 
 
+def _is_suggestion_or_discussion(text: str) -> bool:
+    """检测用户是在建议/讨论，而不是下达指令"""
+    return any(p in text for p in DISCUSS_WORDS)
+
+
+def _has_task_signal(text: str) -> bool:
+    """检测是否有任务信号（动作词或请求结构）"""
+    has_action = any(w in text for w in TASK_WORDS)
+    has_request = any(w in text for w in REQUEST_STRUCTURE)
+    return has_action or has_request
+
+
+def classify_intent(text: str, scores: dict) -> str:
+    """
+    意图分层分类，在技能匹配之前先判断用户意图。
+    返回: 'task' | 'discuss' | 'inform' | 'chat'
+    只有 task 才允许进入技能匹配。
+    """
+    text = (text or '').strip()
+    if not text:
+        return 'chat'
+
+    has_task = _has_task_signal(text)
+    has_skill_kw = scores.get('matched_skill') is not None
+
+    # ── discuss：讨论/建议/假设句式 ──
+    # 但如果同时有明确任务词 + 技能关键词，说明是请求（如"能不能帮我查天气"）
+    is_discuss = any(p in text for p in DISCUSS_WORDS)
+    is_inquiry = any(p in text for p in INQUIRY_WORDS)
+
+    # 强假设词（如果/假如/万一）：即使有任务词也走 discuss
+    # "如果要画海报的话" 是假设，不是请求
+    STRONG_HYPOTHETICAL = ('如果', '假如', '万一')
+    is_hypothetical = any(p in text for p in STRONG_HYPOTHETICAL)
+
+    if is_hypothetical:
+        return 'discuss'
+    if is_discuss and not (has_task and has_skill_kw):
+        return 'discuss'
+    if is_inquiry and not has_task and not has_skill_kw:
+        return 'discuss'
+
+    # ── inform：自述模式（我在X/我叫X）且无任务词 ──
+    is_inform = any(p in text for p in INFORM_PATTERNS)
+    if is_inform and not has_task:
+        return 'inform'
+
+    # ── task：组合证据门槛 ──
+    # 至少满足 2 项：A.动作词 B.请求结构 C.技能关键词命中
+    evidence = 0
+    if any(w in text for w in TASK_WORDS):
+        evidence += 1
+    if any(w in text for w in REQUEST_STRUCTURE):
+        evidence += 1
+    if has_skill_kw:
+        evidence += 1
+    # 弱任务词 + 技能关键词也算 task
+    has_weak = any(w in text for w in WEAK_TASK_WORDS)
+    if has_weak and has_skill_kw:
+        evidence = max(evidence, 2)
+    # 多个技能关键词命中（skill_score >= 2.0）= 强技能信号，直接算 task
+    # 例如"常州天气怎么样"命中了常州+天气两个关键词
+    if scores.get('skill_score', 0) >= 2.0 and has_skill_kw:
+        evidence = max(evidence, 2)
+
+    if evidence >= 2:
+        return 'task'
+
+    # ── chat：默认 ──
+    return 'chat'
+
+
+# ── 复合句拆解 ──────────────────────────────────────────────
+
+_CLAUSE_SPLITTERS = re.compile(
+    r'[，,。！？；\n]|'
+    r'(?<=.)(?:然后|接着|顺便|另外|还有)(?=.)'
+)
+
+
+def split_clauses(text: str) -> list[str]:
+    """复合句拆成子句列表，单句原样返回 [text]"""
+    parts = _CLAUSE_SPLITTERS.split(text)
+    clauses = [p.strip() for p in parts if p.strip()]
+    return clauses if clauses else [text]
+
+
+def analyze_compound(text: str, skills: dict):
+    """
+    复合句分析：拆句 → 逐句分类 → 选出最强 task 子句。
+    单句返回 None（信号：走原有路径）。
+    """
+    clauses = split_clauses(text)
+    if len(clauses) <= 1:
+        return None
+
+    results = []
+    for c in clauses:
+        sc = _score_text(c, skills)
+        intent = classify_intent(c, sc)
+        results.append({'clause': c, 'intent': intent, 'scores': sc})
+
+    # 找最强 task 子句（skill_score 最高）
+    task_results = [r for r in results if r['intent'] == 'task']
+    if task_results:
+        best = max(task_results, key=lambda r: r['scores'].get('skill_score', 0))
+        return {
+            'intent': 'task',
+            'action_clause': best['clause'],
+            'scores': best['scores'],
+            'clauses': results,
+        }
+
+    # 无 task → 取最后一个子句的意图
+    last = results[-1]
+    return {
+        'intent': last['intent'],
+        'action_clause': last['clause'],
+        'scores': last['scores'],
+        'clauses': results,
+    }
+
+
 def _score_text(text: str, skills: dict):
     text = (text or '').strip()
     chat_score = 0.0
@@ -62,6 +206,8 @@ def _score_text(text: str, skills: dict):
     matched_skill = None
     matched_keyword = None
     matched_keyword_len = 0
+
+    is_suggestion = _is_suggestion_or_discussion(text)
 
     for w in CHAT_WORDS:
         if w in text:
@@ -72,19 +218,51 @@ def _score_text(text: str, skills: dict):
             emotion_score += 1.0
             chat_score += 0.25
 
+    # 建议/讨论句式 → 额外 boost chat
+    if is_suggestion:
+        chat_score += 1.5
+
     for w in TASK_WORDS:
         if w in text:
             skill_score += 1.0
 
+    # 弱任务词：只有已经命中了技能关键词时才加分（后面补加）
+    has_weak_task = any(w in text for w in WEAK_TASK_WORDS)
+
+    WEATHER_ACTION_WORDS = ('天气', '气温', '温度', '下雨', '晴天', '多少度', '冷不冷', '热不热', '穿什么')
+
     for skill_name, info in skills.items():
         keywords = info.get('keywords', []) or info.get('trigger', [])
+        anti_keywords = info.get('anti_keywords', []) or []
+
+        # 反例库检查：命中反例则整个技能跳过
+        if anti_keywords and any(ak in text for ak in anti_keywords):
+            continue
+
         for kw in keywords:
             if kw and kw in text:
-                skill_score += 2.0
+                # 天气技能特殊处理：纯城市名不触发，必须搭配天气动作词
+                if skill_name == 'weather' and kw not in WEATHER_ACTION_WORDS:
+                    if not any(aw in text for aw in WEATHER_ACTION_WORDS):
+                        continue  # "我在常州" 不触发天气
+
+                # 短关键词（<3字）降权：可能是泛指而非真正的技能请求
+                if len(kw) < 3:
+                    skill_score += 1.0
+                else:
+                    skill_score += 2.0
                 if matched_skill is None:
                     matched_skill = skill_name
                     matched_keyword = kw
                     matched_keyword_len = len(kw)
+
+    # 弱任务词只在有技能关键词命中时才生效
+    if has_weak_task and matched_skill:
+        skill_score += 0.5
+
+    # 建议/讨论句式压制技能分
+    if is_suggestion and skill_score > 0:
+        skill_score *= 0.5
 
     return {
         'chat_score': chat_score,
@@ -212,7 +390,14 @@ def _looks_like_article_selection(text: str) -> bool:
     raw = (text or '').strip()
     if not raw:
         return False
-    if not (re.match(r'^\d{1,2}$', raw) or re.search(r'第\s*\d{1,2}\s*[条个篇]', raw)):
+    # 纯数字："3"
+    # 第N条："第3条"
+    # 带文章意图："帮我把1写成文章""把第3条写成文章""1号写一篇"
+    has_number = bool(re.search(r'\d{1,2}', raw))
+    is_pure_number = bool(re.match(r'^\d{1,2}$', raw))
+    has_nth = bool(re.search(r'\u7b2c\s*\d{1,2}\s*[\u6761\u4e2a\u7bc7\u53f7]?', raw))
+    has_article_intent = any(w in raw for w in ('\u5199\u6210\u6587\u7ae0', '\u5199\u7bc7\u6587\u7ae0', '\u5199\u6587\u7ae0', '\u5199\u4e00\u7bc7', '\u751f\u6210\u6587\u7ae0'))
+    if not ((is_pure_number or has_nth) or (has_number and has_article_intent)):
         return False
     try:
         with open(_article_state_path, 'r', encoding='utf-8') as f:
@@ -372,6 +557,34 @@ def route(text: str) -> dict:
             'emotion_score': scores['emotion_score'],
         }
 
+    # ── 意图分层门控 ──
+    # 复合句：拆句后逐句分类，取最强 task 子句
+    compound = analyze_compound(text, skills)
+    if compound is not None:
+        intent = compound['intent']
+        scores = compound['scores']  # 用 action_clause 的 scores
+    else:
+        # 单句：走现有逻辑
+        intent = classify_intent(text, scores)
+
+    if intent in ('discuss', 'inform', 'chat'):
+        # 非任务意图 → 直接走 chat，不进技能匹配
+        conf = 0.85 if intent == 'discuss' else (0.75 if intent == 'inform' else 0.6)
+        return {
+            'mode': 'chat',
+            'skill': None,
+            'confidence': conf,
+            'reason': f'意图分类: {intent}，不进技能匹配',
+            'intent': intent,
+            'params': {},
+            'role': role,
+            'chat_score': max(scores['chat_score'], 0.5),
+            'skill_score': scores['skill_score'],
+            'emotion_score': scores['emotion_score'],
+        }
+
+    # ── intent == 'task'：走技能匹配逻辑 ──
+
     # 技能候选层：根据关键词具体程度分级置信度
     # 长关键词（>=3字）+ 有任务词 = 高置信度，直接走
     # 短关键词或无任务词 = 低置信度，交给 LLM 裁决
@@ -415,13 +628,27 @@ def route(text: str) -> dict:
             'emotion_score': scores['emotion_score'],
         }
 
-    # 没有显式技能关键词，但存在明显任务意图时，先不掉进纯聊天
-    if scores['skill_score'] > 0:
+    # 没有显式技能关键词，但存在弱任务意图时，低置信度交给 LLM
+    if scores['skill_score'] > 0 and scores['matched_skill']:
         return {
             'mode': 'hybrid',
             'skill': scores['matched_skill'],
-            'confidence': 0.65,
-            'reason': '存在任务意图，进入技能候选/混合路由',
+            'confidence': 0.45,
+            'reason': '弱技能信号，需 LLM 确认',
+            'params': {},
+            'role': role,
+            'chat_score': scores['chat_score'],
+            'skill_score': scores['skill_score'],
+            'emotion_score': scores['emotion_score'],
+        }
+
+    # 有任务词但没命中任何技能关键词 → 纯聊天
+    if scores['skill_score'] > 0 and not scores['matched_skill']:
+        return {
+            'mode': 'chat',
+            'skill': None,
+            'confidence': 0.7,
+            'reason': '有任务词但无技能匹配，走聊天',
             'params': {},
             'role': role,
             'chat_score': scores['chat_score'],

@@ -53,6 +53,38 @@ def understand_intent(user_input: str) -> dict:
         return {"intent": "聊天", "action": "对话", "target": "", "need_tool": False}
 
 
+def _raw_llm(prompt: str, temperature=0.1, max_tokens=150, timeout=10) -> str:
+    """裸 LLM 调用：不带人格，用于分类/提取等工具性任务"""
+    try:
+        resp = requests.post(
+            f"{LLM_CONFIG['base_url']}/chat/completions",
+            headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
+            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": prompt}],
+                  "temperature": temperature, "max_tokens": max_tokens},
+            timeout=timeout,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # 记录真实 token 消耗
+            usage = data.get("usage", {})
+            if usage:
+                try:
+                    from core.state_loader import record_stats
+                    record_stats(
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        scene="route",
+                        cache_write=usage.get("prompt_cache_miss_tokens", 0),
+                        cache_read=usage.get("prompt_cache_hit_tokens", 0),
+                    )
+                except Exception:
+                    pass
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception:
+        pass
+    return ""
+
+
 def _load_persona() -> dict:
     """从 memory_db/persona.json 读取人格配置，支持多模式切换"""
     base = {
@@ -250,7 +282,7 @@ def _local_persona_reply(mode: str, prompt: str, persona: dict, context: str = '
         return f"我在呢，{user_name}。你慢慢说，先把委屈往我这儿倒一点也没事。"
     if '谢谢' in prompt:
         return f"你跟我客气什么呀，能帮上你我就已经偷偷开心啦。"
-    return f"好嘛，我接住了。你继续往下说，我陪你一起捋。"
+    return f"呜，刚才脑子卡了一下没接住……{user_name}你再说一次嘛，这次我认真听！"
 
 
 def think(prompt: str, context: str = "") -> dict:
@@ -295,29 +327,55 @@ def think(prompt: str, context: str = "") -> dict:
             + chat_guide
         )
 
-    try:
-        resp = requests.post(
-            f"{LLM_CONFIG['base_url']}/chat/completions",
-            headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
-            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.7},
-            timeout=12
-        )
-        if resp.status_code != 200:
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{LLM_CONFIG['base_url']}/chat/completions",
+                headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
+                json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.7},
+                timeout=25
+            )
+            if resp.status_code != 200:
+                print(f"[think] LLM status {resp.status_code}: {resp.text[:200]}")
+                if attempt == 0:
+                    continue  # 重试一次
+                return {"thinking": "", "reply": local_reply}
+
+            raw_json = resp.content.decode('utf-8', errors='strict')
+            resp_data = json.loads(raw_json)
+            if "choices" not in resp_data:
+                print(f"[think] no choices in resp: {raw_json[:200]}")
+                return {"thinking": "", "reply": local_reply}
+
+            # 记录真实 token 消耗
+            usage = resp_data.get("usage", {})
+            if usage:
+                try:
+                    from core.state_loader import record_stats
+                    record_stats(
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        scene="skill" if mode in ("skill", "hybrid") else "chat",
+                        cache_write=usage.get("prompt_cache_miss_tokens", 0),
+                        cache_read=usage.get("prompt_cache_hit_tokens", 0),
+                    )
+                except Exception:
+                    pass
+
+            raw = resp_data["choices"][0]["message"]["content"]
+            cleaned = _clean_llm_reply(raw)
+            if _looks_bad_reply(cleaned):
+                print(f"[think] bad reply filtered: {repr(cleaned[:100])}")
+                return {"thinking": "", "reply": local_reply}
+
+            return {"thinking": "", "reply": cleaned}
+        except Exception as e:
+            print(f"[think] attempt {attempt + 1} exception: {e}")
+            if attempt == 0:
+                continue  # 重试一次
             return {"thinking": "", "reply": local_reply}
 
-        raw_json = resp.content.decode('utf-8', errors='strict')
-        resp_data = json.loads(raw_json)
-        if "choices" not in resp_data:
-            return {"thinking": "", "reply": local_reply}
-
-        raw = resp_data["choices"][0]["message"]["content"]
-        cleaned = _clean_llm_reply(raw)
-        if _looks_bad_reply(cleaned):
-            return {"thinking": "", "reply": local_reply}
-
-        return {"thinking": "", "reply": cleaned}
-    except Exception:
-        return {"thinking": "", "reply": local_reply}
+    return {"thinking": "", "reply": local_reply}
 
 
 def _detect_mode_switch(user_input: str) -> str:
@@ -397,8 +455,7 @@ def _detect_mode_switch(user_input: str) -> str:
         "\u53ea\u8fd4\u56deJSON\u3002"
     )
     try:
-        result = think(llm_prompt, '')
-        reply_text = result.get('reply', '') if isinstance(result, dict) else str(result)
+        reply_text = _raw_llm(llm_prompt, temperature=0.1, max_tokens=80)
         start = reply_text.find('{')
         end = reply_text.rfind('}')
         if start != -1 and end > start:

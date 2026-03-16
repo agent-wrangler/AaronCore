@@ -273,24 +273,98 @@ def load_stats_data():
         "output_tokens": 0,
         "total_tokens": 0,
         "total_requests": 0,
-        "cache_hit": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "model": load_current_model(),
         "last_used": "",
+        "by_scene": {},
     }
     saved = load_json_store(PRIMARY_STATS_FILE, LEGACY_STATS_FILE, {})
     if isinstance(saved, dict):
         stats.update(saved)
     stats["model"] = load_current_model()
+    # 兼容旧格式：补 by_scene
+    if "by_scene" not in stats:
+        stats["by_scene"] = {}
     return stats
 
 
-def record_stats(tokens: int):
-    safe_tokens = max(int(tokens), 0)
+def record_stats(input_tokens: int = 0, output_tokens: int = 0, scene: str = "chat",
+                 cache_write: int = 0, cache_read: int = 0):
+    """记录真实 token 消耗，按场景分类，含缓存统计"""
+    inp = max(int(input_tokens), 0)
+    out = max(int(output_tokens), 0)
+    cw = max(int(cache_write), 0)
+    cr = max(int(cache_read), 0)
+    total = inp + out
     stats = load_stats_data()
-    stats["total_tokens"] = stats.get("total_tokens", 0) + safe_tokens
+    stats["input_tokens"] = stats.get("input_tokens", 0) + inp
+    stats["output_tokens"] = stats.get("output_tokens", 0) + out
+    stats["total_tokens"] = stats.get("total_tokens", 0) + total
     stats["total_requests"] = stats.get("total_requests", 0) + 1
-    stats["input_tokens"] = stats.get("input_tokens", 0) + max(safe_tokens // 2, 0)
-    stats["output_tokens"] = stats.get("output_tokens", 0) + max(safe_tokens - (safe_tokens // 2), 0)
+    stats["cache_write_tokens"] = stats.get("cache_write_tokens", 0) + cw
+    stats["cache_read_tokens"] = stats.get("cache_read_tokens", 0) + cr
     stats["last_used"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # 按场景累计
+    by_scene = stats.setdefault("by_scene", {})
+    sc = by_scene.setdefault(scene, {"requests": 0, "tokens": 0})
+    sc["requests"] = sc.get("requests", 0) + 1
+    sc["tokens"] = sc.get("tokens", 0) + total
+    write_json(PRIMARY_STATS_FILE, stats)
+    return stats
+
+
+def record_memory_stats(l2_searches: int = 0, l2_hits: int = 0,
+                        l8_searches: int = 0, l8_hits: int = 0,
+                        l1_count: int = 0, l3_count: int = 0,
+                        l4_available: bool = False, l5_count: int = 0):
+    """记录本地记忆指标（全量层可用性 + 检索层命中率）"""
+    stats = load_stats_data()
+    mem = stats.get("memory")
+    if not isinstance(mem, dict):
+        mem = {
+            "l2_searches": 0, "l2_hits": 0,
+            "l8_searches": 0, "l8_hits": 0,
+            "total_queries": 0,
+            "full_layer_available": 0,
+            "l1_count": 0, "l3_count": 0, "l4_available": 0, "l5_count": 0,
+        }
+    mem["l2_searches"] = mem.get("l2_searches", 0) + max(int(l2_searches), 0)
+    mem["l2_hits"] = mem.get("l2_hits", 0) + max(int(l2_hits), 0)
+    mem["l8_searches"] = mem.get("l8_searches", 0) + max(int(l8_searches), 0)
+    mem["l8_hits"] = mem.get("l8_hits", 0) + max(int(l8_hits), 0)
+    mem["total_queries"] = mem.get("total_queries", 0) + 1
+    # 全量层可用性：L1/L3/L4/L5 有数据的层数（满分 4）
+    layers_up = (1 if l1_count > 0 else 0) + (1 if l3_count > 0 else 0) + \
+                (1 if l4_available else 0) + (1 if l5_count > 0 else 0)
+    mem["full_layer_available"] = mem.get("full_layer_available", 0) + layers_up
+    # 最新一次的数据量快照
+    mem["l1_count"] = l1_count
+    mem["l3_count"] = l3_count
+    mem["l4_available"] = 1 if l4_available else 0
+    mem["l5_count"] = l5_count
+    stats["memory"] = mem
+    write_json(PRIMARY_STATS_FILE, stats)
+
+
+def reset_stats():
+    """清零所有统计"""
+    stats = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "total_requests": 0,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
+        "model": load_current_model(),
+        "last_used": "",
+        "by_scene": {},
+        "memory": {
+            "l2_searches": 0, "l2_hits": 0,
+            "l8_searches": 0, "l8_hits": 0,
+            "total_queries": 0, "full_layer_available": 0,
+            "l1_count": 0, "l3_count": 0, "l4_available": 0, "l5_count": 0,
+        },
+    }
     write_json(PRIMARY_STATS_FILE, stats)
     return stats

@@ -23,11 +23,13 @@ L8_FILE = PRIMARY_STATE_DIR / "knowledge_base.json"
 # ── 依赖注入 ──
 _debug_write = lambda stage, data: None
 _think = None
+_llm_call = None  # 裸 LLM 调用（不带人格）
 
-def init(*, debug_write=None, think=None):
-    global _debug_write, _think
+def init(*, debug_write=None, think=None, llm_call=None):
+    global _debug_write, _think, _llm_call
     if debug_write: _debug_write = debug_write
     if think: _think = think
+    if llm_call: _llm_call = llm_call
 
 # ── 重要性关键词 ──
 _HIGH = ['我叫','我在','我住','喜欢','想要','目标','决定','讨厌','记住','偏好','绝对','必须']
@@ -53,8 +55,19 @@ def _detect_type(text: str) -> str:
     if any(k in t for k in ['不对','错了','不好','太短','太长','不是这个','说错']): return 'correction'
     # 技能需求（"帮我做/能不能/怎么用" + 不存在的能力）→ L5
     if any(k in t for k in ['帮我做','能不能','你会不会','有没有功能','可以帮我']): return 'skill_demand'
-    # 知识类（"什么是/为什么/怎么回事/是什么意思/谁是"）→ L8
-    if any(k in t for k in ['什么是','是什么','为什么','怎么回事','是谁','意思是','原理']): return 'knowledge'
+    # 知识类 → L8（严格匹配，防止"有意思""是什么模式"等误判）
+    _knowledge_phrases = ['什么是','为什么','怎么回事','是谁','什么意思','意思是什么','什么原理','原理是']
+    # "是什么"需要后面跟实体词，排除"你是什么""现在是什么"等问Nova自身状态的句子
+    is_knowledge = any(k in t for k in _knowledge_phrases)
+    if not is_knowledge and '是什么' in t:
+        # "X是什么" 前面不能是 你/我/它/这/那/现在 等代词
+        idx = t.index('是什么')
+        if idx > 0:
+            prev = t[idx-1]
+            if prev not in '你我它他她这那现在的了':
+                is_knowledge = True
+    if is_knowledge and len(t) >= 4:
+        return 'knowledge'
     if any(k in t for k in ['喜欢','偏好','讨厌']): return 'preference'
     if any(k in t for k in ['想要','目标','计划']): return 'goal'
     if any(k in t for k in ['项目','在做','开发','产品']): return 'project'
@@ -189,7 +202,32 @@ def _bump_hits(ids):
         if changed: _save(store)
     except: pass
 
-# ── 自动结晶（L2 中枢分发）──
+# ── 知识问答二次验证 ──
+_CASUAL_PATTERNS = [
+    '有意思', '没意思', '挺有', '真有', '好有', '太有',
+    '不错', '还行', '可以', '厉害', '牛', '哈哈', '嗯嗯',
+    '好的', '知道了', '明白', '懂了', '谢谢', '感谢',
+    '你现在', '你怎么', '你是不是', '你会不会',
+]
+
+def _is_real_knowledge_query(text: str) -> bool:
+    """二次验证：确认用户输入确实是在问知识，而非闲聊/感叹/评价"""
+    t = text.strip()
+    # 太短的不是知识问答
+    if len(t) < 6:
+        return False
+    # 命中闲聊模式 → 不是知识
+    if any(p in t for p in _CASUAL_PATTERNS):
+        return False
+    # 必须包含至少一个疑问信号
+    question_signals = ['?', '\uff1f', '\u4ec0\u4e48', '\u4e3a\u4ec0\u4e48', '\u4e3a\u5565',
+                        '\u600e\u4e48', '\u5982\u4f55', '\u54ea\u91cc', '\u54ea\u4e2a',
+                        '\u662f\u8c01', '\u539f\u7406', '\u533a\u522b']
+    if not any(s in t for s in question_signals):
+        return False
+    return True
+
+
 def _try_crystallize(entry):
     imp = entry.get("importance",0)
     mtype = entry.get("memory_type","general")
@@ -204,9 +242,10 @@ def _try_crystallize(entry):
     if mtype == "skill_demand":
         _to_l5(text)
 
-    # L8: 知识类 — 不要求高分，用户问了知识问题且Nova回答了就存
+    # L8: 知识类 — 需要二次验证确实是知识问答，防止闲聊污染
     if mtype == "knowledge" and len(ai_text) > 20:
-        _to_l8(text, ai_text)
+        if _is_real_knowledge_query(text):
+            _to_l8(text, ai_text)
 
     # 城市提取 — 不受分数限制，用户提到"我在X"就更新L4
     _try_update_city(text)
@@ -428,17 +467,25 @@ def _auto_summary(cfg, store):
     _debug_write("l2_summary", {"rounds":f"{last+1}-{total}"})
 
 def _gen_summary(mems, start, end):
+    # 优先用裸 LLM，fallback 到 think
+    dialog = ""
+    for m in mems[-SUMMARY_INTERVAL:]:
+        dialog += f"\u7528\u6237: {m.get('user_text','')}\nNova: {m.get('ai_text','')[:100]}\n\n"
+    prompt = (
+        f"\u4ee5\u4e0b\u662f\u7b2c{start}\u8f6e\u5230\u7b2c{end}\u8f6e\u7684\u5bf9\u8bdd\u8bb0\u5f55\uff0c"
+        "\u8bf7\u75281-2\u53e5\u8bdd\u63d0\u70bc\u8981\u70b9\uff08\u5173\u6ce8\u7528\u6237\u63d0\u5230\u7684\u4e8b\u5b9e\u3001\u504f\u597d\u3001\u91cd\u8981\u4e8b\u4ef6\uff09\uff0c"
+        "\u4e0d\u8981\u5217\u6e05\u5355\uff0c\u7528\u81ea\u7136\u7684\u53d9\u8ff0\u8bed\u6c14\uff1a\n\n"
+        + dialog[:2000]
+    )
+    if _llm_call:
+        try:
+            txt = (_llm_call(prompt) or "").strip()
+            if len(txt) > 5:
+                return txt
+        except Exception:
+            pass
     if _think:
         try:
-            dialog = ""
-            for m in mems[-SUMMARY_INTERVAL:]:
-                dialog += f"\u7528\u6237: {m.get('user_text','')}\nNova: {m.get('ai_text','')[:100]}\n\n"
-            prompt = (
-                f"\u4ee5\u4e0b\u662f\u7b2c{start}\u8f6e\u5230\u7b2c{end}\u8f6e\u7684\u5bf9\u8bdd\u8bb0\u5f55\uff0c"
-                "\u8bf7\u75281-2\u53e5\u8bdd\u63d0\u70bc\u8981\u70b9\uff08\u5173\u6ce8\u7528\u6237\u63d0\u5230\u7684\u4e8b\u5b9e\u3001\u504f\u597d\u3001\u91cd\u8981\u4e8b\u4ef6\uff09\uff0c"
-                "\u4e0d\u8981\u5217\u6e05\u5355\uff0c\u7528\u81ea\u7136\u7684\u53d9\u8ff0\u8bed\u6c14\uff1a\n\n"
-                + dialog[:2000]
-            )
             result = _think(prompt, "")
             if isinstance(result, dict):
                 txt = str(result.get("reply","")).strip()
@@ -446,8 +493,9 @@ def _gen_summary(mems, start, end):
                 txt = str(result or "").strip()
             if len(txt) > 5:
                 return txt
-        except: pass
-    # fallback
+        except Exception:
+            pass
+    # fallback: 关键词提取
     kps = []
     imp_kw = ['\u9879\u76ee','\u76ee\u6807','\u559c\u6b22','\u51b3\u5b9a','\u6b63\u5728','\u5f00\u53d1','\u60f3\u505a','AI','\u521b\u4e1a','\u8bb0\u4f4f']
     for m in mems:

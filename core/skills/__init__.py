@@ -43,6 +43,7 @@ def load_skills():
                     _skill_registry[skill_name] = {
                         'name': meta.get('name', skill_name),
                         'keywords': meta.get('keywords', []),
+                        'anti_keywords': meta.get('anti_keywords', []),
                         'description': meta.get('description', ''),
                         'priority': meta.get('priority', 10),
                         'category': meta.get('category', '通用'),

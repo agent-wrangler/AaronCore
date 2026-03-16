@@ -15,7 +15,9 @@
     "最新消息",
     "世界大事"
   ],
+  "anti_keywords": ["新闻行业", "新闻学", "新闻专业", "新闻系统", "做个新闻", "写个新闻"],
   "description": "抓取 Google News 热门新闻",
   "priority": 5,
-  "category": "信息"
+  "category": "信息查询",
+  "icon": "📰"
 }

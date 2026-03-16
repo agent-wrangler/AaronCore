@@ -160,70 +160,161 @@ function show(n){
 
  if(n==2){
   setInputVisible(false);
-  chat.innerHTML='<div style="padding:20px;"><h2 class="page-title" style="margin-bottom:15px;">⚡ 技能矩阵</h2><div id="skillsList">加载中...</div></div>';
+  chat.innerHTML='<div class="skill-store"><div class="skill-store-title"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3l1.8 4.6L18.5 9 14 10.7 12 15l-2-4.3L5.5 9l4.7-1.4z" stroke="currentColor" fill="none"/><path d="M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z" stroke="currentColor" fill="none"/></svg>\u6280\u80fd\u4e2d\u5fc3</div><div id="skillsList">\u52a0\u8f7d\u4e2d...</div></div>';
   fetch('/skills').then(r=>r.json()).then(function(d){
-   var cardBg=isLight?'#f9fafb':'rgba(30,30,40,0.8)';
-   var textColor=isLight?'#1a1a1a':'#e2e8f0';
-   var subColor=isLight?'#6b7280':'#94a3b8';
-   var headerBg=isLight?'#f3f4f6':'#1e293b';
-   var borderColor=isLight?'#e5e7eb':'#334155';
-   var categories={ '信息查询':[], '内容创作':[], '生活娱乐':[], '个人助手':[] };
+   // SVG 图标映射（线条风格，带 inline 尺寸防止 CSS 未加载时撑满）
+   var icons={
+    '\u5929\u6c14':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/></svg>',
+    '\u80a1\u7968':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+    '\u65b0\u95fb':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><line x1="6" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="14" y2="12"/><line x1="6" y1="16" x2="10" y2="16"/></svg>',
+    '\u6587\u7ae0':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+    '\u6545\u4e8b':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
+    '\u753b\u56fe':'<svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+    '\u4ee3\u7801':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    '\u7f16\u7a0b':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
+   };
+   // 分类图标
+   var catIcons={
+    '\u4fe1\u606f\u67e5\u8be2':'<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    '\u5185\u5bb9\u521b\u4f5c':'<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
+    '\u5f00\u53d1\u5de5\u5177':'<svg viewBox="0 0 24 24" width="18" height="18"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>'
+   };
+   // 按 category 分组
+   var catOrder=['\u4fe1\u606f\u67e5\u8be2','\u5185\u5bb9\u521b\u4f5c','\u5f00\u53d1\u5de5\u5177'];
+   var groups={};
+   catOrder.forEach(function(c){groups[c]=[];});
    if(d.skills){
     d.skills.forEach(function(s){
-     var name=s.name||'';
-     var cat='个人助手';
-     if(name.includes('天气')||name.includes('气温')||name.includes('温度')||name.includes('股票')||name.includes('查询')) cat='信息查询';
-     else if(name.includes('画')||name.includes('图片')||name.includes('海报')||name.includes('图')) cat='内容创作';
-     else if(name.includes('故事')||name.includes('写作')||name.includes('文案')) cat='内容创作';
-     else if(name.includes('视频')||name.includes('娱乐')) cat='生活娱乐';
-     categories[cat].push(s);
+     var cat=s.category||'\u5f00\u53d1\u5de5\u5177';
+     if(!groups[cat])groups[cat]=[];
+     groups[cat].push(s);
     });
    }
-   var html='<div style="display:flex;flex-direction:column;gap:6px;">';
-   Object.keys(categories).forEach(function(catName){
-    var skills=categories[catName];
-    if(skills && skills.length>0){
-     html+='<div style="background:'+cardBg+';border-radius:10px;overflow:hidden;margin-bottom:4px;">';
-     html+='<div class="catHeader" onclick="toggleCat(this)" style="padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:'+headerBg+';">';
-     html+='<span style="font-weight:600;color:'+textColor+';">'+catName+' ('+skills.length+' 个)</span>';
-     html+='<span style="color:'+subColor+';font-weight:bold;">+</span></div>';
-     html+='<div class="catSkills" style="display:none;padding:8px 12px;">';
-     skills.forEach(function(s){
-      var statusBg=s.status==='ready'?'#22c55e':'#ef4444';
-      var status='<span style="color:#fff;background:'+statusBg+';padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;margin-left:8px;">'+(s.status==='ready'?'在线':'离线')+'</span>';
-      html+='<div style="padding:8px 0;border-bottom:1px solid '+borderColor+';"><span style="font-weight:500;color:'+textColor+';">'+(s.name||'未命名技能')+'</span>'+status+'<div style="font-size:12px;color:'+subColor+';margin-top:4px;">'+(s.description||'暂无描述')+'</div></div>';
+   var html='';
+   catOrder.forEach(function(catName){
+    var skills=groups[catName];
+    if(!skills||skills.length===0)return;
+    var ci=catIcons[catName]||'';
+    html+='<div class="skill-category">';
+    html+='<div class="skill-category-header">'+ci+'<span class="skill-category-name">'+catName+'</span><span class="skill-category-count">'+skills.length+'</span></div>';
+    html+='<div class="skill-grid">';
+    skills.forEach(function(s){
+     var name=s.name||'';
+     var iconKey=Object.keys(icons).find(function(k){return name.indexOf(k)!==-1;});
+     var icon=iconKey?icons[iconKey]:'<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+     var isOnline=s.status==='ready';
+     html+='<div class="skill-card">';
+     html+='<div class="skill-card-icon">'+icon+'</div>';
+     html+='<div class="skill-card-name">'+name+'</div>';
+     html+='<div class="skill-card-desc">'+(s.description||'\u6682\u65e0\u63cf\u8ff0')+'</div>';
+     html+='<div class="skill-card-status"><span class="dot'+(isOnline?'':' offline')+'"></span>'+(isOnline?'\u5728\u7ebf':'\u79bb\u7ebf')+'</div>';
+     html+='</div>';
+    });
+    html+='</div></div>';
+   });
+   // 未分类的也展示
+   Object.keys(groups).forEach(function(cat){
+    if(catOrder.indexOf(cat)===-1&&groups[cat].length>0){
+     html+='<div class="skill-category"><div class="skill-category-header"><span class="skill-category-name">'+cat+'</span><span class="skill-category-count">'+groups[cat].length+'</span></div><div class="skill-grid">';
+     groups[cat].forEach(function(s){
+      html+='<div class="skill-card"><div class="skill-card-icon"><svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10"/></svg></div><div class="skill-card-name">'+(s.name||'')+'</div><div class="skill-card-desc">'+(s.description||'')+'</div><div class="skill-card-status"><span class="dot'+(s.status==='ready'?'':' offline')+'"></span>'+(s.status==='ready'?'\u5728\u7ebf':'\u79bb\u7ebf')+'</div></div>';
      });
      html+='</div></div>';
     }
    });
-   html+='</div>';
    document.getElementById('skillsList').innerHTML=html;
   }).catch(function(){
-   document.getElementById('skillsList').innerHTML='<div style="color:#ef4444;">技能数据加载失败</div>';
+   document.getElementById('skillsList').innerHTML='<div style="color:#ef4444;">\u6280\u80fd\u6570\u636e\u52a0\u8f7d\u5931\u8d25</div>';
   });
  }
 
  if(n==3){
   setInputVisible(false);
-  chat.innerHTML='<div style="padding:20px;"><h2 class="page-title" style="margin-bottom:15px;">📊 数据看板</h2><div id="statsBox">加载中...</div></div>';
-  fetch('/stats').then(r=>r.json()).then(function(d){
-   var stats=d.stats||d||{};
-   var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.78)';
-   var numColor=isLight?'#0f172a':'#f8fafc';
-   var labelColor=isLight?'#64748b':'#94a3b8';
-   var html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">';
-   html+='<div style="background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">输入</div><div style="font-size:22px;font-weight:600;color:'+numColor+';">'+((stats.input_tokens||0).toLocaleString())+'</div></div>';
-   html+='<div style="background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">输出</div><div style="font-size:22px;font-weight:600;color:'+numColor+';">'+((stats.output_tokens||0).toLocaleString())+'</div></div>';
-   html+='<div style="background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">总请求</div><div style="font-size:22px;font-weight:600;color:'+numColor+';">'+((stats.total_requests||0).toLocaleString())+'</div></div></div>';
-   html+='<div style="display:flex;gap:12px;margin-bottom:16px;">';
-   html+='<div style="flex:1;background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">当前模型</div><div style="font-size:16px;font-weight:600;color:'+numColor+';">'+(stats.model||'-')+'</div></div>';
-   html+='<div style="flex:1;background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">最后使用</div><div style="font-size:14px;font-weight:600;color:'+numColor+';">'+(stats.last_used||'-')+'</div></div></div>';
-   html+='<div style="display:flex;gap:12px;">';
-   html+='<div style="flex:1;background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">总 Token</div><div style="font-size:20px;font-weight:600;color:'+numColor+';">'+((stats.total_tokens||0).toLocaleString())+'</div></div>';
-   html+='<div style="flex:1;background:'+cardBg+';padding:16px;border-radius:12px;text-align:center;"><div style="font-size:12px;color:'+labelColor+';">缓存命中</div><div style="font-size:14px;font-weight:600;color:'+numColor+';">'+((stats.cache_hit||0)+'%')+'</div></div></div>';
-   document.getElementById('statsBox').innerHTML=html;
+  chat.innerHTML='<div class="stats-page"><h2 class="page-title" style="margin-bottom:15px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>\u6570\u636e\u770b\u677f</h2><div id="statsBox">\u52a0\u8f7d\u4e2d...</div></div>';
+  fetch('/stats').then(function(r){return r.json()}).then(function(d){
+   var s=d.stats||d||{};
+   var bs=s.by_scene||{};
+   var totalReq=s.total_requests||0;
+   var avgToken=totalReq>0?Math.round((s.total_tokens||0)/totalReq):0;
+   var svgToken='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+   var svgCall='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>';
+   var svgScene='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>';
+   var svgCache='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>';
+   // Token \u6d88\u8017
+   var h='<div class="stats-section"><div class="stats-section-title">'+svgToken+' Token \u6d88\u8017</div><div class="stats-grid">';
+   h+='<div class="stats-card"><div class="stats-label">\u8f93\u5165</div><div class="stats-number">'+((s.input_tokens||0).toLocaleString())+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">\u8f93\u51fa</div><div class="stats-number">'+((s.output_tokens||0).toLocaleString())+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">\u603b Token</div><div class="stats-number">'+((s.total_tokens||0).toLocaleString())+'</div></div>';
+   h+='</div></div>';
+   // \u8c03\u7528\u7edf\u8ba1
+   h+='<div class="stats-section"><div class="stats-section-title">'+svgCall+' \u8c03\u7528\u7edf\u8ba1</div><div class="stats-grid">';
+   h+='<div class="stats-card"><div class="stats-label">\u603b\u8bf7\u6c42</div><div class="stats-number">'+(totalReq.toLocaleString())+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">\u5e73\u5747\u6d88\u8017</div><div class="stats-number">'+(avgToken.toLocaleString())+' <span style="font-size:12px;font-weight:400;opacity:0.6;">/\u6b21</span></div></div>';
+   h+='<div class="stats-card"><div class="stats-label">\u5f53\u524d\u6a21\u578b</div><div class="stats-number model-name">'+(s.model||'-')+'</div></div>';
+   h+='</div></div>';
+   // \u7f13\u5b58\u7edf\u8ba1
+   var cacheWrite=s.cache_write_tokens||0;
+   var cacheRead=s.cache_read_tokens||0;
+   var cacheTotal=cacheWrite+cacheRead;
+   var cacheRate=(s.input_tokens||0)>0?Math.round(cacheRead/(s.input_tokens||1)*100):0;
+   h+='<div class="stats-section"><div class="stats-section-title">'+svgCache+' \u7f13\u5b58\u7edf\u8ba1</div><div class="stats-grid">';
+   h+='<div class="stats-card"><div class="stats-label">\u7f13\u5b58\u5199\u5165</div><div class="stats-number">'+(cacheWrite.toLocaleString())+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">\u7f13\u5b58\u8bfb\u53d6</div><div class="stats-number">'+(cacheRead.toLocaleString())+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">\u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+(cacheRate)+'%</div></div>';
+   h+='</div></div>';
+   // 本地记忆总览
+   var mem=s.memory||{};
+   var l2s=mem.l2_searches||0,l2h=mem.l2_hits||0;
+   var l8s=mem.l8_searches||0,l8h=mem.l8_hits||0;
+   var tq=mem.total_queries||0;
+   var fla=mem.full_layer_available||0;
+   var l2rate=l2s>0?Math.round(l2h/l2s*100):0;
+   var l8rate=l8s>0?Math.round(l8h/l8s*100):0;
+   // 综合有效率 = (全量层贡献 + 检索层贡献) / (总请求×2) × 100%
+   var fullLayerPct=tq>0?Math.round(fla/(tq*4)*100):0;
+   var searchHits=(l2h+l8h);var searchTotal=(l2s+l8s);
+   var searchPct=searchTotal>0?Math.round(searchHits/searchTotal*100):0;
+   var compositeRate=tq>0?Math.min(100,Math.round((fullLayerPct+searchPct)/2)):0;
+   var svgMem='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+   h+='<div class="stats-section"><div class="stats-section-title">'+svgMem+' \u672c\u5730\u8bb0\u5fc6\u603b\u89c8</div>';
+   h+='<div style="text-align:center;padding:12px 0 8px;"><div style="font-size:32px;font-weight:700;" class="stats-highlight">'+compositeRate+'%</div>';
+   h+='<div style="font-size:12px;opacity:0.6;margin-top:2px;">\u7efc\u5408\u6709\u6548\u7387</div></div>';
+   h+='<div style="display:flex;justify-content:center;gap:24px;font-size:12px;opacity:0.7;padding-bottom:10px;">';
+   h+='<span>\u5168\u91cf\u5c42\u8d21\u732e '+fullLayerPct+'%</span><span>\u68c0\u7d22\u5c42\u8d21\u732e '+searchPct+'%</span></div>';
+   h+='<div class="stats-grid">';
+   h+='<div class="stats-card"><div class="stats-label">L2 \u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+l2rate+'%</div><div style="font-size:11px;opacity:0.5;margin-top:2px;">'+l2s+'\u6b21/'+l2h+'\u547d\u4e2d</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">L8 \u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+l8rate+'%</div><div style="font-size:11px;opacity:0.5;margin-top:2px;">'+l8s+'\u6b21/'+l8h+'\u547d\u4e2d</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">L1 \u5bf9\u8bdd</div><div class="stats-number">'+(mem.l1_count||0)+'\u6761</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">L3 \u7ecf\u5386</div><div class="stats-number">'+(mem.l3_count||0)+'\u6761</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">L4 \u4eba\u683c</div><div class="stats-number">'+(mem.l4_available?'\u2705':'\u274c')+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">L5 \u6280\u80fd</div><div class="stats-number">'+(mem.l5_count||0)+'\u4e2a</div></div>';
+   h+='</div></div>';
+   // \u573a\u666f\u5206\u5e03
+   var scenes=[{k:'chat',n:'\u804a\u5929'},{k:'route',n:'\u8def\u7531'},{k:'skill',n:'\u6280\u80fd'},{k:'learn',n:'\u5b66\u4e60'}];
+   var totalSceneTokens=0;
+   scenes.forEach(function(sc){totalSceneTokens+=(bs[sc.k]||{}).tokens||0;});
+   h+='<div class="stats-section"><div class="stats-section-title">'+svgScene+' \u573a\u666f\u5206\u5e03</div>';
+   if(totalSceneTokens>0){
+   h+='<div class="stats-bars">';
+   scenes.forEach(function(sc){
+    var t=(bs[sc.k]||{}).tokens||0;
+    var r=(bs[sc.k]||{}).requests||0;
+    var pct=totalSceneTokens>0?Math.round(t/totalSceneTokens*100):0;
+    h+='<div class="stats-bar-row"><div class="stats-bar-label">'+sc.n+'</div>';
+    h+='<div class="stats-bar-track"><div class="stats-bar-fill '+sc.k+'" style="width:'+pct+'%"></div></div>';
+    h+='<div class="stats-bar-pct">'+pct+'% <span style="opacity:0.5;font-size:11px;">'+r+'\u6b21</span></div></div>';
+   });
+   h+='</div>';
+   }else{
+   h+='<div style="text-align:center;padding:16px;color:#64748b;font-size:13px;">\u804a\u51e0\u53e5\u5c31\u6709\u6570\u636e\u4e86</div>';
+   }
+   h+='</div>';
+   // \u5e95\u90e8
+   h+='<div class="stats-footer"><div class="stats-footer-info">\u6700\u540e\u4f7f\u7528\uff1a'+(s.last_used||'-')+'</div>';
+   h+='<button class="stats-reset-btn" onclick="if(confirm(\'\u786e\u8ba4\u91cd\u7f6e\u6240\u6709\u7edf\u8ba1\u6570\u636e\uff1f\')){fetch(\'/stats\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({reset:true})}).then(function(){show(3)})}">\u21bb \u91cd\u7f6e\u7edf\u8ba1</button></div>';
+   document.getElementById('statsBox').innerHTML=h;
   }).catch(function(){
-   document.getElementById('statsBox').innerHTML='<div style="color:#ef4444;">统计数据加载失败</div>';
+   document.getElementById('statsBox').innerHTML='<div style="color:#ef4444;">\u7edf\u8ba1\u6570\u636e\u52a0\u8f7d\u5931\u8d25</div>';
   });
  }
 
