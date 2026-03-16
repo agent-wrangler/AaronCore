@@ -162,14 +162,15 @@ def _connect_browser(port: int = 9333):
         return None, None, f"连接浏览器失败：{e}。请用 --remote-debugging-port={port} 启动浏览器"
 
 
-def web_chat(site: str, message: str, port: int = 9333) -> str:
+def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1) -> str:
     """在网页版 AI（豆包等）发送消息并获取回复。用子进程执行避免 async 冲突。"""
     import subprocess
     worker = os.path.join(os.path.dirname(__file__), '_web_chat_worker.py')
+    timeout = 45 if rounds <= 1 else min(rounds * 30 + 30, 600)
     try:
         result = subprocess.run(
-            [sys.executable, worker, site, message, str(port)],
-            capture_output=True, text=True, timeout=45,
+            [sys.executable, worker, site, message, str(port), str(rounds)],
+            capture_output=True, text=True, timeout=timeout,
             env={**os.environ, 'NO_PROXY': 'localhost,127.0.0.1', 'no_proxy': 'localhost,127.0.0.1'},
         )
         if result.returncode != 0:
@@ -185,7 +186,19 @@ def web_chat(site: str, message: str, port: int = 9333) -> str:
             return f"浏览器操作失败：无法解析返回结果"
         data = json.loads(json_line)
         if data.get("ok"):
-            return f"「{site}」回复：{data['reply']}"
+            # 多轮对话
+            conv = data.get("conversation")
+            if conv and len(conv) > 1:
+                lines = [f"和「{site}」聊了 {len(conv)} 轮：\n"]
+                for item in conv:
+                    lines.append(f"第{item['round']}轮 我说：{item['send']}")
+                    lines.append(f"　　它说：{item['reply'][:150]}\n")
+                return "\n".join(lines)
+            # 单轮
+            elif conv and len(conv) == 1:
+                return f"「{site}」回复：{conv[0]['reply']}"
+            # 旧格式兼容
+            return f"「{site}」回复：{data.get('reply', '')}"
         else:
             return f"浏览器操作失败：{data.get('error', '未知错误')}"
     except subprocess.TimeoutExpired:
@@ -246,7 +259,20 @@ def _do_execute(text: str) -> str:
         group = qq_read_match.group(1)
         return qq_read_messages(group)
 
-    # 网页聊天（豆包等）
+    # 网页多轮聊天（"和豆包聊5轮/10分钟"）
+    multi_match = re.search(r'(?:和|跟)(?:豆包|doubao|chatgpt|kimi).*?聊.*?(\d+)\s*(?:轮|分钟|次)[，,]?\s*(?:聊聊|话题|关于)?\s*(.+)?', text, re.I)
+    if multi_match:
+        rounds = int(multi_match.group(1))
+        topic = (multi_match.group(2) or "").strip()
+        if '分钟' in text:
+            rounds = max(rounds * 2, 2)  # 粗略：1分钟约2轮
+        rounds = min(rounds, 20)  # 最多20轮
+        site = '豆包' if '豆包' in text else 'chatgpt'
+        site_url = 'doubao' if site == '豆包' else site.lower()
+        first_msg = topic if topic else "你好，我们来聊聊天吧，随便聊点什么有趣的话题"
+        return web_chat(site_url, first_msg, rounds=rounds)
+
+    # 网页单轮聊天（豆包等）
     web_match = re.search(r'(?:问|去|在)(?:豆包|doubao|chatgpt|kimi)[：:]?\s*(.+)', text, re.I)
     if web_match:
         msg = web_match.group(1)

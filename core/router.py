@@ -706,7 +706,7 @@ def route(text: str) -> dict:
         }
 
     # Computer Use 检测
-    _cu_words = ('问豆包', '去豆包', '问chatgpt', '问kimi', '去QQ', '发QQ', 'QQ群', '在QQ', '帮我在QQ', '帮我发QQ', '桌面上有什么', '什么窗口')
+    _cu_words = ('问豆包', '去豆包', '问chatgpt', '问kimi', '去QQ', '发QQ', 'QQ群', '在QQ', '帮我在QQ', '帮我发QQ', '桌面上有什么', '什么窗口', '和豆包聊', '跟豆包聊', '和chatgpt聊', '跟chatgpt聊')
     if any(w in text for w in _cu_words):
         return {
             'mode': 'skill',
