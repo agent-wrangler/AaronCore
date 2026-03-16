@@ -273,7 +273,7 @@ def _do_execute(text: str) -> str:
         return web_chat(site_url, first_msg, rounds=rounds)
 
     # 网页单轮聊天（豆包等）
-    web_match = re.search(r'(?:问|去|在)(?:豆包|doubao|chatgpt|kimi)[：:]?\s*(.+)', text, re.I)
+    web_match = re.search(r'(?:问|去|在|用|让|叫)(?:一下|下)?(?:豆包|doubao|chatgpt|kimi)[：:，,]?\s*(.+)', text, re.I)
     if web_match:
         msg = web_match.group(1)
         site = '豆包' if '豆包' in text.lower() or 'doubao' in text.lower() else 'chatgpt'
