@@ -705,24 +705,19 @@ def route(text: str) -> dict:
             'emotion_score': scores['emotion_score'],
         }
 
-    # Computer Use 检测
-    _cu_targets = ('豆包', 'doubao', 'chatgpt', 'kimi')
-    _cu_actions = ('问', '去', '和', '跟', '让', '叫', '用', '打开', '发')
-    _cu_direct = ('QQ群', '在QQ', '去QQ', '发QQ', '桌面上有什么', '什么窗口')
-    _has_target = any(t in text for t in _cu_targets)
-    _has_action = any(text.startswith(a) or a + '下' in text or a + '一下' in text for a in _cu_actions)
-    if (_has_target and _has_action) or any(w in text for w in _cu_direct):
+    # Computer Use：如果 _score_text 已匹配到 computer_use，直接高置信度返回
+    if scores.get('matched_skill') == 'computer_use':
         return {
             'mode': 'skill',
             'skill': 'computer_use',
             'confidence': 0.95,
-            'reason': '命中桌面代理意图',
+            'reason': '命中桌面代理: ' + str(scores.get('matched_keyword', '')),
             'params': {},
             'role': role,
             'stage': 'request', 'tone': 'command',
-            'chat_score': 0.0,
-            'skill_score': 3.0,
-            'emotion_score': 0.0,
+            'chat_score': scores['chat_score'],
+            'skill_score': max(scores['skill_score'], 3.0),
+            'emotion_score': scores['emotion_score'],
         }
 
     if _looks_like_meta_bug_report(text):
