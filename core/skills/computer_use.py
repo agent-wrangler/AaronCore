@@ -59,38 +59,58 @@ def qq_send_message(group_name: str, message: str) -> str:
         qq_wins[0].activate()
         time.sleep(0.5)
 
-        # 2. 用搜索框找群（pyautogui 全程操作，避免 pywinauto 在 FastAPI 里报错）
+        # 2. 读会话列表，精确匹配群名
         app = Application(backend='uia').connect(title='QQ')
         main_win = app.window(title='QQ')
-        search = main_win.child_window(title='搜索', control_type='Edit')
-        rect = search.rectangle()
+        session = main_win.child_window(title='会话列表', control_type='Window')
+
+        # 滚到顶部
+        sr = session.rectangle()
+        pyautogui.click((sr.left + sr.right) // 2, (sr.top + sr.bottom) // 2)
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'Home')
+        time.sleep(0.5)
+
+        # 边滚动边找，每个 item 的 children[0] 就是群名
+        target = None
+        for _ in range(10):
+            for item in session.children():
+                try:
+                    children = item.children()
+                    if children:
+                        name = children[0].window_text().strip()
+                        if name == group_name and not name.startswith('来自群'):
+                            rect = item.rectangle()
+                            if rect.top > 0:
+                                target = item
+                                break
+                except:
+                    continue
+            if target:
+                break
+            pyautogui.scroll(-5, x=(sr.left + sr.right) // 2, y=(sr.top + sr.bottom) // 2)
+            time.sleep(0.3)
+
+        if not target:
+            return f"在 QQ 会话列表中没找到「{group_name}」"
+
+        # 3. 点击群聊
+        rect = target.rectangle()
         pyautogui.click((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
-        time.sleep(0.3)
-        pyperclip.copy(group_name)
-        pyautogui.hotkey('ctrl', 'v')
         time.sleep(1.5)
 
-        # 3. 回车进入第一个搜索结果
-        pyautogui.press('enter')
-        time.sleep(2)
-
-        # 4. 找到群聊窗口
+        # 4. 找到群聊窗口，点击输入框发送
         chat_win = None
         for w in gw.getAllWindows():
-            if '会话' in w.title or group_name[:4] in w.title:
+            if '会话' in w.title:
                 chat_win = w
                 break
         if not chat_win:
-            pyautogui.press('escape')
             return f"打开群「{group_name}」失败"
 
         chat_win.activate()
-        time.sleep(0.5)
-
-        # 5. 点击输入框（窗口底部）并发送
-        input_x = chat_win.left + chat_win.width // 2
-        input_y = chat_win.top + chat_win.height - 80
-        pyautogui.click(input_x, input_y)
+        time.sleep(0.3)
+        pyautogui.click(chat_win.left + chat_win.width // 2, chat_win.top + chat_win.height - 80)
         time.sleep(0.3)
         pyperclip.copy(message)
         pyautogui.hotkey('ctrl', 'v')
