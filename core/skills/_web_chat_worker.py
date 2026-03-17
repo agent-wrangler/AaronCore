@@ -84,6 +84,9 @@ def _read_last_reply(page):
 
 def send_and_read(page, message):
     """发一条消息，等回复稳定后再读取。"""
+    # 先记住发送前的最后一条内容
+    old_reply = _read_last_reply(page) or ""
+
     textarea = page.locator('textarea').first
     textarea.click()
     time.sleep(0.2)
@@ -91,19 +94,28 @@ def send_and_read(page, message):
     time.sleep(0.2)
     page.keyboard.press('Enter')
 
-    time.sleep(4)
+    # 第一阶段：等新回复出现（内容和发送前不同）
+    time.sleep(3)
+    for _ in range(30):
+        curr = _read_last_reply(page) or ""
+        if curr and curr != old_reply:
+            break
+        time.sleep(1)
+
+    # 第二阶段：等回复稳定（连续 3 次相同 = 说完了）
     prev_text = ""
     stable_count = 0
-    for _ in range(40):
+    for _ in range(45):
         curr_text = _read_last_reply(page) or ""
         if curr_text and curr_text == prev_text:
             stable_count += 1
-            if stable_count >= 2:
+            if stable_count >= 3:
                 break
         else:
             stable_count = 0
         prev_text = curr_text
         time.sleep(1)
+
     return prev_text or ""
 
 
