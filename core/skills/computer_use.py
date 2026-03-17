@@ -52,8 +52,6 @@ def qq_send_message(group_name: str, message: str) -> str:
         return "缺少依赖：需要 pyautogui + pywinauto（pip install pyautogui pywinauto）"
 
     try:
-        from pywinauto.keyboard import send_keys as pw_send_keys
-
         # 1. 激活 QQ 主窗口
         qq_wins = [w for w in gw.getAllWindows() if w.title.strip() == 'QQ']
         if not qq_wins:
@@ -61,21 +59,22 @@ def qq_send_message(group_name: str, message: str) -> str:
         qq_wins[0].activate()
         time.sleep(0.5)
 
-        # 2. 用搜索框找群
+        # 2. 用搜索框找群（pyautogui 全程操作，避免 pywinauto 在 FastAPI 里报错）
         app = Application(backend='uia').connect(title='QQ')
         main_win = app.window(title='QQ')
         search = main_win.child_window(title='搜索', control_type='Edit')
-        search.click_input()
+        rect = search.rectangle()
+        pyautogui.click((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
         time.sleep(0.3)
         pyperclip.copy(group_name)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(1.5)
 
         # 3. 回车进入第一个搜索结果
-        pw_send_keys('{ENTER}')
+        pyautogui.press('enter')
         time.sleep(2)
 
-        # 4. 找到群聊窗口（新版 QQ 标题可能是截断的）
+        # 4. 找到群聊窗口
         chat_win = None
         for w in gw.getAllWindows():
             if '会话' in w.title or group_name[:4] in w.title:
