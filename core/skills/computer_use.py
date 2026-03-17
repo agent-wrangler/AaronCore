@@ -171,7 +171,11 @@ def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1) -> str:
         result = subprocess.run(
             [sys.executable, worker, site, message, str(port), str(rounds)],
             capture_output=True, text=True, timeout=timeout,
-            env={**os.environ, 'NO_PROXY': 'localhost,127.0.0.1', 'no_proxy': 'localhost,127.0.0.1'},
+            env={
+                **{k: v for k, v in os.environ.items() if 'proxy' not in k.lower()},
+                'NO_PROXY': 'localhost,127.0.0.1',
+                'no_proxy': 'localhost,127.0.0.1',
+            },
         )
         if result.returncode != 0:
             return f"浏览器操作失败：{result.stderr[:200]}"
