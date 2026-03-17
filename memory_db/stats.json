@@ -1,9 +1,0 @@
-{
-  "input_tokens": 18288,
-  "output_tokens": 18449,
-  "total_tokens": 66222,
-  "total_requests": 519,
-  "cache_hit": 0,
-  "model": "deepseek-chat",
-  "last_used": "2026-03-16 04:09"
-}

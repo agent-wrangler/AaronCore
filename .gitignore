@@ -19,5 +19,13 @@ memory_db/conversation_history.txt
 memory_db/msg_history.json
 memory_db/stats.json
 memory_db/evolution.json
+memory_db/feedback_rules.json
+memory_db/knowledge_base.json
+memory_db/l2_config.json
+memory_db/l2_short_term.json
+memory_db/long_term.json
+memory_db/persona.json
+memory_db/qq_monitor_state.json
+*.png
 output.html.codex_backup
 .claude/
