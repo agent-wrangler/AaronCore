@@ -34,6 +34,11 @@
  <!-- 主聊天区域 -->
  <div class="main">
  <div class="content">
+  <div class="qq-monitor-bar" id="qqMonitorBar" style="display:none;padding:6px 16px;background:linear-gradient(90deg,#e8f5e9,#f1f8e9);border-bottom:1px solid #c8e6c9;font-size:13px;color:#2e7d32;display:flex;align-items:center;gap:8px;">
+   <span style="animation:pulse 1.5s infinite;">&#x1F7E2;</span>
+   <span id="qqMonitorText"></span>
+   <button onclick="fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'\u505c\u6b62\u76d1\u542c'})}).then(()=>checkQQMonitor())" style="margin-left:auto;background:#ef5350;color:#fff;border:none;border-radius:12px;padding:3px 12px;font-size:12px;cursor:pointer;">\u505c\u6b62</button>
+  </div>
   <div class="chat" id="chat"></div>
  </div>
  <div class="awareness-bar" id="awarenessBar"></div>
@@ -74,5 +79,21 @@
 <script src="/static/js/settings.js"></script>
 <script src="/static/js/docs.js"></script>
 <script src="/static/js/app.js"></script>
+<script>
+function checkQQMonitor(){
+ fetch('/qq/monitor').then(r=>r.json()).then(d=>{
+  var bar=document.getElementById('qqMonitorBar');
+  var txt=document.getElementById('qqMonitorText');
+  if(d.active){
+   bar.style.display='flex';
+   txt.textContent='\u6b63\u5728\u76d1\u542c\u7fa4\u300c'+d.group+'\u300d';
+  }else{
+   bar.style.display='none';
+  }
+ }).catch(()=>{});
+}
+checkQQMonitor();
+setInterval(checkQQMonitor,5000);
+</script>
 </body>
 </html>

@@ -119,12 +119,25 @@ def qq_stop_monitor() -> str:
     """停止 QQ 群监听。"""
     global _monitor_process, _monitor_group
     if _monitor_process and _monitor_process.poll() is None:
-        _monitor_process.terminate()
-        _monitor_process.wait(timeout=5)
+        try:
+            _monitor_process.kill()
+            _monitor_process.wait(timeout=5)
+        except:
+            pass
         name = _monitor_group
         _monitor_process = None
         _monitor_group = None
-        return f"已停止监听群「{name}」"
+        return f"\u5df2\u505c\u6b62\u76d1\u542c\u7fa4\u300c{name}\u300d"
+    _monitor_process = None
+    _monitor_group = None
+    return "\u5f53\u524d\u6ca1\u6709\u5728\u76d1\u542c\u4efb\u4f55\u7fa4"
+
+
+def qq_monitor_status() -> dict:
+    """返回监听状态"""
+    if _monitor_process and _monitor_process.poll() is None:
+        return {"active": True, "group": _monitor_group}
+    return {"active": False, "group": None}
     _monitor_process = None
     _monitor_group = None
     return "当前没有在监听任何群"

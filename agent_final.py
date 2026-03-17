@@ -924,6 +924,15 @@ async def get_autolearn_diagnosis(query: str, route_mode: str = "chat", skill: s
     return build_l8_diagnosis(query, route_mode=route_mode, skill=skill, limit=limit)
 
 
+@app.get("/qq/monitor")
+async def get_qq_monitor_status():
+    try:
+        from core.skills.computer_use import qq_monitor_status
+        return qq_monitor_status()
+    except Exception:
+        return {"active": False, "group": None}
+
+
 @app.get("/l7/stats")
 async def get_l7_stats():
     from core.feedback_classifier import _load_rules as _l7_load_rules
