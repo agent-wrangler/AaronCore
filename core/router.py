@@ -419,8 +419,10 @@ def _score_text(text: str, skills: dict):
         if skill_name in _blocked_skills:
             continue
 
+        # computer_use 关键词匹配时去掉空格（用户常说"和豆包 聊"而非"和豆包聊"）
+        _text_for_match = text.replace(' ', '') if skill_name == 'computer_use' else text
         for kw in keywords:
-            if kw and kw in text:
+            if kw and kw in _text_for_match:
                 # 天气技能特殊处理：纯城市名不触发，必须搭配天气动作词
                 if skill_name == 'weather' and kw not in WEATHER_ACTION_WORDS:
                     if not any(aw in text for aw in WEATHER_ACTION_WORDS):
