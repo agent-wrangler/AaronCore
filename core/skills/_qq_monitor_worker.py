@@ -92,16 +92,47 @@ def _load_llm_config():
         return None
 
 
-def _generate_reply(recent_msgs, target_msg, my_name, llm_cfg):
+def _load_persona():
+    """读 persona.json 提取人格信息"""
+    try:
+        p = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'persona.json')
+        with open(p, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        mode = data.get('active_mode', 'sweet')
+        mode_cfg = data.get('persona_modes', {}).get(mode, {})
+        ai = data.get('ai_profile', {})
+        return {
+            'identity': ai.get('identity', ''),
+            'expression': mode_cfg.get('expression', ''),
+            'tone': mode_cfg.get('tone', []),
+            'particles': mode_cfg.get('particles', []),
+            'avoid': mode_cfg.get('avoid', []),
+        }
+    except:
+        return None
+
+
+def _generate_reply(recent_msgs, target_msg, my_name, llm_cfg, persona=None):
     """用 LLM 生成群聊回复"""
     if not llm_cfg:
         return None
 
     context = "\n".join([f"{m['sender']}: {m['content']}" for m in recent_msgs[-5:]])
 
+    # 人格描述
+    persona_desc = ""
+    if persona:
+        persona_desc = (
+            f"\n\u4f60\u7684\u8eab\u4efd\uff1a{persona.get('identity', '')}\n"
+            f"\u8bf4\u8bdd\u98ce\u683c\uff1a{persona.get('expression', '')}\n"
+            f"\u8bed\u6c14\u8bcd\uff1a{', '.join(persona.get('particles', []))}\n"
+            f"\u7981\u6b62\u8bf4\uff1a{', '.join(persona.get('avoid', []))}\n"
+        )
+
     prompt = (
         f"\u4f60\u662f\u4e00\u4e2aQQ\u7fa4\u91cc\u7684\u7fa4\u53cb\uff0c\u6635\u79f0\u662f\u201c{my_name}\u201d\u3002"
-        "\u6839\u636e\u4ee5\u4e0b\u7fa4\u804a\u8bb0\u5f55\uff0c\u751f\u6210\u4e00\u6761\u56de\u590d\u3002\n\n"
+        "\u6839\u636e\u4ee5\u4e0b\u7fa4\u804a\u8bb0\u5f55\uff0c\u751f\u6210\u4e00\u6761\u56de\u590d\u3002\n"
+        f"{persona_desc}\n"
         "\u89c4\u5219\uff1a\n"
         "1. \u5982\u679c\u522b\u4eba\u95ee\u95ee\u9898\uff0c\u8ba4\u771f\u56de\u7b54\uff0c\u7ed9\u51fa\u5b9e\u9645\u5185\u5bb9\uff0c\u4e0d\u8981\u6253\u592a\u6781\u62f3\n"
         "2. \u95f2\u804a\u65f6\u53ef\u4ee5\u8f7b\u677e\u4e00\u70b9\uff0c\u4f46\u4e0d\u8981\u6bcf\u6761\u90fd\u6297\u673a\u7075\n"
@@ -146,19 +177,17 @@ def _generate_reply(recent_msgs, target_msg, my_name, llm_cfg):
 
 def _parse_messages(doc_text):
     """从 Document 文本解析消息列表"""
-    # 格式: "发送者 LV等级  消息内容"，多条消息用大量空格分隔
     msgs = []
-    # 按 "xxx LVxx" 模式分割
-    parts = re.split(r'(?=\S+\s+LV\d+)', doc_text)
-    for part in parts:
-        m = re.match(r'(\S+)\s+LV\d+\s+(.+)', part.strip())
-        if m:
-            sender = m.group(1).strip()
-            content = m.group(2).strip()
-            # 清理多余空格
-            content = re.sub(r'\s{3,}', ' ', content).strip()
-            if content and not _is_system_msg(content):
-                msgs.append({"sender": sender, "content": content})
+    # 格式: "  名字 LV数字  消息内容"，名字前有多个空格
+    # 用 "多空格 + 非空文字 + LV数字" 作为分割点
+    parts = re.findall(r'\s{2,}(\S+)\s+LV\d+\s+(.+?)(?=\s{2,}\S+\s+LV\d+|\s{2,}关闭 发送|$)', doc_text, re.DOTALL)
+    for sender, content in parts:
+        sender = sender.strip()
+        content = re.sub(r'\s{3,}', ' ', content).strip()
+        # 去掉时间戳（如 "18:07"）
+        content = re.sub(r'\s*\d{2}:\d{2}\s*$', '', content).strip()
+        if content and not _is_system_msg(content) and len(sender) >= 1:
+            msgs.append({"sender": sender, "content": content})
     return msgs
 
 
@@ -208,7 +237,8 @@ def _log(msg):
 # ── 主循环 ──
 
 llm_cfg = _load_llm_config()
-_log(f"开始监听群「{group_name}」，我的昵称={my_name}，间隔={poll_interval}s")
+persona = _load_persona()
+_log(f"\u5f00\u59cb\u76d1\u542c\u7fa4\u300c{group_name}\u300d\uff0c\u6211\u7684\u6635\u79f0={my_name}\uff0c\u95f4\u9694={poll_interval}s\uff0c\u4eba\u683c={'OK' if persona else 'None'}")
 
 # 群聊窗口标题（双击打开后的标题就是群名）
 chat_title = group_name
@@ -238,7 +268,7 @@ while True:
         prev_sender = msgs[-2]['sender'] if len(msgs) >= 2 else None
         if _should_reply(latest['sender'], latest['content'], my_name, prev_sender):
             if _rate_limit_ok():
-                reply = _generate_reply(msgs, latest, my_name, llm_cfg)
+                reply = _generate_reply(msgs, latest, my_name, llm_cfg, persona)
                 if reply:
                     ok = _send_message(chat_title, reply)
                     _reply_timestamps.append(time.time())
