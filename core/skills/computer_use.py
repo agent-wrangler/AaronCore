@@ -21,6 +21,25 @@ import re
 # ── 监听进程管理 ──
 _monitor_process = None
 _monitor_group = None
+_MONITOR_STATE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'qq_monitor_state.json')
+
+
+def _save_monitor_state(active, group=None):
+    try:
+        import json as _json
+        with open(_MONITOR_STATE_FILE, 'w', encoding='utf-8') as f:
+            _json.dump({"active": active, "group": group}, f, ensure_ascii=False)
+    except: pass
+
+
+def qq_monitor_status() -> dict:
+    """返回监听状态（从文件读，跨模块实例可靠）"""
+    try:
+        import json as _json
+        with open(_MONITOR_STATE_FILE, 'r', encoding='utf-8') as f:
+            return _json.load(f)
+    except:
+        return {"active": False, "group": None}
 
 # ── 依赖检测 ──
 _HAS_PYAUTOGUI = False
@@ -118,12 +137,14 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
         env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
     )
     _monitor_group = group_name
+    _save_monitor_state(True, group_name)
     return f"\u5f00\u59cb\u76d1\u542c\u7fa4\u300c{group_name}\u300d\uff0c\u6709\u4eba@\u6211\u6216\u804a\u5230\u76f8\u5173\u8bdd\u9898\u4f1a\u81ea\u52a8\u56de\u590d\u3002\u8bf4\u201c\u505c\u6b62\u76d1\u542c\u201d\u53ef\u4ee5\u5173\u95ed\u3002"
 
 
 def qq_stop_monitor() -> str:
     """停止 QQ 群监听。"""
     global _monitor_process, _monitor_group
+    _save_monitor_state(False)
     if _monitor_process and _monitor_process.poll() is None:
         try:
             _monitor_process.kill()
@@ -139,11 +160,7 @@ def qq_stop_monitor() -> str:
     return "\u5f53\u524d\u6ca1\u6709\u5728\u76d1\u542c\u4efb\u4f55\u7fa4"
 
 
-def qq_monitor_status() -> dict:
-    """返回监听状态"""
-    if _monitor_process and _monitor_process.poll() is None:
-        return {"active": True, "group": _monitor_group}
-    return {"active": False, "group": None}
+
     _monitor_process = None
     _monitor_group = None
     return "当前没有在监听任何群"
