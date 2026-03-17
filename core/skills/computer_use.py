@@ -276,14 +276,14 @@ def _do_execute(text: str) -> str:
         # 提取 topic：去掉指令性词汇，留下话题内容
         topic = text
         for noise in ['去', '和', '跟', '让', '叫', '豆包', '聊', '轮', '分钟', '次', '个回合',
-                       '关于', '的话题', '的事', '回来', '总结', '给我', '随便', '聊点什么',
-                       '帮我', '一下', '那边', rounds_match.group(0)]:
+                       '关于', '的话题', '的事', '回来', '总结', '给我', '随便', '点什么',
+                       '帮我', '一下', '那边', '什么', rounds_match.group(0)]:
             topic = topic.replace(noise, '')
-        topic = re.sub(r'\s+', '', topic).strip('，, 。')
-        if topic:
+        topic = re.sub(r'[\d\s，,。]+', '', topic).strip()
+        if len(topic) >= 2:
             first_msg = f"我们来聊聊{topic}吧，你先说说你的看法"
         else:
-            first_msg = "你好，我们来聊聊天吧，随便聊点什么有趣的话题"
+            first_msg = "你好，随便聊点什么吧，最近有什么让你印象深刻的事吗？"
         return web_chat(site_url, first_msg, rounds=rounds)
 
     # 网页单轮聊天（豆包等）
