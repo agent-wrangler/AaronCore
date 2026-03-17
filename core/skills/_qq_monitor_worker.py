@@ -48,7 +48,7 @@ def _is_system_msg(text):
     return any(p in text for p in SYSTEM_MSG_PATTERNS)
 
 
-def _should_reply(sender, content, my_name):
+def _should_reply(sender, content, my_name, prev_sender=None):
     """判断要不要回复这条消息"""
     if sender == my_name:
         return False
@@ -59,12 +59,15 @@ def _should_reply(sender, content, my_name):
     # 有人@我
     if f'@{my_name}' in content:
         return True
+    # 对话延续：上一条是我说的，这条是别人接的
+    if prev_sender == my_name:
+        return True
     # 提到关键词
-    reply_keywords = ['AI', 'agent', 'Agent', 'nova', 'Nova', '机器人', '智能', '自动']
+    reply_keywords = ['AI', 'agent', 'Agent', 'nova', 'Nova', '\u673a\u5668\u4eba', '\u667a\u80fd', '\u81ea\u52a8']
     if any(k in content for k in reply_keywords):
         return True
-    # 问号结尾（可能在问问题）
-    if content.strip().endswith('?') or content.strip().endswith('？'):
+    # 问号结尾
+    if content.strip().endswith('?') or content.strip().endswith('\uff1f'):
         return True
     return False
 
@@ -232,7 +235,8 @@ while True:
 
         # 检查最新一条消息是否需要回复
         latest = msgs[-1]
-        if _should_reply(latest['sender'], latest['content'], my_name):
+        prev_sender = msgs[-2]['sender'] if len(msgs) >= 2 else None
+        if _should_reply(latest['sender'], latest['content'], my_name, prev_sender):
             if _rate_limit_ok():
                 reply = _generate_reply(msgs, latest, my_name, llm_cfg)
                 if reply:
