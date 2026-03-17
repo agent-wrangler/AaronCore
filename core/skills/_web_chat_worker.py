@@ -5,6 +5,7 @@ import json
 import time
 import urllib.request
 
+sys.stdout.reconfigure(encoding='utf-8')
 os.environ['NO_PROXY'] = 'localhost,127.0.0.1'
 os.environ['no_proxy'] = 'localhost,127.0.0.1'
 

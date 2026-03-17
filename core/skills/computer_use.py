@@ -169,18 +169,21 @@ def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1) -> str:
     timeout = 60 if rounds <= 1 else min(rounds * 50 + 30, 600)
     try:
         result = subprocess.run(
-            [sys.executable, worker, site, message, str(port), str(rounds)],
-            capture_output=True, text=True, timeout=timeout,
+            [sys.executable, '-u', worker, site, message, str(port), str(rounds)],
+            capture_output=True, timeout=timeout,
             env={
                 **{k: v for k, v in os.environ.items() if 'proxy' not in k.lower()},
                 'NO_PROXY': 'localhost,127.0.0.1',
                 'no_proxy': 'localhost,127.0.0.1',
+                'PYTHONIOENCODING': 'utf-8',
             },
         )
         if result.returncode != 0:
-            return f"浏览器操作失败：{result.stderr[:200]}"
-        # stdout 可能包含 Node.js 的 warning，只取最后一行 JSON
-        stdout_lines = [l.strip() for l in result.stdout.strip().splitlines() if l.strip()]
+            err = result.stderr.decode('utf-8', errors='replace')[:200] if isinstance(result.stderr, bytes) else str(result.stderr)[:200]
+            return f"浏览器操作失败：{err}"
+        # stdout 解码 + 只取最后一行 JSON
+        raw_out = result.stdout.decode('utf-8', errors='replace') if isinstance(result.stdout, bytes) else result.stdout
+        stdout_lines = [l.strip() for l in raw_out.strip().splitlines() if l.strip()]
         json_line = ""
         for line in reversed(stdout_lines):
             if line.startswith("{"):
