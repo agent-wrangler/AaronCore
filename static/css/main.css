@@ -34,6 +34,9 @@ body.light .input textarea{background:#f8fafc;color:#0f172a;border:1px solid #cb
 body.light::-webkit-scrollbar-track{background:#e2e8f0}
 body.light::-webkit-scrollbar-thumb{background:#94a3b8}
 body.light::-webkit-scrollbar-thumb:hover{background:#64748b}
+body.light .chat::-webkit-scrollbar-track{background:#f1f5f9}
+body.light .chat::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:3px}
+body.light .chat::-webkit-scrollbar-thumb:hover{background:#64748b}
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg-app);color:var(--text-main);height:100vh;overflow:hidden;display:flex}
 /* ===== 优雅可拉伸侧边栏 ===== */
 .sidebar{
