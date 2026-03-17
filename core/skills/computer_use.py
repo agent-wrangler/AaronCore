@@ -166,7 +166,7 @@ def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1) -> str:
     """在网页版 AI（豆包等）发送消息并获取回复。用子进程执行避免 async 冲突。"""
     import subprocess
     worker = os.path.join(os.path.dirname(__file__), '_web_chat_worker.py')
-    timeout = 45 if rounds <= 1 else min(rounds * 30 + 30, 600)
+    timeout = 60 if rounds <= 1 else min(rounds * 50 + 30, 600)
     try:
         result = subprocess.run(
             [sys.executable, worker, site, message, str(port), str(rounds)],

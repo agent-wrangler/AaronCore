@@ -15,24 +15,9 @@ rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 1
 from playwright.sync_api import sync_playwright
 
 
-def send_and_read(page, message):
-    """发一条消息，等回复，返回回复内容。"""
-    textarea = page.locator('textarea').first
-    textarea.click()
-    time.sleep(0.2)
-    textarea.fill(message)
-    time.sleep(0.2)
-    page.keyboard.press('Enter')
-
-    time.sleep(5)
-    for _ in range(25):
-        stop_btns = page.locator('[aria-label*="stop"], [class*="stop"]').count()
-        if stop_btns == 0:
-            break
-        time.sleep(1)
-    time.sleep(1)
-
-    result = page.evaluate('''() => {
+def _read_last_reply(page):
+    """读取页面上最后一条 AI 回复。"""
+    return page.evaluate('''() => {
         const all = document.querySelectorAll('[class*="markdown"], [class*="message-content"]');
         const texts = [];
         all.forEach(el => {
@@ -41,7 +26,33 @@ def send_and_read(page, message):
         });
         return texts.length ? texts[texts.length - 1] : "";
     }''')
-    return result or ""
+
+
+def send_and_read(page, message):
+    """发一条消息，等回复稳定后再读取。"""
+    textarea = page.locator('textarea').first
+    textarea.click()
+    time.sleep(0.2)
+    textarea.fill(message)
+    time.sleep(0.2)
+    page.keyboard.press('Enter')
+
+    # 等内容稳定：连续 2 次读到相同内容且非空，说明回复完了
+    time.sleep(4)
+    prev_text = ""
+    stable_count = 0
+    for _ in range(40):  # 最多等 40 秒
+        curr_text = _read_last_reply(page) or ""
+        if curr_text and curr_text == prev_text:
+            stable_count += 1
+            if stable_count >= 2:
+                break
+        else:
+            stable_count = 0
+        prev_text = curr_text
+        time.sleep(1)
+
+    return prev_text or ""
 
 
 pw = sync_playwright().start()
