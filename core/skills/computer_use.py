@@ -51,71 +51,58 @@ def qq_send_message(group_name: str, message: str) -> str:
     if not _HAS_PYAUTOGUI or not _HAS_PYWINAUTO:
         return "缺少依赖：需要 pyautogui + pywinauto（pip install pyautogui pywinauto）"
 
-    # 找到 QQ 主窗口
-    qq_wins = [w for w in gw.getAllWindows() if w.title.strip() == 'QQ']
-    if not qq_wins:
-        return "没找到 QQ 窗口，请先打开 QQ"
-
-    win = qq_wins[0]
-    win.activate()
-    time.sleep(0.5)
-
-    # 用 pywinauto 读控件，找到目标群
     try:
+        from pywinauto.keyboard import send_keys as pw_send_keys
+
+        # 1. 激活 QQ 主窗口
+        qq_wins = [w for w in gw.getAllWindows() if w.title.strip() == 'QQ']
+        if not qq_wins:
+            return "没找到 QQ 窗口，请先打开 QQ"
+        qq_wins[0].activate()
+        time.sleep(0.5)
+
+        # 2. 用搜索框找群
         app = Application(backend='uia').connect(title='QQ')
         main_win = app.window(title='QQ')
-        # 读取会话列表文本
-        doc = main_win.child_window(control_type="Document")
-        doc_text = doc.window_text()
-
-        if group_name not in doc_text:
-            return f"在 QQ 会话列表中没找到「{group_name}」，请确认群名或先把群聊置顶"
-
-        # 在会话列表中找到群的位置并点击
-        session_list = main_win.child_window(title="会话列表", control_type="Window")
-        items = session_list.children()
-        clicked = False
-        for item in items:
-            try:
-                if group_name in item.window_text():
-                    item.click_input()
-                    clicked = True
-                    break
-            except Exception:
-                continue
-
-        if not clicked:
-            # fallback: 用搜索
-            return f"无法定位群「{group_name}」的位置，请手动点开该群后重试"
-
-        time.sleep(1)
-
-        # 找到群聊窗口
-        group_wins = [w for w in gw.getAllWindows() if group_name in w.title]
-        if not group_wins:
-            return f"群「{group_name}」窗口没有打开"
-
-        group_win = group_wins[0]
-        group_win.activate()
+        search = main_win.child_window(title='搜索', control_type='Edit')
+        search.click_input()
         time.sleep(0.3)
+        pyperclip.copy(group_name)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(1.5)
 
-        # 在输入框输入消息
-        click_x = group_win.left + group_win.width // 2
-        click_y = group_win.top + group_win.height - 160
-        pyautogui.click(click_x, click_y)
-        time.sleep(0.2)
+        # 3. 回车进入第一个搜索结果
+        pw_send_keys('{ENTER}')
+        time.sleep(2)
 
+        # 4. 找到群聊窗口（新版 QQ 标题可能是截断的）
+        chat_win = None
+        for w in gw.getAllWindows():
+            if '会话' in w.title or group_name[:4] in w.title:
+                chat_win = w
+                break
+        if not chat_win:
+            pyautogui.press('escape')
+            return f"打开群「{group_name}」失败"
+
+        chat_win.activate()
+        time.sleep(0.5)
+
+        # 5. 点击输入框（窗口底部）并发送
+        input_x = chat_win.left + chat_win.width // 2
+        input_y = chat_win.top + chat_win.height - 80
+        pyautogui.click(input_x, input_y)
+        time.sleep(0.3)
         pyperclip.copy(message)
         pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.2)
-
-        # 发送
+        time.sleep(0.3)
         pyautogui.press('enter')
         time.sleep(0.5)
 
         return f"已在「{group_name}」发送：{message}"
 
     except Exception as e:
+        return f"QQ 操作失败：{e}"
         return f"QQ 操作失败：{e}"
 
 
