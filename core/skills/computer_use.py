@@ -269,13 +269,13 @@ def execute(user_input: str) -> str:
 def _do_execute(text: str) -> str:
     """实际执行逻辑。"""
 
-    # QQ 发消息
-    qq_send_match = re.search(r'(?:在|去)(?:QQ|qq).*?[「""](.+?)[」""].*?(?:发|说|回复)[：:]?\s*(.+)', text)
+    # QQ 发消息（支持有引号和无引号两种写法）
+    qq_send_match = re.search(r'(?:在|去)(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""\s]*(?:发|说|回复)[：:]?\s*(.+)', text)
     if not qq_send_match:
-        qq_send_match = re.search(r'(?:帮我|替我).*?(?:在|去).*?[「""](.+?)[」""].*?(?:发|说)[：:]?\s*(.+)', text)
+        qq_send_match = re.search(r'(?:帮我|替我).*?(?:在|去).*?(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""\s]*(?:发|说)[：:]?\s*(.+)', text)
     if qq_send_match:
-        group = qq_send_match.group(1)
-        msg = qq_send_match.group(2)
+        group = qq_send_match.group(1).strip()
+        msg = qq_send_match.group(2).strip()
         return qq_send_message(group, msg)
 
     # QQ 读消息
