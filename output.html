@@ -34,11 +34,12 @@
  <!-- 主聊天区域 -->
  <div class="main">
  <div class="content">
-  <div class="qq-monitor-bar" id="qqMonitorBar" style="display:none;padding:6px 16px;background:linear-gradient(90deg,#e8f5e9,#f1f8e9);border-bottom:1px solid #c8e6c9;font-size:13px;color:#2e7d32;align-items:center;gap:8px;">
-   <span style="animation:pulse 1.5s infinite;">&#x1F7E2;</span>
-   <span id="qqMonitorText"></span>
-   <button onclick="fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'\u505c\u6b62\u76d1\u542c'})}).then(()=>checkQQMonitor())" style="margin-left:auto;background:#ef5350;color:#fff;border:none;border-radius:12px;padding:3px 12px;font-size:12px;cursor:pointer;">\u505c\u6b62</button>
+  <div class="qq-monitor-bar" id="qqMonitorBar" style="display:none;padding:8px 16px;background:linear-gradient(90deg,#e8f5e9,#f1f8e9);border-bottom:1px solid #c8e6c9;font-size:13px;color:#2e7d32;align-items:center;gap:10px;">
+   <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4caf50;animation:blink 1.5s infinite;"></span>
+   <span id="qqMonitorText" style="flex:1;"></span>
+   <button onclick="fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'\u505c\u6b62\u76d1\u542c'})}).then(()=>setTimeout(checkQQMonitor,2000))" style="background:none;color:#e53935;border:1px solid #e53935;border-radius:14px;padding:2px 14px;font-size:12px;cursor:pointer;">停止监听</button>
   </div>
+  <style>@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}</style>
   <div class="chat" id="chat"></div>
  </div>
  <div class="awareness-bar" id="awarenessBar"></div>
