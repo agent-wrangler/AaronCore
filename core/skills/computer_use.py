@@ -223,6 +223,37 @@ def desktop_list_windows() -> str:
     return "当前打开的窗口：\n" + "\n".join(f"  · {w}" for w in windows[:20])
 
 
+def _generate_first_msg(user_input: str) -> str:
+    """用 LLM 从用户指令中提取话题，生成自然的第一句话发给对方 AI。"""
+    try:
+        cfg_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        import urllib.request
+        body = json.dumps({
+            "model": cfg.get("model", ""),
+            "messages": [{"role": "user", "content":
+                f"用户让你去和另一个AI聊天，用户的原话是：\u201c{user_input}\u201d\n"
+                "请提取用户想聊的话题，生成一句自然的开场白发给对方AI。"
+                "要求：1.像真人聊天 2.只输出开场白那一句话 3.不要解释 4.如果没有明确话题就随便找个有趣的话题开聊"
+            }],
+            "max_tokens": 80,
+        }).encode()
+        req = urllib.request.Request(
+            cfg.get("base_url", "").rstrip("/") + "/chat/completions",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {cfg.get('api_key', '')}",
+            },
+        )
+        resp = urllib.request.urlopen(req, timeout=8).read()
+        data = json.loads(resp)
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return "你好，随便聊点什么吧，最近有什么让你印象深刻的事吗？"
+
+
 # ── 技能入口 ──
 
 def execute(user_input: str) -> str:
@@ -276,17 +307,8 @@ def _do_execute(text: str) -> str:
         rounds = min(rounds, 20)
         site = '豆包' if '豆包' in text else 'chatgpt'
         site_url = 'doubao' if site == '豆包' else site.lower()
-        # 提取 topic：去掉指令性词汇，留下话题内容
-        topic = text
-        for noise in ['去', '和', '跟', '让', '叫', '豆包', '聊', '轮', '分钟', '次', '个回合',
-                       '关于', '的话题', '的事', '回来', '总结', '给我', '随便', '点什么',
-                       '帮我', '一下', '那边', '什么', rounds_match.group(0)]:
-            topic = topic.replace(noise, '')
-        topic = re.sub(r'[\d\s，,。]+', '', topic).strip()
-        if len(topic) >= 2:
-            first_msg = f"我们来聊聊{topic}吧，你先说说你的看法"
-        else:
-            first_msg = "你好，随便聊点什么吧，最近有什么让你印象深刻的事吗？"
+        # 用 LLM 提取 topic 并生成自然的第一句话
+        first_msg = _generate_first_msg(text)
         return web_chat(site_url, first_msg, rounds=rounds)
 
     # 网页单轮聊天（豆包等）
