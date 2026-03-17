@@ -45,8 +45,19 @@ function addMessage(sender,text,type){
  var timeSpan=document.createElement('span');
  timeSpan.className='msg-time';
  timeSpan.textContent=T();
- msgMeta.appendChild(nameSpan);
- msgMeta.appendChild(timeSpan);
+ var copyBtn=document.createElement('button');
+ copyBtn.className='msg-copy';
+ copyBtn.textContent='\u590d\u5236';
+ copyBtn.onclick=function(){navigator.clipboard.writeText(text).then(function(){copyBtn.textContent='\u2713';setTimeout(function(){copyBtn.textContent='\u590d\u5236';},1200);});};
+ if(type==='user'){
+  msgMeta.appendChild(copyBtn);
+  msgMeta.appendChild(nameSpan);
+  msgMeta.appendChild(timeSpan);
+ } else {
+  msgMeta.appendChild(nameSpan);
+  msgMeta.appendChild(timeSpan);
+  msgMeta.appendChild(copyBtn);
+ }
  
   // 组装消息
   msgContent.appendChild(bubble);
@@ -216,6 +227,7 @@ function createProcessBubble(card){
 
 async function send(){
  AwarenessManager.stopPolling();
+ if(typeof hideWelcome==='function') hideWelcome();
  var inp=document.getElementById('inp');
  var text=inp.value.trim();
  if(text==='')return;
@@ -227,6 +239,8 @@ async function send(){
 
  var btn=document.getElementById('sendBtn');
  btn.disabled=true;
+ btn.classList.add('sending');
+ setTimeout(function(){btn.classList.remove('sending');},500);
  var pendingState=buildPendingAssistantMessage();
  var chat=document.getElementById('chat');
  chat.appendChild(pendingState.root);
@@ -254,7 +268,6 @@ async function send(){
   if(pendingState.status && pendingState.status.parentNode){
    pendingState.status.parentNode.removeChild(pendingState.status);
   }
-  // convert thinking panel to normal reply bubble
   var panel=pendingState.panel;
   if(panel) panel.parentNode.removeChild(panel);
   pendingState.root.className='msg assistant';
@@ -262,8 +275,6 @@ async function send(){
   msgContent.className='msg-content';
   var bubble=document.createElement('div');
   bubble.className='bubble';
-  bubble.style.opacity='0';
-  bubble.innerHTML=formatBubbleText(text);
   var meta=document.createElement('div');
   meta.className='msg-meta';
   var nameSpan=document.createElement('span');
@@ -274,21 +285,49 @@ async function send(){
   timeSpan.textContent=T();
   meta.appendChild(nameSpan);
   meta.appendChild(timeSpan);
+  var cpBtn=document.createElement('button');
+  cpBtn.className='msg-copy';
+  cpBtn.textContent='\u590d\u5236';
+  cpBtn.onclick=function(){navigator.clipboard.writeText(text).then(function(){cpBtn.textContent='\u2713';setTimeout(function(){cpBtn.textContent='\u590d\u5236';},1200);});};
+  meta.appendChild(cpBtn);
   msgContent.appendChild(bubble);
   msgContent.appendChild(meta);
   pendingState.root.appendChild(msgContent);
-  requestAnimationFrame(function(){
-   bubble.style.transition='opacity 0.4s ease';
-   bubble.style.opacity='1';
-   chat.scrollTop=chat.scrollHeight;
-   if(!pendingState.persisted){
-    bubble.style.removeProperty('transition');
-    chatHistory+=pendingState.root.outerHTML;
-    trimChatHistory();
-    localStorage.setItem('nova_chat_history',chatHistory);
-    pendingState.persisted=true;
+
+  // ── 打字机效果 ──
+  var chars=Array.from(text);
+  var idx=0;
+  var speed=30; // 每字 30ms
+  var cursor=document.createElement('span');
+  cursor.className='typing-cursor';
+  bubble.appendChild(cursor);
+
+  function typeNext(){
+   if(idx>=chars.length){
+    // 打完了：移除光标，格式化 markdown
+    if(cursor.parentNode) cursor.parentNode.removeChild(cursor);
+    bubble.innerHTML=formatBubbleText(text);
+    chat.scrollTop=chat.scrollHeight;
+    if(!pendingState.persisted){
+     chatHistory+=pendingState.root.outerHTML;
+     trimChatHistory();
+     localStorage.setItem('nova_chat_history',chatHistory);
+     pendingState.persisted=true;
+    }
+    return;
    }
-  });
+   var ch=chars[idx];
+   bubble.insertBefore(document.createTextNode(ch), cursor);
+   idx++;
+   chat.scrollTop=chat.scrollHeight;
+   // 标点符号稍微停顿
+   var delay=speed;
+   if('，。！？、；：…'.indexOf(ch)>=0) delay=speed*3;
+   else if(',.!?;:'.indexOf(ch)>=0) delay=speed*2;
+   else if(ch==='\n') delay=speed*2;
+   setTimeout(typeNext, delay);
+  }
+  typeNext();
  }
 
  try{

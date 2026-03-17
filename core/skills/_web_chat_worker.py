@@ -119,9 +119,52 @@ def send_and_read(page, message):
     return prev_text or ""
 
 
+def _ensure_browser(port: int) -> bool:
+    """检查浏览器调试端口是否就绪，没有则关掉已有 Brave 再用调试参数重启。"""
+    import subprocess
+    # 先检查是否已经在监听
+    try:
+        urllib.request.urlopen(f'http://127.0.0.1:{port}/json', timeout=2)
+        return True
+    except Exception:
+        pass
+    # 没有调试端口 → 先杀掉已有 Brave 进程（它没带调试参数，新进程会被合并进去）
+    subprocess.call(['taskkill', '/F', '/IM', 'brave.exe'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(1)
+    # 找 Brave 路径
+    brave_paths = [
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+    ]
+    brave_exe = next((p for p in brave_paths if os.path.exists(p)), None)
+    if not brave_exe:
+        return False
+    env = os.environ.copy()
+    for k in ["HTTP_PROXY","HTTPS_PROXY","http_proxy","https_proxy","ALL_PROXY","all_proxy"]:
+        env.pop(k, None)
+    subprocess.Popen(
+        [brave_exe, f"--remote-debugging-port={port}", "--no-first-run", "--no-default-browser-check"],
+        env=env
+    )
+    # 等待最多 15 秒
+    for _ in range(30):
+        time.sleep(0.5)
+        try:
+            urllib.request.urlopen(f'http://127.0.0.1:{port}/json', timeout=1)
+            return True
+        except Exception:
+            pass
+    return False
+
+
 # ── 主流程 ──
 
 llm_cfg = _load_llm_config()
+
+# 确保浏览器就绪
+if not _ensure_browser(port):
+    print(json.dumps({"ok": False, "error": "浏览器未启动且无法自动打开，请手动启动 Brave 并开启调试端口"}, ensure_ascii=False))
+    sys.exit(0)
 
 pw = sync_playwright().start()
 try:
@@ -134,8 +177,18 @@ try:
                 break
 
     if not page:
-        print(json.dumps({"ok": False, "error": f"\u6ca1\u627e\u5230\u5305\u542b{site}\u7684\u9875\u9762"}, ensure_ascii=False))
-        sys.exit(0)
+        # 没找到页面 → 自动新开一个标签
+        site_urls = {
+            "doubao": "https://www.doubao.com/chat/",
+            "chatgpt": "https://chat.openai.com/",
+            "kimi": "https://kimi.moonshot.cn/",
+        }
+        target_url = site_urls.get(site.lower(), f"https://www.{site}.com/")
+        ctx = browser.contexts[0] if browser.contexts else browser.new_context()
+        page = ctx.new_page()
+        page.goto(target_url)
+        page.wait_for_load_state("domcontentloaded", timeout=15000)
+        time.sleep(3)  # 等页面渲染
 
     conversation = []
     current_msg = msg

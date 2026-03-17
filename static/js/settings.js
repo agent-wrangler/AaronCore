@@ -48,26 +48,26 @@ function clampSettingNumber(value,min,max,fallback){
 }
 
 function renderSettingsToggleCard(title, desc, key, value, isLight){
- var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.78)';
+ var cardBg=isLight?'#ffffff':'rgba(36,36,40,0.95)';
  var borderColor=value
-  ? (isLight?'rgba(99,102,241,0.24)':'rgba(129,140,248,0.28)')
+  ? (isLight?'rgba(120,120,130,0.24)':'rgba(150,150,160,0.28)')
   : (isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
- var titleColor=isLight?'#0f172a':'#e2e8f0';
+ var titleColor=isLight?'#1c1c1e':'#e2e8f0';
  var subColor=isLight?'#64748b':'#94a3b8';
  var stateBg=value
-  ? (isLight?'rgba(79,70,229,0.12)':'rgba(99,102,241,0.18)')
+  ? (isLight?'rgba(100,100,110,0.12)':'rgba(120,120,130,0.18)')
   : (isLight?'rgba(148,163,184,0.12)':'rgba(148,163,184,0.12)');
- var stateColor=value?(isLight?'#4338ca':'#c7d2fe'):(isLight?'#475569':'#cbd5e1');
+ var stateColor=value?(isLight?'#374151':'#c7d2fe'):(isLight?'#475569':'#cbd5e1');
  var actionBg=value
-  ? (isLight?'linear-gradient(135deg,#6366f1,#8b5cf6)':'linear-gradient(135deg,#6366f1,#8b5cf6)')
+  ? (isLight?'linear-gradient(135deg,#6b7280,#8b5cf6)':'linear-gradient(135deg,#6b7280,#8b5cf6)')
   : (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)');
  var actionColor=value?'#fff':(isLight?'#334155':'#e2e8f0');
- return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:'+(isLight?'0 8px 24px rgba(15,23,42,0.06)':'0 10px 28px rgba(0,0,0,0.14)')+';">'
+ return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:'+(isLight?'0 8px 24px rgba(0,0,0,0.06)':'0 10px 28px rgba(0,0,0,0.14)')+';">'
   +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
   +'<div style="min-width:0;"><div style="font-size:15px;font-weight:700;color:'+titleColor+';margin-bottom:4px;">'+escapeHtml(title)+'</div><div style="font-size:12px;line-height:1.7;color:'+subColor+';">'+escapeHtml(desc)+'</div></div>'
   +'<span style="flex-shrink:0;padding:6px 10px;border-radius:999px;background:'+stateBg+';color:'+stateColor+';font-size:12px;font-weight:700;">'+(value?'已开启':'已关闭')+'</span>'
   +'</div>'
-  +'<button type="button" data-settings-action="toggle" data-settings-key="'+escapeHtml(key)+'" style="margin-top:auto;padding:10px 12px;border:none;border-radius:12px;background:'+actionBg+';color:'+actionColor+';font-size:13px;font-weight:700;cursor:pointer;box-shadow:'+(value?'0 8px 20px rgba(99,102,241,0.18)':'none')+';">'+(value?'保持开启':'现在开启')+'</button>'
+  +'<button type="button" data-settings-action="toggle" data-settings-key="'+escapeHtml(key)+'" style="margin-top:auto;padding:10px 12px;border:none;border-radius:12px;background:'+actionBg+';color:'+actionColor+';font-size:13px;font-weight:700;cursor:pointer;box-shadow:'+(value?'0 8px 20px rgba(120,120,130,0.18)':'none')+';">'+(value?'保持开启':'现在开启')+'</button>'
   +'</div>';
 }
 
@@ -95,18 +95,18 @@ function currentAutolearnPreset(config){
 function renderAutolearnPresetCard(key, preset, currentKey, isLight){
  var active=key===currentKey;
  var cardBg=active
-  ? (isLight?'linear-gradient(135deg,#eef2ff,#f8fafc)':'linear-gradient(135deg,rgba(79,70,229,0.18),rgba(15,23,42,0.72))')
-  : (isLight?'#ffffff':'rgba(30,41,59,0.72)');
+  ? (isLight?'linear-gradient(135deg,#eef2ff,#f8fafc)':'linear-gradient(135deg,rgba(100,100,110,0.18),rgba(28,28,30,0.92))')
+  : (isLight?'#ffffff':'rgba(36,36,40,0.92)');
  var borderColor=active
-  ? (isLight?'rgba(99,102,241,0.22)':'rgba(129,140,248,0.28)')
+  ? (isLight?'rgba(120,120,130,0.22)':'rgba(150,150,160,0.28)')
   : (isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
- var textColor=isLight?'#0f172a':'#e2e8f0';
+ var textColor=isLight?'#1c1c1e':'#e2e8f0';
  var subColor=isLight?'#64748b':'#94a3b8';
  var btnBg=active
   ? (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)')
-  : 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+  : 'linear-gradient(135deg,#6b7280,#8b5cf6)';
  var btnColor=active?(isLight?'#334155':'#e2e8f0'):'#fff';
- return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:'+(isLight?'0 8px 24px rgba(15,23,42,0.06)':'0 10px 28px rgba(0,0,0,0.14)')+';">'
+ return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:'+(isLight?'0 8px 24px rgba(0,0,0,0.06)':'0 10px 28px rgba(0,0,0,0.14)')+';">'
   +'<div style="font-size:16px;font-weight:800;color:'+textColor+';">'+escapeHtml(preset.label)+'</div>'
   +'<div style="font-size:12px;line-height:1.7;color:'+subColor+';flex:1;">'+escapeHtml(preset.desc)+'</div>'
   +'<button type="button" data-settings-action="preset" data-settings-key="'+escapeHtml(key)+'" style="padding:10px 12px;border:none;border-radius:12px;background:'+btnBg+';color:'+btnColor+';font-size:13px;font-weight:700;cursor:pointer;">'+(active?'保持这一档':'切到这一档')+'</button>'
@@ -140,14 +140,14 @@ function renderSettingsActionButton(label, action, key, isLight, emphasis, disab
  var primary=emphasis==='primary';
  var bg=disabled
   ? (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)')
-  : (primary?'linear-gradient(135deg,#6366f1,#8b5cf6)':(isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)'));
+  : (primary?'linear-gradient(135deg,#6b7280,#8b5cf6)':(isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)'));
  var color=disabled?'#94a3b8':(primary?'#fff':(isLight?'#334155':'#e2e8f0'));
  return '<button type="button" data-settings-action="'+action+'"'+(key?' data-settings-key="'+escapeHtml(key)+'"':'')+' style="position:relative;z-index:1;padding:10px 12px;border:none;border-radius:12px;background:'+bg+';color:'+color+';font-size:13px;font-weight:700;cursor:'+(disabled?'default':'pointer')+';'+(disabled?'opacity:0.68;pointer-events:none;':'')+'">'+escapeHtml(label)+'</button>';
 }
 
 function renderSettingsMetaPill(label, tone, isLight){
  var palette={
-  accent:isLight?['rgba(79,70,229,0.12)','#4338ca']:['rgba(99,102,241,0.18)','#c7d2fe'],
+  accent:isLight?['rgba(100,100,110,0.12)','#374151']:['rgba(120,120,130,0.18)','#c7d2fe'],
   ok:isLight?['rgba(16,185,129,0.12)','#047857']:['rgba(16,185,129,0.18)','#86efac'],
   warn:isLight?['rgba(245,158,11,0.14)','#b45309']:['rgba(245,158,11,0.16)','#fde68a'],
   danger:isLight?['rgba(239,68,68,0.12)','#b91c1c']:['rgba(239,68,68,0.18)','#fca5a5'],
@@ -278,10 +278,10 @@ function renderSelfRepairReportCard(report, isLight, active){
  var apply=safe.apply_result&&typeof safe.apply_result==='object'?safe.apply_result:{};
  var statusMeta=selfRepairReportStatusMeta(safe);
  var riskMeta=selfRepairRiskMeta(safe);
- var textColor=isLight?'#0f172a':'#e2e8f0';
+ var textColor=isLight?'#1c1c1e':'#e2e8f0';
  var subColor=isLight?'#64748b':'#94a3b8';
- var borderColor=active?(isLight?'rgba(99,102,241,0.22)':'rgba(129,140,248,0.28)'):(isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
- var cardBg=active?(isLight?'linear-gradient(135deg,#eef2ff,#f8fafc)':'linear-gradient(135deg,rgba(79,70,229,0.18),rgba(15,23,42,0.72))'):(isLight?'#ffffff':'rgba(30,41,59,0.72)');
+ var borderColor=active?(isLight?'rgba(120,120,130,0.22)':'rgba(150,150,160,0.28)'):(isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
+ var cardBg=active?(isLight?'linear-gradient(135deg,#eef2ff,#f8fafc)':'linear-gradient(135deg,rgba(100,100,110,0.18),rgba(28,28,30,0.92))'):(isLight?'#ffffff':'rgba(36,36,40,0.92)');
  var summary=cleanInlineText(safe.summary||safe.problem||'',220)||'这条修复提案还没有生成摘要。';
  var diagnosis=cleanInlineText(safe.diagnosis||safe.fix||'',240);
  var question=cleanInlineText(safe.last_question||'',140);
@@ -300,7 +300,7 @@ function renderSelfRepairReportCard(report, isLight, active){
  var canPreview=applyStatus!=='applied'&&applyStatus!=='applied_without_validation'&&previewStatus!=='preview_ready';
  var canApply=previewStatus==='preview_ready'&&applyStatus!=='applied'&&applyStatus!=='applied_without_validation';
  var html='';
- html+='<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:18px;padding:16px;box-shadow:'+(active?(isLight?'0 10px 30px rgba(79,70,229,0.08)':'0 12px 30px rgba(0,0,0,0.18)'):(isLight?'0 8px 24px rgba(15,23,42,0.05)':'0 10px 24px rgba(0,0,0,0.12)'))+';">';
+ html+='<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:18px;padding:16px;box-shadow:'+(active?(isLight?'0 10px 30px rgba(100,100,110,0.08)':'0 12px 30px rgba(0,0,0,0.18)'):(isLight?'0 8px 24px rgba(0,0,0,0.05)':'0 10px 24px rgba(0,0,0,0.12)'))+';">';
  html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
  html+='<div style="min-width:0;flex:1 1 420px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+renderSettingsMetaPill(statusMeta.label,statusMeta.tone,isLight)+renderSettingsMetaPill(riskMeta.label,riskMeta.tone,isLight)+'</div><div style="font-size:16px;font-weight:800;color:'+textColor+';line-height:1.5;margin-top:10px;">'+escapeHtml(summary)+'</div></div>';
  html+='<div style="font-size:12px;color:'+subColor+';white-space:nowrap;">'+escapeHtml(formatSettingsTimestamp(safe.updated_at||safe.created_at))+'</div></div>';
@@ -333,9 +333,9 @@ function renderSelfRepairReportCard(report, isLight, active){
 }
 
 function renderSelfRepairReviewSection(config, status, reports, isLight){
- var textColor=isLight?'#0f172a':'#e2e8f0';
+ var textColor=isLight?'#1c1c1e':'#e2e8f0';
  var subColor=isLight?'#64748b':'#94a3b8';
- var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.78)';
+ var cardBg=isLight?'#ffffff':'rgba(36,36,40,0.95)';
  var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
  var safeReports=Array.isArray(reports)?reports:[];
  var list=safeReports.slice(0,10);
@@ -389,9 +389,9 @@ function renderSettingsPage(isLight){
  var selfRepairReports=Array.isArray(settingsPanelState.selfRepairReports)?settingsPanelState.selfRepairReports:[];
  var l7s=settingsPanelState.l7Stats||{};
  var notice=settingsPanelState.error||settingsPanelState.notice||'';
- var noticeColor=settingsPanelState.error?'#ef4444':(isLight?'#4338ca':'#c7d2fe');
- var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.78)';
- var textColor=isLight?'#0f172a':'#e2e8f0';
+ var noticeColor=settingsPanelState.error?'#ef4444':(isLight?'#374151':'#c7d2fe');
+ var cardBg=isLight?'#ffffff':'rgba(36,36,40,0.95)';
+ var textColor=isLight?'#1c1c1e':'#e2e8f0';
  var subColor=isLight?'#64748b':'#94a3b8';
  var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
  var html='';

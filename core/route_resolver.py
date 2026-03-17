@@ -300,14 +300,31 @@ def llm_route_lite(bundle: dict, core_route: dict = None) -> dict:
             + "\n\u4f46\u4e0d\u786e\u5b9a\u662f\u5426\u6b63\u786e\uff0c\u8bf7\u4f60\u5224\u65ad\u3002"
         )
 
+    few_shot = (
+        "\n\u793a\u4f8b\uff1a\n"
+        "\u300c\u4eca\u5929\u5e38\u5dde\u5929\u6c14\u300d \u2192 {\"intent\":\"weather\"}\n"
+        "\u300c\u4f60\u53bb\u95ee\u4e0b\u8c46\u5305\u300d \u2192 {\"intent\":\"computer_use\"}\n"
+        "\u300c\u53bb\u627e\u8c46\u5305\u804a\u804a\u300d \u2192 {\"intent\":\"computer_use\"}\n"
+        "\u300c\u5e2e\u6211\u95ee\u4e0b\u8c46\u5305\u300d \u2192 {\"intent\":\"computer_use\"}\n"
+        "\u300c\u4f60\u53bb\u53d1\u4e2aQQ\u6d88\u606f\u300d \u2192 {\"intent\":\"computer_use\"}\n"
+        "\u300c\u8bb2\u4e2a\u7b11\u8bdd\u300d \u2192 {\"intent\":\"story\"}\n"
+        "\u300c\u5e2e\u6211\u5199\u4e2a\u6545\u4e8b\u300d \u2192 {\"intent\":\"story\"}\n"
+        "\u300c\u4eca\u5929\u6709\u4ec0\u4e48\u65b0\u95fb\u300d \u2192 {\"intent\":\"news\"}\n"
+        "\u300c\u54c8\u54c8\u597d\u7b11\u300d \u2192 {\"intent\":\"chat\"}\n"
+        "\u300c\u4f60\u662f\u8c01\u300d \u2192 {\"intent\":\"chat\"}\n"
+    )
+
     prompt = (
         "\u4f60\u662f\u610f\u56fe\u5206\u7c7b\u5668\u3002\u5224\u65ad\u7528\u6237\u8fd9\u53e5\u8bdd\u7684\u610f\u56fe\u3002\n\n"
         "\u7528\u6237\u8bf4\uff1a" + msg + "\n"
         "\u6700\u8fd1\u5bf9\u8bdd\uff1a" + (recent or "\u65e0") + "\n"
         "\u573a\u666f\uff1a" + l2_brief + "\n"
         + ("\u76f8\u5173\u8bb0\u5fc6\uff1a" + l2_mem + "\n" if l2_mem else "")
+        + "\u4ea4\u4e92\u9636\u6bb5\uff1a" + (l2.get("stage") or "\u672a\u77e5") + "\uff0c\u8bed\u7528\u6001\u5ea6\uff1a" + (l2.get("attitude") or "\u672a\u77e5") + "\n"
         + "\u53ef\u7528\u6280\u80fd\uff1a" + skills_str + "\n"
-        + hint + "\n\n"
+        + hint
+        + few_shot + "\n"
+        "\u89c4\u5219\uff1a\u4ea4\u4e92\u9636\u6bb5\u4e3a\u300c\u8bf7\u6c42\u300d\u6216\u300c\u786e\u8ba4\u300d\u4e14\u8bed\u7528\u6001\u5ea6\u4e3a\u300c\u6307\u4ee4\u300d\u65f6\uff0c\u4f18\u5148\u9009\u62e9\u6280\u80fd\u800c\u975e\u804a\u5929\u3002\n"
         "\u8fd4\u56deJSON\uff1a{\"intent\":\"chat\u6216\u6280\u80fd\u540d\",\"reason\":\"\u4e00\u53e5\u8bdd\"}\n"
         "\u53ea\u8fd4\u56deJSON\u3002"
     )
@@ -386,7 +403,15 @@ def resolve_route(bundle: dict) -> dict:
         _debug_write("missing_capability_route", missing_capability_route)
         return missing_capability_route
 
-    # ── 阶段 1：关键词路由（router.py）──
+    # ── 阶段 0.5：交互阶段门控 ──
+    # 请求阶段 + 指令态 → 强制走技能，不给 LLM 聊天机会
+    l2 = bundle.get("l2") or {}
+    stage = l2.get("stage", "")
+    attitude = l2.get("attitude", "")
+    if stage in ("请求", "确认") and attitude == "指令":
+        _debug_write("route_decision", {"action": "stage_gate_skill", "stage": stage, "attitude": attitude})
+        # 继续走关键词路由，但把 LLM 聊天兜底关掉
+        bundle["_force_skill"] = True
     core_route = None
     if _nova_core_ready:
         try:
@@ -431,9 +456,15 @@ def resolve_route(bundle: dict) -> dict:
             return lite_result
 
         # LLM 说是 chat，且关键词路由也没有强候选 → 直接 chat
+        # 但如果是强制技能模式（请求阶段+指令态），走 LLM heavy 再判一次
         if core_route is None or not has_skill_target(core_route):
-            _debug_write("route_decision", {"action": "lite_chat"})
-            return lite_result
+            if bundle.get("_force_skill"):
+                _debug_write("route_decision", {"action": "force_skill_llm_heavy"})
+                # 不直接 chat，继续走 llm_route heavy
+                pass
+            else:
+                _debug_write("route_decision", {"action": "lite_chat"})
+                return lite_result
 
         # LLM 说 chat，但关键词路由有候选（中低置信度）→ 信 LLM，走 chat
         core_conf = float(core_route.get("confidence", 0) or 0)

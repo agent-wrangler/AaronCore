@@ -1,19 +1,63 @@
+var _SVG_SUN='<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+var _SVG_MOON='<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+function _syncThemeIcon(){
+ var btn=document.getElementById('themeBtn');
+ if(!btn) return;
+ btn.innerHTML=document.body.classList.contains('light')?_SVG_SUN:_SVG_MOON;
+}
+function winMinimize(){if(window.pywebview&&window.pywebview.api)window.pywebview.api.minimize();}
+function winMaximize(){if(window.pywebview&&window.pywebview.api)window.pywebview.api.toggle_maximize();}
+function winClose(){if(window.pywebview&&window.pywebview.api)window.pywebview.api.close();}
+
+function initTopBarDrag(){
+ var bar=document.getElementById('topBar');
+ if(!bar) return;
+ bar.addEventListener('mousedown',function(e){
+  if(e.target.closest('.win-controls,.top-btn,.top-bar-controls button')) return;
+  if(e.button!==0) return;
+  e.preventDefault();
+  if(window.pywebview&&window.pywebview.api)
+   window.pywebview.api.start_drag();
+ });
+ bar.addEventListener('dblclick',function(e){
+  if(e.target.closest('.win-controls,.top-btn')) return;
+  winMaximize();
+ });
+}
+
+function _syncTitleBar(theme){
+ if(window.pywebview&&window.pywebview.api){
+  window.pywebview.api.set_theme(theme);
+ }
+}
 function toggleTheme(){
  var body=document.body;
  var currentMenu=document.querySelector('.menu.active');
  var currentId=currentMenu?currentMenu.id:'';
+ // 保存滚动位置（记忆页用 memScroll，其他用 chat）
+ var scrollEl=document.getElementById('memScroll')||document.getElementById('chat');
+ var scrollTop=scrollEl?scrollEl.scrollTop:0;
+ window._memScrollTop=scrollTop;
  if(body.classList.contains('dark')){
   body.classList.remove('dark');
   body.classList.add('light');
   localStorage.setItem('nova_theme','light');
+  _syncTitleBar('light');
+  _syncThemeIcon();
  }else{
   body.classList.remove('light');
   body.classList.add('dark');
   localStorage.setItem('nova_theme','dark');
+  _syncTitleBar('dark');
+  _syncThemeIcon();
  }
  var menuMap={m1:1,m2:2,m3:3,m4:4,m5:5,m6:6};
  if(currentId && menuMap[currentId]){
   show(menuMap[currentId]);
+  requestAnimationFrame(function(){
+   var el=document.getElementById('memScroll')||document.getElementById('chat');
+   if(el) el.scrollTop=scrollTop;
+  });
  }
 }
 
@@ -83,20 +127,53 @@ function initSidebarResize(){
 
 // setInputVisible is in utils.js
 
+// 快捷发送（欢迎页按钮）
+function quickSend(text){
+ var inp=document.getElementById('inp');
+ inp.value=text;
+ send();
+}
+
+// 隐藏欢迎页
+function loadWelcomeNews(){
+ var el=document.getElementById('welcomeNewsList');
+ if(!el) return;
+ fetch('/skills/news/headlines').then(function(r){return r.json();}).then(function(d){
+  var items=d.headlines||d.items||[];
+  if(!items.length){el.innerHTML='<div style="color:#6b7280;font-size:13px;">暂无热点</div>';return;}
+  el.innerHTML=items.slice(0,6).map(function(item){
+   var title=typeof item==='string'?item:(item.title||item.text||'');
+   return '<div class="welcome-news-item" onclick="quickSend(\'帮我介绍一下：'+title.replace(/'/g,'')+'\')">'+title+'</div>';
+  }).join('');
+ }).catch(function(){
+  el.innerHTML='<div style="color:#6b7280;font-size:13px;">网络未连接</div>';
+ });
+}
+function hideWelcome(){
+ var w=document.getElementById('welcomePage');
+ if(w) w.style.display='none';
+}
+
 window.onload=function(){
- // 初始化侧边栏拉伸
  initSidebarResize();
+ initTopBarDrag();
+ loadWelcomeNews();
  
- // 加载保存的主题
- var savedTheme=localStorage.getItem('nova_theme');
+ // 加载保存的主题，默认白天
+ var savedTheme=localStorage.getItem('nova_theme')||'light';
  if(savedTheme==='light'){
   document.body.classList.remove('dark');
   document.body.classList.add('light');
  }
+ // pywebview API 可能延迟就绪，等一下再同步标题栏
+ setTimeout(function(){
+  _syncTitleBar(savedTheme==='light'?'light':'dark');
+  _syncThemeIcon();
+ },500);
  
  // 加载聊天历史
  var saved=localStorage.getItem('nova_chat_history');
- if(saved){
+ if(saved && saved.trim()!==''){
   // 修复历史数据中残留的 opacity:0
   var tmp=document.createElement('div');
   tmp.innerHTML=saved;
@@ -111,9 +188,9 @@ window.onload=function(){
   });
   var cleaned=tmp.innerHTML;
   chatHistory=cleaned;
-  document.getElementById('chat').innerHTML=cleaned;
-  document.getElementById('chat').scrollTop=document.getElementById('chat').scrollHeight;
-  // 回写修复后的数据
+  var chat=document.getElementById('chat');
+  chat.innerHTML=cleaned;
+  chat.scrollTop=chat.scrollHeight;
   if(cleaned!==saved) localStorage.setItem('nova_chat_history',cleaned);
   console.log('[Nova] 恢复聊天历史，消息数:', tmp.querySelectorAll('.msg').length);
  }
@@ -134,13 +211,6 @@ window.onload=function(){
   var el=document.getElementById('modelName');
   if(el) el.textContent='未知';
  });
- 
- // 添加欢迎消息（如果无历史记录）
- if(!saved||saved.trim()===''){
-  setTimeout(function(){
-   addMessage('Nova','你好，我是 Nova。现在聊天、技能、消耗、记忆这些页面都已经接回来了。','assistant');
-  },300);
- }
 };
 
 function show(n){
@@ -154,8 +224,13 @@ function show(n){
 
  if(n==1){
   setInputVisible(true);
-  chat.innerHTML=chatHistory;
-  chat.scrollTop=chat.scrollHeight;
+  if(!chatHistory || chatHistory.trim()===''){
+   chat.innerHTML='<div class="welcome" id="welcomePage"><div class="welcome-left"><div class="welcome-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div><div class="welcome-title">\u4eca\u5929\u60f3\u804a\u70b9\u4ec0\u4e48\uff1f</div><div class="welcome-sub">Nova \u5df2\u5c31\u7eea\uff0c\u8bb0\u5fc6\u3001\u6280\u80fd\u3001\u8054\u7f51\u5168\u90e8\u5728\u7ebf</div><div class="welcome-actions"><div class="welcome-chip" onclick="quickSend(\'\u4eca\u5929\u5e38\u5dde\u5929\u6c14\u600e\u4e48\u6837\')">\u67e5\u5929\u6c14</div><div class="welcome-chip" onclick="quickSend(\'\u7ed9\u6211\u8bb2\u4e2a\u7b11\u8bdd\')">\u8bb2\u7b11\u8bdd</div><div class="welcome-chip" onclick="quickSend(\'\u4f60\u8fd8\u8bb0\u5f97\u6211\u5417\')">\u8bb0\u5fc6\u6d4b\u8bd5</div><div class="welcome-chip" onclick="quickSend(\'\u4f60\u90fd\u4f1a\u4ec0\u4e48\u6280\u80fd\')">\u6280\u80fd\u5217\u8868</div></div></div><div class="welcome-right" id="welcomeNews"><div class="welcome-news-title">\u4eca\u65e5\u70ed\u70b9</div><div class="welcome-news-list" id="welcomeNewsList">\u52a0\u8f7d\u4e2d...</div></div></div>';
+   loadWelcomeNews();
+  } else {
+   chat.innerHTML=chatHistory;
+   chat.scrollTop=chat.scrollHeight;
+  }
  }
 
  if(n==2){
@@ -255,7 +330,6 @@ function show(n){
    // \u7f13\u5b58\u7edf\u8ba1
    var cacheWrite=s.cache_write_tokens||0;
    var cacheRead=s.cache_read_tokens||0;
-   var cacheTotal=cacheWrite+cacheRead;
    var cacheRate=(s.input_tokens||0)>0?Math.round(cacheRead/(s.input_tokens||1)*100):0;
    h+='<div class="stats-section"><div class="stats-section-title">'+svgCache+' \u7f13\u5b58\u7edf\u8ba1</div><div class="stats-grid">';
    h+='<div class="stats-card"><div class="stats-label">\u7f13\u5b58\u5199\u5165</div><div class="stats-number">'+(cacheWrite.toLocaleString())+'</div></div>';
@@ -286,7 +360,7 @@ function show(n){
    h+='<div class="stats-card"><div class="stats-label">L8 \u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+l8rate+'%</div><div style="font-size:11px;opacity:0.5;margin-top:2px;">'+l8s+'\u6b21/'+l8h+'\u547d\u4e2d</div></div>';
    h+='<div class="stats-card"><div class="stats-label">L1 \u5bf9\u8bdd</div><div class="stats-number">'+(mem.l1_count||0)+'\u6761</div></div>';
    h+='<div class="stats-card"><div class="stats-label">L3 \u7ecf\u5386</div><div class="stats-number">'+(mem.l3_count||0)+'\u6761</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">L4 \u4eba\u683c</div><div class="stats-number">'+(mem.l4_available?'\u2705':'\u274c')+'</div></div>';
+   h+='<div class="stats-card"><div class="stats-label">L4 \u4eba\u683c</div><div class="stats-number">'+(mem.l4_available?'<span style="color:#6aaa88;font-size:13px;">已加载</span>':'<span style="color:#6b7280;font-size:13px;">未加载</span>')+'</div></div>';
    h+='<div class="stats-card"><div class="stats-label">L5 \u6280\u80fd</div><div class="stats-number">'+(mem.l5_count||0)+'\u4e2a</div></div>';
    h+='</div></div>';
    // \u573a\u666f\u5206\u5e03
@@ -321,11 +395,10 @@ function show(n){
  if(n==4){
   setInputVisible(false);
   currentMemoryFilter='all';
-  chat.innerHTML='<div style="padding:20px;overflow:auto;height:100%;"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;"><div><div style="font-size:26px;font-weight:700;color:'+(isLight?'#1a1a1a':'#e2e8f0')+';margin-bottom:6px;">记忆引擎</div><div style="font-size:13px;color:'+(isLight?'#6b7280':'#94a3b8')+';line-height:1.7;max-width:720px;">这里会沉淀 NovaCore 从 L1 到 L8 的变化轨迹。记忆粒子、记忆结晶、成长经验、相伴时间，都会在这里慢慢长出来。</div></div><div style="font-size:12px;color:'+(isLight?'#6b7280':'#94a3b8')+';padding-top:6px;">Memory Engine</div></div><div id="memoryOverview" style="display:grid;grid-template-columns:'+memoryOverviewColumns()+';gap:12px;margin-bottom:18px;"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="memoryChips"><button class="mem-chip" onclick="setMemoryFilter(\'all\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#1a1a1a':'#fff')+';cursor:pointer;">全部</button><button class="mem-chip" onclick="setMemoryFilter(\'L3\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">记忆结晶</button><button class="mem-chip" onclick="setMemoryFilter(\'L4\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">人格图谱</button><button class="mem-chip" onclick="setMemoryFilter(\'L5\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">技能矩阵</button><button class="mem-chip" onclick="setMemoryFilter(\'L6\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">技能执行</button><button class="mem-chip" onclick="setMemoryFilter(\'L7\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">反馈学习</button><button class="mem-chip" onclick="setMemoryFilter(\'L8\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">成长经验</button></div><div style="margin-bottom:18px;"><input id="memorySearch" type="text" placeholder="搜索记忆事件..." style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid '+(isLight?'#d1d5db':'#333')+';background:'+(isLight?'#fff':'#1a1a2a')+';color:'+(isLight?'#1a1a1a':'#fff')+';outline:none;" onkeyup="filterMemBySearch(this.value)"></div><div id="memoryTimeline" style="display:flex;flex-direction:column;gap:10px;">加载中...</div></div>';
+  chat.innerHTML='<div style="padding:20px;overflow:auto;height:100%;" id="memScroll"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;"><div><div style="font-size:26px;font-weight:700;color:'+(isLight?'#1a1a1a':'#e2e8f0')+';margin-bottom:6px;">记忆引擎</div><div style="font-size:13px;color:'+(isLight?'#6b7280':'#94a3b8')+';line-height:1.7;max-width:720px;">这里会沉淀 NovaCore 从 L1 到 L8 的变化轨迹。记忆粒子、记忆结晶、成长经验、相伴时间，都会在这里慢慢长出来。</div></div><div style="font-size:12px;color:'+(isLight?'#6b7280':'#94a3b8')+';padding-top:6px;">Memory Engine</div></div><div id="memoryOverview" style="display:grid;grid-template-columns:'+memoryOverviewColumns()+';gap:12px;margin-bottom:18px;"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="memoryChips"><button class="mem-chip" onclick="setMemoryFilter(\'all\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#1a1a1a':'#fff')+';cursor:pointer;">全部</button><button class="mem-chip" onclick="setMemoryFilter(\'L3\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">记忆结晶</button><button class="mem-chip" onclick="setMemoryFilter(\'L4\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">人格图谱</button><button class="mem-chip" onclick="setMemoryFilter(\'L5\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">技能矩阵</button><button class="mem-chip" onclick="setMemoryFilter(\'L6\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">技能执行</button><button class="mem-chip" onclick="setMemoryFilter(\'L7\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">反馈学习</button><button class="mem-chip" onclick="setMemoryFilter(\'L8\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">成长经验</button></div><div style="margin-bottom:18px;"><input id="memorySearch" type="text" placeholder="搜索记忆事件..." style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid '+(isLight?'#d1d5db':'#333')+';background:'+(isLight?'#fff':'#1e1e20')+';color:'+(isLight?'#1a1a1a':'#fff')+';outline:none;" onkeyup="filterMemBySearch(this.value)"></div><div id="memoryTimeline" style="display:flex;flex-direction:column;gap:10px;">加载中...</div></div>';
   fetch('/memory').then(r=>r.json()).then(function(d){
-   var cardBg=isLight?'#ffffff':'rgba(30,41,59,0.72)';
    var softBg=isLight?'#f8fafc':'rgba(255,255,255,0.03)';
-   var textColor=isLight?'#0f172a':'#e2e8f0';
+   var textColor=isLight?'#1c1c1e':'#e2e8f0';
    var labelColor=isLight?'#64748b':'#94a3b8';
    var borderColor=isLight?'rgba(148,163,184,0.28)':'rgba(255,255,255,0.05)';
    var events=d.events||[];
@@ -347,53 +420,22 @@ function show(n){
    if(level>=300) stage='繁星';
    if(level>=1000) stage='无界';
    var overview='';
-   overview+='<div style="background:linear-gradient(135deg,'+(isLight?'#eef2ff,#f5f3ff':'rgba(102,126,234,0.18),rgba(118,75,162,0.22)')+');border:1px solid '+borderColor+';padding:18px;border-radius:18px;box-shadow:'+(isLight?'0 8px 24px rgba(79,70,229,0.08)':'0 10px 28px rgba(0,0,0,0.18)')+';display:flex;flex-direction:column;gap:12px;">';
-   overview+='<div style="font-size:12px;color:'+labelColor+';">成长等级</div><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div style="min-width:0;"><div style="display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap;font-size:28px;font-weight:800;color:'+textColor+';margin-bottom:2px;">Lv.'+level+' <span style="font-size:16px;font-weight:700;opacity:0.9;white-space:nowrap;">'+stage+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(255,255,255,0.78)':'rgba(15,23,42,0.28)')+';border:1px solid '+(isLight?'rgba(99,102,241,0.12)':'rgba(255,255,255,0.08)')+';font-size:12px;color:'+labelColor+';">总经验 '+formatGrowthNumber(totalExp)+'</span><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(255,255,255,0.78)':'rgba(15,23,42,0.28)')+';border:1px solid '+(isLight?'rgba(99,102,241,0.12)':'rgba(255,255,255,0.08)')+';font-size:12px;color:'+labelColor+';">本级 '+formatGrowthNumber(growth.currentExp)+'/'+formatGrowthNumber(growth.nextNeed)+'</span></div></div><div style="padding:7px 12px;border-radius:999px;background:'+(isLight?'rgba(79,70,229,0.1)':'rgba(129,140,248,0.16)')+';border:1px solid '+(isLight?'rgba(79,70,229,0.14)':'rgba(129,140,248,0.2)')+';font-size:12px;font-weight:700;color:'+(isLight?'#4338ca':'#c7d2fe')+';white-space:nowrap;">升级还差 '+formatGrowthNumber(growth.remainingExp)+' EXP</div></div><div style="margin-top:2px;height:10px;background:'+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';border-radius:999px;overflow:hidden;"><div style="height:100%;width:'+progress+'%;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:999px;"></div></div></div>';
+   overview+='<div style="background:linear-gradient(135deg,'+(isLight?'#eef2ff,#f5f3ff':'rgba(255,255,255,0.04),rgba(255,255,255,0.02)')+');border:1px solid '+borderColor+';padding:18px;border-radius:18px;box-shadow:'+(isLight?'0 8px 24px rgba(100,100,110,0.08)':'0 10px 28px rgba(0,0,0,0.18)')+';display:flex;flex-direction:column;gap:12px;">';
+   overview+='<div style="font-size:12px;color:'+labelColor+';">成长等级</div><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div style="min-width:0;"><div style="display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap;font-size:28px;font-weight:800;color:'+textColor+';margin-bottom:2px;">Lv.'+level+' <span style="font-size:16px;font-weight:700;opacity:0.9;white-space:nowrap;">'+stage+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(255,255,255,0.78)':'rgba(255,255,255,0.04)')+';border:1px solid '+(isLight?'rgba(120,120,130,0.12)':'rgba(255,255,255,0.08)')+';font-size:12px;color:'+labelColor+';">总经验 '+formatGrowthNumber(totalExp)+'</span><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(255,255,255,0.78)':'rgba(255,255,255,0.04)')+';border:1px solid '+(isLight?'rgba(120,120,130,0.12)':'rgba(255,255,255,0.08)')+';font-size:12px;color:'+labelColor+';">本级 '+formatGrowthNumber(growth.currentExp)+'/'+formatGrowthNumber(growth.nextNeed)+'</span></div></div><div style="padding:7px 12px;border-radius:999px;background:'+(isLight?'rgba(100,100,110,0.1)':'rgba(150,150,160,0.16)')+';border:1px solid '+(isLight?'rgba(100,100,110,0.14)':'rgba(150,150,160,0.2)')+';font-size:12px;font-weight:700;color:'+(isLight?'#374151':'#c7d2fe')+';white-space:nowrap;">升级还差 '+formatGrowthNumber(growth.remainingExp)+' EXP</div></div><div style="margin-top:2px;height:10px;background:'+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';border-radius:999px;overflow:hidden;"><div style="height:100%;width:'+progress+'%;background:linear-gradient(90deg,rgba(255,255,255,0.5),rgba(255,255,255,0.25));border-radius:999px;"></div></div></div>';
    overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">记忆粒子（L1）</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+counts.L1+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">最细小的输入与感知片段</div></div>';
    overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">记忆结晶（L3）</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+counts.L3+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">已经沉淀成结构的长期片段</div></div>';
    overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">相伴天数</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+days+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">一起把系统慢慢养起来的时间</div></div>';
    document.getElementById('memoryOverview').innerHTML=overview;
 
-   var grouped={};
-   events.forEach(function(e){
-    var date=e.time?String(e.time).split('T')[0].split(' ')[0]:'未知';
-    if(!grouped[date]) grouped[date]=[];
-    grouped[date].push(e);
-   });
-   var dates=Object.keys(grouped).sort().reverse();
-   var html='';
-    dates.forEach(function(date){
-     var label=date;
-     var now=new Date();
-     var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-     var yd=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
-     var yesterday=yd.getFullYear()+'-'+String(yd.getMonth()+1).padStart(2,'0')+'-'+String(yd.getDate()).padStart(2,'0');
-     if(date===today) label='今天'; else if(date===yesterday) label='昨天';
-     html+='<div class="mem-date-group">';
-     html+='<div class="mem-date-label" style="font-size:12px;color:'+labelColor+';margin:18px 0 8px 0;font-weight:700;letter-spacing:0.3px;">'+label+'</div>';
-     grouped[date].forEach(function(e){
-      var view=memoryEventCopy(e);
-      var layer=e.layer||'MEM';
-     var tagBg='#475569'; var tagColor='#e2e8f0';
-     if(layer==='L1'){tagBg='#0f766e';tagColor='#ccfbf1';}
-     else if(layer==='L3'){tagBg='#1d4ed8';tagColor='#dbeafe';}
-     else if(layer==='L4'){tagBg='#6d28d9';tagColor='#ede9fe';}
-     else if(layer==='L5'){tagBg='#3d2f0a';tagColor='#fcd34d';}
-     else if(layer==='L6'){tagBg='#14532d';tagColor='#86efac';}
-     else if(layer==='L7'){tagBg='#7c2d12';tagColor='#fdba74';}
-     else if(layer==='L8'){tagBg='#1f4a3d';tagColor='#6ee7b7';}
-     var time=e.time?String(e.time).replace('T',' ').substring(11,16):'';
-     html+='<div class="mem-item" data-layer="'+layer+'" style="padding:16px 18px;background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;margin-bottom:10px;box-shadow:'+(isLight?'0 6px 20px rgba(15,23,42,0.06)':'0 8px 24px rgba(0,0,0,0.14)')+';position:relative;overflow:hidden;">';
-     html+='<div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg, transparent, rgba(102,126,234,0.55), transparent);"></div>';
-     html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-size:10px;padding:3px 8px;background:'+tagBg+';color:'+tagColor+';border-radius:999px;font-weight:700;flex-shrink:0;">'+layer+'</span><span style="font-size:14px;font-weight:700;color:'+textColor+';letter-spacing:0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+view.title.replace(/^'+layer+'\s?/,'')+'</span></div><span style="font-size:11px;color:'+labelColor+';flex-shrink:0;">'+time+'</span></div>';
-      html+='<div style="font-size:13px;color:'+textColor+';line-height:1.82;opacity:0.96;">'+view.content+'</div>';
-      html+='</div>';
-     });
-     html+='</div>';
-    });
-   document.getElementById('memoryTimeline').innerHTML=html||'<div style="color:'+labelColor+';">还没有记忆事件</div>';
+   // 存全量事件，交给分页模块处理
+   window._memAllEvents=events; // 后端已按时间降序排好
+   _memCurrentPage=1;
    var allNode=document.querySelector('.mem-chip');
    if(allNode) setMemoryFilter('all', allNode);
+   else { _memFilteredItems=window._memAllEvents; _memRenderPage(); }
+   // fetch 完成后恢复滚动位置
+   var ms=document.getElementById('memScroll');
+   if(ms && window._memScrollTop) ms.scrollTop=window._memScrollTop;
   }).catch(function(){
    document.getElementById('memoryTimeline').innerHTML='<div style="color:#ef4444;">记忆数据加载失败</div>';
   });

@@ -35,7 +35,82 @@ _INTENT_RULES: list[tuple[list[str], str]] = [
     (["你好", "嗨", "在吗", "早", "晚安"], "打招呼"),
 ]
 
+# ── 交互阶段检测 ──────────────────────────────────────────────
+# 请求阶段：用户明确要求执行某件事
+_STAGE_REQUEST = [
+    "帮我", "帮忙", "去做", "去找", "去问", "去查", "去看", "去发",
+    "你去", "你帮", "你来", "你能不能", "能不能帮", "麻烦你", "麻烦帮",
+    "执行", "运行", "启动", "打开", "发送", "查一下", "查下", "搜一下",
+]
+# 确认阶段：用户在确认/授权执行
+_STAGE_CONFIRM = [
+    "好的", "行", "可以", "就这样", "开始吧", "那就", "确认", "没问题",
+    "就按", "按这个", "就这么", "搞吧", "干吧",
+]
+# 探索阶段：用户在讨论/提议，不是要求立即执行
+_STAGE_EXPLORE = [
+    "要不", "或者", "也可以", "感觉", "觉得", "是不是", "能不能",
+    "如果", "假设", "要是", "万一", "考虑", "想想",
+]
+# 纠偏阶段：用户在纠正
+_STAGE_CORRECT = [
+    "不对", "不是", "错了", "不是这个", "不是这样", "我说的是",
+    "你理解错了", "不是让你", "我只是",
+]
+
+# ── 语用态度检测 ──────────────────────────────────────────────
+# 指令态：强烈执行意图
+_ATTITUDE_COMMAND = [
+    "去", "帮我去", "你去", "立刻", "马上", "现在", "直接",
+    "必须", "一定要", "赶紧",
+]
+# 提议态：轻度建议，不强求
+_ATTITUDE_SUGGEST = [
+    "要不", "或者", "也行", "也可以", "都行", "随便", "无所谓",
+]
+# 讨论态：纯探讨，不要求执行
+_ATTITUDE_DISCUSS = [
+    "感觉", "觉得", "好像", "应该", "可能", "大概", "理论上",
+    "按道理", "一般来说",
+]
+
 def _detect_topics(all_user_text: str) -> list[str]:
+    """从用户文本中识别话题。"""
+    found = []
+    for keywords, topic in _TOPIC_RULES:
+        if any(kw in all_user_text for kw in keywords):
+            found.append(topic)
+    return found or ["闲聊"]
+
+
+def _detect_interaction_stage(current_input: str, user_texts: list[str]) -> str:
+    """检测当前交互阶段。"""
+    text = current_input.strip()
+    # 纠偏优先级最高
+    if any(w in text for w in _STAGE_CORRECT):
+        return "纠偏"
+    if any(w in text for w in _STAGE_CONFIRM):
+        return "确认"
+    if any(w in text for w in _STAGE_REQUEST):
+        return "请求"
+    if any(w in text for w in _STAGE_EXPLORE):
+        return "探索"
+    return "社交"
+
+
+def _detect_attitude(current_input: str) -> str:
+    """检测语用态度。"""
+    text = current_input.strip()
+    if any(w in text for w in _ATTITUDE_COMMAND):
+        return "指令"
+    if any(w in text for w in _ATTITUDE_SUGGEST):
+        return "提议"
+    if any(w in text for w in _ATTITUDE_DISCUSS):
+        return "讨论"
+    return "中性"
+
+
+
     """从用户文本中识别话题。"""
     found = []
     for keywords, topic in _TOPIC_RULES:
@@ -143,9 +218,17 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
     # ── 板块 4: 上下文延续 ──
     follow_up = _detect_follow_up(user_texts, nova_texts, current_input)
 
+    # ── 板块 5: 交互阶段 ──
+    stage = _detect_interaction_stage(current_input, user_texts)
+
+    # ── 板块 6: 语用态度 ──
+    attitude = _detect_attitude(current_input)
+
     return {
         "topics": topics,
         "mood": mood,
         "intents": intents,
         "follow_up": follow_up,
+        "stage": stage,
+        "attitude": attitude,
     }
