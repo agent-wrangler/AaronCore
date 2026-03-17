@@ -57,17 +57,30 @@ try:
         print(json.dumps({"ok": False, "error": f"会话列表中没找到「{group_name}」"}, ensure_ascii=False))
         sys.exit(0)
 
-    # 3. 点击群聊
+    # 3. 双击进入群聊（单击只打开资料卡）
     rect = target.rectangle()
-    pyautogui.click((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
-    time.sleep(1.5)
+    pyautogui.doubleClick((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
+    time.sleep(2)
 
-    # 4. 找群聊窗口，发送消息
+    # 关掉可能弹出的资料卡
+    for w in gw.getAllWindows():
+        if '资料卡' in w.title:
+            w.activate()
+            pyautogui.press('escape')
+            time.sleep(0.3)
+
+    # 4. 用群名匹配群聊窗口
     chat_win = None
     for w in gw.getAllWindows():
-        if '会话' in w.title:
+        if w.title.strip() == group_name and w.width > 400:
             chat_win = w
             break
+    if not chat_win:
+        # fallback: 找"会话"窗口
+        for w in gw.getAllWindows():
+            if '会话' in w.title:
+                chat_win = w
+                break
     if not chat_win:
         print(json.dumps({"ok": False, "error": f"打开群「{group_name}」失败"}, ensure_ascii=False))
         sys.exit(0)
