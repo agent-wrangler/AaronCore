@@ -94,10 +94,16 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
     try:
         result = subprocess.run(
             [sys.executable, '-u', open_worker, group_name],
-            capture_output=True, timeout=15,
+            capture_output=True, timeout=25,
             env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
         )
         raw = result.stdout.decode('utf-8', errors='replace') if isinstance(result.stdout, bytes) else result.stdout
+        err = result.stderr.decode('utf-8', errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr)
+        # 日志
+        try:
+            with open("memory_db/cu_debug.log", "a", encoding="utf-8") as f:
+                f.write(f"[open_group] stdout={raw[:200]} stderr={err[:200]}\n")
+        except: pass
         data = json.loads(raw.strip().splitlines()[-1]) if raw.strip() else {}
         if not data.get("ok"):
             return f"QQ \u6253\u5f00\u7fa4\u300c{group_name}\u300d\u5931\u8d25\uff1a{data.get('error', '')}"
