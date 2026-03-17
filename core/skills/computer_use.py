@@ -259,19 +259,24 @@ def _do_execute(text: str) -> str:
         group = qq_read_match.group(1)
         return qq_read_messages(group)
 
-    # 网页多轮聊天（"和豆包聊5轮/10分钟"）— 必须在单轮前面
-    multi_match = re.search(r'(?:和|跟|去|让|叫).*?(?:豆包|doubao|chatgpt|kimi).*?聊.*?(\d+)\s*(?:轮|分钟|次)[，,]?\s*(?:聊聊|话题|关于)?\s*(.+)?', text, re.I)
-    if multi_match:
-        rounds = int(multi_match.group(1))
-        topic = (multi_match.group(2) or "").strip()
+    # 网页多轮聊天 — 只要同时出现"豆包"和"X轮/X分钟"就算多轮
+    rounds_match = re.search(r'(\d+)\s*(?:轮|分钟|次|个回合)', text)
+    has_target = re.search(r'(?:豆包|doubao|chatgpt|kimi)', text, re.I)
+    if rounds_match and has_target:
+        rounds = int(rounds_match.group(1))
         if '分钟' in text:
-            rounds = max(rounds * 2, 2)  # 粗略：1分钟约2轮
-        rounds = min(rounds, 20)  # 最多20轮
+            rounds = max(rounds * 2, 2)
+        rounds = min(rounds, 20)
         site = '豆包' if '豆包' in text else 'chatgpt'
         site_url = 'doubao' if site == '豆包' else site.lower()
-        # 清理 topic，去掉"的话题""的事"等尾巴，生成自然的第一句话
+        # 提取 topic：去掉指令性词汇，留下话题内容
+        topic = text
+        for noise in ['去', '和', '跟', '让', '叫', '豆包', '聊', '轮', '分钟', '次', '个回合',
+                       '关于', '的话题', '的事', '回来', '总结', '给我', '随便', '聊点什么',
+                       '帮我', '一下', '那边', rounds_match.group(0)]:
+            topic = topic.replace(noise, '')
+        topic = re.sub(r'\s+', '', topic).strip('，, 。')
         if topic:
-            topic = re.sub(r'的?(?:话题|事情?|问题|东西)$', '', topic).strip()
             first_msg = f"我们来聊聊{topic}吧，你先说说你的看法"
         else:
             first_msg = "你好，我们来聊聊天吧，随便聊点什么有趣的话题"
