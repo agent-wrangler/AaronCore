@@ -47,79 +47,32 @@ except ImportError:
 # ── QQ 操作 ──
 
 def qq_send_message(group_name: str, message: str) -> str:
-    """在指定 QQ 群里发送消息。"""
-    if not _HAS_PYAUTOGUI or not _HAS_PYWINAUTO:
-        return "缺少依赖：需要 pyautogui + pywinauto（pip install pyautogui pywinauto）"
-
+    """在指定 QQ 群里发送消息。用子进程执行避免 FastAPI 兼容问题。"""
+    import subprocess
+    worker = os.path.join(os.path.dirname(__file__), '_qq_worker.py')
     try:
-        # 1. 激活 QQ 主窗口
-        qq_wins = [w for w in gw.getAllWindows() if w.title.strip() == 'QQ']
-        if not qq_wins:
-            return "没找到 QQ 窗口，请先打开 QQ"
-        qq_wins[0].activate()
-        time.sleep(0.5)
-
-        # 2. 读会话列表，精确匹配群名
-        app = Application(backend='uia').connect(title='QQ')
-        main_win = app.window(title='QQ')
-        session = main_win.child_window(title='会话列表', control_type='Window')
-
-        # 滚到顶部
-        sr = session.rectangle()
-        pyautogui.click((sr.left + sr.right) // 2, (sr.top + sr.bottom) // 2)
-        time.sleep(0.2)
-        pyautogui.hotkey('ctrl', 'Home')
-        time.sleep(0.5)
-
-        # 边滚动边找，每个 item 的 children[0] 就是群名
-        target = None
-        for _ in range(10):
-            for item in session.children():
-                try:
-                    children = item.children()
-                    if children:
-                        name = children[0].window_text().strip()
-                        if name == group_name and not name.startswith('来自群'):
-                            rect = item.rectangle()
-                            if rect.top > 0:
-                                target = item
-                                break
-                except:
-                    continue
-            if target:
+        result = subprocess.run(
+            [sys.executable, '-u', worker, group_name, message],
+            capture_output=True, timeout=30,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
+        )
+        raw = result.stdout.decode('utf-8', errors='replace') if isinstance(result.stdout, bytes) else result.stdout
+        lines = [l.strip() for l in raw.strip().splitlines() if l.strip()]
+        json_line = ""
+        for line in reversed(lines):
+            if line.startswith("{"):
+                json_line = line
                 break
-            pyautogui.scroll(-5, x=(sr.left + sr.right) // 2, y=(sr.top + sr.bottom) // 2)
-            time.sleep(0.3)
-
-        if not target:
-            return f"在 QQ 会话列表中没找到「{group_name}」"
-
-        # 3. 点击群聊
-        rect = target.rectangle()
-        pyautogui.click((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
-        time.sleep(1.5)
-
-        # 4. 找到群聊窗口，点击输入框发送
-        chat_win = None
-        for w in gw.getAllWindows():
-            if '会话' in w.title:
-                chat_win = w
-                break
-        if not chat_win:
-            return f"打开群「{group_name}」失败"
-
-        chat_win.activate()
-        time.sleep(0.3)
-        pyautogui.click(chat_win.left + chat_win.width // 2, chat_win.top + chat_win.height - 80)
-        time.sleep(0.3)
-        pyperclip.copy(message)
-        pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.3)
-        pyautogui.press('enter')
-        time.sleep(0.5)
-
-        return f"已在「{group_name}」发送：{message}"
-
+        if not json_line:
+            err = result.stderr.decode('utf-8', errors='replace')[:200] if isinstance(result.stderr, bytes) else str(result.stderr)[:200]
+            return f"QQ 操作失败：{err}"
+        data = json.loads(json_line)
+        if data.get("ok"):
+            return data.get("result", "已发送")
+        else:
+            return f"QQ 操作失败：{data.get('error', '未知错误')}"
+    except subprocess.TimeoutExpired:
+        return "QQ 操作超时"
     except Exception as e:
         return f"QQ 操作失败：{e}"
         return f"QQ 操作失败：{e}"
