@@ -551,6 +551,82 @@ class ChatRequest(BaseModel):
     message: str
 
 
+# ── Companion 伴侣窗口状态 ──
+_companion_activity = "idle"  # idle / thinking / replying / skill
+_companion_last_reply = ""    # 最近一次回复摘要
+_companion_reply_id = ""      # 回复 ID（用于前端去重）
+_companion_model = "Hiyori"   # 当前模型名
+
+COMPANION_HTML_FILE = ENGINE_DIR / "companion.html"
+LIVE2D_DIR = ENGINE_DIR / "static" / "live2d"
+
+# 可用模型列表（扫描目录）
+def _scan_live2d_models():
+    models = {}
+    if LIVE2D_DIR.is_dir():
+        for d in sorted(LIVE2D_DIR.iterdir()):
+            if d.is_dir() and not d.name.startswith("_"):
+                m3 = d / f"{d.name}.model3.json"
+                if m3.exists():
+                    models[d.name] = f"/static/live2d/{d.name}/{d.name}.model3.json"
+    return models
+
+_available_models = _scan_live2d_models()
+
+
+@app.get("/companion", response_class=HTMLResponse)
+async def companion_page():
+    """伴侣窗口 HTML 页面"""
+    if COMPANION_HTML_FILE.exists():
+        try:
+            html = COMPANION_HTML_FILE.read_text(encoding="utf-8")
+            # 内联 companion CSS
+            css_file = ENGINE_DIR / "static" / "css" / "companion.css"
+            if css_file.exists():
+                css = css_file.read_text(encoding="utf-8")
+                html = html.replace(
+                    '<link rel="stylesheet" href="/static/css/companion.css">',
+                    f"<style>{css}</style>",
+                )
+            return html
+        except Exception:
+            pass
+    return "<html><body style='background:transparent'>companion not found</body></html>"
+
+
+@app.get("/companion/state")
+async def companion_state():
+    """伴侣窗口轮询端点：返回当前 mood/activity/最近回复"""
+    persona = load_l4_persona()
+    ps = persona.get("persona_state", {}) if isinstance(persona, dict) else {}
+    return {
+        "mood": ps.get("mood", "\u6e29\u67d4"),
+        "energy": ps.get("energy", "\u7a33\u5b9a"),
+        "active_mode": persona.get("active_mode", "sweet") if isinstance(persona, dict) else "sweet",
+        "activity": _companion_activity,
+        "last_reply_id": _companion_reply_id,
+        "last_reply_summary": _companion_last_reply,
+        "model": _companion_model,
+        "ts": datetime.now().isoformat(),
+    }
+
+
+@app.get("/companion/models")
+async def companion_models():
+    """返回可用模型列表"""
+    return {"models": _available_models, "current": _companion_model}
+
+
+@app.post("/companion/model/{name}")
+async def companion_switch_model(name: str):
+    """切换伴侣模型"""
+    global _companion_model
+    if name in _available_models:
+        _companion_model = name
+        return {"ok": True, "model": name, "path": _available_models[name]}
+    return {"ok": False, "error": f"model '{name}' not found"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
     if HTML_FILE.exists():
@@ -605,6 +681,9 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     save_msg_history(history)
 
     async def event_stream():
+        global _companion_activity, _companion_last_reply, _companion_reply_id
+        _companion_activity = "thinking"
+
         async def _trace(label, detail):
             await asyncio.sleep(0.3)
             return {"event": "trace", "data": json.dumps({"label": label, "detail": detail}, ensure_ascii=False)}
@@ -686,6 +765,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 response = mode_switch_reply
                 yield await _trace("\u4eba\u683c\u5207\u6362", "\u5df2\u5207\u6362\u4eba\u683c\u6a21\u5f0f")
                 yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                _companion_activity = "idle"
                 add_to_history("assistant", response)
                 history.append({"role": "assistant", "content": response, "time": datetime.now().isoformat()})
                 save_msg_history(history)
@@ -703,6 +783,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
             if mode in ("skill", "hybrid") and skill not in ("none", "", None) and NOVA_CORE_READY:
                 # ── Step 5: 调用技能 ──
+                _companion_activity = "skill"
                 skill_display = get_skill_display_name(skill)
                 yield await _trace("\u8c03\u7528\u6280\u80fd", f"\u6b63\u5728\u8c03\u7528\u300c{skill_display}\u300d\u6280\u80fd\u2026")
 
@@ -713,6 +794,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     response = str(skill_result or "")
             else:
                 # ── Step 5: 生成回复 ──
+                _companion_activity = "replying"
                 # 检测用户是否主动要求学习/搜索
                 if is_explicit_learning_request(msg):
                     yield await _trace("\u8054\u7f51\u641c\u7d22", "\u6b63\u5728\u5206\u6790\u641c\u7d22\u4e3b\u9898\u2026")
@@ -773,6 +855,12 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         # ── 最终回复 ──
         await asyncio.sleep(0.05)
         yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+        _companion_activity = "idle"
+
+        # 更新伴侣窗口的回复摘要（截取前 30 字）
+        _companion_reply_id = datetime.now().isoformat()
+        summary = str(response or "").replace("\n", " ").strip()
+        _companion_last_reply = summary[:60] + ("..." if len(summary) > 60 else "")
 
         # ── 后台任务 ──
         feedback_rule = l7_record_feedback_v2(msg, history, background_tasks)
@@ -818,6 +906,19 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             debug_write("l2_add_error", {"error": str(exc)})
 
     return EventSourceResponse(event_stream())
+
+
+@app.get("/skills/news/headlines")
+async def get_news_headlines():
+    """欢迎页今日热点，取 Google News top 6 条标题"""
+    try:
+        from core.skills.news import _parse_rss, GOOGLE_NEWS_FEEDS
+        url = GOOGLE_NEWS_FEEDS.get("top", list(GOOGLE_NEWS_FEEDS.values())[0])
+        items, _ = _parse_rss(url, limit=6)
+        headlines = [item.get("title", "") for item in items if item.get("title")]
+        return {"headlines": headlines}
+    except Exception as e:
+        return {"headlines": [], "error": str(e)}
 
 
 @app.get("/stats")
@@ -1186,16 +1287,18 @@ async def get_memory():
             for item in l7_data:
                 feedback = str(item.get("user_feedback") or "").strip()
                 fix = str(item.get("fix") or "").strip()
+                category = str(item.get("category") or "").strip()
                 scene = str(item.get("scene") or "general").strip()
                 content = feedback or "收到一条新的反馈修正规则"
                 if fix:
                     content = f"收到反馈：{content}（修正方向：{fix}）"
+                title = category or "反馈学习"
                 events.append(
                     {
                         "time": normalize_event_time(item.get("created_at") or item.get("time")),
                         "layer": "L7",
                         "event_type": "feedback",
-                        "title": "反馈学习",
+                        "title": title,
                         "content": content,
                         "scene": scene,
                     }

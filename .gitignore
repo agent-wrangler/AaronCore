@@ -29,3 +29,7 @@ memory_db/qq_monitor_state.json
 *.png
 output.html.codex_backup
 .claude/
+static/live2d/_tmp_cubism/
+static/live2d/_tmp/
+companion/node_modules/
+static/live2d/*/
