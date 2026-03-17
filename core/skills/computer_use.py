@@ -81,14 +81,30 @@ def qq_send_message(group_name: str, message: str) -> str:
         return f"QQ 操作失败：{e}"
 
 
-def qq_start_monitor(group_name: str, my_name: str = '浴火重生') -> str:
-    """启动 QQ 群监听。"""
+def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f') -> str:
+    """启动 QQ 群监听。先打开群聊窗口，再启动后台监听进程。"""
     global _monitor_process, _monitor_group
     import subprocess
 
     if _monitor_process and _monitor_process.poll() is None:
         return f"\u5df2\u7ecf\u5728\u76d1\u542c\u300c{_monitor_group}\u300d\u4e86\uff0c\u5148\u8bf4\u201c\u505c\u6b62\u76d1\u542c\u201d\u518d\u5207\u6362"
 
+    # 先用 _qq_worker 打开群聊窗口（发一条空操作）
+    open_worker = os.path.join(os.path.dirname(__file__), '_qq_open_group.py')
+    try:
+        result = subprocess.run(
+            [sys.executable, '-u', open_worker, group_name],
+            capture_output=True, timeout=15,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
+        )
+        raw = result.stdout.decode('utf-8', errors='replace') if isinstance(result.stdout, bytes) else result.stdout
+        data = json.loads(raw.strip().splitlines()[-1]) if raw.strip() else {}
+        if not data.get("ok"):
+            return f"QQ \u6253\u5f00\u7fa4\u300c{group_name}\u300d\u5931\u8d25\uff1a{data.get('error', '')}"
+    except Exception as e:
+        return f"QQ \u6253\u5f00\u7fa4\u5931\u8d25\uff1a{e}"
+
+    # 启动监听 worker
     worker = os.path.join(os.path.dirname(__file__), '_qq_monitor_worker.py')
     _monitor_process = subprocess.Popen(
         [sys.executable, '-u', worker, group_name, my_name, '8'],
