@@ -18,6 +18,10 @@ import time
 import json
 import re
 
+# ── 监听进程管理 ──
+_monitor_process = None
+_monitor_group = None
+
 # ── 依赖检测 ──
 _HAS_PYAUTOGUI = False
 _HAS_PYWINAUTO = False
@@ -75,7 +79,39 @@ def qq_send_message(group_name: str, message: str) -> str:
         return "QQ 操作超时"
     except Exception as e:
         return f"QQ 操作失败：{e}"
-        return f"QQ 操作失败：{e}"
+
+
+def qq_start_monitor(group_name: str, my_name: str = '浴火重生') -> str:
+    """启动 QQ 群监听。"""
+    global _monitor_process, _monitor_group
+    import subprocess
+
+    if _monitor_process and _monitor_process.poll() is None:
+        return f"\u5df2\u7ecf\u5728\u76d1\u542c\u300c{_monitor_group}\u300d\u4e86\uff0c\u5148\u8bf4\u201c\u505c\u6b62\u76d1\u542c\u201d\u518d\u5207\u6362"
+
+    worker = os.path.join(os.path.dirname(__file__), '_qq_monitor_worker.py')
+    _monitor_process = subprocess.Popen(
+        [sys.executable, '-u', worker, group_name, my_name, '8'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
+    )
+    _monitor_group = group_name
+    return f"\u5f00\u59cb\u76d1\u542c\u7fa4\u300c{group_name}\u300d\uff0c\u6709\u4eba@\u6211\u6216\u804a\u5230\u76f8\u5173\u8bdd\u9898\u4f1a\u81ea\u52a8\u56de\u590d\u3002\u8bf4\u201c\u505c\u6b62\u76d1\u542c\u201d\u53ef\u4ee5\u5173\u95ed\u3002"
+
+
+def qq_stop_monitor() -> str:
+    """停止 QQ 群监听。"""
+    global _monitor_process, _monitor_group
+    if _monitor_process and _monitor_process.poll() is None:
+        _monitor_process.terminate()
+        _monitor_process.wait(timeout=5)
+        name = _monitor_group
+        _monitor_process = None
+        _monitor_group = None
+        return f"已停止监听群「{name}」"
+    _monitor_process = None
+    _monitor_group = None
+    return "当前没有在监听任何群"
 
 
 def qq_read_messages(group_name: str) -> str:
@@ -240,6 +276,16 @@ def execute(user_input: str) -> str:
 
 def _do_execute(text: str) -> str:
     """实际执行逻辑。"""
+
+    # QQ 群监听（启动/停止）— 必须在 QQ 发消息之前
+    if re.search(r'(?:停止|关闭|取消).*?监听', text):
+        return qq_stop_monitor()
+    monitor_match = re.search(r'监听.*?(?:QQ|qq)(?:群)?[「""\s]*(.+)', text)
+    if not monitor_match:
+        monitor_match = re.search(r'(?:在|去).*?(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""]*(?:监听|自动回复|聊天)', text)
+    if monitor_match:
+        group = monitor_match.group(1).strip().rstrip('」""里面中内 ')
+        return qq_start_monitor(group)
 
     # QQ 发消息（支持有引号和无引号两种写法）
     qq_send_match = re.search(r'(?:在|去)(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""\s]*(?:发|说|回复)[：:]?\s*(.+)', text)
