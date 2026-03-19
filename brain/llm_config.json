@@ -1,5 +1,17 @@
 {
-  "api_key": "sk-e5cbede8b15f454dad0e48273e8eb4e3",
-  "model": "deepseek-chat",
-  "base_url": "https://api.deepseek.com/v1"
+  "models": {
+    "deepseek-chat": {
+      "api_key": "sk-e5cbede8b15f454dad0e48273e8eb4e3",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "vision": false
+    },
+    "gpt-4o": {
+      "api_key": "sk-xxx",
+      "base_url": "https://xxx/v1",
+      "model": "gpt-4o",
+      "vision": true
+    }
+  },
+  "default": "deepseek-chat"
 }

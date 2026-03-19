@@ -31,8 +31,21 @@ SYSTEM_MSG_PATTERNS = [
 ]
 
 # 每分钟最多回复数
-MAX_REPLIES_PER_MIN = 3
+MAX_REPLIES_PER_MIN = 15
 _reply_timestamps = []
+
+# ── 日志 ──
+
+_LOG_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'qq_monitor_debug.log')
+
+def _log(msg):
+    line = json.dumps({"log": msg, "t": time.strftime("%H:%M:%S")}, ensure_ascii=False)
+    print(line, flush=True)
+    try:
+        with open(_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except:
+        pass
 
 # PLACEHOLDER_FUNCTIONS
 
@@ -56,20 +69,8 @@ def _should_reply(sender, content, my_name, prev_sender=None):
         return False
     if _is_dangerous(content):
         return False
-    # 有人@我
-    if f'@{my_name}' in content:
-        return True
-    # 对话延续：上一条是我说的，这条是别人接的
-    if prev_sender == my_name:
-        return True
-    # 提到关键词
-    reply_keywords = ['AI', 'agent', 'Agent', 'nova', 'Nova', '\u673a\u5668\u4eba', '\u667a\u80fd', '\u81ea\u52a8']
-    if any(k in content for k in reply_keywords):
-        return True
-    # 问号结尾
-    if content.strip().endswith('?') or content.strip().endswith('\uff1f'):
-        return True
-    return False
+    # 只要不是自己说的、不是系统消息，都回复
+    return True
 
 
 def _rate_limit_ok():
@@ -87,8 +88,18 @@ def _load_llm_config():
     try:
         p = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
         with open(p, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
+            data = json.load(f)
+        # 优先读 default 指向的模型配置
+        default = data.get('default', '')
+        if default and default in data.get('models', {}):
+            return data['models'][default]
+        # fallback: 顶层字段
+        if data.get('model') and data.get('api_key'):
+            return data
+        _log(f"llm_config \u65e0\u6709\u6548\u914d\u7f6e: default={default}")
+        return None
+    except Exception as e:
+        _log(f"llm_config \u52a0\u8f7d\u5931\u8d25: {e}")
         return None
 
 
@@ -167,11 +178,9 @@ def _generate_reply(recent_msgs, target_msg, my_name, llm_cfg, persona=None):
         if _is_dangerous(reply):
             return None
         return reply
-    except:
+    except Exception as e:
+        _log(f"LLM \u8c03\u7528\u5931\u8d25: {e}")
         return None
-
-
-# PLACEHOLDER_PARSE
 
 
 def _parse_messages(doc_text):
@@ -192,17 +201,32 @@ def _parse_messages(doc_text):
     return msgs
 
 
+def _restore_window(title_keyword):
+    """如果聊天窗口最小化了，先恢复它"""
+    try:
+        for w in gw.getAllWindows():
+            if title_keyword in w.title.strip() and w.width > 400:
+                if w.isMinimized:
+                    w.restore()
+                    time.sleep(0.3)
+                return
+    except:
+        pass
+
+
 def _read_chat_text(group_title):
-    """读取群聊窗口的 Document 文本"""
+    """读取群聊窗口的 Document 文本（支持折叠窗口，最小化也能读）"""
     try:
         desktop = Desktop(backend='uia')
-        wins = desktop.windows(title=group_title)
+        # 先精确前缀匹配（独立窗口）
+        wins = desktop.windows(title_re=f"^{re.escape(group_title)}.*")
         if not wins:
-            return ""
-        chat = wins[0]
-        docs = [c for c in chat.descendants(control_type='Document')]
-        if docs:
-            return docs[0].window_text()
+            # fallback: 包含匹配（QQ 折叠窗口，如"AI Agent等2个会话"）
+            wins = desktop.windows(title_re=f".*{re.escape(group_title)}.*")
+        for chat in wins:
+            docs = [c for c in chat.descendants(control_type='Document')]
+            if docs:
+                return docs[0].window_text()
     except:
         pass
     return ""
@@ -211,7 +235,8 @@ def _read_chat_text(group_title):
 def _send_message(chat_title, message):
     """在群聊窗口发送消息"""
     try:
-        wins = [w for w in gw.getAllWindows() if w.title.strip() == chat_title and w.width > 400]
+        _restore_window(chat_title)
+        wins = [w for w in gw.getAllWindows() if chat_title in w.title.strip() and w.width > 400]
         if not wins:
             return False
         w = wins[0]
@@ -231,15 +256,12 @@ def _send_message(chat_title, message):
 
 # ── 主循环 ──
 
-def _log(msg):
-    print(json.dumps({"log": msg}, ensure_ascii=False), flush=True)
-
-
-# ── 主循环 ──
-
 llm_cfg = _load_llm_config()
 persona = _load_persona()
 _log(f"\u5f00\u59cb\u76d1\u542c\u7fa4\u300c{group_name}\u300d\uff0c\u6211\u7684\u6635\u79f0={my_name}\uff0c\u95f4\u9694={poll_interval}s\uff0c\u4eba\u683c={'OK' if persona else 'None'}")
+_llm_model = llm_cfg.get('model') if llm_cfg else 'None'
+_llm_url = (llm_cfg.get('base_url', '')[:30] + '...') if llm_cfg else 'None'
+_log(f"LLM \u914d\u7f6e: model={_llm_model}, url={_llm_url}")
 
 # 群聊窗口标题（双击打开后的标题就是群名）
 chat_title = group_name
@@ -249,6 +271,12 @@ while True:
     try:
         doc_text = _read_chat_text(chat_title)
         if not doc_text:
+            time.sleep(poll_interval)
+            continue
+
+        # 确认当前聊天区显示的是自己监听的群（QQ 折叠窗口时只显示激活群）
+        # 匹配 "群名(成员数)" 格式，如 "AI Agent(1229)"
+        if not re.search(rf'{re.escape(group_name)}\(\d+\)', doc_text):
             time.sleep(poll_interval)
             continue
 

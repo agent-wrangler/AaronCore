@@ -413,7 +413,10 @@ function renderSettingsPage(isLight){
  html+='<div data-settings-action="toggle" data-settings-key="enabled" style="flex-shrink:0;width:44px;height:24px;border-radius:12px;background:'+(_evo?(isLight?'#10b981':'#34d399'):(isLight?'#cbd5e1':'#475569'))+';cursor:pointer;position:relative;transition:background 0.2s;"><span style="position:absolute;top:2px;'+(_evo?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.2s;"></span></div>';
  html+='</div>';
 
- // ── 区块3：修复提案审核 ──
+ // ── 区块3：模型管理 ──
+ html+=renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor);
+
+ // ── 区块4：修复提案审核 ──
  html+=renderSelfRepairReviewSection(config,selfRepairStatus,selfRepairReports,isLight);
 
  box.innerHTML=html;
@@ -454,6 +457,7 @@ function loadSettingsPage(isLight){
  chat.innerHTML='<div class="settings-page" style="padding:20px;overflow:auto;height:100%;width:100%;position:relative;z-index:1;"><h2 class="page-title" style="margin-bottom:15px;">⚙️ 设置</h2><div id="settingsBox">加载中...</div></div>';
  settingsPanelState.notice='';
  settingsPanelState.error='';
+ loadSettingsModels();
  refreshSettingsData(isLight).catch(function(){
   settingsPanelState.error='设置数据加载失败';
   renderSettingsPage(isLight);
@@ -524,5 +528,122 @@ function saveSelfRepairMode(){
  var el=document.getElementById('selfRepairApplyMode');
  if(!el) return;
  saveAutolearnConfigPatch({self_repair_apply_mode:el.value},'审批节奏已更新');
+}
+
+// ── 模型管理 ──
+var _settingsModels=null;
+var _settingsCurrentModel='';
+
+function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor){
+ var html='';
+ html+='<div style="margin-top:14px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px 20px;border-radius:14px;">';
+ html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;">';
+ html+='<span style="font-size:15px;font-weight:700;color:'+textColor+';">\u6a21\u578b\u7ba1\u7406</span>';
+ html+='<button type="button" onclick="addModelRow()" style="padding:6px 14px;border:1px solid '+borderColor+';border-radius:8px;background:none;color:'+textColor+';font-size:12px;cursor:pointer;">+ \u6dfb\u52a0\u6a21\u578b</button>';
+ html+='</div>';
+ html+='<div id="modelListBox" style="display:flex;flex-direction:column;gap:6px;">';
+ if(!_settingsModels){
+  html+='\u52a0\u8f7d\u4e2d...';
+ }else{
+  var models=_settingsModels;
+  var keys=Object.keys(models);
+  if(!keys.length){
+   html+='<div style="font-size:12px;color:'+subColor+';">\u8fd8\u6ca1\u6709\u914d\u7f6e\u6a21\u578b</div>';
+  }else{
+   keys.forEach(function(mid){
+    var m=models[mid]||{};
+    var isCurrent=mid===_settingsCurrentModel;
+    var rowBg=isCurrent?(isLight?'rgba(59,130,246,0.06)':'rgba(59,130,246,0.1)'):(isLight?'#f8fafc':'rgba(28,28,30,0.6)');
+    var rowBorder=isCurrent?(isLight?'rgba(59,130,246,0.25)':'rgba(96,165,250,0.3)'):borderColor;
+    var visionDot=m.vision?'<span style="width:6px;height:6px;border-radius:50%;background:#60a5fa;display:inline-block;margin-left:4px;" title="\u652f\u6301\u89c6\u89c9"></span>':'';
+    var checkMark=isCurrent?'<span style="color:#34d399;font-size:14px;margin-right:6px;">\u2713</span>':'';
+    // 单行：勾选标记 + 模型名 + 视觉点 + 右侧按钮
+    html+='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:'+rowBg+';border:1px solid '+rowBorder+';border-radius:10px;cursor:pointer;transition:all 0.15s;" onclick="switchModel(\''+escapeHtml(mid)+'\')" onmouseenter="this.style.opacity=\'0.85\'" onmouseleave="this.style.opacity=\'1\'">';
+    html+=checkMark;
+    html+='<span style="font-size:13px;font-weight:'+(isCurrent?'700':'500')+';color:'+textColor+';flex:1;">'+escapeHtml(m.model||mid)+'</span>';
+    html+=visionDot;
+    html+='<span style="font-size:11px;color:'+subColor+';margin-right:4px;">'+escapeHtml(mid)+'</span>';
+    html+='<button onclick="event.stopPropagation();editModelRow(\''+escapeHtml(mid)+'\')" style="padding:3px 8px;border:1px solid '+borderColor+';border-radius:5px;background:none;color:'+subColor+';font-size:11px;cursor:pointer;">\u7f16\u8f91</button>';
+    if(!isCurrent) html+='<button onclick="event.stopPropagation();deleteModel(\''+escapeHtml(mid)+'\')" style="padding:3px 8px;border:1px solid rgba(239,68,68,0.3);border-radius:5px;background:none;color:#ef4444;font-size:11px;cursor:pointer;">\u5220\u9664</button>';
+    html+='</div>';
+   });
+  }
+ }
+ html+='</div></div>';
+ return html;
+}
+
+function loadSettingsModels(){
+ fetch('/models/config').then(function(r){return r.json();}).then(function(d){
+  _settingsModels=d.models||{};
+  _settingsCurrentModel=d.current||'';
+  // 同步侧边栏
+  window._novaModels={};
+  Object.keys(_settingsModels).forEach(function(k){
+   window._novaModels[k]={model:(_settingsModels[k]||{}).model||k,vision:!!(_settingsModels[k]||{}).vision};
+  });
+  window._novaCurrentModel=_settingsCurrentModel;
+  var el=document.getElementById('modelName');
+  if(el) el.textContent=_settingsCurrentModel||'\u672a\u77e5';
+  if(typeof updateImageBtnState==='function') updateImageBtnState();
+  renderSettingsPage(document.body.classList.contains('light'));
+ }).catch(function(){});
+}
+
+function addModelRow(){
+ var mid=prompt('\u6a21\u578b ID\uff08\u4f8b\u5982 gpt-4o\u3001claude-3\uff09');
+ if(!mid||!mid.trim())return;
+ mid=mid.trim();
+ var baseUrl=prompt('Base URL\uff08\u4f8b\u5982 https://api.openai.com/v1\uff09');
+ if(!baseUrl)return;
+ var apiKey=prompt('API Key');
+ if(!apiKey)return;
+ var modelName=prompt('\u6a21\u578b\u540d\u79f0\uff08\u7559\u7a7a\u5219\u540c ID\uff09')||mid;
+ var vision=confirm('\u8be5\u6a21\u578b\u652f\u6301\u56fe\u7247/\u89c6\u89c9\u5417\uff1f');
+ saveModelConfig(mid,{api_key:apiKey,base_url:baseUrl,model:modelName,vision:vision});
+}
+
+function editModelRow(mid){
+ if(!_settingsModels||!_settingsModels[mid])return;
+ var m=_settingsModels[mid];
+ var baseUrl=prompt('Base URL',m.base_url||'');
+ if(baseUrl===null)return;
+ var apiKey=prompt('API Key\uff08\u7559\u7a7a\u4fdd\u6301\u4e0d\u53d8\uff09','')||m.api_key;
+ var modelName=prompt('\u6a21\u578b\u540d\u79f0',m.model||mid)||m.model||mid;
+ var vision=confirm('\u8be5\u6a21\u578b\u652f\u6301\u56fe\u7247/\u89c6\u89c9\u5417\uff1f');
+ saveModelConfig(mid,{api_key:apiKey,base_url:baseUrl,model:modelName,vision:vision});
+}
+
+function saveModelConfig(mid,cfg){
+ fetch('/models/config',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({id:mid,config:cfg})
+ }).then(function(r){return r.json();}).then(function(d){
+  if(d.ok) loadSettingsModels();
+  else alert(d.error||'\u4fdd\u5b58\u5931\u8d25');
+ }).catch(function(){alert('\u4fdd\u5b58\u5931\u8d25');});
+}
+
+function deleteModel(mid){
+ if(!confirm('\u786e\u8ba4\u5220\u9664\u6a21\u578b '+mid+' \uff1f'))return;
+ fetch('/models/config',{
+  method:'DELETE',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({id:mid})
+ }).then(function(r){return r.json();}).then(function(d){
+  if(d.ok) loadSettingsModels();
+  else alert(d.error||'\u5220\u9664\u5931\u8d25');
+ }).catch(function(){alert('\u5220\u9664\u5931\u8d25');});
+}
+
+function switchModel(mid){
+ if(mid===_settingsCurrentModel) return;
+ fetch('/model/'+encodeURIComponent(mid),{method:'POST'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+   if(d.ok||d.model) loadSettingsModels();
+   else alert(d.error||'\u5207\u6362\u5931\u8d25');
+  }).catch(function(){alert('\u5207\u6362\u5931\u8d25');});
 }
 

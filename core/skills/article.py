@@ -19,9 +19,14 @@ _llm_config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 
 def _load_llm_config():
     try:
         with open(_llm_config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            raw = json.load(f)
+        if "models" in raw:
+            default = raw.get("default", "")
+            models = raw["models"]
+            return models.get(default) or next(iter(models.values()))
+        return raw
     except Exception:
-        return {"api_key": "", "model": "MiniMax-M2.5", "base_url": "https://api.minimax.chat/v1"}
+        return {"api_key": "", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"}
 
 
 def _llm_call(prompt, max_tokens=3000, temperature=0.75):

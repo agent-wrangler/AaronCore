@@ -228,7 +228,7 @@ def format_l8_context(items: list[dict]) -> str:
 
 def build_context_bundle(msg: str, history: list) -> dict:
     return {
-        "l1": get_recent_messages(history, 6),
+        "l1": get_recent_messages(history, 30),
         "l2": _extract_session_context(history, msg),
         "l3": load_l3_long_term(),
         "l4": load_l4_persona(),

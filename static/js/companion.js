@@ -1,6 +1,6 @@
 /**
  * Nova Companion — Live2D 桌面伴侣
- * 鼠标跟踪 + 对话气泡 + 丰富互动 + 状态同步
+ * 鼠标跟踪 + 对话气泡 + 丰富互动 + 状态同步 + 语音交互
  */
 (function () {
   'use strict';
@@ -20,6 +20,7 @@
   var idleTimer = null;
   var interactionBound = false;
   var pollingStarted = false;
+  var isSpeaking = false;  // TTS 正在播放
 
   var ACTIVITY_MAP = {
     'thinking': { motionGroup: 'Idle', motionIndex: 1 },
@@ -38,6 +39,7 @@
     '\u4e3b\u4eba\u60f3\u6211\u4e86\uff1f'
   ];
 
+  // ── 初始化 ──
   function initApp() {
     var canvas = document.getElementById('live2d-canvas');
     app = new PIXI.Application({
@@ -67,7 +69,7 @@
     var loading = document.getElementById('loading');
     try {
       var Live2DModel = PIXI.live2d.Live2DModel;
-      // autoInteract: true → 模型自动跟踪鼠标
+      // autoInteract: true -> 模型自动跟踪鼠标
       model = await Live2DModel.from(MODEL_PATH, { autoInteract: true });
 
       var ow = model.internalModel.originalWidth || model.width;
@@ -100,7 +102,6 @@
 
   // ── 点击互动 ──
   function bindModelTap() {
-    // hit area 点击
     model.on('hit', function (hitAreas) {
       if (hitAreas.includes('Body')) {
         playMotion('TapBody', 0, 3);
@@ -108,10 +109,7 @@
         showBubble(reply);
       }
     });
-
-    // 如果没命中 hitArea，也响应普通点击
     model.on('pointertap', function (e) {
-      // 随机播放一个 idle 动作作为反应
       var idx = Math.floor(Math.random() * 8);
       playMotion('Idle', idx, 2);
     });
@@ -142,27 +140,84 @@
     var mood = state.mood || '';
 
     if (activity !== currentActivity) {
-      var prev = currentActivity;
       currentActivity = activity;
       if (ACTIVITY_MAP[activity]) {
         var m = ACTIVITY_MAP[activity];
         playMotion(m.motionGroup, m.motionIndex, 3);
       }
-      // 从 thinking 进入 → 显示思考气泡
       if (activity === 'thinking') {
         showBubble('\u8ba9\u6211\u60f3\u60f3...', 5000);
       }
     }
 
-    // Nova 回复了新内容 → 显示气泡摘要
+    // Nova 回复了新内容 -> 显示气泡 + 语音播报
     if (state.last_reply_id && state.last_reply_id !== lastReplyId) {
       lastReplyId = state.last_reply_id;
       if (state.last_reply_summary) {
         showBubble(state.last_reply_summary, 6000);
       }
+      var ttsText = state.last_reply_full || state.last_reply_summary || '';
+      if (ttsText) {
+        speakReply(ttsText);
+      }
     }
 
     currentMood = mood;
+  }
+
+  // ── TTS 流式语音播报（整段文本一次性流式） ──
+  var ttsPlaying = false;
+
+  async function speakReply(text) {
+    if (!text || ttsPlaying) return;
+    if (text.length > 500) text = text.substring(0, 500);
+
+    ttsPlaying = true;
+    isSpeaking = true;
+    reportTTSStatus(true);
+
+    var url = '/tts_stream?text=' + encodeURIComponent(text);
+
+    try {
+      await playStreamUrl(url);
+    } catch (e) {
+      console.warn('[Companion] TTS error:', e);
+    } finally {
+      isSpeaking = false;
+      ttsPlaying = false;
+      reportTTSStatus(false);
+    }
+  }
+
+  function playStreamUrl(url) {
+    return new Promise(function (resolve) {
+      if (model && typeof model.speak === 'function') {
+        model.speak(url, { volume: 0.8 });
+        // 等音频真正开始播再检测结束
+        var started = false;
+        var done = false;
+        function finish() { if (done) return; done = true; resolve(); }
+        var check = setInterval(function () {
+          if (model.speaking) { started = true; }
+          if (started && !model.speaking) { clearInterval(check); finish(); }
+        }, 200);
+        setTimeout(function () { clearInterval(check); finish(); }, 60000);
+      } else {
+        var audio = new Audio(url);
+        audio.volume = 0.8;
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      }
+    });
+  }
+
+  function reportTTSStatus(playing) {
+    fetch('/companion/tts_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playing: playing })
+    }).catch(function(){});
   }
 
   // ── 随机 idle ──
@@ -181,14 +236,9 @@
   function showBubble(text, duration) {
     var bubble = document.getElementById('speech-bubble');
     if (!bubble) return;
-    bubble.textContent = text;
+    bubble.textContent = (text || '').replace(/\*\*/g, '');
     bubble.classList.add('visible');
-
-    // 等渲染完再定位，否则 offsetWidth 为 0
-    requestAnimationFrame(function () {
-      positionBubble(bubble);
-    });
-
+    requestAnimationFrame(function () { positionBubble(bubble); });
     clearTimeout(bubble._timer);
     bubble._timer = setTimeout(function () {
       bubble.classList.remove('visible');
@@ -201,26 +251,23 @@
     var ow = model.internalModel.originalWidth || model.width / scale;
     var modelCenterX = model.x + (ow * scale * 0.5);
     var modelTop = model.y;
-    var bw = bubble.offsetWidth || 200;
-    var bh = bubble.offsetHeight || 40;
-    // 气泡在模型头顶上方
-    var left = modelCenterX - bw / 2;
-    var top = modelTop - bh - 12;
-    // 边界保护
-    left = Math.max(5, Math.min(left, window.innerWidth - bw - 5));
-    top = Math.max(5, top);
+    var bw = bubble.offsetWidth || 220;
+    var bh = bubble.offsetHeight || 60;
+    var left = Math.max(5, Math.min(modelCenterX - bw / 2, window.innerWidth - bw - 5));
+    var top = Math.max(5, modelTop - bh - 10);
     bubble.style.left = left + 'px';
     bubble.style.top = top + 'px';
+    bubble.dataset.placement = 'top';
   }
 
   // ── 淡出 + 长按拖拽 ──
   function bindInteraction() {
-    // 长按拖拽
     var dragState = { active: false, startX: 0, startY: 0, timer: null, moved: false };
-    var DRAG_DELAY = 200; // 按住 200ms 进入拖拽模式
+    var DRAG_DELAY = 200;
 
     document.addEventListener('mousedown', function (e) {
       if (e.button !== 0) return;
+      if (e.target.closest('#mic-area')) return;
       dragState.startX = e.screenX;
       dragState.startY = e.screenY;
       dragState.moved = false;
@@ -233,7 +280,6 @@
       if (!dragState.active && !dragState.timer) return;
       var dx = e.screenX - dragState.startX;
       var dy = e.screenY - dragState.startY;
-      // 还没进入拖拽模式但已经移动了一定距离，立即进入
       if (!dragState.active && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
         clearTimeout(dragState.timer);
         dragState.active = true;
@@ -254,7 +300,6 @@
       dragState.active = false;
     });
 
-    // 淡出
     var fadeTimer = null;
     document.addEventListener('mouseenter', function () {
       fadeTimer = setTimeout(function () { document.body.classList.add('faded'); }, 3000);
@@ -281,7 +326,6 @@
       if (!data.ok) return;
       MODEL_PATH = data.path;
       currentModelName = name;
-      // 移除旧模型
       if (model) {
         app.stage.removeChild(model);
         model.destroy();
@@ -319,11 +363,10 @@
 
     document.addEventListener('contextmenu', function (e) {
       e.preventDefault();
-      // 重建菜单项的勾选状态
       var items = menu.children;
-      var names = Object.keys(availableModels);
-      for (var i = 0; i < items.length; i++) {
-        items[i].textContent = (names[i] === currentModelName ? '\u2713 ' : '   ') + names[i];
+      var menuNames = Object.keys(availableModels);
+      for (var j = 0; j < items.length; j++) {
+        items[j].textContent = (menuNames[j] === currentModelName ? '\u2713 ' : '   ') + menuNames[j];
       }
       menu.style.display = 'block';
       menu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';

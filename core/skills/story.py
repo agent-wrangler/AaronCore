@@ -42,9 +42,16 @@ def _load_llm_config():
     config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            raw = json.load(f)
+        # 新格式：models + default
+        if "models" in raw:
+            default = raw.get("default", "")
+            models = raw["models"]
+            return models.get(default) or next(iter(models.values()))
+        # 旧格式：顶层 api_key/model/base_url
+        return raw
     except Exception:
-        return {"api_key": "", "model": "MiniMax-M2.5", "base_url": "https://api.minimax.chat/v1"}
+        return {"api_key": "", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"}
 
 
 def _llm_generate(prompt: str, max_tokens: int = 2000) -> str:

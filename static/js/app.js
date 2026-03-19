@@ -5,31 +5,11 @@ function _syncThemeIcon(){
  if(!btn) return;
  btn.innerHTML=document.body.classList.contains('light')?_SVG_SUN:_SVG_MOON;
 }
-function winMinimize(){if(window.pywebview&&window.pywebview.api)window.pywebview.api.minimize();}
-function winMaximize(){if(window.pywebview&&window.pywebview.api)window.pywebview.api.toggle_maximize();}
-function winClose(){if(window.pywebview&&window.pywebview.api)window.pywebview.api.close();}
-
-function initTopBarDrag(){
- var bar=document.getElementById('topBar');
- if(!bar) return;
- bar.addEventListener('mousedown',function(e){
-  if(e.target.closest('.win-controls,.top-btn,.top-bar-controls button')) return;
-  if(e.button!==0) return;
-  e.preventDefault();
-  if(window.pywebview&&window.pywebview.api)
-   window.pywebview.api.start_drag();
- });
- bar.addEventListener('dblclick',function(e){
-  if(e.target.closest('.win-controls,.top-btn')) return;
-  winMaximize();
- });
-}
-
 function _syncTitleBar(theme){
- if(window.pywebview&&window.pywebview.api){
+ if(window.pywebview&&window.pywebview.api&&window.pywebview.api.set_theme)
   window.pywebview.api.set_theme(theme);
- }
 }
+
 function toggleTheme(){
  var body=document.body;
  var currentMenu=document.querySelector('.menu.active');
@@ -156,44 +136,77 @@ function hideWelcome(){
 
 window.onload=function(){
  initSidebarResize();
- initTopBarDrag();
  loadWelcomeNews();
- 
+ // 输入框右键菜单（pywebview 不提供原生右键）
+ (function(){
+  var menu=document.createElement('div');
+  menu.id='ctx-menu';
+  menu.style.cssText='position:fixed;z-index:9999;background:#2a2a2e;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:4px 0;display:none;box-shadow:0 4px 16px rgba(0,0,0,0.4);min-width:100px;';
+  var items=[{label:'\u526a\u5207',act:'cut'},{label:'\u590d\u5236',act:'copy'},{label:'\u7c98\u8d34',act:'paste'},{label:'\u5168\u9009',act:'selectAll'}];
+  items.forEach(function(it){
+   var d=document.createElement('div');
+   d.textContent=it.label;
+   d.style.cssText='padding:6px 16px;font-size:13px;color:#e0e0e0;cursor:pointer;';
+   d.onmouseenter=function(){d.style.background='rgba(255,255,255,0.08)';};
+   d.onmouseleave=function(){d.style.background='none';};
+   d.onclick=function(){document.execCommand(it.act);menu.style.display='none';};
+   menu.appendChild(d);
+  });
+  document.body.appendChild(menu);
+  document.getElementById('inp').addEventListener('contextmenu',function(e){
+   e.preventDefault();
+   menu.style.display='block';
+   var mh=menu.offsetHeight;
+   var x=e.clientX,y=e.clientY;
+   if(y+mh>window.innerHeight) y=y-mh;
+   if(x+menu.offsetWidth>window.innerWidth) x=window.innerWidth-menu.offsetWidth-5;
+   menu.style.left=x+'px';
+   menu.style.top=y+'px';
+  });
+  document.addEventListener('click',function(){menu.style.display='none';});
+ })();
+
  // 加载保存的主题，默认白天
  var savedTheme=localStorage.getItem('nova_theme')||'light';
  if(savedTheme==='light'){
   document.body.classList.remove('dark');
   document.body.classList.add('light');
  }
- // pywebview API 可能延迟就绪，等一下再同步标题栏
+ _syncThemeIcon();
+ // pywebview API 可能延迟就绪，等一下再同步标题栏颜色
  setTimeout(function(){
   _syncTitleBar(savedTheme==='light'?'light':'dark');
-  _syncThemeIcon();
- },500);
- 
- // 加载聊天历史
- var saved=localStorage.getItem('nova_chat_history');
- if(saved && saved.trim()!==''){
-  // 修复历史数据中残留的 opacity:0
-  var tmp=document.createElement('div');
-  tmp.innerHTML=saved;
-  tmp.querySelectorAll('.bubble').forEach(function(b){
-   if(b.style.opacity==='0') b.style.removeProperty('opacity');
-   b.style.removeProperty('transition');
-  });
-  tmp.querySelectorAll('.thinking-bubble').forEach(function(b){
-   b.style.removeProperty('opacity');
-   b.style.removeProperty('transform');
-   b.style.removeProperty('transition');
-  });
-  var cleaned=tmp.innerHTML;
-  chatHistory=cleaned;
+ },800);
+
+ // 从后端加载聊天历史
+ fetch('/history').then(function(r){return r.json()}).then(function(d){
+  var items=d.history||[];
+  if(items.length===0) return;
   var chat=document.getElementById('chat');
-  chat.innerHTML=cleaned;
+  var html='';
+  items.forEach(function(item){
+   var role=item.role||'user';
+   var text=item.content||'';
+   var time=item.time||'';
+   if(!text.trim()) return;
+   var cls=role==='user'?'user':'assistant';
+   var name=role==='user'?'你':'Nova';
+   var avBg=role==='user'?'linear-gradient(135deg,#10b981,#059669)':'linear-gradient(135deg,#667eea,#764ba2)';
+   var avTxt=role==='user'?'你':'N';
+   html+='<div class="msg '+cls+'">';
+   html+='<div class="avatar" style="background:'+avBg+'">'+avTxt+'</div>';
+   html+='<div class="msg-content">';
+   html+='<div class="bubble">'+formatBubbleText(text)+'</div>';
+   html+='<div class="msg-meta">';
+   if(role==='user') html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
+   else html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
+   html+='</div></div></div>';
+  });
+  chat.innerHTML=html;
+  chatHistory=html;
   chat.scrollTop=chat.scrollHeight;
-  if(cleaned!==saved) localStorage.setItem('nova_chat_history',cleaned);
-  console.log('[Nova] 恢复聊天历史，消息数:', tmp.querySelectorAll('.msg').length);
- }
+  console.log('[Nova] 从后端恢复聊天历史，消息数:', items.length);
+ }).catch(function(e){ console.warn('[Nova] 加载历史失败',e); });
  
  // 初始化输入框监听
  var inp=document.getElementById('inp');
@@ -202,11 +215,13 @@ window.onload=function(){
  setInputVisible(true);
  AwarenessManager.init();
 
- // 读取模型名
- fetch('/stats').then(r=>r.json()).then(function(d){
-  var stats=d.stats||d||{};
+ // 读取模型列表
+ fetch('/models').then(r=>r.json()).then(function(d){
   var el=document.getElementById('modelName');
-  if(el) el.textContent=stats.model||'未知';
+  if(el) el.textContent=d.current||'未知';
+  window._novaModels=d.models||{};
+  window._novaCurrentModel=d.current||'';
+  updateImageBtnState();
  }).catch(function(){
   var el=document.getElementById('modelName');
   if(el) el.textContent='未知';
@@ -308,85 +323,7 @@ function show(n){
   chat.innerHTML='<div class="stats-page"><h2 class="page-title" style="margin-bottom:15px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>\u6570\u636e\u770b\u677f</h2><div id="statsBox">\u52a0\u8f7d\u4e2d...</div></div>';
   fetch('/stats').then(function(r){return r.json()}).then(function(d){
    var s=d.stats||d||{};
-   var bs=s.by_scene||{};
-   var totalReq=s.total_requests||0;
-   var avgToken=totalReq>0?Math.round((s.total_tokens||0)/totalReq):0;
-   var svgToken='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-   var svgCall='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>';
-   var svgScene='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>';
-   var svgCache='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>';
-   // Token \u6d88\u8017
-   var h='<div class="stats-section"><div class="stats-section-title">'+svgToken+' Token \u6d88\u8017</div><div class="stats-grid">';
-   h+='<div class="stats-card"><div class="stats-label">\u8f93\u5165</div><div class="stats-number">'+((s.input_tokens||0).toLocaleString())+'</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">\u8f93\u51fa</div><div class="stats-number">'+((s.output_tokens||0).toLocaleString())+'</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">\u603b Token</div><div class="stats-number">'+((s.total_tokens||0).toLocaleString())+'</div></div>';
-   h+='</div></div>';
-   // \u8c03\u7528\u7edf\u8ba1
-   h+='<div class="stats-section"><div class="stats-section-title">'+svgCall+' \u8c03\u7528\u7edf\u8ba1</div><div class="stats-grid">';
-   h+='<div class="stats-card"><div class="stats-label">\u603b\u8bf7\u6c42</div><div class="stats-number">'+(totalReq.toLocaleString())+'</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">\u5e73\u5747\u6d88\u8017</div><div class="stats-number">'+(avgToken.toLocaleString())+' <span style="font-size:12px;font-weight:400;opacity:0.6;">/\u6b21</span></div></div>';
-   h+='<div class="stats-card"><div class="stats-label">\u5f53\u524d\u6a21\u578b</div><div class="stats-number model-name">'+(s.model||'-')+'</div></div>';
-   h+='</div></div>';
-   // \u7f13\u5b58\u7edf\u8ba1
-   var cacheWrite=s.cache_write_tokens||0;
-   var cacheRead=s.cache_read_tokens||0;
-   var cacheRate=(s.input_tokens||0)>0?Math.round(cacheRead/(s.input_tokens||1)*100):0;
-   h+='<div class="stats-section"><div class="stats-section-title">'+svgCache+' \u7f13\u5b58\u7edf\u8ba1</div><div class="stats-grid">';
-   h+='<div class="stats-card"><div class="stats-label">\u7f13\u5b58\u5199\u5165</div><div class="stats-number">'+(cacheWrite.toLocaleString())+'</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">\u7f13\u5b58\u8bfb\u53d6</div><div class="stats-number">'+(cacheRead.toLocaleString())+'</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">\u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+(cacheRate)+'%</div></div>';
-   h+='</div></div>';
-   // 本地记忆总览
-   var mem=s.memory||{};
-   var l2s=mem.l2_searches||0,l2h=mem.l2_hits||0;
-   var l8s=mem.l8_searches||0,l8h=mem.l8_hits||0;
-   var tq=mem.total_queries||0;
-   var fla=mem.full_layer_available||0;
-   var l2rate=l2s>0?Math.round(l2h/l2s*100):0;
-   var l8rate=l8s>0?Math.round(l8h/l8s*100):0;
-   // 综合有效率 = (全量层贡献 + 检索层贡献) / (总请求×2) × 100%
-   var fullLayerPct=tq>0?Math.round(fla/(tq*4)*100):0;
-   var searchHits=(l2h+l8h);var searchTotal=(l2s+l8s);
-   var searchPct=searchTotal>0?Math.round(searchHits/searchTotal*100):0;
-   var compositeRate=tq>0?Math.min(100,Math.round((fullLayerPct+searchPct)/2)):0;
-   var svgMem='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
-   h+='<div class="stats-section"><div class="stats-section-title">'+svgMem+' \u672c\u5730\u8bb0\u5fc6\u603b\u89c8</div>';
-   h+='<div style="text-align:center;padding:12px 0 8px;"><div style="font-size:32px;font-weight:700;" class="stats-highlight">'+compositeRate+'%</div>';
-   h+='<div style="font-size:12px;opacity:0.6;margin-top:2px;">\u7efc\u5408\u6709\u6548\u7387</div></div>';
-   h+='<div style="display:flex;justify-content:center;gap:24px;font-size:12px;opacity:0.7;padding-bottom:10px;">';
-   h+='<span>\u5168\u91cf\u5c42\u8d21\u732e '+fullLayerPct+'%</span><span>\u68c0\u7d22\u5c42\u8d21\u732e '+searchPct+'%</span></div>';
-   h+='<div class="stats-grid">';
-   h+='<div class="stats-card"><div class="stats-label">L2 \u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+l2rate+'%</div><div style="font-size:11px;opacity:0.5;margin-top:2px;">'+l2s+'\u6b21/'+l2h+'\u547d\u4e2d</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">L8 \u547d\u4e2d\u7387</div><div class="stats-number stats-highlight">'+l8rate+'%</div><div style="font-size:11px;opacity:0.5;margin-top:2px;">'+l8s+'\u6b21/'+l8h+'\u547d\u4e2d</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">L1 \u5bf9\u8bdd</div><div class="stats-number">'+(mem.l1_count||0)+'\u6761</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">L3 \u7ecf\u5386</div><div class="stats-number">'+(mem.l3_count||0)+'\u6761</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">L4 \u4eba\u683c</div><div class="stats-number">'+(mem.l4_available?'<span style="color:#6aaa88;font-size:13px;">已加载</span>':'<span style="color:#6b7280;font-size:13px;">未加载</span>')+'</div></div>';
-   h+='<div class="stats-card"><div class="stats-label">L5 \u6280\u80fd</div><div class="stats-number">'+(mem.l5_count||0)+'\u4e2a</div></div>';
-   h+='</div></div>';
-   // \u573a\u666f\u5206\u5e03
-   var scenes=[{k:'chat',n:'\u804a\u5929'},{k:'route',n:'\u8def\u7531'},{k:'skill',n:'\u6280\u80fd'},{k:'learn',n:'\u5b66\u4e60'}];
-   var totalSceneTokens=0;
-   scenes.forEach(function(sc){totalSceneTokens+=(bs[sc.k]||{}).tokens||0;});
-   h+='<div class="stats-section"><div class="stats-section-title">'+svgScene+' \u573a\u666f\u5206\u5e03</div>';
-   if(totalSceneTokens>0){
-   h+='<div class="stats-bars">';
-   scenes.forEach(function(sc){
-    var t=(bs[sc.k]||{}).tokens||0;
-    var r=(bs[sc.k]||{}).requests||0;
-    var pct=totalSceneTokens>0?Math.round(t/totalSceneTokens*100):0;
-    h+='<div class="stats-bar-row"><div class="stats-bar-label">'+sc.n+'</div>';
-    h+='<div class="stats-bar-track"><div class="stats-bar-fill '+sc.k+'" style="width:'+pct+'%"></div></div>';
-    h+='<div class="stats-bar-pct">'+pct+'% <span style="opacity:0.5;font-size:11px;">'+r+'\u6b21</span></div></div>';
-   });
-   h+='</div>';
-   }else{
-   h+='<div style="text-align:center;padding:16px;color:#64748b;font-size:13px;">\u804a\u51e0\u53e5\u5c31\u6709\u6570\u636e\u4e86</div>';
-   }
-   h+='</div>';
-   // \u5e95\u90e8
-   h+='<div class="stats-footer"><div class="stats-footer-info">\u6700\u540e\u4f7f\u7528\uff1a'+(s.last_used||'-')+'</div>';
-   h+='<button class="stats-reset-btn" onclick="if(confirm(\'\u786e\u8ba4\u91cd\u7f6e\u6240\u6709\u7edf\u8ba1\u6570\u636e\uff1f\')){fetch(\'/stats\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({reset:true})}).then(function(){show(3)})}">\u21bb \u91cd\u7f6e\u7edf\u8ba1</button></div>';
-   document.getElementById('statsBox').innerHTML=h;
+   document.getElementById('statsBox').innerHTML=renderStats(s);
   }).catch(function(){
    document.getElementById('statsBox').innerHTML='<div style="color:#ef4444;">\u7edf\u8ba1\u6570\u636e\u52a0\u8f7d\u5931\u8d25</div>';
   });
@@ -450,4 +387,53 @@ function show(n){
   loadDocsPage(isLight);
   return;
  }
+}
+
+// ── 模型选择器 ──
+function toggleModelDropdown(e){
+ e.stopPropagation();
+ var dd=document.getElementById('modelDropdown');
+ if(!dd)return;
+ if(dd.style.display!=='none'){dd.style.display='none';return;}
+ var models=window._novaModels||{};
+ var current=window._novaCurrentModel||'';
+ var html='';
+ Object.keys(models).forEach(function(mid){
+  var m=models[mid];
+  var active=mid===current?' active':'';
+  var vision=m.vision?' <span class="model-vision-tag">视觉</span>':'';
+  html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+mid+vision+'</div>';
+ });
+ dd.innerHTML=html;
+ dd.style.display='block';
+ // 点击其他地方关闭
+ setTimeout(function(){
+  document.addEventListener('click',_closeModelDropdown,{once:true});
+ },0);
+}
+function _closeModelDropdown(){
+ var dd=document.getElementById('modelDropdown');
+ if(dd) dd.style.display='none';
+}
+function switchModel(mid){
+ fetch('/model/'+mid,{method:'POST'}).then(r=>r.json()).then(function(d){
+  if(d.ok){
+   window._novaCurrentModel=mid;
+   var el=document.getElementById('modelName');
+   if(el) el.textContent=mid;
+   updateImageBtnState();
+  }
+ }).catch(function(){});
+ var dd=document.getElementById('modelDropdown');
+ if(dd) dd.style.display='none';
+}
+function updateImageBtnState(){
+ var btn=document.getElementById('imageUploadBtn');
+ if(!btn)return;
+ var models=window._novaModels||{};
+ var current=window._novaCurrentModel||'';
+ // 只要有任何一个模型支持 vision 就启用（会自动 fallback）
+ var anyVision=Object.keys(models).some(function(k){return models[k].vision;});
+ btn.disabled=!anyVision;
+ btn.title=anyVision?'上传图片':'当前无视觉模型可用';
 }

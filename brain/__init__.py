@@ -10,20 +10,65 @@ except Exception:
     def has_rule(fix: str, scene: str = '', min_level: str = 'once') -> bool:
         return False
 
-# 加载 LLM 配置
+# 加载 LLM 配置（支持多模型格式）
 config_path = os.path.join(os.path.dirname(__file__), 'llm_config.json')
 if os.path.exists(config_path):
-    LLM_CONFIG = json.load(open(config_path, 'r', encoding='utf-8'))
+    _raw_config = json.load(open(config_path, 'r', encoding='utf-8'))
 else:
     parent_config = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'brain', 'llm_config.json')
     if os.path.exists(parent_config):
-        LLM_CONFIG = json.load(open(parent_config, 'r', encoding='utf-8'))
+        _raw_config = json.load(open(parent_config, 'r', encoding='utf-8'))
     else:
-        LLM_CONFIG = {
+        _raw_config = {
             "api_key": "",
             "model": "MiniMax-M2.5",
             "base_url": "https://api.minimax.chat/v1"
         }
+
+# 向后兼容：旧格式（无 models 字段）自动转新格式
+if "models" not in _raw_config:
+    _model_name = _raw_config.get("model", "deepseek-chat")
+    _raw_config = {
+        "models": {
+            _model_name: {
+                "api_key": _raw_config.get("api_key", ""),
+                "base_url": _raw_config.get("base_url", ""),
+                "model": _model_name,
+                "vision": False,
+            }
+        },
+        "default": _model_name,
+    }
+
+MODELS_CONFIG = _raw_config["models"]
+_current_default = _raw_config.get("default", next(iter(MODELS_CONFIG)))
+
+# 兼容旧代码：LLM_CONFIG 指向当前默认模型
+LLM_CONFIG = MODELS_CONFIG.get(_current_default) or next(iter(MODELS_CONFIG.values()))
+
+
+def get_models() -> dict:
+    """返回可用模型列表和当前默认模型"""
+    models = {}
+    for mid, cfg in MODELS_CONFIG.items():
+        models[mid] = {"model": cfg.get("model", mid), "vision": cfg.get("vision", False)}
+    return {"models": models, "current": _current_default}
+
+
+def set_default_model(model_id: str) -> bool:
+    """切换默认模型，返回是否成功"""
+    global _current_default, LLM_CONFIG
+    if model_id not in MODELS_CONFIG:
+        return False
+    _current_default = model_id
+    LLM_CONFIG = MODELS_CONFIG[model_id]
+    # 持久化到配置文件
+    try:
+        _raw_config["default"] = model_id
+        json.dump(_raw_config, open(config_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    return True
 
 
 def understand_intent(user_input: str) -> dict:
@@ -285,8 +330,8 @@ def _local_persona_reply(mode: str, prompt: str, persona: dict, context: str = '
     return f"呜，刚才脑子卡了一下没接住……{user_name}你再说一次嘛，这次我认真听！"
 
 
-def think(prompt: str, context: str = "") -> dict:
-    """L4: 统一人格输出层"""
+def think(prompt: str, context: str = "", image: str = None, model_id: str = None) -> dict:
+    """L4: 统一人格输出层，支持图片（base64）和指定模型"""
     persona = _load_persona()
     mode = _detect_mode(prompt, context)
     local_reply = _local_persona_reply(mode, prompt, persona, context)
@@ -327,12 +372,32 @@ def think(prompt: str, context: str = "") -> dict:
             + chat_guide
         )
 
+    # 确定使用的模型配置
+    use_cfg = LLM_CONFIG
+    if model_id and model_id in MODELS_CONFIG:
+        use_cfg = MODELS_CONFIG[model_id]
+    # 有图片但当前模型不支持 vision，自动切到第一个支持 vision 的模型
+    if image and not use_cfg.get("vision", False):
+        for _mid, _mcfg in MODELS_CONFIG.items():
+            if _mcfg.get("vision", False):
+                use_cfg = _mcfg
+                break
+
+    # 构建 messages：有图片时用多模态格式
+    if image:
+        user_content = [
+            {"type": "text", "text": full_prompt},
+            {"type": "image_url", "image_url": {"url": image if image.startswith("http") else f"data:image/png;base64,{image}"}},
+        ]
+    else:
+        user_content = full_prompt
+
     for attempt in range(2):
         try:
             resp = requests.post(
-                f"{LLM_CONFIG['base_url']}/chat/completions",
-                headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
-                json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.7},
+                f"{use_cfg['base_url']}/chat/completions",
+                headers={"Authorization": f"Bearer {use_cfg['api_key']}", "Content-Type": "application/json"},
+                json={"model": use_cfg["model"], "messages": [{"role": "user", "content": user_content}], "temperature": 0.7},
                 timeout=25
             )
             if resp.status_code != 200:

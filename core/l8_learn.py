@@ -994,6 +994,18 @@ def should_trigger_auto_learn(user_input: str, route_result: dict | None = None,
                      '\u4ece\u54ea\u91cc\u67e5', '\u54ea\u91cc\u641c', '\u54ea\u91cc\u627e']
     if any(c in text for c in _ai_challenge):
         return False, "ai_challenge"
+    # 以"你"开头 → 问的是 Nova，不是知识
+    if text.startswith('你'):
+        return False, "about_nova"
+    # 包含"找到你""告诉你""给你""问你""跟你"等 → 对话对象是 Nova
+    _about_nova = ['找到你', '告诉你', '给你', '问你', '跟你', '和你', '对你', '让你']
+    if any(a in text for a in _about_nova):
+        return False, "about_nova"
+    # 元对话：抱怨/指令 Nova 的句子
+    _meta_conv = ['我让你', '你为什么', '你怎么', '你没', '你自己', '你去', '你回来',
+                  '快去搜吧', '快去查吧', '真让人头疼', '你聊', '你说错', '你理解']
+    if any(m in text for m in _meta_conv):
+        return False, "meta_conversation"
 
     is_question_like = any(hint in lowered or hint in text for hint in QUESTION_HINTS)
     is_learning_request = any(hint in text for hint in LEARNING_HINTS)
@@ -1001,6 +1013,41 @@ def should_trigger_auto_learn(user_input: str, route_result: dict | None = None,
         return False, "not_question_like"
 
     return True, "eligible"
+
+
+def _extract_search_query(user_input: str) -> str | None:
+    """用 LLM 把用户原话提炼成干净的知识查询词。
+    返回 None 表示这句话不是知识问题，不应该触发搜索。"""
+    if not _llm_call:
+        return user_input  # 没有 LLM 就原样返回，不拦截
+    try:
+        prompt = (
+            f"用户说了一句话：\u300c{user_input}\u300d\n"
+            "判断这句话是否在询问一个可以搜索的知识点（如概念、原理、事实、方法）。\n"
+            "如果是，提炼出最精准的搜索查询词（1-8个字，名词或短语，不含疑问词）。\n"
+            "如果不是知识问题（如闲聊、抱怨、指令、对话、感叹、反问、吐槽），只输出：NO\n"
+            "\n"
+            "示例：\n"
+            "\u300c什么是MCP\u300d→ MCP\n"
+            "\u300cFastAPI怎么用\u300d→ FastAPI\n"
+            "\u300c说得这么轻松？那网页别人怎么找到你\u300d→ NO\n"
+            "\u300c你怎么不记得群里的聊天\u300d→ NO\n"
+            "\u300c帮我查一下量子计算\u300d→ 量子计算\n"
+            "\u300c你又搜了一堆垃圾\u300d→ NO\n"
+            "\n"
+            "只输出查询词或NO，不要解释。"
+        )
+        result = _llm_call(prompt, max_tokens=20)
+        result = (result or "").strip()
+        if not result or result.upper() == "NO" or len(result) < 2:
+            return None
+        # 如果返回的还是一句话（含动词/疑问词），说明没提炼成功
+        bad_signals = ['你', '我', '为什么', '怎么', '吗', '呢', '啊', '吧', '？', '?']
+        if any(s in result for s in bad_signals):
+            return None
+        return result
+    except Exception:
+        return user_input  # LLM 出错就原样返回
 
 
 def auto_learn(user_input: str, ai_response: str = "", route_result: dict | None = None) -> dict:
@@ -1015,9 +1062,16 @@ def auto_learn(user_input: str, ai_response: str = "", route_result: dict | None
     if not should_run:
         return {"success": False, "reason": reason}
 
+    # 查询词提炼：把用户原话压缩成干净的知识查询词
+    # 提炼不出来说明根本不是知识问题，直接拦截
+    search_query = _extract_search_query(user_input)
+    if not search_query:
+        _debug_write("l8_skip_not_knowledge", {"input": user_input[:50]})
+        return {"success": False, "reason": "not_knowledge_query"}
+
     try:
         results = search_web_results(
-            user_input,
+            search_query,  # 用提炼后的查询词搜索，不用原话
             max_results=int(config.get("max_results", 5) or 5),
             timeout_sec=int(config.get("search_timeout_sec", 5) or 5),
         )
@@ -1026,6 +1080,21 @@ def auto_learn(user_input: str, ai_response: str = "", route_result: dict | None
 
     if not results:
         return {"success": False, "reason": "no_results"}
+
+    # 相关性校验：搜索结果必须和查询有关键词重叠，否则是跑题结果，不存
+    query_keywords = [w for w in user_input if '\u4e00' <= w <= '\u9fff']  # 提取中文字符
+    # 取查询里长度>=2的连续中文片段作为关键词
+    import re as _re
+    query_chunks = _re.findall(r'[\u4e00-\u9fff]{2,}', user_input)
+    if query_chunks:
+        result_text = ' '.join(
+            (r.get('title', '') + ' ' + r.get('snippet', '')) for r in results[:3]
+        ).lower()
+        # 至少有1个查询片段出现在搜索结果里
+        has_overlap = any(chunk in result_text for chunk in query_chunks[:6])
+        if not has_overlap:
+            _debug_write("l8_skip_irrelevant", {"query": user_input[:40], "chunks": query_chunks[:4]})
+            return {"success": False, "reason": "search_results_irrelevant"}
 
     summary = _build_summary(user_input, results, max_length=int(config.get("max_summary_length", 360) or 360))
     if not summary:

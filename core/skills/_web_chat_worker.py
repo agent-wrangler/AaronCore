@@ -13,6 +13,8 @@ site = sys.argv[1]
 msg = sys.argv[2]
 port = int(sys.argv[3]) if len(sys.argv) > 3 else 9333
 rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 1
+original_goal = sys.argv[5] if len(sys.argv) > 5 else msg
+duration_sec = int(sys.argv[6]) if len(sys.argv) > 6 else 0  # >0 时按时间控制，忽略 rounds
 
 from playwright.sync_api import sync_playwright
 
@@ -24,13 +26,18 @@ def _load_llm_config():
     try:
         cfg_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
         with open(cfg_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            raw = json.load(f)
+        if "models" in raw:
+            default = raw.get("default", "")
+            models = raw["models"]
+            return models.get(default) or next(iter(models.values()))
+        return raw
     except Exception:
         return None
 
 
-def _generate_follow_up(conversation_so_far, llm_cfg):
-    """用 LLM 基于对话历史生成下一轮追问"""
+def _generate_follow_up(conversation_so_far, llm_cfg, original_goal=""):
+    """用 LLM 基于对话历史生成下一轮追问，始终锚定原始目标"""
     if not llm_cfg:
         return None
 
@@ -38,9 +45,12 @@ def _generate_follow_up(conversation_so_far, llm_cfg):
     for item in conversation_so_far:
         history_text += f"我：{item['send']}\n对方：{item['reply'][:200]}\n\n"
 
+    goal_line = f"你的任务目标是：【{original_goal}】。无论对方说什么，你的追问必须围绕这个目标展开，不要被对方带偏话题。\n\n" if original_goal else ""
+
     prompt = (
-        "你正在和另一个AI对话。根据以下对话历史，生成一句自然的追问或回应。"
-        "要求：1.基于对方刚说的内容 2.像真人聊天一样自然 3.可以追问细节、提出不同看法、或延伸话题 "
+        f"{goal_line}"
+        "你正在和另一个AI对话。根据以下对话历史，生成一句自然的追问。"
+        "要求：1.紧扣任务目标，不跟随对方跑题 2.像真人聊天一样自然 3.追问对方给出更具体、可落地的内容 "
         "4.不要重复之前问过的 5.只输出一句话，不要解释\n\n"
         f"对话历史：\n{history_text}"
         "你的下一句："
@@ -192,18 +202,27 @@ try:
 
     conversation = []
     current_msg = msg
+    deadline = time.time() + duration_sec if duration_sec > 0 else None
+    max_rounds = 60 if deadline else rounds  # 时间模式最多60轮兜底
 
-    for i in range(rounds):
+    for i in range(max_rounds):
+        # 时间模式：到时间就停
+        if deadline and time.time() >= deadline:
+            break
+
         reply = send_and_read(page, current_msg)
         conversation.append({"round": i + 1, "send": current_msg, "reply": reply[:300]})
 
-        if rounds > 1 and i < rounds - 1:
-            follow_up = _generate_follow_up(conversation, llm_cfg)
-            if follow_up:
-                current_msg = follow_up
-            else:
-                short = reply[:20]
-                current_msg = f"\u4f60\u8bf4\u7684\u201c{short}\u201d\u8fd9\u90e8\u5206\u5f88\u6709\u610f\u601d\uff0c\u80fd\u518d\u5c55\u5f00\u8bf4\u8bf4\u5417\uff1f"
+        # 判断是否继续
+        has_next = (deadline and time.time() < deadline) or (not deadline and i < rounds - 1)
+        if not has_next:
+            break
+
+        follow_up = _generate_follow_up(conversation, llm_cfg, original_goal=original_goal)
+        if follow_up:
+            current_msg = follow_up
+        else:
+            current_msg = f"回到正题，关于【{original_goal[:30]}】，能给我更具体可落地的建议吗？"
 
     print(json.dumps({"ok": True, "conversation": conversation}, ensure_ascii=False))
 

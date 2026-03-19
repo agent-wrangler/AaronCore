@@ -117,7 +117,9 @@ def ensure_long_term_clean():
 def load_current_model() -> str:
     llm_conf = load_json(LLM_CONFIG_FILE, {})
     if isinstance(llm_conf, dict):
-        return llm_conf.get("model", "unknown")
+        # 优先顶层 model，再查 default 指向的模型名
+        m = llm_conf.get("model") or llm_conf.get("default") or "unknown"
+        return m
     return "unknown"
 
 
@@ -278,6 +280,7 @@ def load_stats_data():
         "model": load_current_model(),
         "last_used": "",
         "by_scene": {},
+        "by_day": {},
     }
     saved = load_json_store(PRIMARY_STATS_FILE, LEGACY_STATS_FILE, {})
     if isinstance(saved, dict):
@@ -310,6 +313,17 @@ def record_stats(input_tokens: int = 0, output_tokens: int = 0, scene: str = "ch
     sc = by_scene.setdefault(scene, {"requests": 0, "tokens": 0})
     sc["requests"] = sc.get("requests", 0) + 1
     sc["tokens"] = sc.get("tokens", 0) + total
+    # 按天累计（最近 30 天）
+    today = datetime.now().strftime("%Y-%m-%d")
+    by_day = stats.setdefault("by_day", {})
+    day = by_day.setdefault(today, {"tokens": 0, "requests": 0, "input": 0, "output": 0})
+    day["tokens"] = day.get("tokens", 0) + total
+    day["requests"] = day.get("requests", 0) + 1
+    day["input"] = day.get("input", 0) + inp
+    day["output"] = day.get("output", 0) + out
+    # 清理 30 天前的数据
+    cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    stats["by_day"] = {k: v for k, v in by_day.items() if k >= cutoff}
     write_json(PRIMARY_STATS_FILE, stats)
     return stats
 

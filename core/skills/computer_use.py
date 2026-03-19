@@ -18,17 +18,17 @@ import time
 import json
 import re
 
-# ── 监听进程管理 ──
-_monitor_process = None
-_monitor_group = None
+# ── 监听进程管理（支持多群） ──
+_monitor_processes = {}  # {group_name: subprocess.Popen}
 _MONITOR_STATE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'qq_monitor_state.json')
 
 
 def _save_monitor_state(active, group=None):
     try:
         import json as _json
+        groups = list(_monitor_processes.keys()) if active else []
         with open(_MONITOR_STATE_FILE, 'w', encoding='utf-8') as f:
-            _json.dump({"active": active, "group": group}, f, ensure_ascii=False)
+            _json.dump({"active": len(groups) > 0, "groups": groups, "group": ", ".join(groups) if groups else None}, f, ensure_ascii=False)
     except: pass
 
 
@@ -39,7 +39,7 @@ def qq_monitor_status() -> dict:
         with open(_MONITOR_STATE_FILE, 'r', encoding='utf-8') as f:
             return _json.load(f)
     except:
-        return {"active": False, "group": None}
+        return {"active": False, "group": None, "groups": []}
 
 # ── 依赖检测 ──
 _HAS_PYAUTOGUI = False
@@ -101,14 +101,18 @@ def qq_send_message(group_name: str, message: str) -> str:
 
 
 def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f') -> str:
-    """启动 QQ 群监听。先打开群聊窗口，再启动后台监听进程。"""
-    global _monitor_process, _monitor_group
+    """启动 QQ 群监听（支持多群同时）。先打开群聊窗口，再启动后台监听进程。"""
+    global _monitor_processes
     import subprocess
 
-    if _monitor_process and _monitor_process.poll() is None:
-        return f"\u5df2\u7ecf\u5728\u76d1\u542c\u300c{_monitor_group}\u300d\u4e86\uff0c\u5148\u8bf4\u201c\u505c\u6b62\u76d1\u542c\u201d\u518d\u5207\u6362"
+    # 已经在监听这个群了
+    if group_name in _monitor_processes:
+        p = _monitor_processes[group_name]
+        if p.poll() is None:
+            _save_monitor_state(True)
+            return f"\u300c{group_name}\u300d\u5df2\u5728\u54cd\u5e94\u4e2d\uff0c\u65e0\u9700\u91cd\u590d\u5f00\u542f"
 
-    # 先用 _qq_worker 打开群聊窗口（发一条空操作）
+    # 先用 _qq_worker 打开群聊窗口
     open_worker = os.path.join(os.path.dirname(__file__), '_qq_open_group.py')
     try:
         result = subprocess.run(
@@ -118,7 +122,6 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
         )
         raw = result.stdout.decode('utf-8', errors='replace') if isinstance(result.stdout, bytes) else result.stdout
         err = result.stderr.decode('utf-8', errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr)
-        # 日志
         try:
             with open("memory_db/cu_debug.log", "a", encoding="utf-8") as f:
                 f.write(f"[open_group] stdout={raw[:200]} stderr={err[:200]}\n")
@@ -131,39 +134,47 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
 
     # 启动监听 worker
     worker = os.path.join(os.path.dirname(__file__), '_qq_monitor_worker.py')
-    _monitor_process = subprocess.Popen(
+    proc = subprocess.Popen(
         [sys.executable, '-u', worker, group_name, my_name, '8'],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
     )
-    _monitor_group = group_name
-    _save_monitor_state(True, group_name)
-    return f"\u5f00\u59cb\u76d1\u542c\u7fa4\u300c{group_name}\u300d\uff0c\u6709\u4eba@\u6211\u6216\u804a\u5230\u76f8\u5173\u8bdd\u9898\u4f1a\u81ea\u52a8\u56de\u590d\u3002\u8bf4\u201c\u505c\u6b62\u76d1\u542c\u201d\u53ef\u4ee5\u5173\u95ed\u3002"
+    _monitor_processes[group_name] = proc
+    _save_monitor_state(True)
+    count = len([p for p in _monitor_processes.values() if p.poll() is None])
+    suffix = f"\uff0c\u5f53\u524d\u5171\u54cd\u5e94 {count} \u4e2a\u7fa4" if count > 1 else ""
+    return f"\u5df2\u5f00\u542f\u667a\u80fd\u4f1a\u8bdd\u54cd\u5e94\uff0c\u6b63\u5728\u54cd\u5e94\u300c{group_name}\u300d\u7684\u6240\u6709\u5bf9\u8bdd{suffix}\u3002\u8bf4\u201c\u505c\u6b62\u54cd\u5e94\u201d\u53ef\u4ee5\u5173\u95ed\u3002"
 
 
-def qq_stop_monitor() -> str:
-    """停止 QQ 群监听。"""
-    global _monitor_process, _monitor_group
-    _save_monitor_state(False)
-    if _monitor_process and _monitor_process.poll() is None:
-        try:
-            _monitor_process.kill()
-            _monitor_process.wait(timeout=5)
-        except:
-            pass
-        name = _monitor_group
-        _monitor_process = None
-        _monitor_group = None
-        return f"\u5df2\u505c\u6b62\u76d1\u542c\u7fa4\u300c{name}\u300d"
-    _monitor_process = None
-    _monitor_group = None
-    return "\u5f53\u524d\u6ca1\u6709\u5728\u76d1\u542c\u4efb\u4f55\u7fa4"
+def qq_stop_monitor(target_group=None) -> str:
+    """停止 QQ 群监听。target_group=None 时停止全部。"""
+    global _monitor_processes
+    if not _monitor_processes:
+        _save_monitor_state(False)
+        return "\u5f53\u524d\u6ca1\u6709\u5728\u54cd\u5e94\u4efb\u4f55\u7fa4"
 
+    stopped = []
+    if target_group and target_group in _monitor_processes:
+        # 停止指定群
+        p = _monitor_processes.pop(target_group)
+        if p.poll() is None:
+            try: p.kill(); p.wait(timeout=5)
+            except: pass
+        stopped.append(target_group)
+    elif not target_group:
+        # 停止全部
+        for name, p in _monitor_processes.items():
+            if p.poll() is None:
+                try: p.kill(); p.wait(timeout=5)
+                except: pass
+            stopped.append(name)
+        _monitor_processes.clear()
 
-
-    _monitor_process = None
-    _monitor_group = None
-    return "当前没有在监听任何群"
+    _save_monitor_state(True)
+    if stopped:
+        names = '\u3001'.join(stopped)
+        return f"\u5df2\u505c\u6b62\u54cd\u5e94\u300c{names}\u300d"
+    return "\u5f53\u524d\u6ca1\u6709\u5728\u54cd\u5e94\u4efb\u4f55\u7fa4"
 
 
 def qq_read_messages(group_name: str) -> str:
@@ -209,14 +220,14 @@ def _connect_browser(port: int = 9333):
         return None, None, f"连接浏览器失败：{e}。请用 --remote-debugging-port={port} 启动浏览器"
 
 
-def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1) -> str:
+def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1, original_goal: str = "", duration_sec: int = 0) -> str:
     """在网页版 AI（豆包等）发送消息并获取回复。用子进程执行避免 async 冲突。"""
     import subprocess
     worker = os.path.join(os.path.dirname(__file__), '_web_chat_worker.py')
-    timeout = 60 if rounds <= 1 else min(rounds * 50 + 30, 600)
+    timeout = duration_sec + 60 if duration_sec > 0 else (60 if rounds <= 1 else min(rounds * 50 + 30, 600))
     try:
         result = subprocess.run(
-            [sys.executable, '-u', worker, site, message, str(port), str(rounds)],
+            [sys.executable, '-u', worker, site, message, str(port), str(rounds), original_goal or message, str(duration_sec)],
             capture_output=True, timeout=timeout,
             env={
                 **{k: v for k, v in os.environ.items() if 'proxy' not in k.lower()},
@@ -270,19 +281,32 @@ def desktop_list_windows() -> str:
     return "当前打开的窗口：\n" + "\n".join(f"  · {w}" for w in windows[:20])
 
 
-def _generate_first_msg(user_input: str) -> str:
-    """用 LLM 从用户指令中提取话题，生成自然的第一句话发给对方 AI。"""
+def _generate_first_msg(user_input: str, context: dict = None) -> str:
+    """用 LLM 从用户指令+对话历史中提取话题，生成自然的第一句话发给对方 AI。"""
     try:
         cfg_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
         with open(cfg_path, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
         import urllib.request
+
+        # 把最近对话历史拼成摘要，帮 LLM 推断当前话题
+        history_hint = ""
+        recent = (context or {}).get("recent_history", [])
+        if recent:
+            lines = []
+            for m in recent[-6:]:
+                role = "用户" if m.get("role") == "user" else "Nova"
+                lines.append(f"{role}：{m.get('content','')[:100]}")
+            history_hint = "最近的对话上下文：\n" + "\n".join(lines) + "\n\n"
+
         body = json.dumps({
             "model": cfg.get("model", ""),
             "messages": [{"role": "user", "content":
-                f"用户让你去和另一个AI聊天，用户的原话是：\u201c{user_input}\u201d\n"
-                "请提取用户想聊的话题，生成一句自然的开场白发给对方AI。"
-                "要求：1.像真人聊天 2.只输出开场白那一句话 3.不要解释 4.如果没有明确话题就随便找个有趣的话题开聊"
+                f"{history_hint}"
+                f"用户现在说：\u201c{user_input}\u201d\n"
+                "请根据上下文推断用户真正想聊的话题，生成一句自然的开场白发给对方AI。"
+                "要求：1.像真人聊天 2.只输出开场白那一句话 3.不要解释 "
+                "4.必须紧扣用户真实意图，从上下文推断话题，不要自己发明无关话题"
             }],
             "max_tokens": 80,
         }).encode()
@@ -298,12 +322,16 @@ def _generate_first_msg(user_input: str) -> str:
         data = json.loads(resp)
         return data["choices"][0]["message"]["content"].strip()
     except Exception:
-        return "你好，随便聊点什么吧，最近有什么让你印象深刻的事吗？"
+        # fallback：从 user_input 里提取关键词，至少不跑偏
+        for kw in ["赚钱", "变现", "头条", "发文", "创业", "技能", "方案"]:
+            if kw in user_input:
+                return f"你觉得AI agent怎么在{kw}这个方向上落地？"
+        return "你觉得AI agent现在最容易落地赚钱的方向是什么？"
 
 
 # ── 技能入口 ──
 
-def execute(user_input: str) -> str:
+def execute(user_input: str, context: dict = None) -> str:
     """Computer Use 技能入口。解析用户意图，分发到具体操作。"""
     text = (user_input or "").strip()
 
@@ -318,7 +346,7 @@ def execute(user_input: str) -> str:
     _log(f"[input] {text}")
 
     try:
-        result = _do_execute(text)
+        result = _do_execute(text, context or {})
         _log(f"[result] {result[:200] if result else 'None'}")
         return result
     except Exception as e:
@@ -326,15 +354,19 @@ def execute(user_input: str) -> str:
         return f"执行失败：{e}"
 
 
-def _do_execute(text: str) -> str:
+def _do_execute(text: str, context: dict = None) -> str:
     """实际执行逻辑。"""
 
     # QQ 群监听（启动/停止）— 必须在 QQ 发消息之前
-    if re.search(r'(?:停止|关闭|取消).*?监听', text):
+    if re.search(r'(?:停止|关闭|取消).*?(?:监听|监视|监控|响应)', text):
         return qq_stop_monitor()
-    monitor_match = re.search(r'监听.*?(?:QQ|qq)(?:群)?[「""\s]*(.+)', text)
+    monitor_match = re.search(r'(?:监听|监视|监控|响应).*?(?:QQ|qq)(?:群)?[「""\s]*(.+)', text)
     if not monitor_match:
-        monitor_match = re.search(r'(?:在|去).*?(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""]*(?:监听|自动回复|聊天)', text)
+        monitor_match = re.search(r'(?:在|去|帮我).*?(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""]*(?:监听|监视|监控|自动回复|聊天|响应)', text)
+    if not monitor_match:
+        monitor_match = re.search(r'(?:QQ|qq)(?:群)?[「""\s]*(.+?)[」""\s]*(?:监听|监视|监控|自动回复|响应)', text)
+    if not monitor_match:
+        monitor_match = re.search(r'(?:开启|打开|启动).*?(?:智能|会话)?(?:响应|对话).*?(?:QQ|qq)?(?:群)?[「""\s]*(.+?)[」""\s]*$', text)
     if monitor_match:
         group = monitor_match.group(1).strip().rstrip('」""里面中内 ')
         return qq_start_monitor(group)
@@ -359,14 +391,17 @@ def _do_execute(text: str) -> str:
     has_target = re.search(r'(?:豆包|doubao|chatgpt|kimi)', text, re.I)
     if rounds_match and has_target:
         rounds = int(rounds_match.group(1))
+        duration_sec = 0
         if '分钟' in text:
-            rounds = max(rounds * 2, 2)
+            duration_sec = rounds * 60  # 真实秒数，worker 按时间控制
+            rounds = 60  # 兜底上限，实际由 deadline 截断
         rounds = min(rounds, 20)
         site = '豆包' if '豆包' in text else 'chatgpt'
         site_url = 'doubao' if site == '豆包' else site.lower()
-        # 用 LLM 提取 topic 并生成自然的第一句话
-        first_msg = _generate_first_msg(text)
-        return web_chat(site_url, first_msg, rounds=rounds)
+        first_msg = _generate_first_msg(text, context or {})
+        goal_strip = re.sub(r'(?:去|和|找)?(?:豆包|doubao|chatgpt|kimi)(?:聊|对话|说说)?[\d分钟轮次个回合\s]*', '', text).strip()
+        original_goal = goal_strip if len(goal_strip) > 4 else first_msg
+        return web_chat(site_url, first_msg, rounds=rounds, original_goal=original_goal, duration_sec=duration_sec)
 
     # 网页单轮聊天（豆包等）
     web_match = re.search(r'(?:问|去|在|用|让|叫)(?:一下|下)?(?:豆包|doubao|chatgpt|kimi)[：:，,]?\s*(.+)', text, re.I)

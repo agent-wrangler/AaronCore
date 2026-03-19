@@ -48,9 +48,14 @@ _llm_config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 
 def _load_llm_config():
     try:
         with open(_llm_config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            raw = json.load(f)
+        if "models" in raw:
+            default = raw.get("default", "")
+            models = raw["models"]
+            return models.get(default) or next(iter(models.values()))
+        return raw
     except Exception:
-        return {"api_key": "", "model": "MiniMax-M2.5", "base_url": "https://api.minimax.chat/v1"}
+        return {"api_key": "", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"}
 
 
 _news_config_path = os.path.join(os.path.dirname(__file__), 'news_config.json')
@@ -93,7 +98,12 @@ def _translate_titles(titles):
             cleaned = re.sub(r'^\d+[\.\、\)\s]+', '', line).strip()
             if cleaned:
                 result.append(cleaned)
-        return result if len(result) == len(titles) else None
+        # 宽松匹配：数量一致直接用；多了截断；少了补英文原文
+        if len(result) >= len(titles):
+            return result[:len(titles)]
+        if len(result) >= len(titles) * 0.6:
+            return result + [titles[i] for i in range(len(result), len(titles))]
+        return None
     except Exception:
         return None
 

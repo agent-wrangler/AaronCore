@@ -15,9 +15,15 @@ def execute(user_request):
     # 加载LLM配置
     config_path = Path(__file__).resolve().parents[2] / "brain" / "llm_config.json"
     if config_path.exists():
-        llm_config = json.load(open(config_path, 'r', encoding='utf-8'))
+        _raw = json.load(open(config_path, 'r', encoding='utf-8'))
+        if "models" in _raw:
+            _default = _raw.get("default", "")
+            _models = _raw["models"]
+            llm_config = _models.get(_default) or next(iter(_models.values()))
+        else:
+            llm_config = _raw
     else:
-        llm_config = {"api_key": "", "model": "abab6.5s-chat", "base_url": "https://api.minimax.chat/v1"}
+        llm_config = {"api_key": "", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"}
     
     # 用LLM生成游戏代码
     prompt = f"""用户想要：{user_request}

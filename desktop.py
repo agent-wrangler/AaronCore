@@ -1,6 +1,5 @@
 """
 NovaCore Desktop - 桌面客户端
-无边框自定义标题栏
 """
 import webview
 import time
@@ -9,66 +8,78 @@ import ctypes
 import ctypes.wintypes
 import subprocess
 
+dwmapi = ctypes.windll.dwmapi
 user32 = ctypes.windll.user32
+DWMWA_CAPTION_COLOR = 35
+DWMWA_TEXT_COLOR = 36
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+
+# 缓存窗口句柄
+_hwnd = None
 
 
-class WindowApi:
-    def __init__(self, win):
-        self._win = win
+def _find_hwnd():
+    """通过窗口标题找到 pywebview 窗口句柄"""
+    global _hwnd
+    if _hwnd:
+        return _hwnd
+    hwnd = user32.FindWindowW(None, "Nova")
+    if hwnd:
+        _hwnd = hwnd
+    return _hwnd
 
-    def _hwnd(self):
-        """获取 pywebview 主窗口句柄"""
-        result = []
-        def cb(hwnd, _):
-            cls = ctypes.create_unicode_buffer(64)
-            title = ctypes.create_unicode_buffer(256)
-            user32.GetClassNameW(hwnd, cls, 64)
-            user32.GetWindowTextW(hwnd, title, 256)
-            rect = ctypes.wintypes.RECT()
-            user32.GetWindowRect(hwnd, ctypes.byref(rect))
-            w = rect.right - rect.left
-            h = rect.bottom - rect.top
-            if w > 800 and h > 600 and 'Nova Companion' not in title.value and 'Visual Studio' not in title.value and 'Claude' not in title.value:
-                result.append(hwnd)
-            return True
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-        user32.EnumWindows(WNDENUMPROC(cb), 0)
-        return result[0] if result else None
 
-    def minimize(self):
-        self._win.minimize()
+def _set_titlebar_theme(dark=True):
+    """设置系统标题栏颜色（DWMWA_CAPTION_COLOR + TEXT_COLOR）"""
+    hwnd = _find_hwnd()
+    if not hwnd:
+        print(f"[desktop] _set_titlebar_theme: hwnd not found", flush=True)
+        return
+    # 先设置深色/浅色模式，否则系统主题会覆盖自定义颜色
+    dark_mode = ctypes.c_int(1 if dark else 0)
+    dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(dark_mode), 4)
+    if dark:
+        bg = ctypes.c_uint(0x00201E1E)   # #1e1e20 BGR
+        fg = ctypes.c_uint(0x00F0EBEB)   # #ebebf0 BGR
+    else:
+        bg = ctypes.c_uint(0x00FCFAF8)   # #f8fafc BGR
+        fg = ctypes.c_uint(0x00634B47)   # #474b63 BGR
+    dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(bg), 4)
+    dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ctypes.byref(fg), 4)
+    print(f"[desktop] titlebar set to {'dark' if dark else 'light'}, hwnd={hwnd}", flush=True)
 
-    def toggle_maximize(self):
-        self._win.toggle_fullscreen()
 
-    def start_drag(self):
-        """触发 Windows 原生窗口拖拽"""
-        hwnd = self._hwnd()
-        if not hwnd:
-            return
-        WM_NCLBUTTONDOWN = 0x00A1
-        HTCAPTION = 2
-        user32.ReleaseCapture()
-        user32.PostMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0)
-
-    def move_window(self, dx, dy):
-        pass
-
-    def close(self):
-        import sys
-        self._win.destroy()
-        sys.exit(0)
-
-    def set_theme(self, theme):
-        pass
+def set_theme(theme):
+    """前端调用：切换标题栏主题"""
+    _set_titlebar_theme(theme == 'dark')
 
 
 def start_backend():
+    """启动后端服务，如果已在运行则跳过"""
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect(("127.0.0.1", 8090))
+        sock.close()
+        print("[desktop] 后端已在运行，跳过启动")
+        return
+    except ConnectionRefusedError:
+        pass
     os.chdir(r"C:\Users\36459\NovaCore")
     subprocess.Popen([r"C:\Program Files\Python311\python.exe", "agent_final.py"])
 
 
 def start_companion():
+    """启动伴侣窗口，如果已在运行则跳过"""
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect(("127.0.0.1", 8091))
+        sock.close()
+        print("[desktop] 伴侣窗口已在运行，跳过启动")
+        return
+    except ConnectionRefusedError:
+        pass
     companion_dir = os.path.join(r"C:\Users\36459\NovaCore", "companion")
     electron_exe = os.path.join(companion_dir, "node_modules", "electron", "dist", "electron.exe")
     env = os.environ.copy()
@@ -76,32 +87,40 @@ def start_companion():
     subprocess.Popen([electron_exe, "."], cwd=companion_dir, env=env)
 
 
-screen_width = user32.GetSystemMetrics(0)
-screen_height = user32.GetSystemMetrics(1)
-window_width = 1100
-window_height = 800
-x = (screen_width - window_width) // 2
-y = (screen_height - window_height) // 2
-
 start_backend()
 time.sleep(3)
 
-api = WindowApi(None)
+# WebView2 初始化前设默认背景色（环境变量方式，最可靠）
+os.environ['WEBVIEW2_DEFAULT_BACKGROUND_COLOR'] = 'EFF6FF'
+
 window = webview.create_window(
-    '',
+    'Nova',
     'http://localhost:8090/',
-    width=window_width,
-    height=window_height,
-    x=x,
-    y=y,
+    width=1100,
+    height=800,
     resizable=True,
-    frameless=True,
-    easy_drag=False,
-    js_api=api,
+    background_color='#eff6ff',
 )
-api._win = window
+
+
+def _on_shown():
+    import threading
+    def _do():
+        time.sleep(2)
+        window.expose(set_theme)
+        hwnd = _find_hwnd()
+        print(f"[desktop] hwnd={hwnd}", flush=True)
+        # hwnd 已缓存，清掉标题栏文字和图标
+        if hwnd:
+            window.set_title("")
+        _set_titlebar_theme(dark=False)
+        print("[desktop] ready, titlebar set to light", flush=True)
+    threading.Thread(target=_do, daemon=True).start()
+
+
+window.events.shown += _on_shown
 
 start_companion()
 
-print("NovaCore \u542f\u52a8\u4e2d...")
-webview.start()
+print("NovaCore 启动中...")
+webview.start(private_mode=False, storage_path=os.path.join(os.environ.get("APPDATA", ""), "NovaCore"))

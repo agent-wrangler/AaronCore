@@ -56,9 +56,11 @@ def _detect_type(text: str) -> str:
     # 技能需求（"帮我做/能不能/怎么用" + 不存在的能力）→ L5
     if any(k in t for k in ['帮我做','能不能','你会不会','有没有功能','可以帮我']): return 'skill_demand'
     # 知识类 → L8（严格匹配，防止"有意思""是什么模式"等误判）
-    _knowledge_phrases = ['什么是','为什么','怎么回事','是谁','什么意思','意思是什么','什么原理','原理是']
+    _knowledge_phrases = ['什么是','怎么回事','是谁','什么意思','意思是什么','什么原理','原理是']
+    # "为什么"单独处理：排除"你为什么/我让你为什么"等元对话
+    _why_ok = '为什么' in t and not t.startswith('你') and '我让你' not in t and '你为什么' not in t
     # "是什么"需要后面跟实体词，排除"你是什么""现在是什么"等问Nova自身状态的句子
-    is_knowledge = any(k in t for k in _knowledge_phrases)
+    is_knowledge = any(k in t for k in _knowledge_phrases) or _why_ok
     if not is_knowledge and '是什么' in t:
         # "X是什么" 前面不能是 你/我/它/这/那/现在 等代词
         idx = t.index('是什么')
@@ -218,6 +220,13 @@ def _is_real_knowledge_query(text: str) -> bool:
         return False
     # 命中闲聊模式 → 不是知识
     if any(p in t for p in _CASUAL_PATTERNS):
+        return False
+    # 以"你"开头 → 是在问 Nova，不是在问知识
+    if t.startswith('你'):
+        return False
+    # 含"我让你/你为什么/你怎么/你没/你自己" → 元对话，不是知识
+    _meta = ['我让你', '你为什么', '你怎么', '你没', '你自己', '你去', '你回来', '你聊']
+    if any(m in t for m in _meta):
         return False
     # 必须包含至少一个疑问信号
     question_signals = ['?', '\uff1f', '\u4ec0\u4e48', '\u4e3a\u4ec0\u4e48', '\u4e3a\u5565',

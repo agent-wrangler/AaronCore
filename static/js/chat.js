@@ -1,4 +1,6 @@
 // ── textarea 自动撑高 ──
+var _pendingImage = null; // base64 图片暂存
+
 (function(){
  var inp=document.getElementById('inp');
  if(!inp)return;
@@ -7,9 +9,54 @@
   inp.style.height=Math.min(inp.scrollHeight,280)+'px';
  }
  inp.addEventListener('input',autoResize);
+
+ // 粘贴图片拦截
+ inp.addEventListener('paste',function(e){
+  var items=e.clipboardData&&e.clipboardData.items;
+  if(!items)return;
+  for(var i=0;i<items.length;i++){
+   if(items[i].type.indexOf('image')!==-1){
+    e.preventDefault();
+    var file=items[i].getAsFile();
+    if(file) readImageFile(file);
+    return;
+   }
+  }
+ });
 })();
 
-function addMessage(sender,text,type){
+function readImageFile(file){
+ if(!file||file.size>10*1024*1024)return; // 10MB limit
+ var reader=new FileReader();
+ reader.onload=function(e){
+  _pendingImage=e.target.result; // data:image/...;base64,...
+  showImagePreview(_pendingImage);
+  updateSendButton();
+ };
+ reader.readAsDataURL(file);
+}
+
+function handleImageFile(input){
+ if(input.files&&input.files[0]) readImageFile(input.files[0]);
+ input.value=''; // reset so same file can be re-selected
+}
+
+function showImagePreview(dataUrl){
+ var bar=document.getElementById('imagePreviewBar');
+ var img=document.getElementById('imagePreviewImg');
+ if(!bar||!img)return;
+ img.src=dataUrl;
+ bar.style.display='flex';
+}
+
+function removeImagePreview(){
+ _pendingImage=null;
+ var bar=document.getElementById('imagePreviewBar');
+ if(bar) bar.style.display='none';
+ updateSendButton();
+}
+
+function addMessage(sender,text,type,imageUrl){
  var chat=document.getElementById('chat');
  var msgDiv=document.createElement('div');
  msgDiv.className='msg '+(type==='user'?'user':'assistant');
@@ -34,7 +81,18 @@ function addMessage(sender,text,type){
  // 创建气泡
  var bubble=document.createElement('div');
  bubble.className='bubble';
- bubble.innerHTML=formatBubbleText(text);
+ if(imageUrl){
+  var img=document.createElement('img');
+  img.className='bubble-image';
+  img.src=imageUrl;
+  img.alt='图片';
+  bubble.appendChild(img);
+ }
+ if(text){
+  var textNode=document.createElement('span');
+  textNode.innerHTML=formatBubbleText(text);
+  bubble.appendChild(textNode);
+ }
  
  // 创建元信息（昵称+时间）
  var msgMeta=document.createElement('div');
@@ -230,11 +288,15 @@ async function send(){
  if(typeof hideWelcome==='function') hideWelcome();
  var inp=document.getElementById('inp');
  var text=inp.value.trim();
- if(text==='')return;
+ var image=_pendingImage;
+ if(text===''&&!image)return;
 
- addMessage('\u4f60',text,'user');
+ addMessage('\u4f60',text,'user',image);
  inp.value='';
  inp.style.height='auto';
+ _pendingImage=null;
+ var bar=document.getElementById('imagePreviewBar');
+ if(bar) bar.style.display='none';
  updateSendButton();
 
  var btn=document.getElementById('sendBtn');
@@ -331,10 +393,16 @@ async function send(){
  }
 
  try{
+  var imageBase64=null;
+  if(image){
+   // strip data:image/...;base64, prefix for the API
+   var commaIdx=image.indexOf(',');
+   imageBase64=commaIdx>=0?image.substring(commaIdx+1):image;
+  }
   var resp=await fetch('/chat',{
    method:'POST',
    headers:{'Content-Type':'application/json; charset=utf-8','Accept':'text/event-stream'},
-   body:JSON.stringify({message:String(text)})
+   body:JSON.stringify({message:String(text||'描述这张图片'),image:imageBase64})
   });
 
   var reader=resp.body.getReader();
@@ -391,3 +459,124 @@ async function send(){
  chat.scrollTop=chat.scrollHeight;
  setTimeout(updateSendButton,100);
 }
+
+// ── 语音对话模式（点一次进入，自动循环，再点退出） ──
+var _voiceMode = false;
+
+(function(){
+ var voiceBtn=document.getElementById('voiceBtn');
+ if(!voiceBtn) return;
+
+ var SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SpeechRecognition){
+  voiceBtn.style.display='none';
+  return;
+ }
+
+ var recognition=new SpeechRecognition();
+ recognition.lang='zh-CN';
+ recognition.continuous=false;
+ recognition.interimResults=true;
+
+ var isRecording=false;
+ var inp=document.getElementById('inp');
+
+ voiceBtn.addEventListener('click',function(e){
+  e.preventDefault();
+  if(_voiceMode){ exitVoiceMode(); }
+  else{ enterVoiceMode(); }
+ });
+
+ function enterVoiceMode(){
+  _voiceMode=true;
+  voiceBtn.classList.add('recording');
+  startListening();
+ }
+
+ function exitVoiceMode(){
+  _voiceMode=false;
+  voiceBtn.classList.remove('recording');
+  if(isRecording){ try{ recognition.stop(); }catch(err){} }
+  isRecording=false;
+  if(inp) inp.placeholder='\u4e0e Nova \u5bf9\u8bdd...';
+ }
+
+ function startListening(){
+  if(!_voiceMode) return;
+  isRecording=true;
+  if(inp){ inp.value=''; inp.placeholder='\u6b63\u5728\u542c...'; }
+  try{ recognition.start(); }catch(err){}
+ }
+
+ recognition.onresult=function(e){
+  var transcript='';
+  for(var i=0;i<e.results.length;i++){
+   transcript+=e.results[i][0].transcript;
+  }
+  if(inp) inp.value=transcript;
+ };
+
+ recognition.onend=function(){
+  isRecording=false;
+  if(!_voiceMode){ if(inp) inp.placeholder='\u4e0e Nova \u5bf9\u8bdd...'; return; }
+  var text=(inp&&inp.value||'').trim();
+  if(!text){ setTimeout(startListening,300); return; }
+  if(inp) inp.placeholder='\u7b49\u5f85\u56de\u590d...';
+  // 记录当前回复ID，等新回复出现后估算等待时间
+  var replyIdBefore=_lastReplyIdForVoice||'';
+  send();
+  waitForReplyThenListen(replyIdBefore);
+ };
+
+ recognition.onerror=function(e){
+  isRecording=false;
+  if(!_voiceMode) return;
+  setTimeout(startListening, e.error==='no-speech'?300:1000);
+ };
+
+ // 等 Nova 回复完 + TTS 播完再开始听
+ function waitForReplyThenListen(replyIdBefore){
+  if(!_voiceMode) return;
+  var polls=0;
+  var gotReply=false;
+  var seenTtsStart=false;
+  var replyTime=0;
+  var timer=setInterval(function(){
+   polls++;
+   if(!_voiceMode||polls>=100){ clearInterval(timer); if(_voiceMode) startListening(); return; }
+   fetch('/companion/state').then(function(r){return r.json();}).then(function(s){
+    if(!gotReply){
+     // 阶段1：等新回复出现
+     if(s.last_reply_id && s.last_reply_id!==replyIdBefore){
+      gotReply=true;
+      replyTime=Date.now();
+      _lastReplyIdForVoice=s.last_reply_id;
+      // 用文本长度估算最大等待时间（兜底）
+      var text=s.last_reply_full||s.last_reply_summary||'';
+      var maxWait=Math.max((text.length/3)*1000+5000, 8000);
+      setTimeout(function(){
+       clearInterval(timer);
+       if(_voiceMode) startListening();
+      }, maxWait);
+     }
+    }else{
+     // 阶段2：等 TTS 播完
+     if(s.tts_playing){
+      seenTtsStart=true;
+     }
+     if(seenTtsStart && !s.tts_playing){
+      // 确认播完了
+      clearInterval(timer);
+      if(_voiceMode) setTimeout(startListening,300);
+     }
+     // 如果等了 6 秒还没看到 tts_playing=true，伴侣窗口可能没开
+     if(!seenTtsStart && Date.now()-replyTime>6000){
+      clearInterval(timer);
+      if(_voiceMode) startListening();
+     }
+    }
+   }).catch(function(){});
+  },600);
+ }
+ var _lastReplyIdForVoice='';
+})();

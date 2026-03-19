@@ -349,10 +349,11 @@ L8已学知识：
 6. 不要死板，不要空模板。
 7. 不要输出思考过程。
 8. 只输出最终回复。
+9. 禁止在日常聊天中使用 **加粗** 语法，直接说话，不要用 markdown 强调。
 """.strip()
-    result = _think(prompt, dialogue_context)
+    result = _think(prompt, dialogue_context, image=bundle.get("image"))
     reply = result.get("reply", "") if isinstance(result, dict) else str(result)
-    if (not reply) or ("��" in str(reply)) or len(str(reply).strip()) < 2:
+    if (not reply) or ("\ufffd" in str(reply)) or len(str(reply).strip()) < 2:
         return "我在呢，你直接说，我会认真接着你的话聊。"
     return str(reply).strip()
 
@@ -570,6 +571,7 @@ L4人格信息：
 4. 用统一的人格口吻输出，不要像系统提示。
 5. 不要输出思考过程。
 6. 只输出最终回复。
+7. 禁止使用 **加粗** 语法，直接说话，不要用 markdown 强调。
 """.strip()
     result = _think(prompt, dialogue_context)
     reply = result.get("reply", "") if isinstance(result, dict) else str(result)

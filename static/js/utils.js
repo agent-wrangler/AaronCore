@@ -18,8 +18,9 @@ function updateSendButton(){
  var inp=document.getElementById('inp');
  var btn=document.getElementById('sendBtn');
  var hasText=inp.value.trim().length>0;
- 
- btn.disabled=!hasText;
+ var hasImage=typeof _pendingImage!=='undefined'&&!!_pendingImage;
+
+ btn.disabled=!(hasText||hasImage);
 }
 
 function formatBubbleText(text){
