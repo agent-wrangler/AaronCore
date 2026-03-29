@@ -4,13 +4,23 @@
  * 无边框 + 可缩放 + CSS 拖拽
  */
 const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
+const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const { spawn } = require('child_process');
 
 Menu.setApplicationMenu(null);
 
 let win;
 const WINDOW_CONTROLS_MODE = 'custom-html';
+const ROOT_DIR = process.env.NOVACORE_ROOT || path.resolve(__dirname, '..');
+const BACKEND_ENTRY = process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
+const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
+
+function resolvePythonCommand() {
+  if (process.env.NOVACORE_PYTHON) return process.env.NOVACORE_PYTHON;
+  if (process.platform === 'win32' && fs.existsSync(LOCAL_PYTHON)) return LOCAL_PYTHON;
+  return 'python';
+}
 
 function emitWindowState() {
   if (!win || win.isDestroyed()) return;
@@ -56,10 +66,11 @@ function ensureBackend() {
       return;
     }
     console.log('[shell] starting backend...');
+    const pythonCommand = resolvePythonCommand();
     const py = spawn(
-      'C:\\Program Files\\Python311\\python.exe',
-      ['agent_final.py'],
-      { cwd: 'C:\\Users\\36459\\NovaCore', detached: true, stdio: 'ignore' }
+      pythonCommand,
+      [BACKEND_ENTRY],
+      { cwd: ROOT_DIR, detached: true, stdio: 'ignore' }
     );
     py.unref();
     // 等后端就绪

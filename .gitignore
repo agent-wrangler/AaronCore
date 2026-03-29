@@ -36,4 +36,5 @@ shell/node_modules/
 desktop_runtime/
 desktop_runtime_35/node_modules/
 desktop_runtime_35/package-lock.json
+desktop_runtime_35/dist/
 static/live2d/*/

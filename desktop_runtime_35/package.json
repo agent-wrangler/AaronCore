@@ -1,7 +1,101 @@
 {
   "name": "novacore-desktop-runtime-35",
+  "version": "1.0.0",
   "private": true,
+  "description": "Desktop packaging wrapper for NovaCore",
+  "author": "NovaCore",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --dir",
+    "dist:portable": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win portable",
+    "dist:nsis": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win nsis"
+  },
   "devDependencies": {
-    "electron": "35.7.5"
+    "electron": "35.7.5",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.novacore.desktop",
+    "productName": "NovaCore",
+    "asar": true,
+    "npmRebuild": false,
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../agent_final.py",
+        "to": "novacore/agent_final.py"
+      },
+      {
+        "from": "../output.html",
+        "to": "novacore/output.html"
+      },
+      {
+        "from": "../companion.html",
+        "to": "novacore/companion.html"
+      },
+      {
+        "from": "../brain",
+        "to": "novacore/brain"
+      },
+      {
+        "from": "../configs",
+        "to": "novacore/configs"
+      },
+      {
+        "from": "../core",
+        "to": "novacore/core"
+      },
+      {
+        "from": "../routes",
+        "to": "novacore/routes"
+      },
+      {
+        "from": "../shell",
+        "to": "novacore/shell",
+        "filter": [
+          "**/*",
+          "!node_modules{,/**}"
+        ]
+      },
+      {
+        "from": "../skills",
+        "to": "novacore/skills"
+      },
+      {
+        "from": "../static",
+        "to": "novacore/static"
+      },
+      {
+        "from": "../tools",
+        "to": "novacore/tools"
+      },
+      {
+        "from": "../home/.gitkeep",
+        "to": "novacore/home/.gitkeep"
+      },
+      {
+        "from": "../memory/.gitkeep",
+        "to": "novacore/memory/.gitkeep"
+      },
+      {
+        "from": "../memory_db/.gitkeep",
+        "to": "novacore/memory_db/.gitkeep"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    }
   }
 }
