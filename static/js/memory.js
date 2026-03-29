@@ -254,7 +254,7 @@ function layerLabel(layer) {
   if (layer === "L5") return "方法经验";
   if (layer === "L6") return "执行轨迹";
   if (layer === "L7") return "反馈学习";
-  if (layer === "L8") return "能力进化";
+  if (layer === "L8") return "已学知识";
   return "系统事件";
 }
 
@@ -275,6 +275,68 @@ function normalizeMemoryMeta(eventItem) {
   var meta = eventItem.meta || {};
   if (meta.kind) return meta;
   return inferLegacyMemoryMeta(eventItem.layer || "", eventItem.title || "", eventItem.content || "", eventItem.event_type || "");
+}
+
+function isGenericL8Title(title) {
+  title = String(title || "").trim();
+  return (
+    !title ||
+    title === "能力进化" ||
+    title === "成长经验" ||
+    title === "已学知识" ||
+    title === "自主学习" ||
+    title === "对话结晶"
+  );
+}
+
+function extractLegacyL8Query(rawTitle, rawContent) {
+  var title = String(rawTitle || "").trim();
+  var content = String(rawContent || "").trim();
+  var patterns = [
+    /学到[「“"]([^」”"\n]+)[」”"]/,
+    /习得经验[:：]\s*[「“"]([^」”"\n]+)[」”"]/,
+    /学习了[「“"]([^」”"\n]+)[」”"]/,
+    /主题[:：]\s*([^\n：:]+)/,
+  ];
+  var i = 0;
+  var match = null;
+
+  if (!isGenericL8Title(title)) return title;
+
+  for (i = 0; i < patterns.length; i += 1) {
+    match = content.match(patterns[i]);
+    if (match && match[1]) return String(match[1]).trim();
+  }
+
+  match = content.match(/^([^：:\n]{2,60})[:：]/);
+  if (match && match[1]) return String(match[1]).trim();
+
+  match = content.match(/^([^\n]{2,60})$/);
+  if (match && match[1]) return String(match[1]).trim();
+
+  return "";
+}
+
+function extractLegacyL8Summary(rawContent, query) {
+  var summary = String(rawContent || "").trim();
+  var escapedQuery = String(query || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  if (!summary) return "";
+
+  summary = summary
+    .replace(/^学到[「“"][^」”"]+[」”][：:，,\s]*/, "")
+    .replace(/^习得经验[：:]\s*[「“"][^」”"]+[」”][：:，,\s]*/, "")
+    .replace(/^学习了[「“"][^」”"]+[」”][：:，,\s]*/, "")
+    .replace(/^主题[：:]\s*[^：:\n]+[：:，,\s]*/, "")
+    .trim();
+
+  if (escapedQuery) {
+    summary = summary
+      .replace(new RegExp("^" + escapedQuery + "[：:，,\\s]*"), "")
+      .trim();
+  }
+
+  return summary;
 }
 
 function inferLegacyMemoryMeta(layer, rawTitle, rawContent, type) {
@@ -345,6 +407,16 @@ function inferLegacyMemoryMeta(layer, rawTitle, rawContent, type) {
     }
   }
 
+  if (layer === "L8") {
+    var l8Query = extractLegacyL8Query(title, content);
+    return {
+      kind: "self_learned",
+      query: l8Query,
+      summary: extractLegacyL8Summary(content, l8Query),
+      inferred_from_legacy: true,
+    };
+  }
+
   return {};
 }
 
@@ -367,6 +439,9 @@ function memoryEventTitle(layer, meta, rawTitle) {
   if (meta.kind === "method_experience") return "方法经验";
   if (meta.kind === "ability_hint") return "能力线索";
   if (meta.kind === "execution_trace" || meta.kind === "execution_count") return "执行轨迹";
+  if (meta.kind === "self_learned") return "自主学习";
+  if (meta.kind === "dialogue_crystal") return "对话结晶";
+  if (meta.kind === "feedback_relearn") return "纠偏补学";
   return rawTitle || layerLabel(layer);
 }
 
@@ -375,6 +450,9 @@ function memoryEventContent(layer, meta, rawContent, type) {
   if (meta.kind === "ability_hint") return buildAbilityHintContent(meta, rawContent);
   if (meta.kind === "execution_trace") return buildExecutionTraceContent(meta, rawContent);
   if (meta.kind === "execution_count") return buildExecutionCountContent(meta, rawContent);
+  if (meta.kind === "self_learned" || meta.kind === "dialogue_crystal" || meta.kind === "feedback_relearn") {
+    return buildL8KnowledgeContent(meta, rawContent);
+  }
   return buildGenericMemoryContent(layer, rawContent, type);
 }
 
@@ -441,6 +519,27 @@ function buildExecutionCountContent(meta, rawContent) {
   return lines.join("<br>");
 }
 
+function buildL8KnowledgeContent(meta, rawContent) {
+  var query = safeText(meta.query || "");
+  var summary = safeMultiline(meta.summary || rawContent);
+  var sourceLabel = safeText(meta.source_label || "");
+  var primaryScene = safeText(meta.primary_scene || "");
+  var secondaryScene = safeText(meta.secondary_scene || "");
+  var hitCount = Number(meta.hit_count) || 0;
+  var lines = [];
+
+  if (query) lines.push("主题：" + query);
+  if (summary) lines.push("摘要：" + summary);
+  if (sourceLabel) lines.push("来源：" + sourceLabel);
+  if (primaryScene || secondaryScene) {
+    lines.push("场景：" + [primaryScene, secondaryScene].filter(Boolean).join(" / "));
+  }
+  if (hitCount > 0) lines.push("复用：" + hitCount + " 次");
+  else lines.push("状态：已沉淀为新的知识卡片");
+
+  return lines.join("<br>");
+}
+
 function buildGenericMemoryContent(layer, rawContent, type) {
   if (!rawContent || isDirtyText(rawContent)) {
     if (layer === "L2") return "凝结了一段对话印象，这次交流留下了值得记住的痕迹。";
@@ -449,7 +548,7 @@ function buildGenericMemoryContent(layer, rawContent, type) {
     if (layer === "L5") return "L5 里沉淀出一条新的方法线索，后续复杂任务可以继续复用。";
     if (layer === "L6") return "记录下一次真实执行轨迹，后续会继续作为方法沉淀的素材。";
     if (layer === "L7") return "收到一条新的反馈，这次修正会继续影响后续判断。";
-    if (layer === "L8") return "习得了一条新的成长经验，它会继续影响后续优化方向。";
+    if (layer === "L8") return "沉淀了一张新的已学知识卡片，后续会在相似问题里复用。";
     if (layer === "L1") return "捕捉到一枚新的记忆粒子，已经进入感知层等待沉淀。";
     return safeText(type) || "记录了一次新的系统变化。";
   }

@@ -540,13 +540,6 @@ def _condense_knowledge(user_text: str, ai_text: str) -> str:
 def _to_l8(text, ai_text):
     """L2→L8：知识类对话沉淀到知识库，Nova下次就记住了"""
     try:
-        l8 = load_json(L8_FILE, [])
-        # 去重：相同问题不重复存
-        for item in l8:
-            if isinstance(item, dict):
-                existing_q = str(item.get("query", ""))
-                if text[:20] in existing_q or existing_q in text:
-                    return
         # LLM 凝结：从对话中提取纯知识，同时过滤非知识内容
         summary = _condense_knowledge(text, ai_text)
         if not summary:
@@ -556,22 +549,17 @@ def _to_l8(text, ai_text):
             else:
                 _debug_write("l2_crystal_l8_filtered", {"text": text[:50]})
                 return
-        # 上限500条（和L8原有逻辑一致）
-        if len(l8) >= 500:
-            l8 = l8[-499:]
-        kws = _extract_kw(text)
-        l8.append({
-            "id": f"l2_k_{int(time.time()*1000)}",
-            "source": "l2_crystallize",
-            "type": "knowledge",
-            "query": text,
-            "name": text[:30],
-            "summary": summary,
-            "keywords": kws[:10],
-            "hit_count": 0,
-            "created_at": datetime.now().isoformat(),
-        })
-        write_json(L8_FILE, l8)
+        from core import l8_learn
+
+        entry = l8_learn.save_learned_knowledge(
+            text,
+            summary,
+            [],
+            source="l2_crystallize",
+        )
+        if isinstance(entry, dict) and entry.get("saved") is False:
+            _debug_write("l2_crystal_l8_filtered", {"text": text[:50], "reason": entry.get("reason", "")})
+            return
         _debug_write("l2_crystal_l8", {"text": text[:50]})
     except Exception as e:
         _debug_write("l2_crystal_l8_err", {"err": str(e)})

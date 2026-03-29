@@ -9,13 +9,15 @@ import routes.data as data_module
 
 
 class MemoryRouteTests(unittest.TestCase):
-    def _load_memory(self, knowledge=None, evolution=None):
+    def _load_memory(self, knowledge=None, evolution=None, knowledge_base=None):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             if knowledge is not None:
                 (tmp / "knowledge.json").write_text(json.dumps(knowledge, ensure_ascii=False), encoding="utf-8")
             if evolution is not None:
                 (tmp / "evolution.json").write_text(json.dumps(evolution, ensure_ascii=False), encoding="utf-8")
+            if knowledge_base is not None:
+                (tmp / "knowledge_base.json").write_text(json.dumps(knowledge_base, ensure_ascii=False), encoding="utf-8")
 
             with patch.object(data_module.S, "PRIMARY_HISTORY_FILE", tmp / "history.json"), patch.object(
                 data_module.S, "PRIMARY_STATE_DIR", tmp
@@ -110,6 +112,53 @@ class MemoryRouteTests(unittest.TestCase):
         self.assertEqual(trace_event["meta"]["kind"], "execution_count")
         self.assertEqual(trace_event["meta"]["skill"], "web_search")
         self.assertEqual(trace_event["meta"]["count"], 2)
+
+    def test_memory_route_shows_only_clean_l8_knowledge_cards(self):
+        result = self._load_memory(
+            knowledge_base=[
+                {
+                    "source": "bing_rss",
+                    "type": "knowledge",
+                    "query": "FastAPI 是什么？",
+                    "summary": "FastAPI 是一个高性能 Python Web 框架，适合构建 API 服务。",
+                    "hit_count": 2,
+                    "created_at": "2026-03-29 08:10",
+                    "last_used": "2026-03-29 09:00",
+                    "一级场景": "自主学习",
+                    "二级场景": "自主学习-FastAPI",
+                },
+                {
+                    "source": "l2_crystallize",
+                    "type": "knowledge",
+                    "query": "第一性原理是什么",
+                    "summary": "第一性原理是从基本事实和原理出发，逐层推导解决方案的方法。",
+                    "hit_count": 0,
+                    "created_at": "2026-03-29 07:00",
+                },
+                {
+                    "source": "l2_crystallize",
+                    "type": "knowledge",
+                    "query": "我都不知道你说的是什么意思",
+                    "summary": "<think>这段对话没有知识</think>",
+                    "created_at": "2026-03-29 06:00",
+                },
+                {
+                    "source": "feedback_relearn",
+                    "type": "feedback_relearn",
+                    "query": "好神奇",
+                    "summary": "用户问了，Nova 回复了，用户纠正了。",
+                    "created_at": "2026-03-29 05:00",
+                },
+            ]
+        )
+
+        l8_events = [item for item in result["events"] if item.get("layer") == "L8"]
+        self.assertEqual(result["counts"]["L8"], 2)
+        self.assertEqual(len(l8_events), 2)
+
+        titles = {item["title"] for item in l8_events}
+        self.assertEqual(titles, {"自主学习", "对话结晶"})
+        self.assertTrue(all(item.get("meta", {}).get("kind") in {"self_learned", "dialogue_crystal"} for item in l8_events))
 
 
 if __name__ == "__main__":

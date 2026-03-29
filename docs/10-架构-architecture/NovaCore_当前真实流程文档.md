@@ -1,6 +1,6 @@
 # NovaCore 当前真实流程文档
 
-> 最后更新：2026-03-27
+> 最后更新：2026-03-30
 > 定位：**当前运行态补充文档**。用于快速理解 NovaCore 现在真正怎么跑。
 > 适用场景：以后新对话开始时，如果要碰 NovaCore，建议先读这份，再去看具体代码。
 > 说明：遇到和代码不一致时，**以当前代码为准**；遇到和根目录 `CLAUDE.md` 冲突时，优先按代码核对后再判断。
@@ -408,7 +408,8 @@ tool_call 跑完后，当前主链会继续做这些事：
 - 写入 L1 历史
 - `S.l2_add_memory(msg, response)` 回写 L2
 - 检测 L7 反馈
-- 必要时触发 L8 补学
+- 必要时触发 L8 自主学习 / 显式学习
+- L7 的 `feedback_relearn` 仍会运行，但不再沉淀为 L8 正式知识卡片
 
 关键位置：`routes/chat.py:842-909`
 
@@ -589,8 +590,17 @@ executor 统一执行
 
 ## 6.8 L8
 - 已学知识
+- 定义：真正可复用的知识卡片层，不再混入口语抱怨、对话分析或系统自指内容
 - CoD 下默认按需查询，不预装全量
-- 回复后可触发自动补学
+- 当前只有两条正式入库路径：
+  - 自主学习：`core/l8_learn.py` 的 `explicit_search_and_learn()` 与 `run_l8_autolearn_task -> save_learned_knowledge()`
+  - 对话结晶：`core/l2_memory.py` 的 `_to_l8() -> save_learned_knowledge(source="l2_crystallize")`
+- 记忆页中会显示为两类事件：`自主学习` 和 `对话结晶`
+- `feedback_relearn` 属于 L7 的补学动作，当前只保留在反馈链路里，不再作为 L8 已学知识入库、检索或展示
+- 核心文件与数据：
+  - `core/l8_learn.py`
+  - `core/l2_memory.py`
+  - `memory_db/knowledge_base.json`
 
 ---
 

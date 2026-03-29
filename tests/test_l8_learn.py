@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from core import l2_memory
 from core import l8_learn
 
 
@@ -132,6 +133,108 @@ class L8LearnTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["reason"], "already_known")
         mock_search.assert_not_called()
+
+    def test_should_surface_knowledge_entry_rejects_dirty_l8_items(self):
+        dirty_entry = {
+            "source": "l2_crystallize",
+            "type": "knowledge",
+            "query": "我都不知道你说的是什么意思",
+            "summary": "<think>这段对话没有可复用知识</think>",
+        }
+
+        self.assertFalse(l8_learn.should_surface_knowledge_entry(dirty_entry))
+        self.assertFalse(l8_learn.should_show_l8_timeline_entry(dirty_entry))
+
+    def test_prune_l8_garbage_entries_backs_up_and_removes_dirty_items(self):
+        self.knowledge_base_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "source": "bing_rss",
+                        "type": "knowledge",
+                        "query": "FastAPI 是什么？",
+                        "summary": "FastAPI 是一个高性能 Python Web 框架。",
+                    },
+                    {
+                        "source": "l2_crystallize",
+                        "type": "knowledge",
+                        "query": "我都不知道你说的是什么意思",
+                        "summary": "<think>这段对话没有可复用知识</think>",
+                    },
+                    {
+                        "source": "feedback_relearn",
+                        "type": "feedback_relearn",
+                        "query": "好神奇",
+                        "summary": "上次回复偏了，需要纠偏。",
+                    },
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = l8_learn.prune_l8_garbage_entries()
+        stored = self._read_knowledge_base()
+        backups = list(self.state_dir.glob("knowledge_base.backup_*.json"))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["removed_count"], 2)
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0]["query"], "FastAPI 是什么？")
+        self.assertEqual(len(backups), 1)
+
+    def test_save_learned_knowledge_sanitizes_extra_fields(self):
+        entry = l8_learn.save_learned_knowledge(
+            "FastAPI 是什么？",
+            "<think>internal</think>FastAPI 是一个高性能 Python Web 框架。",
+            [],
+            extra_fields={"feedback_fix": "<think>internal</think>下次先直接回答定义"},
+        )
+
+        stored = self._read_knowledge_base()
+
+        self.assertEqual(entry["summary"], "FastAPI 是一个高性能 Python Web 框架。")
+        self.assertEqual(stored[0]["feedback_fix"], "下次先直接回答定义")
+
+    def test_feedback_relearn_does_not_persist_into_l8_knowledge_base(self):
+        with patch.object(
+            l8_learn,
+            "search_web_results",
+            return_value=[
+                {
+                    "title": "FastAPI 是什么？",
+                    "snippet": "FastAPI 是一个高性能 Python Web 框架。",
+                    "url": "https://fastapi.tiangolo.com/",
+                }
+            ],
+        ):
+            result = l8_learn.auto_learn_from_feedback(
+                {
+                    "id": "fb_1",
+                    "last_question": "FastAPI 是什么？",
+                    "user_feedback": "上次回复偏了",
+                    "last_answer": "我回答得不准",
+                    "scene": "general",
+                    "problem": "generic_feedback",
+                    "fix": "keep_observing_and_refine",
+                }
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["entry"]["type"], "feedback_relearn")
+        self.assertEqual(self._read_knowledge_base(), [])
+
+    def test_l2_to_l8_uses_unified_l8_writer(self):
+        with patch.object(l2_memory, "_condense_knowledge", return_value="FastAPI 是一个现代 Python Web 框架。"), \
+             patch("core.l8_learn.save_learned_knowledge", return_value={"saved": True}) as mock_save:
+            l2_memory._to_l8("FastAPI 是什么？", "FastAPI 是一个现代 Python Web 框架。")
+
+        mock_save.assert_called_once_with(
+            "FastAPI 是什么？",
+            "FastAPI 是一个现代 Python Web 框架。",
+            [],
+            source="l2_crystallize",
+        )
 
 
 if __name__ == "__main__":

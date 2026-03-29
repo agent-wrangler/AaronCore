@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from fastapi import APIRouter
 from core import shared as S
+from core.l8_learn import classify_l8_entry_kind, should_show_l8_timeline_entry
 from core.state_loader import get_model_price, MODEL_PRICES
 
 router = APIRouter()
@@ -30,6 +31,24 @@ def _is_live_skill_name(skill_name: str) -> bool:
             pass
 
     return False
+
+
+def _l8_source_label(kind: str) -> str:
+    if kind == "dialogue_crystal":
+        return "对话结晶"
+    if kind == "feedback_relearn":
+        return "纠偏补学"
+    return "自主学习"
+
+
+def _safe_stringify(value) -> str:
+    formatter = getattr(S, "stringify_event_value", None)
+    if callable(formatter):
+        try:
+            return formatter(value)
+        except Exception:
+            pass
+    return str(value or "").strip()
 
 
 @router.get("/memory")
@@ -255,20 +274,35 @@ async def get_memory():
         try:
             l8_data = json.loads(l8_file.read_text(encoding="utf-8"))
             for item in l8_data:
-                if not S.should_surface_knowledge_entry(item):
+                if not should_show_l8_timeline_entry(item):
                     continue
-                scene = str(item.get("\u4e8c\u7ea7\u573a\u666f") or item.get("\u6838\u5fc3\u6280\u80fd") or item.get("name") or "").strip()
-                scene_name = scene.replace("\u81ea\u4e3b\u5b66\u4e60-", "") if scene else "\u65b0\u7ecf\u9a8c"
-                summary = S.stringify_event_value(item.get("summary") or item.get("\u5e94\u7528\u793a\u4f8b") or "")
-                content = f"\u4e60\u5f97\u7ecf\u9a8c\uff1a\u300c{scene_name}\u300d"
+                kind = classify_l8_entry_kind(item)
+                query = str(item.get("query") or item.get("name") or "已学知识").strip()
+                summary = _safe_stringify(item.get("summary") or item.get("应用示例") or "")
+                primary_scene = str(item.get("一级场景") or "").strip()
+                secondary_scene = str(item.get("二级场景") or "").strip()
+                hit_count = int(item.get("hit_count", 0) or 0)
+                source_label = _l8_source_label(kind)
+                content = f"学到「{query}」"
                 if summary:
-                    content += f"\uff1a{summary}"
+                    content += f"：{summary}"
                 else:
-                    content += "\uff08\u5c06\u8f6c\u5316\u4e3a\u6280\u80fd\u4f18\u5316\u4f9d\u636e\uff09"
+                    content += "，已沉淀为新的知识卡片"
                 events.append({
-                    "time": S.normalize_event_time(item.get("\u6700\u8fd1\u4f7f\u7528\u65f6\u95f4") or item.get("time") or item.get("created_at")),
-                    "layer": "L8", "event_type": "knowledge", "title": "\u80fd\u529b\u8fdb\u5316",
+                    "time": S.normalize_event_time(item.get("last_used") or item.get("最近使用时间") or item.get("time") or item.get("created_at")),
+                    "layer": "L8", "event_type": kind, "title": source_label,
                     "content": content,
+                    "meta": {
+                        "kind": kind,
+                        "query": query,
+                        "summary": summary,
+                        "source": str(item.get("source") or "").strip(),
+                        "source_label": source_label,
+                        "hit_count": hit_count,
+                        "primary_scene": primary_scene,
+                        "secondary_scene": secondary_scene,
+                        "keywords": item.get("keywords") or item.get("trigger") or [],
+                    },
                 })
                 counts["L8"] += 1
         except Exception:

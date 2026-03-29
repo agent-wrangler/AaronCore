@@ -1,6 +1,7 @@
 # L8 自动学习 - 安全版：后台搜索、知识沉淀、主链回流
 import json
 import re
+import shutil
 import threading
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -334,8 +335,191 @@ def _is_registered_skill_name(skill_name: str) -> bool:
         return False
 
 
+_THINK_RE = re.compile(r"(?is)<think>.*?(?:</think>|$)")
+
+_L8_INTERNAL_HINTS = [
+    "记忆里", "记忆系统", "知识库", "知识点", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8",
+    "NovaCore", "记忆层", "人格图谱", "方法经验", "执行轨迹", "反馈学习",
+]
+
+_L8_QUERY_NOISE_HINTS = [
+    "好神奇",
+    "我都不知道你说的是什么意思",
+    "你说的是什么意思",
+    "怎么又",
+    "太短了",
+    "还是这个",
+    "你怎么还",
+]
+
+_L8_DIALOGUE_ANALYSIS_HINTS = [
+    "用户让我判断",
+    "对话内容",
+    "分析这段对话",
+    "关键判断",
+    "这段对话中",
+    "没有包含可独立复用的知识",
+    "只是AI在提问",
+    "没有给出任何答案或解释",
+]
+
+
+def _strip_think_content(text: str) -> str:
+    cleaned = _THINK_RE.sub(" ", str(text or ""))
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _sanitize_extra_fields(extra_fields: dict | None) -> dict:
+    cleaned = {}
+    for key, value in (extra_fields or {}).items():
+        if isinstance(value, str):
+            sanitized = _strip_think_content(value).strip()
+            if sanitized:
+                cleaned[key] = sanitized[:400]
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+def _contains_internal_reference(text: str) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    return any(hint in raw for hint in _L8_INTERNAL_HINTS)
+
+
+def _looks_like_query_noise(text: str) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return True
+    if any(hint in raw for hint in _L8_QUERY_NOISE_HINTS):
+        return True
+    if len(raw) <= 3 and not any(hint in raw for hint in QUESTION_HINTS) and not re.search(r"[A-Za-z0-9]{3,}", raw):
+        return True
+    if len(raw) <= 6 and not any(hint in raw for hint in QUESTION_HINTS) and not re.search(r"[A-Za-z0-9]{3,}", raw):
+        return not bool(re.search(r"[\u4e00-\u9fff]{4,}", raw))
+    return False
+
+
+def _looks_like_dialogue_analysis(summary: str) -> bool:
+    text = str(summary or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    if "<think>" in lowered or "</think>" in lowered:
+        return True
+    hits = sum(1 for hint in _L8_DIALOGUE_ANALYSIS_HINTS if hint in text)
+    return hits >= 2
+
+
+def _entry_query(entry: dict) -> str:
+    return str(entry.get("query") or "").strip()
+
+
+def _entry_summary(entry: dict) -> str:
+    return str(entry.get("summary") or entry.get("应用示例") or "").strip()
+
+
+def _entry_type(entry: dict) -> str:
+    return str(entry.get("type") or entry.get("source") or "").strip()
+
+
+def _entry_source(entry: dict) -> str:
+    return str(entry.get("source") or "").strip()
+
+
+def _entry_has_reusable_knowledge(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+
+    query = _entry_query(entry)
+    summary = _entry_summary(entry)
+    if not query or not summary:
+        return False
+    if _THINK_RE.search(query) or _THINK_RE.search(summary):
+        return False
+    if _looks_like_dialogue_analysis(summary):
+        return False
+    if _contains_internal_reference(query) or _contains_internal_reference(summary):
+        return False
+    if _looks_like_query_noise(query):
+        return False
+    if len(_clean_text(summary)) < 15:
+        return False
+    return True
+
+
+def classify_l8_entry_kind(entry: dict) -> str:
+    entry_type = _entry_type(entry)
+    source = _entry_source(entry)
+    if entry_type == "feedback_relearn" or source == "feedback_relearn":
+        return "feedback_relearn"
+    if source == "l2_crystallize":
+        return "dialogue_crystal"
+    return "self_learned"
+
+
+def build_feedback_relearn_preview(rule_item: dict, summary: str = "", *, used_web: bool = False) -> dict:
+    query = build_feedback_learning_query(rule_item)
+    label = "纠偏补学" if used_web else "反馈记录"
+    return {
+        "id": f"l7_feedback_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
+        "source": "feedback_relearn",
+        "type": "feedback_relearn",
+        "query": query,
+        "name": _clean_text(f"{label}：{query}", 24) or label,
+        "summary": _strip_think_content(summary),
+    }
+
+
+def prune_l8_garbage_entries(*, make_backup: bool = True, reason: str = "manual_cleanup") -> dict:
+    with _FILE_LOCK:
+        data = _load_json(KNOWLEDGE_BASE_FILE, [])
+        if not isinstance(data, list):
+            data = []
+
+        original_count = len(data)
+        kept = []
+        removed = []
+        for item in data:
+            if isinstance(item, dict) and should_surface_knowledge_entry(item):
+                kept.append(item)
+            else:
+                removed.append(item)
+
+        backup_path = ""
+        if make_backup and KNOWLEDGE_BASE_FILE.exists():
+            backup_name = f"{KNOWLEDGE_BASE_FILE.stem}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}{KNOWLEDGE_BASE_FILE.suffix}"
+            backup_file = KNOWLEDGE_BASE_FILE.with_name(backup_name)
+            shutil.copy2(KNOWLEDGE_BASE_FILE, backup_file)
+            backup_path = str(backup_file)
+
+        _write_json(KNOWLEDGE_BASE_FILE, kept[-500:])
+
+    removed_queries = []
+    for item in removed[:10]:
+        if isinstance(item, dict):
+            removed_queries.append(str(item.get("query") or item.get("name") or "")[:80])
+
+    result = {
+        "success": True,
+        "reason": reason,
+        "backup_created": bool(backup_path),
+        "backup_path": backup_path,
+        "original_count": original_count,
+        "kept_count": len(kept[-500:]),
+        "removed_count": len(removed),
+        "removed_queries": removed_queries,
+    }
+    _debug_write("l8_prune", result)
+    return result
+
+
 def should_surface_knowledge_entry(entry: dict) -> bool:
     if not isinstance(entry, dict):
+        return False
+
+    if not _entry_has_reusable_knowledge(entry):
         return False
 
     primary_scene = str(entry.get("一级场景") or "").strip()
@@ -350,6 +534,16 @@ def should_surface_knowledge_entry(entry: dict) -> bool:
     # 知识检索结果里，它们的价值仅在于记录 feedback_rule，不应作为"已学知识"影响后续对话。
     entry_type = str(entry.get("type") or entry.get("source") or "").strip()
     if entry_type == "feedback_relearn":
+        return False
+
+    return True
+
+
+def should_show_l8_timeline_entry(entry: dict) -> bool:
+    if not _entry_has_reusable_knowledge(entry):
+        return False
+
+    if classify_l8_entry_kind(entry) == "feedback_relearn":
         return False
 
     return True
@@ -767,7 +961,7 @@ def _check_entry_quality(query: str, summary: str) -> str:
     防止垃圾数据进入知识库，避免污染后续检索。
     """
     q = str(query or "").strip()
-    s = str(summary or "").strip()
+    s = _strip_think_content(summary)
 
     # 1. 包含 LLM 思考标签 → 说明 LLM 输出没处理干净
     if "<think>" in q.lower() or "<think>" in s.lower():
@@ -791,6 +985,15 @@ def _check_entry_quality(query: str, summary: str) -> str:
     ]
     if any(m in q for m in _complaint_markers):
         return "query_is_complaint"
+
+    if _looks_like_query_noise(q):
+        return "query_is_noise"
+
+    if _contains_internal_reference(q) or _contains_internal_reference(s):
+        return "self_referential"
+
+    if _looks_like_dialogue_analysis(s):
+        return "summary_is_dialogue_analysis"
 
     # 5. summary 里大部分是 LLM 的自我对话，不是知识
     _noise_markers = [
@@ -817,6 +1020,7 @@ def save_learned_knowledge(
     feedback_scene: str = "",
     route_result: dict | None = None,
 ) -> dict:
+    summary = _strip_think_content(summary)
     # ── L8 入库质量检查：垃圾不让进 ──
     _reject_reason = _check_entry_quality(query, summary)
     if _reject_reason:
@@ -845,7 +1049,7 @@ def save_learned_knowledge(
                 keywords = keywords[:10]
         except Exception:
             pass
-    extra = dict(extra_fields or {})
+    extra = _sanitize_extra_fields(extra_fields)
     primary_scene = _infer_primary_scene(query, feedback_scene=feedback_scene, route_result=route_result)
 
     # 二级场景：根据一级场景给更有意义的前缀
@@ -959,8 +1163,6 @@ def auto_learn_from_feedback(rule_item: dict) -> dict:
         return {"success": False, "reason": "disabled"}
     if not config.get("allow_feedback_relearn", True):
         return {"success": False, "reason": "feedback_relearn_disabled"}
-    if not config.get("allow_knowledge_write", True):
-        return {"success": False, "reason": "knowledge_write_blocked"}
     if not isinstance(rule_item, dict):
         return {"success": False, "reason": "invalid_rule"}
 
@@ -981,15 +1183,8 @@ def auto_learn_from_feedback(rule_item: dict) -> dict:
     }
 
     base_summary = _build_feedback_summary(rule_item, max_length=max_length)
-    feedback_scene = str(rule_item.get("scene") or "")
-    entry = save_learned_knowledge(
-        query,
-        base_summary,
-        [],
-        source="feedback_relearn",
-        extra_fields=extra_fields,
-        feedback_scene=feedback_scene,
-    )
+    entry = build_feedback_relearn_preview(rule_item, base_summary, used_web=False)
+    entry.update(_sanitize_extra_fields(extra_fields))
 
     if not config.get("allow_web_search", True):
         return {
@@ -1045,14 +1240,8 @@ def auto_learn_from_feedback(rule_item: dict) -> dict:
 
     web_summary = _build_summary(query, results, max_length=max(max_length // 2, 180))
     combined_summary = _build_feedback_summary(rule_item, web_summary=web_summary, max_length=max_length)
-    entry = save_learned_knowledge(
-        query,
-        combined_summary,
-        results,
-        source="feedback_relearn",
-        extra_fields=extra_fields,
-        feedback_scene=feedback_scene,
-    )
+    entry = build_feedback_relearn_preview(rule_item, combined_summary, used_web=True)
+    entry.update(_sanitize_extra_fields(extra_fields))
     return {
         "success": True,
         "type": "feedback_relearn",

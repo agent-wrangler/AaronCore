@@ -6,7 +6,8 @@
 const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const net = require('net');
+const { spawn, spawnSync } = require('child_process');
 
 Menu.setApplicationMenu(null);
 
@@ -15,6 +16,7 @@ const WINDOW_CONTROLS_MODE = 'custom-html';
 const ROOT_DIR = process.env.NOVACORE_ROOT || path.resolve(__dirname, '..');
 const BACKEND_ENTRY = process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
 const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
+const BACKEND_PORT = 8090;
 
 function resolvePythonCommand() {
   if (process.env.NOVACORE_PYTHON) return process.env.NOVACORE_PYTHON;
@@ -41,6 +43,82 @@ function focusExistingWindow() {
   win.focus();
 }
 
+function escapePowerShell(value) {
+  return String(value || "").replace(/'/g, "''");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isBackendListening() {
+  return new Promise((resolve) => {
+    const sock = new net.Socket();
+    sock.setTimeout(1000);
+    sock.on('connect', () => { sock.destroy(); resolve(true); });
+    sock.on('error', () => { sock.destroy(); resolve(false); });
+    sock.on('timeout', () => { sock.destroy(); resolve(false); });
+    sock.connect(BACKEND_PORT, '127.0.0.1');
+  });
+}
+
+async function waitForBackendState(shouldBeUp, maxAttempts = 30, delayMs = 500) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const listening = await isBackendListening();
+    if (listening === shouldBeUp) return true;
+    await sleep(delayMs);
+  }
+  return false;
+}
+
+function stopExistingBackend() {
+  if (process.platform !== 'win32') return [];
+
+  const backendPath = BACKEND_ENTRY.replace(/\//g, '\\');
+  const rootPath = ROOT_DIR.replace(/\//g, '\\');
+  const script = `
+$backend = '${escapePowerShell(backendPath)}'
+$root = '${escapePowerShell(rootPath)}'
+$killed = @()
+Get-CimInstance Win32_Process | Where-Object {
+  ($_.Name -eq 'python.exe' -or $_.Name -eq 'pythonw.exe') -and
+  $_.CommandLine -and (
+    $_.CommandLine.Replace('/', '\\').Contains($backend) -or
+    ($_.CommandLine.Replace('/', '\\').Contains('agent_final.py') -and $_.CommandLine.Replace('/', '\\').Contains($root))
+  )
+} | ForEach-Object {
+  try {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+    $killed += [string]$_.ProcessId
+  } catch {
+  }
+}
+$killed -join ','
+`.trim();
+
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+
+  if (result.error) {
+    console.warn('[shell] failed to stop old backend:', result.error.message);
+    return [];
+  }
+  if (result.status !== 0 && result.stderr) {
+    console.warn('[shell] backend stop stderr:', result.stderr.trim());
+  }
+
+  const killed = String(result.stdout || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (killed.length) {
+    console.log('[shell] stopped old backend pids:', killed.join(', '));
+  }
+  return killed;
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -50,43 +128,24 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-// ── 启动 Python 后端（如果还没在跑） ──
-function ensureBackend() {
-  const net = require('net');
-  return new Promise((resolve) => {
-    const sock = new net.Socket();
-    sock.setTimeout(1000);
-    sock.on('connect', () => { sock.destroy(); resolve(true); });
-    sock.on('error',   () => { sock.destroy(); resolve(false); });
-    sock.on('timeout', () => { sock.destroy(); resolve(false); });
-    sock.connect(8090, '127.0.0.1');
-  }).then((running) => {
-    if (running) {
-      console.log('[shell] backend already running');
-      return;
-    }
-    console.log('[shell] starting backend...');
-    const pythonCommand = resolvePythonCommand();
-    const py = spawn(
-      pythonCommand,
-      [BACKEND_ENTRY],
-      { cwd: ROOT_DIR, detached: true, stdio: 'ignore' }
-    );
-    py.unref();
-    // 等后端就绪
-    return new Promise((resolve) => {
-      let tries = 0;
-      const check = setInterval(() => {
-        const s = new net.Socket();
-        s.setTimeout(500);
-        s.on('connect', () => { s.destroy(); clearInterval(check); resolve(); });
-        s.on('error',   () => { s.destroy(); });
-        s.on('timeout', () => { s.destroy(); });
-        s.connect(8090, '127.0.0.1');
-        if (++tries > 30) { clearInterval(check); resolve(); } // 15s 超时
-      }, 500);
-    });
-  });
+// ── 启动 Python 后端：每次先结束旧的 NovaCore 后端，再启动当前源码版本 ──
+async function ensureBackend() {
+  console.log('[shell] restarting backend...');
+  stopExistingBackend();
+  await waitForBackendState(false, 20, 250);
+
+  const pythonCommand = resolvePythonCommand();
+  const py = spawn(
+    pythonCommand,
+    [BACKEND_ENTRY],
+    { cwd: ROOT_DIR, detached: true, stdio: 'ignore' }
+  );
+  py.unref();
+
+  const ready = await waitForBackendState(true, 30, 500);
+  if (!ready) {
+    console.warn('[shell] backend did not become ready on port', BACKEND_PORT);
+  }
 }
 
 // ── 创建主窗口 ──
@@ -131,7 +190,7 @@ function createWindow() {
     },
   });
 
-  win.loadURL('http://localhost:8090/');
+  win.loadURL(`http://localhost:${BACKEND_PORT}/`);
   win.webContents.on('did-finish-load', emitWindowState);
 
   // 标题栏双击最大化/还原（无边框窗口需要手动处理）
