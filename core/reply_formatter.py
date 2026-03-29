@@ -532,6 +532,24 @@ def _build_l1_messages(bundle: dict, limit: int = 10) -> list[dict]:
     return messages
 
 
+def _build_recent_dialogue_text(bundle: dict, limit: int = 6) -> str:
+    """把最近几轮 L1 对话压成简短文本，供普通聊天 prompt 使用。"""
+    messages = _build_l1_messages(bundle, limit=limit)
+    if not messages:
+        return ""
+
+    lines = []
+    for item in messages[-limit:]:
+        role = "用户" if item.get("role") == "user" else "Nova"
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        if len(content) > 180:
+            content = content[:180] + "…"
+        lines.append(f"{role}：{content}")
+    return "\n".join(lines)
+
+
 def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None = None) -> str:
     task_plan = bundle.get("task_plan") if isinstance(bundle.get("task_plan"), dict) else {}
     if not task_plan:
@@ -1099,6 +1117,128 @@ def _condense_l4(l4: dict) -> str:
     return "\n".join(parts)
 
 
+def _build_session_context_text(l2_session: dict) -> str:
+    if not isinstance(l2_session, dict):
+        return ""
+    parts = []
+    topic_sep = "\u3001"
+    topics = [str(t).strip() for t in (l2_session.get("topics") or []) if str(t).strip()]
+    if topics and topics != ["\u95f2\u804a"]:
+        parts.append(f"\u5f53\u524d\u8bdd\u9898\uff1a{topic_sep.join(topics[:4])}")
+    mood = str(l2_session.get("mood") or "").strip()
+    if mood:
+        parts.append(f"\u7528\u6237\u60c5\u7eea\uff1a{mood}")
+    intent = str(l2_session.get("intent") or "").strip()
+    if intent and intent != "\u95f2\u804a":
+        parts.append(f"\u4f1a\u8bdd\u610f\u56fe\uff1a{intent}")
+    user_state = str(l2_session.get("user_state") or "").strip()
+    if user_state:
+        parts.append(f"\u7528\u6237\u72b6\u6001\uff1a{user_state}")
+    return "\n".join(parts)
+
+
+def _build_light_chat_prompt(bundle: dict) -> str:
+    """普通聊天轻量 prompt：只带 L1/L2 session/L4/dialogue hint/flashback/L7。"""
+    l4 = bundle["l4"]
+    l7 = bundle.get("l7", [])
+    l2_session = bundle.get("l2", {})
+    current_model = bundle.get("current_model", "")
+    msg = bundle["user_input"]
+    search_context = bundle.get("search_context", "")
+    search_summary = bundle.get("search_summary", "")
+    recall_context = bundle.get("recall_context", "")
+    flashback = bundle.get("flashback_hint")
+
+    l1_text = _build_recent_dialogue_text(bundle, limit=6) or "\u6682\u65e0"
+    l2_text = _build_session_context_text(l2_session) or "\u6682\u65e0"
+    l4_text = _condense_l4(l4) or "\u6682\u65e0"
+    l7_text = format_l7_context(l7) or "\u6682\u65e0"
+    style_hints = _build_style_hints_from_l4(l4)
+    time_context = _build_current_time_context()
+
+    sections = [
+        time_context,
+        f"\u5f53\u524d\u7528\u6237\u8f93\u5165\uff1a{msg}",
+        f"\u4f60\u7684\u5e95\u5c42\u6a21\u578b\uff1a{current_model}",
+        f"L1 \u6700\u8fd1\u5bf9\u8bdd\uff1a\n{l1_text}",
+        f"L2 session_context\uff1a\n{l2_text}",
+        f"L4 persona\uff1a\n{l4_text}",
+        f"L7 relevant rules\uff1a\n{l7_text}",
+    ]
+
+    if search_context:
+        search_block = f"\u5b9e\u65f6\u641c\u7d22\u7ed3\u679c\uff1a\n{search_context}"
+        if search_summary:
+            search_block += f"\n\u641c\u7d22\u6458\u8981\uff1a{search_summary}"
+        sections.append(search_block)
+
+    if recall_context:
+        sections.append(f"\u65f6\u95f4\u56de\u5fc6\uff1a\n{recall_context}")
+
+    if flashback:
+        sections.append(str(flashback))
+
+    sections.append(
+        "\u56de\u590d\u8981\u6c42\uff1a\n"
+        "1. \u8fd9\u662f\u666e\u901a\u804a\u5929\uff0c\u76f4\u63a5\u81ea\u7136\u63a5\u8bdd\uff0c\u4e0d\u8981\u5148\u505a\u957f\u7bc7\u94fa\u57ab\u3002\n"
+        "2. \u76f4\u63a5\u57fa\u4e8e\u4e0a\u9762\u7684 L1/L2/L4/L7 \u56de\u7b54\uff0c\u4e0d\u8981\u8bf4\u81ea\u5df1\u6ca1\u6709\u8bb0\u5fc6\u3002\n"
+        "3. \u7528\u6237\u8ffd\u95ee\u65f6\u9ed8\u8ba4\u6cbf\u7740\u6700\u8fd1\u8bdd\u9898\u63a5\u4e0a\uff0c\u4e0d\u8981\u53cd\u95ee\u201c\u4f60\u6307\u4ec0\u4e48\u201d\u3002\n"
+        f"4. \u5982\u679c\u7528\u6237\u95ee\u6a21\u578b\u4fe1\u606f\uff0c\u76f4\u63a5\u56de\u7b54\u5e95\u5c42\u6a21\u578b\u662f {current_model}\u3002\n"
+        "5. \u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\uff0c\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002\n"
+        "6. \u4e8b\u5b9e\u4fe1\u606f\u4f18\u5148\u51c6\u786e\uff0c\u8bed\u6c14\u518d\u6309\u4eba\u683c\u98ce\u683c\u81ea\u7136\u8868\u8fbe\u3002"
+    )
+    sections.append(f"\u98ce\u683c\u63d0\u793a\uff1a\n{style_hints}")
+    return "\n\n".join(part for part in sections if part).strip()
+
+
+def unified_chat_reply(bundle: dict, route: dict | None = None) -> str:
+    route = route if isinstance(route, dict) else {}
+    intent = str(route.get("intent") or "").strip()
+    if intent in {"self_repair_capability", "ability_capability", "missing_skill"}:
+        return build_capability_chat_reply(route)
+    if intent == "meta_bug_report":
+        return build_meta_bug_report_reply(route)
+    if intent == "answer_correction":
+        return build_answer_correction_reply(route)
+
+    prompt = _build_light_chat_prompt(bundle)
+    # 普通聊天轻链路已经携带 L1 最近对话，这里不再重复注入 dialogue_context。
+    result = _think(prompt, "", image=bundle.get("image"), images=bundle.get("images"))
+    reply = result.get("reply", "") if isinstance(result, dict) else str(result)
+    if (not reply) or ("\ufffd" in str(reply)) or len(str(reply).strip()) < 2:
+        return "\u6211\u5728\u5440\uff0c\u4f60\u76f4\u63a5\u8bf4\uff0c\u6211\u4f1a\u8ba4\u771f\u63a5\u7740\u4f60\u7684\u8bdd\u804a\u3002"
+    return str(reply).strip()
+
+
+def unified_chat_reply_stream(bundle: dict, route: dict | None = None):
+    """普通聊天轻量流式实现。"""
+    route = route if isinstance(route, dict) else {}
+    intent = str(route.get("intent") or "").strip()
+    if intent in {"self_repair_capability", "ability_capability", "missing_skill"}:
+        yield build_capability_chat_reply(route)
+        return
+    if intent == "meta_bug_report":
+        yield build_meta_bug_report_reply(route)
+        return
+    if intent == "answer_correction":
+        yield build_answer_correction_reply(route)
+        return
+
+    if not _think_stream:
+        yield unified_chat_reply(bundle, route)
+        return
+
+    prompt = _build_light_chat_prompt(bundle)
+    # 普通聊天轻链路已经携带 L1 最近对话，这里不再重复注入 dialogue_context。
+    for chunk in _think_stream(prompt, "", image=bundle.get("image"), images=bundle.get("images")):
+        if isinstance(chunk, dict):
+            if chunk.get("_done"):
+                break
+            yield chunk
+        else:
+            yield chunk
+
+
 def _build_cod_system_prompt(bundle: dict) -> str:
     """构建 CoD 模式的精简 system prompt（从 configs/prompts.json 读取可实验部分）"""
     l4 = bundle["l4"]
@@ -1316,9 +1456,6 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
     messages = [
         {"role": "system", "content": system_prompt},
     ]
-    visible_tools_context = _build_visible_tools_context(tools)
-    if visible_tools_context:
-        messages.append({"role": "system", "content": visible_tools_context})
     # 注入非重复的对话增量提示
     if dialogue_context:
         messages.append({"role": "system", "content": f"对话增量提示：\n{dialogue_context}"})
@@ -1564,6 +1701,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     collected_tokens = []
     tool_calls_signal = None
     usage = {}
+    streamed_text = False
 
     for chunk in _llm_call_stream(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30):
         if isinstance(chunk, dict):
@@ -1574,13 +1712,26 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             # 其他 dict 信号透传
         else:
             collected_tokens.append(chunk)
+            streamed_text = True
+            yield chunk
 
-    if not tool_calls_signal:
+    if tool_calls_signal and streamed_text:
+        # 检查文本是否只是 <think> 思考内容（不算真正的回复文本）
+        joined = "".join(collected_tokens).strip()
+        _only_think = bool(_re.fullmatch(r'<think>.*?</think>\s*', joined, flags=_re.S | _re.I))
+        if not _only_think:
+            _debug_write("tool_call_stream_mixed_output", {
+                "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
+                "text_len": len(joined),
+            })
+            tool_calls_signal = None
+
+    if not tool_calls_signal and not streamed_text:
         legacy_tc = _parse_legacy_tool_call_text("".join(collected_tokens), bundle.get("user_input", ""))
         if legacy_tc:
             _debug_write("legacy_tool_call_compat", {"mode": "stream", "name": legacy_tc.get("function", {}).get("name", "")})
             tool_calls_signal = [legacy_tc]
-    if not tool_calls_signal:
+    if not tool_calls_signal and not streamed_text:
         forced_app_tc = _force_app_tool_call_from_reply(
             "".join(collected_tokens),
             bundle.get("user_input", ""),
@@ -1588,7 +1739,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         if forced_app_tc:
             _debug_write("forced_app_tool_call", {"mode": "stream"})
             tool_calls_signal = [forced_app_tc]
-    if not tool_calls_signal:
+    if not tool_calls_signal and not streamed_text:
         inferred_tc = _infer_action_tool_call_from_reply(
             "".join(collected_tokens),
             bundle.get("user_input", ""),
@@ -1613,8 +1764,6 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             )
         except Exception:
             pass
-        for token in collected_tokens:
-            yield token
         yield {"_done": True, "usage": usage, "tool_used": None}
         return
 
@@ -1766,9 +1915,11 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         if not tool_calls_n:
             # LLM 不再调工具，输出文本完成
             text_n = "".join(collected_n)
-            if str(text_n or "").strip():
-                for token in collected_n:
-                    yield token
+            # 过滤 <think> 标签后再判断
+            _clean_text_n = _re.sub(r'<think>.*?</think>\s*', '', text_n, flags=_re.S | _re.I).strip()
+            if _clean_text_n:
+                # 流式输出过滤后的文本
+                yield _clean_text_n
                 break
             _last_tool_response = ""
             for _m in reversed(messages):

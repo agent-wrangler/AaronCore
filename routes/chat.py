@@ -12,8 +12,13 @@ from routes import companion as _comp
 
 
 def _get_tool_call_enabled() -> bool:
-    """tool_call \u6a21\u5f0f\u9ed8\u8ba4\u5f00\u542f\uff0c\u4ec5 Anthropic \u534f\u8bae\u4e0d\u652f\u6301"""
-    return True
+    """tool_call 总开关，由配置控制。"""
+    try:
+        from core.state_loader import PRIMARY_STATE_DIR
+        cfg = json.loads((PRIMARY_STATE_DIR / "tool_call_config.json").read_text("utf-8"))
+        return bool(cfg.get("enabled", True))
+    except Exception:
+        return True
 
 
 def _get_cod_enabled() -> bool:
@@ -532,7 +537,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         # Step 1: 记忆加载
         l1 = S.get_recent_messages(_history_for_context, 10)
         l2 = S.extract_session_context(_history_for_context, msg)
-        l2_memories = [] if _use_cod else S.l2_search_relevant(msg)
+        _use_light_chat_bundle = not _use_tool_call
+        l2_memories = [] if (_use_cod or _use_light_chat_bundle) else S.l2_search_relevant(msg)
 
         # Step 1.5: 时间回忆检测
         recall_result = None
@@ -547,7 +553,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     yield await _trace("\u56de\u5fc6\u5bf9\u8bdd", f"\u6b63\u5728\u56de\u5fc6{recall_intent['time_label']}\u7684\u5bf9\u8bdd\u8bb0\u5f55\u2026", "running")
 
         # Step 2: 上下文接入（CoD 模式跳过 L3/L5）
-        l3 = [] if _use_cod else S.load_l3_long_term()
+        l3 = [] if (_use_cod or _use_light_chat_bundle) else S.load_l3_long_term()
         l4 = S.load_l4_persona()
         if isinstance(l4, dict):
             _lp = l4.get("local_persona") or {}
@@ -555,7 +561,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _up = _lp.get("user_profile")
                 if isinstance(_up, dict) and not isinstance(l4.get("user_profile"), dict):
                     l4 = {**l4, "user_profile": dict(_up)}
-        l5 = {} if _use_cod else S.load_l5_knowledge()
+        l5 = {} if (_use_cod or _use_light_chat_bundle) else S.load_l5_knowledge()
         persona_name = ""
         if isinstance(l4, dict):
             lp = l4.get("local_persona") or l4
@@ -563,21 +569,21 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         skill_count = len(l5.get("skills", {})) if isinstance(l5, dict) else 0
 
         # Step 3: 检索知识（CoD 模式跳过，由 LLM 按需调用 query_knowledge）
-        if _use_cod:
+        if _use_cod or _use_light_chat_bundle:
             l8 = []
         else:
             l8 = S.find_relevant_knowledge(msg, limit=3, touch=True)
 
         try:
             from core.state_loader import record_memory_stats
-            _cod_this = None if _use_tool_call else (bool(l2_memories) or bool(l8))
+            _cod_this = None if _use_tool_call else False
             _l4_ok = bool(l4 and isinstance(l4, dict) and len(l4) > 0)
             record_memory_stats(
-                l2_searches=0 if _use_cod else 1, l2_hits=1 if l2_memories else 0,
-                l8_searches=0 if _use_cod else 1, l8_hits=1 if l8 else 0,
-                l3_queries=0 if _use_cod else 1, l3_hits=0 if _use_cod else (1 if l3 else 0),
+                l2_searches=0 if (_use_cod or _use_light_chat_bundle) else 1, l2_hits=1 if l2_memories else 0,
+                l8_searches=0 if (_use_cod or _use_light_chat_bundle) else 1, l8_hits=1 if l8 else 0,
+                l3_queries=0 if (_use_cod or _use_light_chat_bundle) else 1, l3_hits=0 if (_use_cod or _use_light_chat_bundle) else (1 if l3 else 0),
                 l4_queries=1, l4_hits=1 if _l4_ok else 0,
-                l5_queries=0 if _use_cod else 1, l5_hits=0 if _use_cod else (1 if skill_count > 0 else 0),
+                l5_queries=0 if (_use_cod or _use_light_chat_bundle) else 1, l5_hits=0 if (_use_cod or _use_light_chat_bundle) else (1 if skill_count > 0 else 0),
                 l1_count=len(l1), l3_count=len(l3),
                 l4_available=_l4_ok, l5_count=skill_count,
                 cod_used=_cod_this,
@@ -586,12 +592,15 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             pass
 
         user_turns = len([m for m in l1 if isinstance(m, dict) and m.get("role") == "user"])
+        l1_count = len([m for m in l1 if isinstance(m, dict)])
+        l2_ready = bool(isinstance(l2, dict) and any(bool(v) for v in l2.values()))
         mem_parts = []
-        if user_turns:
-            mem_parts.append(f"\u6700\u8fd1{user_turns}\u8f6e\u5bf9\u8bdd\u5df2\u63a5\u5165")
+        if l1_count:
+            mem_parts.append(f"L1\u6700\u8fd1{l1_count}\u6761\u6d88\u606f\u5df2\u63a5\u5165")
         else:
             mem_parts.append("\u5f53\u524d\u662f\u7b2c\u4e00\u53e5\u5bf9\u8bdd")
-        mem_parts.append("\u4f1a\u8bdd\u8bb0\u5fc6\u5df2\u63a5\u5165")
+        if l2_ready:
+            mem_parts.append("L2\u4f1a\u8bdd\u72b6\u6001\u5df2\u63a5\u5165")
         if persona_name:
             mem_parts.append(f"{persona_name} \u4eba\u683c\u56fe\u8c31\u5c31\u7eea")
         else:
@@ -863,8 +872,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     if _after.strip():
                                         _stream_chunks.append(_after)
                                         yield {"event": "stream", "data": json.dumps({"token": _after}, ensure_ascii=False)}
-                            elif len(_think_buf) > 60:
-                                # 累积超过 60 字符仍没出现 <think>，确认模型没用 think，输出缓冲
+                            elif len(_think_buf) > 7:
+                                # 超过 7 字符没出现 <think>，直接输出
                                 _think_done = True
                                 if _think_buf.strip():
                                     _stream_chunks.append(_think_buf)
@@ -1139,8 +1148,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         if _after.strip():
                                             _stream_chunks.append(_after)
                                             yield {"event": "stream", "data": json.dumps({"token": _after}, ensure_ascii=False)}
-                                elif len(_think_buf) > 60:
-                                    # 累积超过 60 字符仍没出现 <think>，确认模型没用 think，输出缓冲
+                                elif len(_think_buf) > 7:
+                                    # 超过 7 字符没出现 <think>，直接输出
                                     _think_done = True
                                     if _think_buf.strip():
                                         _stream_chunks.append(_think_buf)

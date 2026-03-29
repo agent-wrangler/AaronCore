@@ -64,8 +64,15 @@ def _should_retry_without_env(exc: Exception) -> bool:
     return _has_local_proxy_env() and any(sig in text for sig in retry_signals)
 
 
+_DOMESTIC_HOSTS = {"minimaxi.com", "dashscope.aliyuncs.com", "open.bigmodel.cn", "api.volcengine.com"}
+
 def _post_with_proxy_fallback(url: str, **kwargs):
-    return _post_with_network_strategy(url, **kwargs)
+    """国内 API 直连（跳过代理），国外 API 走系统代理"""
+    from urllib.parse import urlparse
+    host = urlparse(url).hostname or ""
+    if any(d in host for d in _DOMESTIC_HOSTS):
+        kwargs.setdefault("proxies", {"http": None, "https": None})
+    return requests.request("POST", url, **kwargs)
 
 # 加载 LLM 配置（支持多模型格式）
 config_path = os.path.join(os.path.dirname(__file__), 'llm_config.json')
