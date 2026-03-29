@@ -1662,7 +1662,14 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         reply = result.get("reply", "")
         if reply:
             yield reply
-        yield {"_done": True, "usage": result.get("usage", {}), "tool_used": result.get("tool_used"), "action_summary": result.get("action_summary", "")}
+        yield {
+            "_done": True,
+            "usage": result.get("usage", {}),
+            "tool_used": result.get("tool_used"),
+            "action_summary": result.get("action_summary", ""),
+            "run_meta": result.get("run_meta") if isinstance(result.get("run_meta"), dict) else {},
+            "success": True if result.get("tool_used") else None,
+        }
         return
 
     from brain import LLM_CONFIG
@@ -1812,6 +1819,8 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     if unresolved_drift:
         tool_response = _append_drift_note(tool_response, exec_result)
     _tool_used = tool_name
+    _current_run_meta = exec_result.get("meta") if isinstance(exec_result.get("meta"), dict) else {}
+    _current_tool_success = bool(success)
 
     yield {
         "_tool_call": {
@@ -1869,7 +1878,14 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             fallback = _fallback_tool_reply(tool_response)
             if fallback:
                 yield fallback
-        yield {"_done": True, "usage": usage, "tool_used": _tool_used or tool_name, "action_summary": action_summary}
+        yield {
+            "_done": True,
+            "usage": usage,
+            "tool_used": _tool_used or tool_name,
+            "action_summary": action_summary,
+            "run_meta": _current_run_meta,
+            "success": _current_tool_success,
+        }
         return
 
     _round = 1
@@ -1929,7 +1945,14 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             _fallback = _fallback_tool_reply(_last_tool_response)
             if _fallback:
                 yield _fallback
-                yield {"_done": True, "usage": usage, "tool_used": _tool_used or tool_name, "action_summary": ""}
+                yield {
+                    "_done": True,
+                    "usage": usage,
+                    "tool_used": _tool_used or tool_name,
+                    "action_summary": "",
+                    "run_meta": _current_run_meta,
+                    "success": _current_tool_success,
+                }
                 return
             break
 
@@ -1976,6 +1999,8 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             }
         }
         _tool_used = tool_name_n
+        _current_run_meta = exec_result_n.get("meta") if isinstance(exec_result_n.get("meta"), dict) else {}
+        _current_tool_success = bool(success_n)
         recent_attempts.append({
             "tool": tool_name_n,
             "success": success_n,
@@ -2024,7 +2049,13 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             _fallback = format_skill_fallback(_last_tool_response)
             yield _fallback
 
-    yield {"_done": True, "usage": usage, "tool_used": _tool_used or tool_name}
+    yield {
+        "_done": True,
+        "usage": usage,
+        "tool_used": _tool_used or tool_name,
+        "run_meta": _current_run_meta,
+        "success": _current_tool_success,
+    }
 
 
 def format_skill_fallback(skill_response: str) -> str:

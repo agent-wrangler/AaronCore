@@ -11,6 +11,72 @@ from core import shared as S
 from routes import companion as _comp
 
 
+def _summarize_execution_text(text: str) -> str:
+    text = str(text or "").strip()
+    if not text:
+        return ""
+    text = text.replace("`", "").replace("\r", "\n")
+    lines = [line.strip(" -") for line in text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    summary = " / ".join(lines[:2]).strip()
+    return summary[:140] + ("..." if len(summary) > 140 else "")
+
+
+def _build_run_event(*, success: bool, meta: dict | None = None, fallback_text: str = "", fallback_summary: str = "") -> dict:
+    meta = meta if isinstance(meta, dict) else {}
+    state = meta.get("state") if isinstance(meta.get("state"), dict) else {}
+    drift = meta.get("drift") if isinstance(meta.get("drift"), dict) else {}
+    action = meta.get("action") if isinstance(meta.get("action"), dict) else {}
+    post = meta.get("post_condition") if isinstance(meta.get("post_condition"), dict) else {}
+    verification = meta.get("verification") if isinstance(meta.get("verification"), dict) else {}
+
+    summary = str(action.get("display_hint") or fallback_summary or "").strip()
+    if not summary:
+        parts = [
+            str(action.get("action_kind") or "").strip(),
+            str(action.get("target_kind") or "").strip(),
+            str(action.get("outcome") or "").strip(),
+            str(action.get("target") or "").strip(),
+        ]
+        summary = " / ".join([part for part in parts if part][:4]).strip()
+    if not summary:
+        summary = _summarize_execution_text(fallback_text)
+
+    expected_state = str(state.get("expected_state") or post.get("expected") or "").strip()
+    observed_state = str(
+        state.get("observed_state")
+        or post.get("observed")
+        or verification.get("observed_state")
+        or ""
+    ).strip()
+    drift_reason = str(drift.get("reason") or post.get("drift") or "").strip()
+    repair_hint = str(drift.get("repair_hint") or post.get("hint") or "").strip()
+
+    verified = None
+    if "verified" in verification:
+        verified = bool(verification.get("verified"))
+    elif "ok" in post:
+        verified = bool(post.get("ok"))
+
+    run_event = {
+        "success": bool(success),
+        "verified": verified,
+        "summary": summary,
+        "expected_state": expected_state,
+        "observed_state": observed_state,
+        "drift_reason": drift_reason,
+        "repair_hint": repair_hint,
+        "repair_succeeded": bool(meta.get("repair_succeeded", False)),
+        "action_kind": str(action.get("action_kind") or "").strip(),
+        "target_kind": str(action.get("target_kind") or "").strip(),
+        "target": str(action.get("target") or "").strip(),
+        "outcome": str(action.get("outcome") or "").strip(),
+        "verification_mode": str(action.get("verification_mode") or "").strip(),
+    }
+    return {k: v for k, v in run_event.items() if v not in ("", None)}
+
+
 def _get_tool_call_enabled() -> bool:
     """tool_call 总开关，由配置控制。"""
     try:
@@ -368,7 +434,12 @@ def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict
         }
 
     try:
-        S.evolve(bundle["user_input"], skill_name)
+        run_event = _build_run_event(
+            success=bool(execute_result.get("success")),
+            meta=execute_result.get("meta"),
+            fallback_text=execute_result.get("response", ""),
+        )
+        S.evolve(bundle["user_input"], skill_name, run_event=run_event)
     except Exception as exc:
         S.debug_write("evolve_error", {"skill": skill_name, "error": str(exc)})
 
@@ -737,6 +808,9 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _comp.activity = "replying"
                 _stream_chunks = []
                 _tool_used = None
+                _tool_success = None
+                _tool_run_meta = {}
+                _tool_action_summary = ""
                 _trace_thinking_sent = False
                 _think_buf = ""
                 _think_done = False
@@ -810,6 +884,9 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     yield await _trace(_trace_label, _trace_detail, "running")
                                 elif tc_info.get("done"):
                                     _tool_used = tc_name
+                                    _tool_success = bool(tc_info.get("success"))
+                                    _tool_run_meta = tc_info.get("run_meta") if isinstance(tc_info.get("run_meta"), dict) else {}
+                                    _tool_action_summary = str(tc_info.get("action_summary") or "").strip()
                                     _comp.activity = "replying"
                                     _MEMORY_TOOL_NAMES2 = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
                                     _dn = _MEMORY_TOOL_NAMES2.get(tc_name) or ("联网搜索" if tc_name == "web_search" else S.get_skill_display_name(tc_name))
@@ -846,6 +923,11 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         yield await _trace(_fail_label, _fail_detail, "error")
                             elif _item.get("_done"):
                                 _tool_used = _item.get("tool_used")
+                                if "run_meta" in _item and isinstance(_item.get("run_meta"), dict):
+                                    _tool_run_meta = _item.get("run_meta") or {}
+                                if "success" in _item:
+                                    _tool_success = bool(_item.get("success"))
+                                _tool_action_summary = str(_item.get("action_summary") or _tool_action_summary or "").strip()
                                 break
                             elif _item.get("_thinking"):
                                 if not _tool_trace_started and not _trace_thinking_sent:
@@ -890,7 +972,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         tc_result = unified_reply_with_tools(bundle, tools, execute_tool_call)
                         response = tc_result.get("reply", "")
                         _tool_used = tc_result.get("tool_used")
+                        _tool_run_meta = tc_result.get("run_meta") if isinstance(tc_result.get("run_meta"), dict) else {}
+                        _tool_success = True if _tool_used else None
                         _action_summary = str(tc_result.get("action_summary") or "").strip()
+                        _tool_action_summary = _action_summary or _tool_action_summary
                         if _tool_used and _action_summary:
                             yield await _trace("\u6280\u80fd\u5b8c\u6210", " \u00b7 ".join([p for p in [_tool_used, _action_summary] if p]), "done")
                     else:
@@ -899,7 +984,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 # 记录技能使用统计
                 if _tool_used:
                     try:
-                        S.evolve(msg, _tool_used)
+                        run_event = _build_run_event(
+                            success=bool(_tool_success) if _tool_success is not None else True,
+                            meta=_tool_run_meta,
+                            fallback_text=response,
+                            fallback_summary=_tool_action_summary,
+                        )
+                        S.evolve(msg, _tool_used, run_event=run_event)
                     except Exception:
                         pass
                     route = {"mode": "skill", "skill": _tool_used, "reason": "tool_call", "source": "tool_call"}
