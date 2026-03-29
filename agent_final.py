@@ -22,7 +22,7 @@ from core.state_loader import (
 from core.state_loader import init as _state_loader_init
 from core.context_builder import (
     normalize_event_time, build_persona_events, stringify_event_value,
-    build_dialogue_context,
+    build_dialogue_context, render_dialogue_context,
 )
 from core.context_builder import init as _context_builder_init
 
@@ -48,16 +48,16 @@ try:
     sys.path.insert(0, str(CORE_DIR))
     from router import route as nova_route
     from executor import execute as nova_execute
-    from core.skills import get_all_skills
+    from core.skills import get_all_skills, get_all_skills_for_ui, set_skill_enabled
     NOVA_CORE_READY = True
     CORE_IMPORT_ERROR = ""
 except Exception as exc:
-    nova_route = nova_execute = get_all_skills = None
+    nova_route = nova_execute = get_all_skills = get_all_skills_for_ui = set_skill_enabled = None
     NOVA_CORE_READY = False
     CORE_IMPORT_ERROR = str(exc)
 
 sys.path.insert(0, str(ENGINE_DIR))
-from brain import think
+from brain import think, think_stream, llm_call as _brain_llm_call, llm_call_stream as _brain_llm_call_stream
 from core.l8_learn import (
     auto_learn as l8_auto_learn,
     auto_learn_from_feedback as l8_feedback_relearn,
@@ -76,15 +76,82 @@ from core.l2_memory import (
     add_memory as l2_add_memory, search_relevant as l2_search_relevant,
 )
 from core.l2_memory import init as _l2_memory_init
-from core.json_store import load_json
-from core.route_resolver import (
-    is_registered_skill_name, looks_like_news_request, resolve_route,
-    normalize_route_result, detect_story_follow_up_route, llm_route,
+from core.history_recall import (
+    detect_recall_intent, recall_by_time,
+    init as _history_recall_init,
 )
-from core.route_resolver import init as _route_resolver_init
+from core.json_store import load_json
+try:
+    from core.route_resolver import (
+        is_registered_skill_name, looks_like_news_request, resolve_route,
+        resolve_route_fast, normalize_route_result, detect_story_follow_up_route, llm_route,
+    )
+    from core.route_resolver import init as _route_resolver_init
+except Exception:
+    def is_registered_skill_name(skill_name: str) -> bool:
+        try:
+            return bool(get_all_skills and skill_name in (get_all_skills() or {}))
+        except Exception:
+            return False
+
+    def looks_like_news_request(text: str) -> bool:
+        raw = str(text or '').strip()
+        return any(word in raw for word in ('新闻', '头条', '热点', '今日新闻'))
+
+    def normalize_route_result(result, user_input: str = '', source: str = '') -> dict:
+        result = result if isinstance(result, dict) else {}
+        mode = str(result.get('mode') or 'chat').strip() or 'chat'
+        skill = str(result.get('skill') or '').strip()
+        normalized = dict(result)
+        normalized.setdefault('rewritten_input', user_input)
+        normalized.setdefault('source', source or result.get('source') or 'fallback')
+        if mode == 'skill' and skill and not is_registered_skill_name(skill):
+            return {
+                'mode': 'chat',
+                'skill': skill,
+                'intent': 'missing_skill',
+                'missing_skill': skill,
+                'rewritten_input': user_input,
+                'source': normalized['source'],
+            }
+        normalized['mode'] = mode
+        return normalized
+
+    def detect_story_follow_up_route(bundle: dict | None = None):
+        bundle = bundle if isinstance(bundle, dict) else {}
+        text = str(bundle.get('user_input') or '').strip()
+        if text not in {'然后呢', '后来呢', '接着呢', '继续', '继续讲'}:
+            return None
+        history = bundle.get('l2') or []
+        if not isinstance(history, list):
+            return None
+        latest = next((item for item in reversed(history) if isinstance(item, dict) and item.get('role') in ('nova', 'assistant')), None)
+        content = str((latest or {}).get('content') or '')
+        if '《' in content and '》' in content:
+            return {'mode': 'skill', 'skill': 'story', 'source': 'context', 'rewritten_input': text}
+        return None
+
+    def resolve_route(bundle: dict | None = None) -> dict:
+        bundle = bundle if isinstance(bundle, dict) else {}
+        user_input = str(bundle.get('user_input') or '').strip()
+        follow_up = detect_story_follow_up_route(bundle)
+        if follow_up:
+            return follow_up
+        return {'mode': 'chat', 'skill': 'none', 'rewritten_input': user_input, 'source': 'fallback'}
+
+    def resolve_route_fast(bundle: dict | None = None) -> dict:
+        return resolve_route(bundle)
+
+    def llm_route(*args, **kwargs) -> dict:
+        return {'mode': 'chat', 'skill': 'none', 'source': 'fallback'}
+
+    def _route_resolver_init(**kwargs):
+        return None
 from core.reply_formatter import (
     list_primary_capabilities, get_skill_display_name,
-    unified_chat_reply, format_skill_fallback, format_skill_error_reply,
+    unified_chat_reply, unified_chat_reply_stream,
+    unified_reply_with_tools, unified_reply_with_tools_stream,
+    format_skill_fallback, format_skill_error_reply,
     format_story_reply, prettify_trace_reason,
     _build_learning_summary, _build_repair_summary,
     _build_latest_status_summary,
@@ -95,62 +162,43 @@ from core.feedback_classifier import init as _feedback_classifier_init, search_r
 
 # ── LLM 调用函数 ──
 def _raw_llm_call(prompt: str) -> str:
-    from brain import LLM_CONFIG
-    try:
-        resp = requests.post(
-            f"{LLM_CONFIG['base_url']}/chat/completions",
-            headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
-            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": prompt}],
-                  "temperature": 0.1, "max_tokens": 100},
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            usage = data.get("usage", {})
-            if usage:
-                try:
-                    record_stats(
-                        input_tokens=usage.get("prompt_tokens", 0),
-                        output_tokens=usage.get("completion_tokens", 0),
-                        scene="route",
-                        cache_write=usage.get("prompt_cache_miss_tokens", 0),
-                        cache_read=usage.get("prompt_cache_hit_tokens", 0),
-                    )
-                except Exception:
-                    pass
-            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    except Exception:
-        return ""
+    from brain import LLM_CONFIG, llm_call
+    result = llm_call(LLM_CONFIG, [{"role": "user", "content": prompt}],
+                      temperature=0.1, max_tokens=500, timeout=15)
+    usage = result.get("usage", {})
+    if usage:
+        try:
+            record_stats(
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                scene="route",
+                cache_write=usage.get("prompt_cache_miss_tokens", 0),
+                cache_read=usage.get("prompt_cache_hit_tokens", 0),
+                model=LLM_CONFIG.get("model", ""),
+            )
+        except Exception:
+            pass
+    return result.get("content", "")
 
 
 def _knowledge_llm_call(prompt: str) -> str:
-    from brain import LLM_CONFIG
-    try:
-        resp = requests.post(
-            f"{LLM_CONFIG['base_url']}/chat/completions",
-            headers={"Authorization": f"Bearer {LLM_CONFIG['api_key']}", "Content-Type": "application/json"},
-            json={"model": LLM_CONFIG["model"], "messages": [{"role": "user", "content": prompt}],
-                  "temperature": 0.2, "max_tokens": 300},
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            usage = data.get("usage", {})
-            if usage:
-                try:
-                    record_stats(
-                        input_tokens=usage.get("prompt_tokens", 0),
-                        output_tokens=usage.get("completion_tokens", 0),
-                        scene="learn",
-                        cache_write=usage.get("prompt_cache_miss_tokens", 0),
-                        cache_read=usage.get("prompt_cache_hit_tokens", 0),
-                    )
-                except Exception:
-                    pass
-            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    except Exception:
-        pass
-    return ""
+    from brain import LLM_CONFIG, llm_call
+    result = llm_call(LLM_CONFIG, [{"role": "user", "content": prompt}],
+                      temperature=0.2, max_tokens=300, timeout=15)
+    usage = result.get("usage", {})
+    if usage:
+        try:
+            record_stats(
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                scene="learn",
+                cache_write=usage.get("prompt_cache_miss_tokens", 0),
+                cache_read=usage.get("prompt_cache_hit_tokens", 0),
+                model=LLM_CONFIG.get("model", ""),
+            )
+        except Exception:
+            pass
+    return result.get("content", "")
 
 
 # ── 依赖注入：初始化各 core 模块 ──
@@ -161,7 +209,12 @@ _state_loader_init(
 )
 _l2_memory_init(debug_write=debug_write, think=think, llm_call=_raw_llm_call)
 _l8_learn_init(llm_call=_knowledge_llm_call, debug_write=debug_write)
+_history_recall_init(llm_call=_knowledge_llm_call, debug_write=debug_write)
 _feedback_classifier_init(llm_call=_raw_llm_call, debug_write=debug_write)
+
+# 实验室初始化
+from core.lab import init as _lab_init
+_lab_init(llm_call=_raw_llm_call, debug_write=debug_write)
 _context_builder_init(
     find_relevant_knowledge=find_relevant_knowledge,
     extract_session_context=extract_session_context,
@@ -174,7 +227,7 @@ _route_resolver_init(
     search_l2=l2_search_relevant, llm_call=_raw_llm_call,
 )
 _reply_formatter_init(
-    think=think, debug_write=debug_write,
+    think=think, think_stream=think_stream, debug_write=debug_write,
     nova_core_ready=NOVA_CORE_READY,
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
     nova_execute=nova_execute if NOVA_CORE_READY else None,
@@ -182,10 +235,22 @@ _reply_formatter_init(
     load_autolearn_config=load_autolearn_config,
     load_self_repair_reports=load_self_repair_reports,
     find_feedback_rule=find_feedback_rule,
+    llm_call=_brain_llm_call,
+    llm_call_stream=_brain_llm_call_stream,
+)
+
+from core.tool_adapter import init as _tool_adapter_init
+_tool_adapter_init(
+    get_all_skills=get_all_skills if NOVA_CORE_READY else None,
+    debug_write=debug_write,
+    l2_search_relevant=l2_search_relevant,
+    load_l3_long_term=load_l3_long_term,
+    find_relevant_knowledge=find_relevant_knowledge,
 )
 
 from core.feedback_loop import (
     l7_record_feedback_v2, l8_touch, run_l8_autolearn_task,
+    run_l8_feedback_relearn_task,
     trigger_self_repair_from_error, build_l8_diagnosis,
 )
 from core.feedback_loop import init as _feedback_loop_init
@@ -201,13 +266,31 @@ _feedback_loop_init(
     awareness_push=awareness_push,
 )
 
+# ── MCP Client 初始化 ──
+from core.mcp_client import init as _mcp_client_init
+_mcp_client_init(
+    debug_write=debug_write,
+    llm_call=_raw_llm_call,
+    servers_path=ENGINE_DIR / "memory_db" / "mcp_servers.json",
+)
+
+# ── MCP Registry 初始化 ──
+from core.mcp_registry import init as _mcp_registry_init
+_mcp_registry_init(
+    debug_write=debug_write,
+    cache_path=ENGINE_DIR / "memory_db" / "mcp_registry_cache.json",
+)
+
 # ── 填充 shared 状态供路由模块使用 ──
 S.NOVA_CORE_READY = NOVA_CORE_READY
 S.CORE_IMPORT_ERROR = CORE_IMPORT_ERROR
 for _name, _val in {
     "nova_route": nova_route, "nova_execute": nova_execute, "get_all_skills": get_all_skills,
+    "get_all_skills_for_ui": get_all_skills_for_ui if NOVA_CORE_READY else None,
+    "set_skill_enabled": set_skill_enabled if NOVA_CORE_READY else None,
     "think": think, "evolve": evolve, "raw_llm_call": _raw_llm_call,
     "l2_add_memory": l2_add_memory, "l2_search_relevant": l2_search_relevant,
+    "detect_recall_intent": detect_recall_intent, "recall_by_time": recall_by_time,
     "find_relevant_knowledge": find_relevant_knowledge,
     "load_autolearn_config": load_autolearn_config,
     "should_surface_knowledge_entry": should_surface_knowledge_entry,
@@ -222,12 +305,16 @@ for _name, _val in {
     "apply_self_repair_report": apply_self_repair_report,
     "l7_record_feedback_v2": l7_record_feedback_v2, "l8_touch": l8_touch,
     "run_l8_autolearn_task": run_l8_autolearn_task,
+    "run_l8_feedback_relearn_task": run_l8_feedback_relearn_task,
     "trigger_self_repair_from_error": trigger_self_repair_from_error,
     "build_l8_diagnosis": build_l8_diagnosis, "search_relevant_rules": search_relevant_rules,
     "load_current_model": load_current_model,
     "list_primary_capabilities": list_primary_capabilities,
     "get_skill_display_name": get_skill_display_name,
     "unified_chat_reply": unified_chat_reply,
+    "unified_chat_reply_stream": unified_chat_reply_stream,
+    "unified_reply_with_tools": unified_reply_with_tools,
+    "unified_reply_with_tools_stream": unified_reply_with_tools_stream,
     "format_skill_fallback": format_skill_fallback,
     "format_skill_error_reply": format_skill_error_reply,
     "format_story_reply": format_story_reply,
@@ -236,8 +323,10 @@ for _name, _val in {
     "_build_repair_summary": _build_repair_summary,
     "_build_latest_status_summary": _build_latest_status_summary,
     "build_dialogue_context": build_dialogue_context,
+    "render_dialogue_context": render_dialogue_context,
     "extract_session_context": extract_session_context,
     "resolve_route": resolve_route,
+    "resolve_route_fast": resolve_route_fast,
     "looks_like_news_request": looks_like_news_request,
     "is_registered_skill_name": is_registered_skill_name,
     "load_msg_history": load_msg_history, "save_msg_history": save_msg_history,
@@ -359,6 +448,17 @@ def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict
 # ── FastAPI app + 路由挂载 ──
 app = FastAPI()
 
+
+@app.on_event("startup")
+async def _startup_mcp():
+    """启动时连接已启用的 MCP server"""
+    try:
+        from core.mcp_client import connect_all_enabled
+        await connect_all_enabled()
+    except Exception:
+        pass
+
+
 # 启动时清理残留的监听状态（重启后旧的监听进程已死）
 try:
     import json as _json
@@ -374,23 +474,43 @@ _static_dir = ENGINE_DIR / "static"
 if _static_dir.is_dir():
     app.mount("/static", _StaticFiles(directory=str(_static_dir)), name="static")
 
+# 截图文件服务（供前端内联显示）
+from pathlib import Path as _Path
+_screenshots_dir = _Path.home() / 'Desktop' / 'Nova截图'
+_screenshots_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/screenshots", _StaticFiles(directory=str(_screenshots_dir)), name="screenshots")
+
 from routes.health import router as _health_router
 from routes.models import router as _models_router
 from routes.companion import router as _companion_router
 from routes.companion import init as _companion_init
 from routes.data import router as _data_router
+from routes.skills import router as _skills_router
 from routes.settings import router as _settings_router
 from routes.chat import router as _chat_router
 from routes.chat import unified_skill_reply  # re-export for test compatibility
+from routes.lab import router as _lab_router
 
 _companion_init(engine_dir=ENGINE_DIR)
+
+# ── 视觉感知模块初始化 ──
+try:
+    from core.vision import init as _vision_init, start as _vision_start
+    from brain import vision_llm_call as _vision_llm_call
+    _vision_init(llm_call=_vision_llm_call, debug_write=debug_write)
+    _vision_start()
+    print("[agent_final] vision module started")
+except Exception as _ve:
+    print(f"[agent_final] vision module skipped: {_ve}")
 
 app.include_router(_health_router)
 app.include_router(_models_router)
 app.include_router(_companion_router)
 app.include_router(_data_router)
+app.include_router(_skills_router)
 app.include_router(_settings_router)
 app.include_router(_chat_router)
+app.include_router(_lab_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -407,19 +527,20 @@ async def home():
                     f"<style>{css}</style>",
                 )
             js_dir = static_dir / "js"
-            js_order = ["utils.js", "awareness.js", "chat.js", "memory.js", "settings.js", "docs.js", "app.js"]
+            js_order = ["i18n.js", "utils.js", "awareness.js", "chat.js", "memory.js", "settings.js", "docs.js", "stats.js", "app.js"]
+            import re as _re_inline
             for js_name in js_order:
                 js_file = js_dir / js_name
                 if js_file.exists():
                     js = js_file.read_text(encoding="utf-8")
-                    html = html.replace(
-                        f'<script src="/static/js/{js_name}"></script>',
-                        f"<script>{js}</script>",
-                    )
-            return html
+                    pattern = f'<script src="/static/js/{_re_inline.escape(js_name)}[^"]*"></script>'
+                    match = _re_inline.search(pattern, html)
+                    if match:
+                        html = html[:match.start()] + f"<script>{js}</script>" + html[match.end():]
+            return Response(content=html, media_type="text/html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         except Exception:
             pass
-    return "<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>"
+    return Response(content="<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>", media_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/__restored_output.js")

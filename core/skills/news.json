@@ -1,23 +1,23 @@
 {
   "name": "新闻抓取",
-  "keywords": [
-    "新闻",
-    "news",
-    "今天新闻",
-    "热门新闻",
-    "大新闻",
-    "头条新闻",
-    "国际新闻",
-    "科技新闻",
-    "商业新闻",
-    "财经新闻",
-    "今天发生了什么",
-    "最新消息",
-    "世界大事"
-  ],
-  "anti_keywords": ["新闻行业", "新闻学", "新闻专业", "新闻系统", "做个新闻", "写个新闻"],
-  "description": "抓取 Google News 热门新闻",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Fetch current news when external updates are needed. Decide the scope and optional topic from user intent and context.",
   "priority": 5,
   "category": "信息查询",
-  "icon": "📰"
+  "icon": "📰",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      },
+      "topic": {
+        "type": "string",
+        "description": "Optional news topic or scope inferred from user intent and context."
+      }
+    },
+    "required": ["user_input"]
+  }
 }

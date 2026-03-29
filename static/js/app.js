@@ -6,18 +6,13 @@ function _syncThemeIcon(){
  btn.innerHTML=document.body.classList.contains('light')?_SVG_SUN:_SVG_MOON;
 }
 function _syncTitleBar(theme){
- if(window.pywebview&&window.pywebview.api&&window.pywebview.api.set_theme)
+ if(window.novaShell) window.novaShell.setTheme(theme);
+ else if(window.pywebview&&window.pywebview.api&&window.pywebview.api.set_theme)
   window.pywebview.api.set_theme(theme);
 }
 
 function toggleTheme(){
  var body=document.body;
- var currentMenu=document.querySelector('.menu.active');
- var currentId=currentMenu?currentMenu.id:'';
- // 保存滚动位置（记忆页用 memScroll，其他用 chat）
- var scrollEl=document.getElementById('memScroll')||document.getElementById('chat');
- var scrollTop=scrollEl?scrollEl.scrollTop:0;
- window._memScrollTop=scrollTop;
  if(body.classList.contains('dark')){
   body.classList.remove('dark');
   body.classList.add('light');
@@ -30,14 +25,6 @@ function toggleTheme(){
   localStorage.setItem('nova_theme','dark');
   _syncTitleBar('dark');
   _syncThemeIcon();
- }
- var menuMap={m1:1,m2:2,m3:3,m4:4,m5:5,m6:6};
- if(currentId && menuMap[currentId]){
-  show(menuMap[currentId]);
-  requestAnimationFrame(function(){
-   var el=document.getElementById('memScroll')||document.getElementById('chat');
-   if(el) el.scrollTop=scrollTop;
-  });
  }
 }
 
@@ -120,13 +107,13 @@ function loadWelcomeNews(){
  if(!el) return;
  fetch('/skills/news/headlines').then(function(r){return r.json();}).then(function(d){
   var items=d.headlines||d.items||[];
-  if(!items.length){el.innerHTML='<div style="color:#6b7280;font-size:13px;">暂无热点</div>';return;}
+  if(!items.length){el.innerHTML='<div style="color:#6b7280;font-size:13px;">'+t('welcome.news.empty')+'</div>';return;}
   el.innerHTML=items.slice(0,6).map(function(item){
    var title=typeof item==='string'?item:(item.title||item.text||'');
    return '<div class="welcome-news-item" onclick="quickSend(\'帮我介绍一下：'+title.replace(/'/g,'')+'\')">'+title+'</div>';
   }).join('');
  }).catch(function(){
-  el.innerHTML='<div style="color:#6b7280;font-size:13px;">网络未连接</div>';
+  el.innerHTML='<div style="color:#6b7280;font-size:13px;">'+t('welcome.news.offline')+'</div>';
  });
 }
 function hideWelcome(){
@@ -135,6 +122,7 @@ function hideWelcome(){
 }
 
 window.onload=function(){
+ window._currentTab=1; // 默认聊天 tab
  initSidebarResize();
  loadWelcomeNews();
  // 输入框右键菜单（pywebview 不提供原生右键）
@@ -142,7 +130,7 @@ window.onload=function(){
   var menu=document.createElement('div');
   menu.id='ctx-menu';
   menu.style.cssText='position:fixed;z-index:9999;background:#2a2a2e;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:4px 0;display:none;box-shadow:0 4px 16px rgba(0,0,0,0.4);min-width:100px;';
-  var items=[{label:'\u526a\u5207',act:'cut'},{label:'\u590d\u5236',act:'copy'},{label:'\u7c98\u8d34',act:'paste'},{label:'\u5168\u9009',act:'selectAll'}];
+  var items=[{label:t('ctx.cut'),act:'cut'},{label:t('ctx.copy'),act:'copy'},{label:t('ctx.paste'),act:'paste'},{label:t('ctx.selectAll'),act:'selectAll'}];
   items.forEach(function(it){
    var d=document.createElement('div');
    d.textContent=it.label;
@@ -179,33 +167,146 @@ window.onload=function(){
  },800);
 
  // 从后端加载聊天历史
- fetch('/history').then(function(r){return r.json()}).then(function(d){
-  var items=d.history||[];
-  if(items.length===0) return;
-  var chat=document.getElementById('chat');
+ window._historyOffset=0;
+ window._historyHasMore=false;
+ window._historyLoading=false;
+
+ window._renderHistoryItems=function(items){
+  function _renderProcessTimeline(process){
+   var steps=(process&&process.steps)||[];
+   if(!steps.length) return '';
+   var html='<div class="step-tracker">';
+   steps.forEach(function(step){
+    var label=escapeHtml(String((step&&step.label)||''));
+    var rawStatus=String((step&&step.status)||'done');
+    var status=escapeHtml(rawStatus==='error'?'error':'done');
+    var detailRaw=String((step&&((step.full_detail&&String(step.full_detail).trim())||step.detail))||'');
+    var detail=escapeHtml(detailRaw);
+    html+='<div class="step-item '+status+' expanded">';
+    html+='<div class="step-icon '+status+'"></div>';
+    html+='<span class="step-label">'+label+'</span>';
+    html+='<span class="step-detail">'+detail+'</span>';
+    html+='</div>';
+   });
+   html+='</div>';
+   return html;
+  }
+
   var html='';
   items.forEach(function(item){
    var role=item.role||'user';
    var text=item.content||'';
+   var process=item.process||null;
    var time=item.time||'';
    if(!text.trim()) return;
    var cls=role==='user'?'user':'assistant';
-   var name=role==='user'?'你':'Nova';
+   var name=role==='user'?t('chat.you'):'Nova';
    var avBg=role==='user'?'linear-gradient(135deg,#10b981,#059669)':'linear-gradient(135deg,#667eea,#764ba2)';
-   var avTxt=role==='user'?'你':'N';
+   var avTxt=role==='user'?t('chat.you'):'N';
    html+='<div class="msg '+cls+'">';
    html+='<div class="avatar" style="background:'+avBg+'">'+avTxt+'</div>';
-   html+='<div class="msg-content">';
-   html+='<div class="bubble">'+formatBubbleText(text)+'</div>';
+   if(role==='user'){
+    html+='<div class="msg-content">';
+   }else if(process&&process.steps&&process.steps.length){
+    html+='<div class="msg-content-wrap">';
+    html+=_renderProcessTimeline(process);
+    html+='<div class="msg-content">';
+   }else{
+    html+='<div class="msg-content">';
+   }
    html+='<div class="msg-meta">';
-   if(role==='user') html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
-   else html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
-   html+='</div></div></div>';
+   html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
+   html+='</div>';
+   html+='<div class="bubble">'+formatBubbleText(text)+'</div>';
+   html+='</div>';
+   if(role!=='user'&&process&&process.steps&&process.steps.length){
+    html+='</div>';
+   }
+   html+='</div>';
   });
-  chat.innerHTML=html;
-  chatHistory=html;
+  return html;
+ };
+
+ window._loadMoreHistory=function(){
+  if(window._historyLoading||!window._historyHasMore) return;
+  if(window._currentTab!==1&&window._currentTab!==undefined) return;
+  window._historyLoading=true;
+  var chat=document.getElementById('chat');
+  var prevHeight=chat.scrollHeight;
+  fetch('/history?limit=20&offset='+window._historyOffset).then(function(r){return r.json()}).then(function(d){
+   if(window._currentTab!==1&&window._currentTab!==undefined){window._historyLoading=false;return;}
+   var items=d.history||[];
+   window._historyHasMore=d.has_more||false;
+   window._historyOffset+=items.length;
+   if(items.length===0){window._historyLoading=false;return;}
+   var html=window._renderHistoryItems(items);
+   // 加载历史：禁用 smooth 防止跳动，精确保持视线位置
+   chat.style.scrollBehavior='auto';
+   chat.insertAdjacentHTML('afterbegin',html);
+   chatHistory=chat.innerHTML;
+   chat.scrollTop=chat.scrollHeight-prevHeight;
+   requestAnimationFrame(function(){ chat.style.scrollBehavior=''; });
+   window._historyLoading=false;
+   _rebindStepToggles(chat);
+  }).catch(function(){window._historyLoading=false;});
+ };
+
+ // 始终绑定 scroll 监听器（不依赖初始加载成功）
+ var chat=document.getElementById('chat');
+ var _scrollBtn=document.getElementById('scrollToBottomBtn');
+
+ function _updateScrollBtn(){
+  if(!_scrollBtn) return;
+  var awayFromBottom=chat.scrollHeight-chat.scrollTop-chat.clientHeight;
+  if(awayFromBottom>150){
+   _scrollBtn.style.display='flex';
+   requestAnimationFrame(function(){ _scrollBtn.classList.add('visible'); });
+  }else{
+   _scrollBtn.classList.remove('visible');
+   setTimeout(function(){ if(!_scrollBtn.classList.contains('visible')) _scrollBtn.style.display='none'; },200);
+  }
+ }
+
+ window.scrollToBottom=function(){
+  chat.scrollTo({top:chat.scrollHeight,behavior:'smooth'});
+ };
+
+ chat.addEventListener('scroll',function(){
+  if(window._currentTab!==1&&window._currentTab!==undefined) return;
+  _updateScrollBtn();
+  if(chat.scrollTop<80&&window._historyHasMore&&!window._historyLoading){
+   window._loadMoreHistory();
+  }
+ });
+
+fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(function(d){
+  var items=d.history||[];
+  window._historyHasMore=d.has_more||false;
+  window._historyOffset=items.length;
+  if(items.length===0) return;
+  if(typeof window._clearSessionTaskPlan==='function'){
+   window._clearSessionTaskPlan();
+  }
+  var chat=document.getElementById('chat');
+  chat.innerHTML=window._renderHistoryItems(items);
+  chatHistory=chat.innerHTML;
+  chat.style.scrollBehavior='auto';
   chat.scrollTop=chat.scrollHeight;
-  console.log('[Nova] 从后端恢复聊天历史，消息数:', items.length);
+  requestAnimationFrame(function(){ chat.style.scrollBehavior=''; });
+  console.log('[Nova] 从后端恢复聊天历史，消息数:', items.length, '更多:', window._historyHasMore);
+  // 重新绑定步骤折叠按钮事件
+  _rebindStepToggles(chat);
+  // 边界修复：如果内容不够高（无法滚动），且还有更多历史，自动继续加载
+  if(window._historyHasMore){
+   var _autoFill=function(){
+    if(!window._historyHasMore||window._historyLoading) return;
+    if(chat.scrollHeight<=chat.clientHeight+100){
+     window._loadMoreHistory();
+     setTimeout(_autoFill, 300);
+    }
+   };
+   setTimeout(_autoFill, 200);
+  }
  }).catch(function(e){ console.warn('[Nova] 加载历史失败',e); });
  
  // 初始化输入框监听
@@ -215,21 +316,48 @@ window.onload=function(){
  setInputVisible(true);
  AwarenessManager.init();
 
- // 读取模型列表
+ window._rebindStepToggles=function(container){
+ var toggles=(container||document).querySelectorAll('.step-tracker-toggle');
+ toggles.forEach(function(btn){
+  var tracker=btn.closest('.step-tracker');
+  if(!tracker) return;
+  btn.onclick=function(e){
+   e.preventDefault(); e.stopPropagation();
+   if(tracker.classList.contains('collapsed')){
+    tracker.classList.remove('collapsed');
+    var sp=btn.querySelector('span'); if(sp) sp.textContent='收起步骤';
+   }else{
+    tracker.classList.add('collapsed');
+    var steps=tracker.querySelectorAll('.step-item');
+    var sp=btn.querySelector('span'); if(sp) sp.textContent=steps.length+' 步完成';
+   }
+  };
+ });
+};
+
+// 读取模型列表
  fetch('/models').then(r=>r.json()).then(function(d){
   var el=document.getElementById('modelName');
-  if(el) el.textContent=d.current||'未知';
-  window._novaModels=d.models||{};
-  window._novaCurrentModel=d.current||'';
+  var models=d.models||{};
+  var cur=d.current||'';
+  var displayName=(models[cur]&&models[cur].model)?models[cur].model:(cur||t('unknown'));
+  if(el) el.textContent=displayName;
+  window._novaModels=models;
+  window._novaCurrentModel=cur;
   updateImageBtnState();
+  // 加载 catalog 供 dropdown 分组用
+  fetch('/models/catalog').then(function(r){return r.json();}).then(function(c){
+   window._novaCatalog=c.catalog||{};
+  }).catch(function(){});
  }).catch(function(){
   var el=document.getElementById('modelName');
-  if(el) el.textContent='未知';
+  if(el) el.textContent=t('unknown');
  });
 };
 
 function show(n){
- for(var i=1;i<=6;i++){
+ window._currentTab=n;
+ for(var i=1;i<=7;i++){
   var menu=document.getElementById('m'+i);
   if(menu) menu.classList.remove('active');
  }
@@ -239,142 +367,88 @@ function show(n){
 
  if(n==1){
   setInputVisible(true);
-  if(!chatHistory || chatHistory.trim()===''){
-   chat.innerHTML='<div class="welcome" id="welcomePage"><div class="welcome-left"><div class="welcome-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div><div class="welcome-title">\u4eca\u5929\u60f3\u804a\u70b9\u4ec0\u4e48\uff1f</div><div class="welcome-sub">Nova \u5df2\u5c31\u7eea\uff0c\u8bb0\u5fc6\u3001\u6280\u80fd\u3001\u8054\u7f51\u5168\u90e8\u5728\u7ebf</div><div class="welcome-actions"><div class="welcome-chip" onclick="quickSend(\'\u4eca\u5929\u5e38\u5dde\u5929\u6c14\u600e\u4e48\u6837\')">\u67e5\u5929\u6c14</div><div class="welcome-chip" onclick="quickSend(\'\u7ed9\u6211\u8bb2\u4e2a\u7b11\u8bdd\')">\u8bb2\u7b11\u8bdd</div><div class="welcome-chip" onclick="quickSend(\'\u4f60\u8fd8\u8bb0\u5f97\u6211\u5417\')">\u8bb0\u5fc6\u6d4b\u8bd5</div><div class="welcome-chip" onclick="quickSend(\'\u4f60\u90fd\u4f1a\u4ec0\u4e48\u6280\u80fd\')">\u6280\u80fd\u5217\u8868</div></div></div><div class="welcome-right" id="welcomeNews"><div class="welcome-news-title">\u4eca\u65e5\u70ed\u70b9</div><div class="welcome-news-list" id="welcomeNewsList">\u52a0\u8f7d\u4e2d...</div></div></div>';
-   loadWelcomeNews();
-  } else {
+  if(chatHistory && chatHistory.trim()!==''){
    chat.innerHTML=chatHistory;
+   var currentMsgCount=chat.querySelectorAll('.msg').length;
+   if(currentMsgCount<window._historyOffset){
+    window._historyOffset=currentMsgCount;
+    window._historyHasMore=true;
+   }
+   chat.style.scrollBehavior='auto';
    chat.scrollTop=chat.scrollHeight;
+   requestAnimationFrame(function(){ chat.style.scrollBehavior=''; });
+  } else {
+   chat.innerHTML='';
   }
  }
 
  if(n==2){
   setInputVisible(false);
-  chat.innerHTML='<div class="skill-store"><div class="skill-store-title"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3l1.8 4.6L18.5 9 14 10.7 12 15l-2-4.3L5.5 9l4.7-1.4z" stroke="currentColor" fill="none"/><path d="M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z" stroke="currentColor" fill="none"/></svg>\u6280\u80fd\u4e2d\u5fc3</div><div id="skillsList">\u52a0\u8f7d\u4e2d...</div></div>';
-  fetch('/skills').then(r=>r.json()).then(function(d){
-   // SVG 图标映射（线条风格，带 inline 尺寸防止 CSS 未加载时撑满）
-   var icons={
-    '\u5929\u6c14':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/></svg>',
-    '\u80a1\u7968':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
-    '\u65b0\u95fb':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><line x1="6" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="14" y2="12"/><line x1="6" y1="16" x2="10" y2="16"/></svg>',
-    '\u6587\u7ae0':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
-    '\u6545\u4e8b':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
-    '\u753b\u56fe':'<svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
-    '\u4ee3\u7801':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
-    '\u7f16\u7a0b':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
-   };
-   // 分类图标
-   var catIcons={
-    '\u4fe1\u606f\u67e5\u8be2':'<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
-    '\u5185\u5bb9\u521b\u4f5c':'<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
-    '\u5f00\u53d1\u5de5\u5177':'<svg viewBox="0 0 24 24" width="18" height="18"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>'
-   };
-   // 按 category 分组
-   var catOrder=['\u4fe1\u606f\u67e5\u8be2','\u5185\u5bb9\u521b\u4f5c','\u5f00\u53d1\u5de5\u5177'];
-   var groups={};
-   catOrder.forEach(function(c){groups[c]=[];});
-   if(d.skills){
-    d.skills.forEach(function(s){
-     var cat=s.category||'\u5f00\u53d1\u5de5\u5177';
-     if(!groups[cat])groups[cat]=[];
-     groups[cat].push(s);
-    });
-   }
-   var html='';
-   catOrder.forEach(function(catName){
-    var skills=groups[catName];
-    if(!skills||skills.length===0)return;
-    var ci=catIcons[catName]||'';
-    html+='<div class="skill-category">';
-    html+='<div class="skill-category-header">'+ci+'<span class="skill-category-name">'+catName+'</span><span class="skill-category-count">'+skills.length+'</span></div>';
-    html+='<div class="skill-grid">';
-    skills.forEach(function(s){
-     var name=s.name||'';
-     var iconKey=Object.keys(icons).find(function(k){return name.indexOf(k)!==-1;});
-     var icon=iconKey?icons[iconKey]:'<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
-     var isOnline=s.status==='ready';
-     html+='<div class="skill-card">';
-     html+='<div class="skill-card-icon">'+icon+'</div>';
-     html+='<div class="skill-card-name">'+name+'</div>';
-     html+='<div class="skill-card-desc">'+(s.description||'\u6682\u65e0\u63cf\u8ff0')+'</div>';
-     html+='<div class="skill-card-status"><span class="dot'+(isOnline?'':' offline')+'"></span>'+(isOnline?'\u5728\u7ebf':'\u79bb\u7ebf')+'</div>';
-     html+='</div>';
-    });
-    html+='</div></div>';
-   });
-   // 未分类的也展示
-   Object.keys(groups).forEach(function(cat){
-    if(catOrder.indexOf(cat)===-1&&groups[cat].length>0){
-     html+='<div class="skill-category"><div class="skill-category-header"><span class="skill-category-name">'+cat+'</span><span class="skill-category-count">'+groups[cat].length+'</span></div><div class="skill-grid">';
-     groups[cat].forEach(function(s){
-      html+='<div class="skill-card"><div class="skill-card-icon"><svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10"/></svg></div><div class="skill-card-name">'+(s.name||'')+'</div><div class="skill-card-desc">'+(s.description||'')+'</div><div class="skill-card-status"><span class="dot'+(s.status==='ready'?'':' offline')+'"></span>'+(s.status==='ready'?'\u5728\u7ebf':'\u79bb\u7ebf')+'</div></div>';
-     });
-     html+='</div></div>';
-    }
-   });
-   document.getElementById('skillsList').innerHTML=html;
-  }).catch(function(){
-   document.getElementById('skillsList').innerHTML='<div style="color:#ef4444;">\u6280\u80fd\u6570\u636e\u52a0\u8f7d\u5931\u8d25</div>';
-  });
+  chat.innerHTML='<div class="skill-store"><div id="skillsList">'+t('loading')+'</div></div>';
+  _loadSkillsList();
  }
 
  if(n==3){
   setInputVisible(false);
-  chat.innerHTML='<div class="stats-page"><h2 class="page-title" style="margin-bottom:15px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>\u6570\u636e\u770b\u677f</h2><div id="statsBox">\u52a0\u8f7d\u4e2d...</div></div>';
-  fetch('/stats').then(function(r){return r.json()}).then(function(d){
-   var s=d.stats||d||{};
-   document.getElementById('statsBox').innerHTML=renderStats(s);
-  }).catch(function(){
-   document.getElementById('statsBox').innerHTML='<div style="color:#ef4444;">\u7edf\u8ba1\u6570\u636e\u52a0\u8f7d\u5931\u8d25</div>';
-  });
+  chat.innerHTML='<div class="stats-page"><div style="text-align:right;margin-bottom:8px;"><button class="stats-refresh-btn" onclick="loadStatsData()" title="刷新数据"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div><div id="statsBox">'+t('loading')+'</div></div>';
+  loadStatsData();
  }
 
  if(n==4){
   setInputVisible(false);
-  currentMemoryFilter='all';
-  chat.innerHTML='<div style="padding:20px;overflow:auto;height:100%;" id="memScroll"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;"><div><div style="font-size:26px;font-weight:700;color:'+(isLight?'#1a1a1a':'#e2e8f0')+';margin-bottom:6px;">记忆引擎</div><div style="font-size:13px;color:'+(isLight?'#6b7280':'#94a3b8')+';line-height:1.7;max-width:720px;">这里会沉淀 NovaCore 从 L1 到 L8 的变化轨迹。记忆粒子、记忆结晶、成长经验、相伴时间，都会在这里慢慢长出来。</div></div><div style="font-size:12px;color:'+(isLight?'#6b7280':'#94a3b8')+';padding-top:6px;">Memory Engine</div></div><div id="memoryOverview" style="display:grid;grid-template-columns:'+memoryOverviewColumns()+';gap:12px;margin-bottom:18px;"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="memoryChips"><button class="mem-chip" onclick="setMemoryFilter(\'all\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#1a1a1a':'#fff')+';cursor:pointer;">全部</button><button class="mem-chip" onclick="setMemoryFilter(\'L3\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">记忆结晶</button><button class="mem-chip" onclick="setMemoryFilter(\'L4\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">人格图谱</button><button class="mem-chip" onclick="setMemoryFilter(\'L5\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">技能矩阵</button><button class="mem-chip" onclick="setMemoryFilter(\'L6\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">技能执行</button><button class="mem-chip" onclick="setMemoryFilter(\'L7\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">反馈学习</button><button class="mem-chip" onclick="setMemoryFilter(\'L8\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid '+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';background:'+(isLight?'#fff':'rgba(255,255,255,0.04)')+';color:'+(isLight?'#6b7280':'#94a3b8')+';cursor:pointer;">成长经验</button></div><div style="margin-bottom:18px;"><input id="memorySearch" type="text" placeholder="搜索记忆事件..." style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid '+(isLight?'#d1d5db':'#333')+';background:'+(isLight?'#fff':'#1e1e20')+';color:'+(isLight?'#1a1a1a':'#fff')+';outline:none;" onkeyup="filterMemBySearch(this.value)"></div><div id="memoryTimeline" style="display:flex;flex-direction:column;gap:10px;">加载中...</div></div>';
+  var _savedMemFilter=currentMemoryFilter||'all';
+  chat.innerHTML='<div id="memScroll"><div id="memoryOverview" style="display:grid;grid-template-columns:'+memoryOverviewColumns()+';gap:12px;margin-bottom:18px;"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="memoryChips"><button class="mem-chip" onclick="setMemoryFilter(\'all\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-primary);cursor:pointer;">'+t('mem.filter.all')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L2\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L2')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L3\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L3')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L4\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L4')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L5\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L5')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L6\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L6')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L7\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L7')+'</button><button class="mem-chip" onclick="setMemoryFilter(\'L8\',this)" style="padding:8px 14px;border-radius:999px;border:1px solid var(--border-chip);background:var(--bg-chip);color:var(--text-chip);cursor:pointer;">'+t('mem.filter.L8')+'</button></div><div style="margin-bottom:18px;"><input id="memorySearch" type="text" placeholder="'+t('mem.search')+'" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid var(--border-input);background:var(--bg-input);color:var(--text-primary);outline:none;" onkeyup="filterMemBySearch(this.value)"></div><div id="memoryTimeline" style="display:flex;flex-direction:column;gap:10px;">'+t('loading')+'</div></div>';
   fetch('/memory').then(r=>r.json()).then(function(d){
-   var softBg=isLight?'#f8fafc':'rgba(255,255,255,0.03)';
-   var textColor=isLight?'#1c1c1e':'#e2e8f0';
-   var labelColor=isLight?'#64748b':'#94a3b8';
-   var borderColor=isLight?'rgba(148,163,184,0.28)':'rgba(255,255,255,0.05)';
+   var softBg='var(--bg-soft)';
+   var textColor='var(--text-primary)';
+   var labelColor='var(--text-label)';
+   var borderColor='var(--border-card)';
    var events=d.events||[];
-   var counts=d.counts||{L1:0,L3:0,L4:0,L5:0,L6:0,L7:0,L8:0};
+   var counts=d.counts||{L1:0,L2:0,L3:0,L4:0,L5:0,L6:0,L7:0,L8:0};
    if(!d.counts){
     events.forEach(function(e){ if(counts[e.layer]!==undefined) counts[e.layer]++; });
    }
+   console.log('[MEMORY DEBUG] d.counts:', d.counts, 'final counts:', JSON.stringify(counts));
    var days=Math.max(1, Math.floor((Date.now() - new Date('2026-02-26').getTime())/86400000)+1);
    var growth=memoryGrowthProfile(counts);
+   console.log('[MEMORY DEBUG] growth:', JSON.stringify(growth));
    var totalExp=growth.totalExp;
    var level=growth.level;
    var progress=growth.progressPercent;
-   var stage='初醒';
-   if(level>=2) stage='生长';
-   if(level>=10) stage='共振';
-   if(level>=30) stage='进化';
-   if(level>=60) stage='自洽';
-   if(level>=120) stage='拓展';
-   if(level>=300) stage='繁星';
-   if(level>=1000) stage='无界';
+   var stage=t('mem.growth.stage.awake');
+   if(level>=2) stage=t('mem.growth.stage.grow');
+   if(level>=10) stage=t('mem.growth.stage.resonate');
+   if(level>=30) stage=t('mem.growth.stage.evolve');
+   if(level>=60) stage=t('mem.growth.stage.selfconsist');
+   if(level>=120) stage=t('mem.growth.stage.expand');
+   if(level>=300) stage=t('mem.growth.stage.stars');
+   if(level>=1000) stage=t('mem.growth.stage.infinite');
    var overview='';
-   overview+='<div style="background:linear-gradient(135deg,'+(isLight?'#eef2ff,#f5f3ff':'rgba(255,255,255,0.04),rgba(255,255,255,0.02)')+');border:1px solid '+borderColor+';padding:18px;border-radius:18px;box-shadow:'+(isLight?'0 8px 24px rgba(100,100,110,0.08)':'0 10px 28px rgba(0,0,0,0.18)')+';display:flex;flex-direction:column;gap:12px;">';
-   overview+='<div style="font-size:12px;color:'+labelColor+';">成长等级</div><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div style="min-width:0;"><div style="display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap;font-size:28px;font-weight:800;color:'+textColor+';margin-bottom:2px;">Lv.'+level+' <span style="font-size:16px;font-weight:700;opacity:0.9;white-space:nowrap;">'+stage+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(255,255,255,0.78)':'rgba(255,255,255,0.04)')+';border:1px solid '+(isLight?'rgba(120,120,130,0.12)':'rgba(255,255,255,0.08)')+';font-size:12px;color:'+labelColor+';">总经验 '+formatGrowthNumber(totalExp)+'</span><span style="padding:6px 10px;border-radius:999px;background:'+(isLight?'rgba(255,255,255,0.78)':'rgba(255,255,255,0.04)')+';border:1px solid '+(isLight?'rgba(120,120,130,0.12)':'rgba(255,255,255,0.08)')+';font-size:12px;color:'+labelColor+';">本级 '+formatGrowthNumber(growth.currentExp)+'/'+formatGrowthNumber(growth.nextNeed)+'</span></div></div><div style="padding:7px 12px;border-radius:999px;background:'+(isLight?'rgba(100,100,110,0.1)':'rgba(150,150,160,0.16)')+';border:1px solid '+(isLight?'rgba(100,100,110,0.14)':'rgba(150,150,160,0.2)')+';font-size:12px;font-weight:700;color:'+(isLight?'#374151':'#c7d2fe')+';white-space:nowrap;">升级还差 '+formatGrowthNumber(growth.remainingExp)+' EXP</div></div><div style="margin-top:2px;height:10px;background:'+(isLight?'#e5e7eb':'rgba(255,255,255,0.08)')+';border-radius:999px;overflow:hidden;"><div style="height:100%;width:'+progress+'%;background:linear-gradient(90deg,rgba(255,255,255,0.5),rgba(255,255,255,0.25));border-radius:999px;"></div></div></div>';
-   overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">记忆粒子（L1）</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+counts.L1+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">最细小的输入与感知片段</div></div>';
-   overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">记忆结晶（L3）</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+counts.L3+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">已经沉淀成结构的长期片段</div></div>';
-   overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">相伴天数</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+days+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">一起把系统慢慢养起来的时间</div></div>';
+   overview+='<div style="background:var(--bg-growth);border:1px solid '+borderColor+';padding:18px;border-radius:18px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;gap:12px;">';
+   overview+='<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:'+labelColor+';">'+t('mem.growth.level')+'</span><span class="mem-help-trigger" style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid '+labelColor+';color:'+labelColor+';font-size:10px;font-weight:700;cursor:help;" onmouseenter="this.querySelector(\'.mem-help-tip\').style.display=\'block\'" onmouseleave="this.querySelector(\'.mem-help-tip\').style.display=\'none\'">?<div class="mem-help-tip" style="display:none;position:absolute;left:22px;top:-8px;width:260px;padding:12px;border-radius:10px;background:var(--bg-card);border:1px solid '+borderColor+';font-size:11px;color:'+labelColor+';line-height:1.7;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:400;cursor:default;" onmouseenter="this.style.display=\'block\'" onmouseleave="this.style.display=\'none\'">'+t('mem.desc')+'</div></span></div><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;"><div style="min-width:0;"><div style="display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap;font-size:28px;font-weight:800;color:'+textColor+';margin-bottom:2px;">Lv.'+level+' <span style="font-size:16px;font-weight:700;opacity:0.9;white-space:nowrap;">'+stage+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><span style="padding:6px 10px;border-radius:999px;background:var(--bg-tag-pill);border:1px solid var(--border-tag-pill);font-size:12px;color:'+labelColor+';">'+t('mem.growth.totalExp')+' '+formatGrowthNumber(totalExp)+'</span><span style="padding:6px 10px;border-radius:999px;background:var(--bg-tag-pill);border:1px solid var(--border-tag-pill);font-size:12px;color:'+labelColor+';">'+t('mem.growth.currentLevel')+' '+formatGrowthNumber(growth.currentExp)+'/'+formatGrowthNumber(growth.nextNeed)+'</span></div></div><div style="padding:7px 12px;border-radius:999px;background:var(--bg-badge);border:1px solid var(--border-badge);font-size:12px;font-weight:700;color:var(--text-badge);white-space:nowrap;">'+t('mem.growth.needMore')+' '+formatGrowthNumber(growth.remainingExp)+' EXP</div></div><div style="margin-top:2px;height:10px;background:var(--bar-track);border-radius:999px;overflow:hidden;"><div style="height:100%;width:'+progress+'%;background:var(--bar-fill);border-radius:999px;"></div></div></div>';
+   overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">'+t('mem.card.L1.title')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+counts.L1+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">'+t('mem.card.L1.desc')+'</div></div>';
+   overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">'+t('mem.card.L3.title')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+counts.L3+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">'+t('mem.card.L3.desc')+'</div></div>';
+   overview+='<div style="background:'+softBg+';border:1px solid '+borderColor+';padding:14px 14px 13px;border-radius:16px;backdrop-filter:blur(8px);min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;">'+t('mem.card.days.title')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';line-height:1.05;">'+days+'</div><div style="font-size:11px;color:'+labelColor+';margin-top:8px;line-height:1.55;">'+t('mem.card.days.desc')+'</div></div>';
    document.getElementById('memoryOverview').innerHTML=overview;
 
    // 存全量事件，交给分页模块处理
    window._memAllEvents=events; // 后端已按时间降序排好
    _memCurrentPage=1;
-   var allNode=document.querySelector('.mem-chip');
-   if(allNode) setMemoryFilter('all', allNode);
-   else { _memFilteredItems=window._memAllEvents; _memRenderPage(); }
+   // 恢复之前的筛选状态
+   var targetFilter=_savedMemFilter||'all';
+   var chips=document.querySelectorAll('.mem-chip');
+   var matched=null;
+   chips.forEach(function(c){
+    var oc=c.getAttribute('onclick')||'';
+    if(oc.indexOf("'"+targetFilter+"'")!==-1) matched=c;
+   });
+   if(matched) setMemoryFilter(targetFilter, matched);
+   else { currentMemoryFilter='all'; _memFilteredItems=window._memAllEvents; _memRenderPage(); }
    // fetch 完成后恢复滚动位置
    var ms=document.getElementById('memScroll');
    if(ms && window._memScrollTop) ms.scrollTop=window._memScrollTop;
   }).catch(function(){
-   document.getElementById('memoryTimeline').innerHTML='<div style="color:#ef4444;">记忆数据加载失败</div>';
+   document.getElementById('memoryTimeline').innerHTML='<div style="color:#ef4444;">'+t('mem.load.fail')+'</div>';
   });
  }
 
@@ -384,9 +458,96 @@ function show(n){
  }
 
  if(n==6){
-  loadDocsPage(isLight);
+  loadEntityPage(isLight);
   return;
  }
+ if(n==7){
+  loadLabPage(isLight);
+  return;
+ }
+}
+
+// ── 技能商店 ──
+var _skillIcons={
+ '\u5929\u6c14':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/></svg>',
+ '\u80a1\u7968':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+ '\u65b0\u95fb':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><line x1="6" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="14" y2="12"/><line x1="6" y1="16" x2="10" y2="16"/></svg>',
+ '\u6587\u7ae0':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+ '\u6545\u4e8b':'<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
+ '\u753b\u56fe':'<svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+ '\u4ee3\u7801':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+ '\u7f16\u7a0b':'<svg viewBox="0 0 24 24" width="22" height="22"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
+};
+var _catIcons={
+ '\u4fe1\u606f\u67e5\u8be2':'<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+ '\u5185\u5bb9\u521b\u4f5c':'<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
+ '\u5f00\u53d1\u5de5\u5177':'<svg viewBox="0 0 24 24" width="18" height="18"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>'
+};
+var _cachedSkillsData=null;
+
+function _loadSkillsList(){
+ fetch('/skills').then(function(r){return r.json();}).then(function(d){
+  _cachedSkillsData=d;
+  if(!d||!d.skills){document.getElementById('skillsList').innerHTML='';return;}
+  var filtered=d.skills.filter(function(s){return (s.source||'native')==='native';});
+  _renderNativeSkills(filtered);
+ }).catch(function(){
+  document.getElementById('skillsList').innerHTML='<div style="color:#ef4444;">'+t('skills.load.fail')+'</div>';
+ });
+}
+
+function _renderNativeSkills(skills){
+ var catOrder=[t('skills.cat.info'),t('skills.cat.content'),t('skills.cat.dev')];
+ var groups={};
+ catOrder.forEach(function(c){groups[c]=[];});
+ skills.forEach(function(s){
+  var cat=s.category||'\u5f00\u53d1\u5de5\u5177';
+  if(!groups[cat])groups[cat]=[];
+  groups[cat].push(s);
+ });
+ var html='';
+ catOrder.forEach(function(catName){
+  var items=groups[catName];
+  if(!items||items.length===0)return;
+  var ci=_catIcons[catName]||'';
+  html+='<div class="skill-category">';
+  html+='<div class="skill-category-header">'+ci+'<span class="skill-category-name">'+catName+'</span></div>';
+  html+='<div class="skill-grid">';
+  items.forEach(function(s){html+=_buildSkillCard(s);});
+  html+='</div></div>';
+ });
+ Object.keys(groups).forEach(function(cat){
+  if(catOrder.indexOf(cat)===-1&&groups[cat].length>0){
+   html+='<div class="skill-category"><div class="skill-category-header"><span class="skill-category-name">'+cat+'</span></div><div class="skill-grid">';
+   groups[cat].forEach(function(s){html+=_buildSkillCard(s);});
+   html+='</div></div>';
+  }
+ });
+ if(!html) html='<div style="color:#94a3b8;padding:20px;">'+t('skills.empty')+'</div>';
+ document.getElementById('skillsList').innerHTML=html;
+}
+
+function _buildSkillCard(s){
+ var name=s.name||'';
+ var id=s.id||'';
+ var iconKey=Object.keys(_skillIcons).find(function(k){return name.indexOf(k)!==-1;});
+ var icon=iconKey?_skillIcons[iconKey]:'<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+ var enabled=s.enabled!==false;
+ var disabledCls=enabled?'':' disabled';
+ var dotCls=enabled?'':'offline';
+ var statusText=enabled?t('skills.status.ready'):t('skills.status.off');
+ var html='<div class="skill-card'+disabledCls+'" id="skill-'+id+'">';
+ html+='<div class="skill-card-icon">'+icon+'</div>';
+ html+='<div class="skill-card-name">'+escapeHtml(name)+'</div>';
+ html+='<div class="skill-card-desc">'+(s.description||t('skills.no.desc'))+'</div>';
+ html+='<div class="skill-card-status"><span class="dot '+dotCls+'"></span>'+statusText+'</div>';
+ html+='</div>';
+ return html;
+}
+
+function _escHtml(s){
+ if(!s) return '';
+ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── 模型选择器 ──
@@ -397,13 +558,75 @@ function toggleModelDropdown(e){
  if(dd.style.display!=='none'){dd.style.display='none';return;}
  var models=window._novaModels||{};
  var current=window._novaCurrentModel||'';
+ var catalog=window._novaCatalog||null;
  var html='';
- Object.keys(models).forEach(function(mid){
-  var m=models[mid];
-  var active=mid===current?' active':'';
-  var vision=m.vision?' <span class="model-vision-tag">视觉</span>':'';
-  html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+mid+vision+'</div>';
- });
+ if(catalog&&Object.keys(catalog).length>0){
+  // 按厂商分组
+  var grouped={};
+  var uncategorized=[];
+  Object.keys(models).forEach(function(mid){
+   var m=models[mid];
+   var midL=mid.toLowerCase();
+   var mNameL=String((m||{}).model||'').toLowerCase();
+   var mUrlL=String((m||{}).base_url||'').toLowerCase();
+   var pkey=null;
+   // 第一轮：按模型 ID / 模型名 / 别名匹配（优先级高）
+   for(var pk in catalog){
+    if(midL.indexOf(pk)!==-1||mNameL.indexOf(pk)!==-1){pkey=pk;break;}
+    var aliases=catalog[pk].aliases||[];
+    for(var i=0;i<aliases.length;i++){if(midL.indexOf(aliases[i])!==-1||mNameL.indexOf(aliases[i])!==-1){pkey=pk;break;}}
+    if(pkey)break;
+   }
+   // 第二轮：按 base_url 匹配（兜底）
+   if(!pkey){
+    for(var pk2 in catalog){
+     if(catalog[pk2].url_hint&&mUrlL.indexOf(catalog[pk2].url_hint)!==-1){pkey=pk2;break;}
+    }
+   }
+   if(pkey){
+    if(!grouped[pkey])grouped[pkey]=[];
+    grouped[pkey].push(mid);
+   }else{
+    uncategorized.push(mid);
+   }
+  });
+  var first=true;
+  for(var pk in catalog){
+   var items=grouped[pk];
+   if(!items||items.length===0) continue;
+   if(!first) html+='<div style="height:1px;background:rgba(128,128,128,0.15);margin:4px 0;"></div>';
+   first=false;
+   var label=pk.charAt(0).toUpperCase()+pk.slice(1);
+   html+='<div style="padding:6px 12px 2px;font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;user-select:none;pointer-events:none;">'+label+'</div>';
+   items.forEach(function(mid){
+    var m=models[mid];
+    var displayName=m.model||mid;
+    var active=mid===current?' active':'';
+    var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
+    html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+displayName+vision+'</div>';
+   });
+  }
+  if(uncategorized.length>0){
+   if(!first) html+='<div style="height:1px;background:rgba(128,128,128,0.15);margin:4px 0;"></div>';
+   html+='<div style="padding:6px 12px 2px;font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;user-select:none;pointer-events:none;">Other</div>';
+   uncategorized.forEach(function(mid){
+    var m=models[mid];
+    var displayName=m.model||mid;
+    var active=mid===current?' active':'';
+    var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
+    html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+displayName+vision+'</div>';
+   });
+  }
+ }else{
+  // fallback: 无 catalog 时扁平列表
+  Object.keys(models).forEach(function(mid){
+   var m=models[mid];
+   var displayName=m.model||mid;
+   var active=mid===current?' active':'';
+   var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
+   html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+displayName+vision+'</div>';
+  });
+ }
  dd.innerHTML=html;
  dd.style.display='block';
  // 点击其他地方关闭
@@ -416,16 +639,35 @@ function _closeModelDropdown(){
  if(dd) dd.style.display='none';
 }
 function switchModel(mid){
- fetch('/model/'+mid,{method:'POST'}).then(r=>r.json()).then(function(d){
-  if(d.ok){
-   window._novaCurrentModel=mid;
-   var el=document.getElementById('modelName');
-   if(el) el.textContent=mid;
-   updateImageBtnState();
-  }
- }).catch(function(){});
+ // 即时关闭 dropdown
  var dd=document.getElementById('modelDropdown');
  if(dd) dd.style.display='none';
+ if(mid===window._novaCurrentModel) return;
+ // 即时更新侧边栏显示
+ window._novaCurrentModel=mid;
+ var el=document.getElementById('modelName');
+ var _m=(window._novaModels||{})[mid];
+ if(el) el.textContent=(_m&&_m.model)?_m.model:mid;
+ // 如果在设置页，即时高亮
+ var items=document.querySelectorAll('[onclick*="switchModel"]');
+ items.forEach(function(it){it.style.pointerEvents='none';it.style.opacity='0.5';});
+ var clicked=null;
+ items.forEach(function(it){if(it.getAttribute('onclick')&&it.getAttribute('onclick').indexOf(mid)!==-1){clicked=it;}});
+ if(clicked){clicked.style.opacity='1';clicked.style.outline='2px solid #60a5fa';clicked.style.outlineOffset='-2px';}
+ fetch('/model/'+encodeURIComponent(mid),{method:'POST'}).then(r=>r.json()).then(function(d){
+  if(d.ok){
+   if(typeof updateImageBtnState==='function') updateImageBtnState();
+   if(typeof _settingsCurrentModel!=='undefined'){
+    _settingsCurrentModel=mid;
+    setTimeout(function(){if(typeof loadSettingsModels==='function') loadSettingsModels();},300);
+   }
+  }else{
+   // 回滚
+   items.forEach(function(it){it.style.pointerEvents='';it.style.opacity='';it.style.outline='';});
+  }
+ }).catch(function(){
+  items.forEach(function(it){it.style.pointerEvents='';it.style.opacity='';it.style.outline='';});
+ });
 }
 function updateImageBtnState(){
  var btn=document.getElementById('imageUploadBtn');
@@ -435,5 +677,20 @@ function updateImageBtnState(){
  // 只要有任何一个模型支持 vision 就启用（会自动 fallback）
  var anyVision=Object.keys(models).some(function(k){return models[k].vision;});
  btn.disabled=!anyVision;
- btn.title=anyVision?'上传图片':'当前无视觉模型可用';
+ btn.title=anyVision?t('model.upload.title'):t('model.no.vision');
+}
+
+function loadStatsData(){
+  var box=document.getElementById('statsBox');
+  if(!box) return;
+  var btn=document.querySelector('.stats-refresh-btn');
+  if(btn) btn.classList.add('spinning');
+  fetch('/stats').then(function(r){return r.json()}).then(function(d){
+    var s=d.stats||d||{};
+    box.innerHTML=renderStats(s);
+    if(btn) btn.classList.remove('spinning');
+  }).catch(function(){
+    box.innerHTML='<div style="color:#ef4444;">'+t('dash.load.fail')+'</div>';
+    if(btn) btn.classList.remove('spinning');
+  });
 }

@@ -54,6 +54,8 @@ def invalidate_constraint_cache():
 
 
 def get_active_constraints() -> list[dict]:
+    # Legacy keyword routing constraints are retired from runtime.
+    return []
     """加载并缓存有效的 L7 路由约束。被 _score_text() 每条消息调用，必须快。"""
     global _constraint_cache, _constraint_cache_time
     now = time.time()

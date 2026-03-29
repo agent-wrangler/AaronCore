@@ -1,0 +1,16 @@
+{
+  "name": "删除文件",
+  "keywords": ["删除文件", "删除目录", "删掉文件", "删掉目录", "删除这个", "删掉这个", "清空目录"],
+  "anti_keywords": ["如果删除文件", "文件删除原理"],
+  "description": "删除本地文件或目录",
+  "priority": 8,
+  "category": "本地操作",
+  "icon": "🗑️",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "需包含待删除路径"}
+    },
+    "required": ["user_input"]
+  }
+}

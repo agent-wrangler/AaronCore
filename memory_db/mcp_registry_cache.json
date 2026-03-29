@@ -1,0 +1,386 @@
+{
+  "fetched_at": "2026-03-24T22:37:53.200460+00:00",
+  "servers": [
+    {
+      "name": "ai.agenttrust/mcp-server",
+      "title": "AgentTrust — Identity & Trust for A2A Agents",
+      "description": "Identity, trust, and A2A orchestration for autonomous AI agents. Official A2A partner.",
+      "npm_package": "@agenttrust/mcp-server",
+      "version": "1.1.1",
+      "env_vars": [
+        {
+          "name": "AGENTTRUST_API_KEY",
+          "description": "Your AgentTrust API key from https://agenttrust.ai",
+          "required": true
+        }
+      ],
+      "repo": "https://github.com/agenttrust/mcp-server",
+      "icon": "https://agenttrust.ai/icon.png"
+    },
+    {
+      "name": "ai.autoblocks/contextlayer-mcp",
+      "title": "ai.autoblocks/contextlayer-mcp",
+      "description": "Personal context management for AI assistants",
+      "npm_package": "@contextlayer/mcp",
+      "version": "0.0.3",
+      "env_vars": [],
+      "repo": "https://github.com/autoblocksai/ctxl",
+      "icon": null
+    },
+    {
+      "name": "ai.autoblocks/ctxl",
+      "title": "ai.autoblocks/ctxl",
+      "description": "Personal context management for AI assistants",
+      "npm_package": "ctxl",
+      "version": "0.0.2",
+      "env_vars": [],
+      "repo": "https://github.com/autoblocksai/ctxl",
+      "icon": null
+    },
+    {
+      "name": "ai.autoblocks/ctxl-mcp",
+      "title": "ai.autoblocks/ctxl-mcp",
+      "description": "Personal context management for AI assistants",
+      "npm_package": "ctxl-mcp",
+      "version": "0.0.2",
+      "env_vars": [],
+      "repo": "https://github.com/autoblocksai/ctxl",
+      "icon": null
+    },
+    {
+      "name": "ai.fodda/mcp-server",
+      "title": "Fodda Knowledge Graphs",
+      "description": "Expert-curated knowledge graphs for AI agents — PSFK Retail, Beauty, Sports and more.",
+      "npm_package": "fodda-mcp",
+      "version": "1.3.0",
+      "env_vars": [
+        {
+          "name": "FODDA_API_KEY",
+          "description": "Your Fodda API key",
+          "required": true
+        },
+        {
+          "name": "FODDA_API_URL",
+          "description": "Upstream Fodda API URL",
+          "required": false
+        }
+      ],
+      "repo": "https://github.com/fodda/mcp-server",
+      "icon": null
+    },
+    {
+      "name": "ai.i18nagent/i18n-agent",
+      "title": "i18n-agent",
+      "description": "AI-powered translation for 48 languages with context-aware quality",
+      "npm_package": "@i18n-agent/mcp-client",
+      "version": "1.16.3",
+      "env_vars": [
+        {
+          "name": "I18N_AGENT_API_KEY",
+          "description": "API key from app.i18nagent.ai",
+          "required": true
+        },
+        {
+          "name": "MCP_SERVER_URL",
+          "description": "MCP server URL",
+          "required": false
+        }
+      ],
+      "repo": "https://github.com/i18n-agent/mcp-client",
+      "icon": null
+    },
+    {
+      "name": "ai.imboard/dossier",
+      "title": "ai.imboard/dossier",
+      "description": "MCP server for dossier automation standard - enables LLMs to discover, verify, and execute dossiers",
+      "npm_package": "@ai-dossier/mcp-server",
+      "version": "1.0.4",
+      "env_vars": [],
+      "repo": "https://github.com/imboard-ai/ai-dossier",
+      "icon": null
+    },
+    {
+      "name": "ai.kawacode/mcp",
+      "title": "Kawa Code MCP",
+      "description": "Intent tracking, decision recording, and team coordination for AI coding assistants",
+      "npm_package": "@kawacode/mcp",
+      "version": "5.0.2",
+      "env_vars": [],
+      "repo": "https://github.com/codeawareness/kawa.mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.kawacode/mcp",
+      "title": "Kawa Code MCP",
+      "description": "Intent tracking, decision recording, and team coordination for AI coding assistants",
+      "npm_package": "@kawacode/mcp",
+      "version": "5.0.2",
+      "env_vars": [],
+      "repo": "https://github.com/codeawareness/kawa.mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.kawacode/mcp",
+      "title": "Kawa Code MCP",
+      "description": "Intent tracking, decision recording, and team coordination for AI coding assistants",
+      "npm_package": "@kawacode/mcp",
+      "version": "5.0.4",
+      "env_vars": [],
+      "repo": "https://github.com/codeawareness/kawa.mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.meetlark/mcp-server",
+      "title": "ai.meetlark/mcp-server",
+      "description": "Agent-first meeting schedule polls for humans and agents. Create polls, vote, find times.",
+      "npm_package": "@meetlark/mcp-server",
+      "version": "1.0.2",
+      "env_vars": [],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.meetlark/mcp-server",
+      "title": "ai.meetlark/mcp-server",
+      "description": "Agent-first meeting schedule polls for humans and agents. Create polls, vote, find times.",
+      "npm_package": "@meetlark/mcp-server",
+      "version": "1.0.3",
+      "env_vars": [],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.perplexity/mcp-server",
+      "title": "Perplexity API Platform",
+      "description": "Real-time web search, reasoning, and research through Perplexity's API",
+      "npm_package": "@perplexity-ai/mcp-server",
+      "version": "0.8.2",
+      "env_vars": [],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.perplexity/mcp-server",
+      "title": "Perplexity API Platform",
+      "description": "Real-time web search, reasoning, and research through Perplexity's API",
+      "npm_package": "@perplexity-ai/mcp-server",
+      "version": "0.8.3",
+      "env_vars": [],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.perplexity/mcp-server",
+      "title": "Perplexity API Platform",
+      "description": "Real-time web search, reasoning, and research through Perplexity's API",
+      "npm_package": "@perplexity-ai/mcp-server",
+      "version": "0.8.4",
+      "env_vars": [],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.perplexity/mcp-server",
+      "title": "Perplexity API Platform",
+      "description": "Real-time web search, reasoning, and research through Perplexity's API",
+      "npm_package": "@perplexity-ai/mcp-server",
+      "version": "0.9.0",
+      "env_vars": [],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.ponlo/server",
+      "title": "ai.ponlo/server",
+      "description": "Family calendar, tasks, meals, lists & rewards hub for AI assistants.",
+      "npm_package": "ponlo-ai",
+      "version": "1.13.2",
+      "env_vars": [
+        {
+          "name": "PONLO_API_URL",
+          "description": "Your Ponlo.ai API URL (e.g., https://ponlo.ai)",
+          "required": true
+        },
+        {
+          "name": "PONLO_API_KEY",
+          "description": "Your Ponlo.ai API key (get it from Settings > API Keys)",
+          "required": true
+        }
+      ],
+      "repo": "https://github.com/ClaudioGodoyB/ponlo-ai",
+      "icon": null
+    },
+    {
+      "name": "ai.rapay/mcp-server",
+      "title": "Ra Pay",
+      "description": "Send fiat payments via MCP with two-step confirmation and Stripe Connect.",
+      "npm_package": "@rapay/mcp-server",
+      "version": "1.2.5",
+      "env_vars": [],
+      "repo": "https://github.com/Ra-Pay-AI/rapay",
+      "icon": null
+    },
+    {
+      "name": "ai.rolli/mcp",
+      "title": "ai.rolli/mcp",
+      "description": "Social media search and analytics across X, Reddit, Bluesky, YouTube, and more",
+      "npm_package": "@rolli/mcp",
+      "version": "1.1.4",
+      "env_vars": [
+        {
+          "name": "ROLLI_API_TOKEN",
+          "description": "Rolli API token (purchase at rolli.ai)",
+          "required": true
+        },
+        {
+          "name": "ROLLI_USER_ID",
+          "description": "Rolli user ID",
+          "required": true
+        }
+      ],
+      "repo": "https://github.com/rolliinc/rolli-mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.rolli/mcp",
+      "title": "ai.rolli/mcp",
+      "description": "Social media search and analytics across X, Reddit, Bluesky, YouTube, and more",
+      "npm_package": "@rolli/mcp",
+      "version": "1.1.5",
+      "env_vars": [
+        {
+          "name": "ROLLI_API_TOKEN",
+          "description": "Rolli API token (purchase at rolli.ai)",
+          "required": true
+        },
+        {
+          "name": "ROLLI_USER_ID",
+          "description": "Rolli user ID (optional, defaults to \"rolli-mcp\")",
+          "required": false
+        }
+      ],
+      "repo": "https://github.com/rolliinc/rolli-mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.rolli/mcp",
+      "title": "ai.rolli/mcp",
+      "description": "Social media search and analytics across X, Reddit, Bluesky, YouTube, and more",
+      "npm_package": "@rolli/mcp",
+      "version": "1.1.6",
+      "env_vars": [
+        {
+          "name": "ROLLI_API_TOKEN",
+          "description": "Rolli API token (purchase at rolli.ai)",
+          "required": true
+        },
+        {
+          "name": "ROLLI_USER_ID",
+          "description": "Rolli user ID (optional, defaults to \"rolli-mcp\")",
+          "required": false
+        }
+      ],
+      "repo": "https://github.com/rolliinc/rolli-mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.rolli/mcp",
+      "title": "ai.rolli/mcp",
+      "description": "Social media search and analytics across X, Reddit, Bluesky, YouTube, and more",
+      "npm_package": "@rolli/mcp",
+      "version": "1.1.7",
+      "env_vars": [
+        {
+          "name": "ROLLI_API_TOKEN",
+          "description": "Rolli API token (purchase at rolli.ai)",
+          "required": true
+        },
+        {
+          "name": "ROLLI_USER_ID",
+          "description": "Rolli user ID (optional, defaults to \"rolli-mcp\")",
+          "required": false
+        }
+      ],
+      "repo": "https://github.com/rolliinc/rolli-mcp",
+      "icon": null
+    },
+    {
+      "name": "ai.shawndurrani/mcp-merchant",
+      "title": "ai.shawndurrani/mcp-merchant",
+      "description": "Search-only commerce MCP server backed by Stripe (test)",
+      "npm_package": "mcp-merchant",
+      "version": "0.1.0",
+      "env_vars": [
+        {
+          "name": "STRIPE_SECRET_KEY",
+          "description": "Stripe secret key (test mode)",
+          "required": true
+        },
+        {
+          "name": "PRODUCT_LIMIT",
+          "description": "Max products to cache",
+          "required": false
+        },
+        {
+          "name": "REFRESH_INTERVAL_SEC",
+          "description": "Catalog refresh interval in seconds",
+          "required": false
+        }
+      ],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.shawndurrani/mcp-merchant",
+      "title": "ai.shawndurrani/mcp-merchant",
+      "description": "Search-only commerce MCP server backed by Stripe (test)",
+      "npm_package": "mcp-merchant",
+      "version": "0.1.1",
+      "env_vars": [
+        {
+          "name": "STRIPE_SECRET_KEY",
+          "description": "Stripe secret key (test mode)",
+          "required": true
+        },
+        {
+          "name": "PRODUCT_LIMIT",
+          "description": "Max products to cache",
+          "required": false
+        },
+        {
+          "name": "REFRESH_INTERVAL_SEC",
+          "description": "Catalog refresh interval in seconds",
+          "required": false
+        }
+      ],
+      "repo": "",
+      "icon": null
+    },
+    {
+      "name": "ai.shawndurrani/mcp-merchant",
+      "title": "ai.shawndurrani/mcp-merchant",
+      "description": "Search-only commerce MCP server backed by Stripe (test)",
+      "npm_package": "mcp-merchant",
+      "version": "0.1.3",
+      "env_vars": [
+        {
+          "name": "STRIPE_SECRET_KEY",
+          "description": "Stripe secret key (test mode)",
+          "required": true
+        },
+        {
+          "name": "PRODUCT_LIMIT",
+          "description": "Max products to cache",
+          "required": false
+        },
+        {
+          "name": "REFRESH_INTERVAL_SEC",
+          "description": "Catalog refresh interval in seconds",
+          "required": false
+        }
+      ],
+      "repo": "",
+      "icon": null
+    }
+  ]
+}

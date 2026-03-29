@@ -1,0 +1,16 @@
+{
+  "name": "打开应用",
+  "keywords": ["打开应用", "打开客户端", "启动应用", "启动客户端"],
+  "anti_keywords": ["打开文件", "打开文件夹", "打开网页"],
+  "description": "打开已知桌面应用并检测窗口是否出现。当前面向常用桌面客户端和快捷方式。",
+  "priority": 8,
+  "category": "桌面操作",
+  "icon": "🪟",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "应用名称或桌面客户端目标"}
+    },
+    "required": ["user_input"]
+  }
+}

@@ -1,40 +1,23 @@
 {
   "name": "天气查询",
-  "keywords": [
-    "北京",
-    "上海",
-    "常州",
-    "南京",
-    "杭州",
-    "苏州",
-    "无锡",
-    "深圳",
-    "广州",
-    "成都",
-    "武汉",
-    "西安",
-    "天津",
-    "重庆",
-    "大理",
-    "丽江",
-    "昆明",
-    "厦门",
-    "青岛",
-    "大连",
-    "长沙",
-    "郑州",
-    "济南",
-    "邢台",
-    "石家庄",
-    "天气",
-    "气温",
-    "温度",
-    "下雨",
-    "晴天"
-  ],
-  "anti_keywords": ["我在北京", "我在上海", "我在常州", "我住", "我人在", "天气功能", "天气系统", "天气预报系统", "做个天气", "写个天气", "怎么写", "怎么做"],
-  "description": "查询天气信息",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Fetch weather information for a location when current conditions or forecast are needed.",
   "priority": 6,
   "category": "信息查询",
-  "icon": "🌤"
+  "icon": "🌤",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      },
+      "city": {
+        "type": "string",
+        "description": "Location inferred from user intent and context."
+      }
+    },
+    "required": ["user_input"]
+  }
 }

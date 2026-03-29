@@ -236,6 +236,13 @@ _LEVEL_TTL = {"session": 1, "short_term": 30, "long_term": 90}
 def _extract_routing_constraint(
     user_feedback: str, last_question: str, last_answer: str, classified: dict
 ) -> dict | None:
+    # Legacy keyword-style routing constraints are retired. Route feedback
+    # should stay as high-level reflection instead of block_keywords output.
+    _debug_write("l7_constraint_retired", {
+        "reason": "legacy_keyword_constraint_retired",
+        "category": str(classified.get("category", "")),
+    })
+    return None
     """对意图理解/路由调度类反馈，提取结构化路由约束。
     返回 constraint dict 或 None。在反馈记录时调用（非热路径）。"""
     category = classified.get("category", "")

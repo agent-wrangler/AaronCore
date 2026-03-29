@@ -57,7 +57,8 @@ class WeatherSkillTests(unittest.TestCase):
         self.assertEqual(weather._extract_city("成都今天天气怎么样"), "")
 
     def test_execute_without_city_asks_for_target_city(self):
-        self.assertIn("哪个城市", weather.execute("天气怎么样"))
+        with patch.object(weather, "PERSONA_PATH", Path(self._tmpdir.name) / "persona.json"):
+            self.assertIn("哪个城市", weather.execute("天气怎么样"))
 
 
 if __name__ == "__main__":

@@ -1,9 +1,19 @@
 {
   "name": "Computer Use",
-  "keywords": ["问豆包", "问下豆包", "问一下豆包", "去豆包", "让豆包", "找豆包", "去找豆包", "你去找豆包", "去问豆包", "问问豆包", "和豆包聊", "跟豆包聊", "和豆包", "跟豆包", "帮我问豆包", "问chatgpt", "问kimi", "去QQ群", "在QQ群", "发QQ消息", "帮我在QQ", "帮我发QQ", "QQ群发", "监听QQ", "监听qq", "停止监听", "停止响应", "关闭响应", "开启智能对话", "开启智能响应", "QQ群监听", "桌面上有什么窗口", "打开浏览器"],
-  "anti_keywords": ["帮我查天气", "帮我画", "帮我写", "豆包是什么", "豆包怎么样"],
-  "description": "操控桌面应用和浏览器，代替用户完成操作",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Desktop agent capability for operating apps, handling chat windows, running browser tasks, and acting on the current computer state.",
   "priority": 3,
   "category": "桌面代理",
-  "icon": "🖥️"
+  "icon": "🖥️",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "Original user request. Preserve intent when passing it in."
+      }
+    },
+    "required": ["user_input"]
+  }
 }

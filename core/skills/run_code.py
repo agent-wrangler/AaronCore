@@ -7,7 +7,8 @@ import requests
 import json
 import sys
 
-REQUEST_TIMEOUT_SEC = 90
+CONNECT_TIMEOUT = 15      # 连接超时（秒）— 连不上就快速失败
+READ_TIMEOUT    = 120     # 读取超时（秒）— 生成代码可能较慢，给够时间
 
 
 def execute(user_request):
@@ -39,14 +40,10 @@ def execute(user_request):
 只输出代码，不要其他内容。"""
     
     try:
-        resp = requests.post(
-            f"{llm_config['base_url']}/chat/completions",
-            headers={"Authorization": f"Bearer {llm_config['api_key']}", "Content-Type": "application/json"},
-            json={"model": llm_config['model'], "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
-            timeout=REQUEST_TIMEOUT_SEC
-        )
-        resp.raise_for_status()
-        code = resp.json()["choices"][0]["message"]["content"]
+        from brain import llm_call
+        result = llm_call(llm_config, [{"role": "user", "content": prompt}],
+                          temperature=0.7, max_tokens=2000, timeout=(CONNECT_TIMEOUT + READ_TIMEOUT))
+        code = result.get("content", "")
         
         # 清理代码
         if "```" in code:

@@ -1,0 +1,19 @@
+{
+  "name": "保存导出",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Save text content as a file. Infer missing content, filename, and destination from the current task when needed.",
+  "priority": 8,
+  "category": "本地操作",
+  "icon": "💾",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "Original user request."},
+      "content": {"type": "string", "description": "Complete text content to save."},
+      "filename": {"type": "string", "description": "Filename without extension."},
+      "destination": {"type": "string", "description": "Destination inferred from the current task."}
+    },
+    "required": ["user_input", "content", "filename"]
+  }
+}

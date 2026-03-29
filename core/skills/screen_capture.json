@@ -1,0 +1,16 @@
+{
+  "name": "屏幕感知",
+  "keywords": ["截图", "截屏", "屏幕截图", "窗口截图", "屏幕状态", "当前屏幕"],
+  "anti_keywords": ["截图软件", "截图工具推荐"],
+  "description": "截取全屏、指定窗口或屏幕区域，观察当前屏幕状态。",
+  "priority": 8,
+  "category": "桌面操作",
+  "icon": "📸",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "截图目标描述"}
+    },
+    "required": ["user_input"]
+  }
+}

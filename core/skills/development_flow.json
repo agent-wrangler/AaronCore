@@ -1,0 +1,16 @@
+{
+  "name": "开发任务",
+  "keywords": ["修复报错", "修这个bug", "改代码", "写功能", "开发任务", "处理这个问题", "帮我修复"],
+  "anti_keywords": ["如果开发", "开发原理", "故事里的开发"],
+  "description": "承接开发/修复类目标，先形成理解和下一步计划",
+  "priority": 8,
+  "category": "开发执行",
+  "icon": "🛠️",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "开发目标或修复需求"}
+    },
+    "required": ["user_input"]
+  }
+}

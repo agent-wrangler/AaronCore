@@ -1,0 +1,139 @@
+{
+  "input_tokens": 6998774,
+  "output_tokens": 241644,
+  "total_tokens": 7240418,
+  "total_requests": 2231,
+  "cache_write_tokens": 4956529,
+  "cache_read_tokens": 1286400,
+  "model": "minimax",
+  "last_used": "2026-03-28 02:07",
+  "by_scene": {
+    "chat": {
+      "requests": 496,
+      "tokens": 3925643
+    },
+    "route": {
+      "requests": 520,
+      "tokens": 349337
+    },
+    "learn": {
+      "requests": 299,
+      "tokens": 47075
+    },
+    "skill": {
+      "requests": 183,
+      "tokens": 372339
+    },
+    "tool_call": {
+      "requests": 733,
+      "tokens": 2546024
+    }
+  },
+  "by_day": {
+    "2026-03-18": {
+      "tokens": 24373,
+      "requests": 4,
+      "input": 24188,
+      "output": 185
+    },
+    "2026-03-19": {
+      "tokens": 829908,
+      "requests": 118,
+      "input": 821223,
+      "output": 8685
+    },
+    "2026-03-20": {
+      "tokens": 1331936,
+      "requests": 410,
+      "input": 1277838,
+      "output": 54098
+    },
+    "2026-03-21": {
+      "tokens": 451794,
+      "requests": 187,
+      "input": 436725,
+      "output": 15069
+    },
+    "2026-03-22": {
+      "tokens": 467165,
+      "requests": 218,
+      "input": 444251,
+      "output": 22914
+    },
+    "2026-03-23": {
+      "tokens": 400772,
+      "requests": 59,
+      "input": 386485,
+      "output": 14287
+    },
+    "2026-03-24": {
+      "tokens": 681157,
+      "requests": 143,
+      "input": 653961,
+      "output": 27196
+    },
+    "2026-03-25": {
+      "tokens": 368171,
+      "requests": 78,
+      "input": 358708,
+      "output": 9463
+    },
+    "2026-03-26": {
+      "tokens": 553853,
+      "requests": 189,
+      "input": 523937,
+      "output": 29916
+    },
+    "2026-03-27": {
+      "tokens": 328852,
+      "requests": 171,
+      "input": 313026,
+      "output": 15826
+    },
+    "2026-03-28": {
+      "tokens": 6926,
+      "requests": 93,
+      "input": 4824,
+      "output": 2102
+    }
+  },
+  "memory": {
+    "l2_searches": 762,
+    "l2_hits": 762,
+    "l8_searches": 762,
+    "l8_hits": 93,
+    "total_queries": 1300,
+    "full_layer_available": 4123,
+    "l1_count": 10,
+    "l3_count": 0,
+    "l4_available": 1,
+    "l5_count": 0,
+    "flash_count": 1100,
+    "trace_back_count": 195,
+    "l3_queries": 94,
+    "l3_hits": 94,
+    "l4_queries": 606,
+    "l4_hits": 606,
+    "l5_queries": 94,
+    "l5_hits": 94,
+    "l6_hits": 94,
+    "l7_hits": 16
+  },
+  "by_model": {
+    "minimax-m2.7": {
+      "input": 588212,
+      "output": 48195,
+      "requests": 591
+    },
+    "deepseek-chat": {
+      "input": 6021505,
+      "output": 175240,
+      "requests": 1551
+    },
+    "minimax-m2.7-highspeed": {
+      "input": 389057,
+      "output": 18209,
+      "requests": 89
+    }
+  }
+}

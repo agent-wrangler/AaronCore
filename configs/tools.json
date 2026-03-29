@@ -1,0 +1,73 @@
+{
+  "_version": "1.1",
+  "_note": "CoD \u5de5\u5177\u63cf\u8ff0\u914d\u7f6e\u3002\u5b9e\u9a8c\u5ba4\u53ef\u4fee\u6539\u6b64\u6587\u4ef6\uff0c\u4e3b\u7a0b\u5e8f\u81ea\u52a8\u52a0\u8f7d\u3002",
+  "cod_tools": [
+    {
+      "name": "recall_memory",
+      "description": "Retrieve prior dialogue or stored experience when earlier context is required for a correct reply.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Memory retrieval query."}
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "query_knowledge",
+      "description": "Query learned knowledge when stored facts, concepts, or prior conclusions are needed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "topic": {"type": "string", "description": "Knowledge topic to retrieve."}
+        },
+        "required": ["topic"]
+      }
+    },
+    {
+      "name": "web_search",
+      "description": "Search the web when current or external information is required and local context is insufficient.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Concise search query."}
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "read_file",
+      "description": "Read file content when inspection is needed before analysis or repair.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {"type": "string", "description": "Allowed file path to read."}
+        },
+        "required": ["file_path"]
+      }
+    },
+    {
+      "name": "list_files",
+      "description": "List accessible files or directories when the target location is still unclear.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "directory": {"type": "string", "description": "Optional directory path to inspect."}
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "self_fix",
+      "description": "Apply a targeted fix when the issue and affected file are already clear. Use for safe local repairs, not core-engine rewrites.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {"type": "string", "description": "Target file path to update."},
+          "problem": {"type": "string", "description": "Expected fix or observed deviation."}
+        },
+        "required": ["file_path", "problem"]
+      }
+    }
+  ]
+}

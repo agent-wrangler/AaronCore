@@ -1,0 +1,16 @@
+{
+  "name": "UI Interaction",
+  "keywords": ["点击按钮", "点一下", "聚焦窗口", "切换到窗口", "输入内容"],
+  "anti_keywords": ["点子", "输入法"],
+  "description": "在已解析窗口目标上执行聚焦、点击、输入等基础 UI 交互。",
+  "priority": 8,
+  "category": "桌面操作",
+  "icon": "🖱️",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "UI 目标与动作描述"}
+    },
+    "required": ["user_input"]
+  }
+}

@@ -73,6 +73,9 @@ CONFIRM_WORDS = [
     '那就这个', '开始吧', '就按你说的', '可以执行', '那就做吧',
     '就这样', '好的开始', '确认', '就这个', '那就按这个',
     '嗯就这样', '行就按这个来', '好你执行', '那就开始',
+    # 动作确认：隐式引用上文的短指令
+    '配一下', '搞一下', '弄一下', '做一下', '试一下',
+    '你配一下', '你搞一下', '你弄一下',
 ]
 
 # 探索词：合并讨论+探询，但不含强假设词（单独处理）
@@ -151,7 +154,8 @@ def classify_stage(text: str, scores: dict) -> str:
         has_skill_kw = scores.get('matched_skill') is not None
         # 多关键词命中（skill_score >= 2.0）说明是强技能信号，不算探索
         strong_skill = scores.get('skill_score', 0) >= 2.0 and has_skill_kw
-        if not (has_task and has_skill_kw) and not strong_skill:
+        # 有技能关键词命中 → 用户在问技能相关的事，不是纯探索
+        if not has_skill_kw and not strong_skill:
             return 'explore'
 
     # ── P4: 任务请求（复用 evidence 门槛）──
@@ -166,6 +170,9 @@ def classify_stage(text: str, scores: dict) -> str:
     if has_weak and scores.get('matched_skill') is not None:
         evidence = max(evidence, 2)
     if scores.get('skill_score', 0) >= 2.0 and scores.get('matched_skill') is not None:
+        evidence = max(evidence, 2)
+    # 技能关键词命中 + 无闲聊/情绪反信号 → 隐式请求（"最新新闻""明天下雨吗"）
+    if scores.get('matched_skill') is not None and scores.get('chat_score', 0) <= 0 and scores.get('emotion_score', 0) <= 0:
         evidence = max(evidence, 2)
     if evidence >= 2:
         return 'request'
@@ -264,7 +271,7 @@ def classify_intent(text: str, scores: dict) -> str:
 
     if is_hypothetical:
         return 'discuss'
-    if is_discuss and not (has_task and has_skill_kw):
+    if is_discuss and not has_skill_kw:
         return 'discuss'
     if is_inquiry and not has_task and not has_skill_kw:
         return 'discuss'
@@ -290,6 +297,9 @@ def classify_intent(text: str, scores: dict) -> str:
     # 多个技能关键词命中（skill_score >= 2.0）= 强技能信号，直接算 task
     # 例如"常州天气怎么样"命中了常州+天气两个关键词
     if scores.get('skill_score', 0) >= 2.0 and has_skill_kw:
+        evidence = max(evidence, 2)
+    # 技能关键词命中 + 无闲聊/情绪反信号 → 隐式请求
+    if has_skill_kw and scores.get('chat_score', 0) <= 0 and scores.get('emotion_score', 0) <= 0:
         evidence = max(evidence, 2)
 
     if evidence >= 2:
@@ -428,8 +438,8 @@ def _score_text(text: str, skills: dict):
                     if not any(aw in text for aw in WEATHER_ACTION_WORDS):
                         continue  # "我在常州" 不触发天气
 
-                # 短关键词（<3字）降权：可能是泛指而非真正的技能请求
-                if len(kw) < 3:
+                # 单字关键词降权（如"画"可能泛指），2字及以上视为明确技能词
+                if len(kw) < 2:
                     skill_score += 1.0
                 else:
                     skill_score += 2.0
@@ -824,9 +834,9 @@ def route(text: str) -> dict:
         has_task_word = scores['skill_score'] > 2.0  # 除了关键词还命中了 TASK_WORDS
         has_emotion = scores['emotion_score'] > 0
 
-        if kw_len >= 3 and has_task_word:
+        if kw_len >= 2 and has_task_word:
             confidence = 0.95  # "查天气""写篇文章" — 高置信度
-        elif kw_len >= 3:
+        elif kw_len >= 2:
             confidence = 0.85  # "天气""新闻" — 中高置信度
         elif has_task_word:
             confidence = 0.7   # 短关键词 + 任务词 — 中置信度

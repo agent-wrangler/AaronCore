@@ -27,6 +27,9 @@ function createWindow() {
     },
   });
 
+  // 设置最高置顶层级，避免被其他窗口遮挡
+  win.setAlwaysOnTop(true, 'screen-saver');
+
   win.setMenu(null);
   win.loadURL('http://localhost:8090/companion');
   win.setIgnoreMouseEvents(false);

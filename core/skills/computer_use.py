@@ -394,8 +394,8 @@ def _do_execute(text: str, context: dict = None) -> str:
         duration_sec = 0
         if '分钟' in text:
             duration_sec = rounds * 60  # 真实秒数，worker 按时间控制
-            rounds = 60  # 兜底上限，实际由 deadline 截断
-        rounds = min(rounds, 20)
+            rounds = 120  # 兜底上限，实际由 deadline 截断
+        rounds = min(rounds, 120)
         site = '豆包' if '豆包' in text else 'chatgpt'
         site_url = 'doubao' if site == '豆包' else site.lower()
         first_msg = _generate_first_msg(text, context or {})

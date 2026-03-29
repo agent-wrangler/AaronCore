@@ -336,6 +336,12 @@ def _load_llm_config() -> dict:
         try:
             data = json.loads(config_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                # 新格式：models + default
+                if "models" in data:
+                    default = data.get("default", "")
+                    models = data["models"]
+                    return models.get(default) or next(iter(models.values()), {})
+                # 旧格式：顶层 api_key/model/base_url
                 return data
         except Exception:
             pass
@@ -458,26 +464,18 @@ def generate_self_repair_patch_plan(report: dict, config: dict | None = None) ->
     prompt = _build_patch_generation_prompt(report, contexts)
     timeout_sec = max(int(config.get("self_repair_patch_timeout_sec") or DEFAULT_PATCH_TIMEOUT_SEC), 10)
     try:
-        response = requests.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-            },
-            timeout=timeout_sec,
-        )
-        if response.status_code != 200:
+        from brain import llm_call
+        result = llm_call(llm_config, [{"role": "user", "content": prompt}],
+                          temperature=0.1, max_tokens=4000, timeout=timeout_sec)
+        if result.get("error"):
             return {
                 "ok": False,
-                "error": f"llm_http_{response.status_code}",
+                "error": f"llm_error: {result['error']}",
                 "summary": "",
                 "edits": [],
                 "allowed_paths": allowed_paths,
             }
-        payload = response.json()
-        raw_text = str((((payload.get("choices") or [{}])[0]).get("message") or {}).get("content") or "").strip()
+        raw_text = result.get("content", "").strip()
         parsed = _extract_json_payload(raw_text)
     except Exception as exc:
         return {"ok": False, "error": str(exc), "summary": "", "edits": [], "allowed_paths": allowed_paths}

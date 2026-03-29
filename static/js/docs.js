@@ -140,7 +140,7 @@ function renderDocsPage(isLight){
  var html='';
 
  html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px;flex-wrap:wrap;">';
- html+='<div><div style="font-size:26px;font-weight:800;color:'+textColor+';margin-bottom:6px;">文档中枢</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';max-width:760px;">把当前主链、架构说明、前端现状和路线图都收进这里，省得每次再去文件夹里翻。</div></div>';
+ html+='<div><div class="page-title"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 4.5h8.5L18 8v11a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19z"/><path d="M14 4.5V8h4"/><path d="M9 12h6"/><path d="M9 15.5h6"/></svg>'+t('docs.title')+'</div><div style="font-size:13px;line-height:1.8;color:'+subColor+';max-width:760px;">把当前主链、架构说明、前端现状和路线图都收进这里，省得每次再去文件夹里翻。</div></div>';
  html+='<div style="padding-top:6px;font-size:12px;color:'+subColor+';">当前 L3：2 条事实、8 条规则、2 条学习、1 条里程碑、1 条一般记录</div>';
  html+='</div>';
 
@@ -219,7 +219,7 @@ function openDoc(path){
 function loadDocsPage(isLight, preferredPath){
  var chat=document.getElementById('chat');
  setInputVisible(false);
- chat.innerHTML='<div style="padding:20px;"><div id="docsBox">文档加载中...</div></div>';
+ chat.innerHTML='<div><div id="docsBox">文档加载中...</div></div>';
  docsPanelState.error='';
  docsPanelState.loading=true;
  fetch('/docs/index').then(function(r){ return r.json(); }).then(function(data){

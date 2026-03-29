@@ -5,5 +5,15 @@
   "description": "查询股票、指数和市场行情",
   "priority": 7,
   "category": "信息查询",
-  "icon": "📈"
+  "icon": "📈",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "用户的原始输入文本"
+      }
+    },
+    "required": ["user_input"]
+  }
 }

@@ -1,6 +1,6 @@
-"""设置相关路由：autolearn、self_repair、L7 stats"""
+"""设置相关路由：autolearn、self_repair、L7 stats、tool_call config"""
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from core import shared as S
 
 router = APIRouter()
@@ -139,3 +139,39 @@ async def apply_self_repair_fix(request: dict | None = None):
     except Exception as exc:
         S.debug_write("self_repair_apply_error", {"error": str(exc), "report_id": report_id})
         return {"ok": False, "error": str(exc)}
+
+
+# ── tool_call 开关 ──────────────────────────────────────────
+
+def _load_tool_call_config() -> dict:
+    import os
+    from pathlib import Path
+    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "memory_db" / "tool_call_config.json"
+    try:
+        if cfg_path.exists():
+            return json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {"enabled": False}
+
+
+def _save_tool_call_config(data: dict):
+    import os
+    from pathlib import Path
+    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "memory_db" / "tool_call_config.json"
+    cfg_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@router.get("/tool_call/config")
+async def get_tool_call_config():
+    return {"config": _load_tool_call_config()}
+
+
+@router.post("/tool_call/config")
+async def set_tool_call_config(request: Request):
+    body = await request.json()
+    cfg = _load_tool_call_config()
+    if "enabled" in body:
+        cfg["enabled"] = bool(body["enabled"])
+    _save_tool_call_config(cfg)
+    return {"ok": True, "config": cfg}

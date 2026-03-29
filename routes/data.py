@@ -1,17 +1,42 @@
-"""数据查询路由：memory, docs, skills, history, stats, nova_name"""
+"""数据查询路由：memory, docs, history, stats, nova_name"""
 import json
 from datetime import datetime
 from fastapi import APIRouter
 from core import shared as S
+from core.state_loader import get_model_price, MODEL_PRICES
 
 router = APIRouter()
+
+
+def _is_live_skill_name(skill_name: str) -> bool:
+    skill_name = str(skill_name or "").strip()
+    if not skill_name:
+        return False
+
+    checker = getattr(S, "is_registered_skill_name", None)
+    if callable(checker):
+        try:
+            if checker(skill_name):
+                return True
+        except Exception:
+            pass
+
+    registry_loader = getattr(S, "get_all_skills", None)
+    if callable(registry_loader):
+        try:
+            skills = registry_loader() or {}
+            return skill_name in skills
+        except Exception:
+            pass
+
+    return False
 
 
 @router.get("/memory")
 async def get_memory():
     S.ensure_long_term_clean()
     events = []
-    counts = {"L1": 0, "L3": 0, "L4": 0, "L5": 0, "L6": 0, "L7": 0, "L8": 0}
+    counts = {"L1": 0, "L2": 0, "L3": 0, "L4": 0, "L5": 0, "L6": 0, "L7": 0, "L8": 0}
 
     l1_file = S.PRIMARY_HISTORY_FILE
     if l1_file.exists():
@@ -22,6 +47,45 @@ async def get_memory():
                 if not content:
                     continue
                 counts["L1"] += 1
+        except Exception:
+            pass
+
+    l2_file = S.PRIMARY_STATE_DIR / "l2_short_term.json"
+    if l2_file.exists():
+        try:
+            l2_data = json.loads(l2_file.read_text(encoding="utf-8"))
+            if isinstance(l2_data, list):
+                counts["L2"] = len(l2_data)
+                for item in l2_data:
+                    imp = item.get("importance") or 0
+                    if imp >= 0.7:
+                        user_text = str(item.get("user_text") or "").strip()
+                        if not user_text:
+                            continue
+                        ai_text = str(item.get("ai_text") or "").strip()
+                        # 跳过开头的括号表情，提取第一句有意义的内容
+                        import re
+                        ai_clean = re.sub(r'^[\s\uff08\u0028][^\uff09\u0029]*[\uff09\u0029]\s*', '', ai_text)
+                        ai_clean = ai_clean.replace("\n", " ").strip()
+                        if not ai_clean:
+                            ai_clean = ai_text.replace("\n", " ").strip()
+                        ai_brief = ai_clean
+                        for sep in ["\u3002", "\uff01", "\uff1f", "\uff5e", "~"]:
+                            if sep in ai_brief:
+                                ai_brief = ai_brief[:ai_brief.index(sep) + 1]
+                                break
+                        if len(ai_brief) > 40:
+                            ai_brief = ai_brief[:40] + "\u2026"
+                        content = f"\u201c{user_text}\u201d"
+                        if ai_brief:
+                            content += f" \u2014\u2014 {ai_brief}"
+                        events.append({
+                            "time": S.normalize_event_time(item.get("time")),
+                            "layer": "L2",
+                            "event_type": "impression",
+                            "title": "\u8bb0\u5fc6\u51dd\u7ed3",
+                            "content": content,
+                        })
         except Exception:
             pass
 
@@ -61,9 +125,26 @@ async def get_memory():
     if l5_file.exists():
         try:
             l5_skills = json.loads(l5_file.read_text(encoding="utf-8"))
-            for item in l5_skills:
+            visible_l5_skills = [
+                item for item in l5_skills
+                if isinstance(item, dict) and str(item.get("source") or "").strip() != "l2_demand"
+            ]
+            for item in visible_l5_skills:
                 skill_name = item.get("name") or item.get("\u6838\u5fc3\u6280\u80fd") or "skill"
-                skill_count = len(l5_skills)
+                skill_count = len(visible_l5_skills)
+                source = str(item.get("source") or "").strip()
+                if source == "l6_success_path":
+                    content = str(item.get("summary") or item.get("\u5e94\u7528\u793a\u4f8b") or "").strip()
+                    if not content:
+                        content = f"\u6c89\u6dc0\u4e86\u300c{skill_name}\u300d\u7684\u7a33\u5b9a\u6210\u529f\u7ecf\u9a8c"
+                    success_count = int(item.get("success_count", item.get("\u4f7f\u7528\u6b21\u6570", 0)) or 0)
+                    events.append({
+                        "time": S.normalize_event_time(item.get("learned_at") or item.get("\u6700\u8fd1\u4f7f\u7528\u65f6\u95f4")),
+                        "layer": "L5", "event_type": "skill", "title": "\u6210\u529f\u7ecf\u9a8c",
+                        "content": f"{skill_name} / {content} / \u5df2\u6c89\u6dc0 {success_count} \u6b21",
+                    })
+                    counts["L5"] += 1
+                    continue
                 events.append({
                     "time": S.normalize_event_time(item.get("learned_at") or item.get("\u6700\u8fd1\u4f7f\u7528\u65f6\u95f4")),
                     "layer": "L5", "event_type": "skill", "title": "\u6280\u80fd\u77e9\u9635",
@@ -77,18 +158,46 @@ async def get_memory():
     if l6_file.exists():
         try:
             l6_data = json.loads(l6_file.read_text(encoding="utf-8"))
-            skills_used = l6_data.get("skills_used", {})
-            for skill_name, data in skills_used.items():
-                if not S.is_registered_skill_name(skill_name):
-                    continue
-                count = data.get("count", 0)
-                tail = "\u8d8a\u6765\u8d8a\u719f\u7ec3\u4e86" if count >= 3 else "\u5df2\u7ecf\u7559\u4e0b\u7b2c\u4e00\u6b21\u6267\u884c\u75d5\u8ff9"
-                events.append({
-                    "time": S.normalize_event_time(data.get("last_used")),
-                    "layer": "L6", "event_type": "evolution", "title": "\u6280\u80fd\u6267\u884c",
-                    "content": f"\u4f7f\u7528\u4e86\uff1a\u300c{skill_name}\u300d \uff08{tail}\uff0c\u7d2f\u8ba1 {count} \u6b21\uff09",
-                })
-                counts["L6"] += 1
+            skill_runs = l6_data.get("skill_runs", [])
+            if isinstance(skill_runs, list) and skill_runs:
+                for item in reversed(skill_runs[-80:]):
+                    if not isinstance(item, dict):
+                        continue
+                    skill_name = str(item.get("skill") or "").strip()
+                    if not _is_live_skill_name(skill_name):
+                        continue
+                    verified = item.get("verified")
+                    observed = str(item.get("observed_state") or "").strip()
+                    drift_reason = str(item.get("drift_reason") or "").strip()
+                    summary = str(item.get("summary") or "").strip()
+                    parts = [skill_name]
+                    if summary:
+                        parts.append(summary)
+                    if verified is True:
+                        parts.append("verified")
+                    elif drift_reason:
+                        parts.append(f"drift={drift_reason}")
+                    if observed:
+                        parts.append(f"observed={observed}")
+                    events.append({
+                        "time": S.normalize_event_time(item.get("at")),
+                        "layer": "L6", "event_type": "evolution", "title": "\u6267\u884c\u8f68\u8ff9",
+                        "content": " / ".join([p for p in parts if p]),
+                    })
+                    counts["L6"] += 1
+            else:
+                skills_used = l6_data.get("skills_used", {})
+                for skill_name, data in skills_used.items():
+                    if not _is_live_skill_name(skill_name):
+                        continue
+                    count = data.get("count", 0)
+                    tail = "\u8d8a\u6765\u8d8a\u719f\u7ec3\u4e86" if count >= 3 else "\u5df2\u7ecf\u7559\u4e0b\u7b2c\u4e00\u6b21\u6267\u884c\u75d5\u8ff9"
+                    events.append({
+                        "time": S.normalize_event_time(data.get("last_used")),
+                        "layer": "L6", "event_type": "evolution", "title": "\u6280\u80fd\u6267\u884c",
+                        "content": f"\u4f7f\u7528\u4e86\uff1a\u300c{skill_name}\u300d \uff08{tail}\uff0c\u7d2f\u8ba1 {count} \u6b21\uff09",
+                    })
+                    counts["L6"] += 1
         except Exception:
             pass
 
@@ -170,45 +279,19 @@ async def get_doc_content(path: str):
     }
 
 
-@router.get("/skills")
-async def get_skills():
-    if not S.NOVA_CORE_READY:
-        return {"skills": [], "ready": False, "error": S.CORE_IMPORT_ERROR or "core_not_ready"}
-    try:
-        skills_data = S.get_all_skills()
-        skills = []
-        for name, info in skills_data.items():
-            skills.append({
-                "name": info.get("name", name),
-                "keywords": info.get("keywords", []),
-                "description": info.get("description", ""),
-                "priority": info.get("priority", 10),
-                "status": info.get("status", "ready"),
-                "category": info.get("category", "\u901a\u7528"),
-            })
-        skills.sort(key=lambda item: (item.get("priority", 10), item.get("name", "")))
-        return {"skills": skills, "ready": True}
-    except Exception as exc:
-        return {"skills": [], "ready": False, "error": str(exc)}
-
-
-@router.get("/skills/news/headlines")
-async def get_news_headlines():
-    try:
-        from core.skills.news import _parse_rss, GOOGLE_NEWS_FEEDS
-        url = GOOGLE_NEWS_FEEDS.get("top", list(GOOGLE_NEWS_FEEDS.values())[0])
-        items, _ = _parse_rss(url, limit=6)
-        headlines = [item.get("title", "") for item in items if item.get("title")]
-        return {"headlines": headlines}
-    except Exception as e:
-        return {"headlines": [], "error": str(e)}
-
-
 @router.get("/history")
-async def get_history():
+async def get_history(limit: int = 40, offset: int = 0):
     history = S.load_msg_history()
+    total = len(history)
+    # offset=0 表示最新的，从末尾往前取
+    if offset <= 0:
+        chunk = history[-limit:] if limit < total else history
+    else:
+        end = total - offset
+        start = max(0, end - limit)
+        chunk = history[start:end] if end > 0 else []
     formatted = []
-    for item in history[-40:]:
+    for item in chunk:
         row = dict(item)
         if "time" in row:
             try:
@@ -216,12 +299,105 @@ async def get_history():
             except Exception:
                 pass
         formatted.append(row)
-    return {"history": formatted, "text_history": S.get_text_history(20)}
+    return {"history": formatted, "text_history": S.get_text_history(20), "total": total, "has_more": (total - offset - limit) > 0}
 
 
 @router.get("/stats")
 async def get_stats():
-    return {"stats": S.load_stats_data()}
+    stats = S.load_stats_data()
+    stats["prices"] = get_model_price(stats.get("model", ""))
+    stats["all_prices"] = MODEL_PRICES
+    # ── 补充真实的 L3/L5 计数（快照值不可靠，直接读文件）──────────
+    mem = stats.setdefault("memory", {})
+    try:
+        l3_raw = json.loads((S.PRIMARY_STATE_DIR / "long_term.json").read_text("utf-8"))
+        real_l3 = sum(1 for i in l3_raw if isinstance(i, dict) and not S.is_legacy_l3_skill_log(i))
+        mem["real_l3_count"] = real_l3
+    except Exception:
+        mem["real_l3_count"] = mem.get("l3_count", 0)
+    try:
+        from core.skills_loader import get_all_skills
+        mem["real_l5_count"] = len(get_all_skills())
+    except Exception:
+        try:
+            kb = json.loads((S.PRIMARY_STATE_DIR / "knowledge.json").read_text("utf-8"))
+            mem["real_l5_count"] = len(kb) if isinstance(kb, list) else 0
+        except Exception:
+            mem["real_l5_count"] = mem.get("l5_count", 0)
+    try:
+        persona = json.loads((S.PRIMARY_STATE_DIR / "persona.json").read_text("utf-8"))
+        if not isinstance(persona, dict):
+            persona = {}
+        active_mode = str(persona.get("active_mode") or "").strip()
+        persona_modes = persona.get("persona_modes") or {}
+        mode_cfg = persona_modes.get(active_mode) if isinstance(persona_modes, dict) else {}
+        if not isinstance(mode_cfg, dict):
+            mode_cfg = {}
+        speech_style = persona.get("speech_style") or {}
+        if not isinstance(speech_style, dict):
+            speech_style = {}
+
+        def _count_nonempty(value):
+            if isinstance(value, dict):
+                return sum(_count_nonempty(v) for v in value.values())
+            if isinstance(value, list):
+                return sum(1 for item in value if str(item or "").strip())
+            return 1 if str(value or "").strip() else 0
+
+        def _recent_update_count(changelog, limit_days=7):
+            now = datetime.now()
+            total = 0
+            for item in changelog if isinstance(changelog, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                raw = str(item.get("time") or item.get("created_at") or "").strip()
+                if not raw:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(raw.replace("/", "-"))
+                except Exception:
+                    try:
+                        ts = datetime.strptime(raw, "%Y-%m-%d %H:%M")
+                    except Exception:
+                        continue
+                if (now - ts).days <= limit_days:
+                    total += 1
+            return total
+
+        user_profile = persona.get("user_profile") or {}
+        relationship_profile = persona.get("relationship_profile") or {}
+        ai_profile = persona.get("ai_profile") or {}
+        rules = persona.get("interaction_rules") or []
+        tone = mode_cfg.get("tone") or speech_style.get("tone") or []
+        particles = mode_cfg.get("particles") or speech_style.get("particles") or []
+        avoid = mode_cfg.get("avoid") or speech_style.get("avoid") or []
+        style_prompt = str(mode_cfg.get("style_prompt") or persona.get("style_prompt") or "").strip()
+        changelog = persona.get("_changelog") or []
+
+        mem["real_l4_active_mode"] = active_mode or "default"
+        mem["real_l4_rule_count"] = len(rules) if isinstance(rules, list) else 0
+        mem["real_l4_profile_count"] = (
+            _count_nonempty(user_profile) +
+            _count_nonempty(relationship_profile) +
+            _count_nonempty(ai_profile)
+        )
+        mem["real_l4_tone_count"] = len(tone) if isinstance(tone, list) else 0
+        mem["real_l4_particle_count"] = len(particles) if isinstance(particles, list) else 0
+        mem["real_l4_avoid_count"] = len(avoid) if isinstance(avoid, list) else 0
+        mem["real_l4_style_prompt"] = 1 if style_prompt else 0
+        mem["real_l4_changelog_count"] = len(changelog) if isinstance(changelog, list) else 0
+        mem["real_l4_recent_updates"] = _recent_update_count(changelog, limit_days=7)
+    except Exception:
+        mem.setdefault("real_l4_active_mode", "default")
+        mem.setdefault("real_l4_rule_count", 0)
+        mem.setdefault("real_l4_profile_count", 0)
+        mem.setdefault("real_l4_tone_count", 0)
+        mem.setdefault("real_l4_particle_count", 0)
+        mem.setdefault("real_l4_avoid_count", 0)
+        mem.setdefault("real_l4_style_prompt", 0)
+        mem.setdefault("real_l4_changelog_count", 0)
+        mem.setdefault("real_l4_recent_updates", 0)
+    return {"stats": stats}
 
 
 @router.post("/stats")
@@ -229,7 +405,17 @@ async def update_stats(request: dict):
     inp = int(request.get("input_tokens", 0)) if isinstance(request, dict) else 0
     out = int(request.get("output_tokens", 0)) if isinstance(request, dict) else 0
     scene = str(request.get("scene", "chat")) if isinstance(request, dict) else "chat"
-    stats = S.record_stats(input_tokens=inp, output_tokens=out, scene=scene)
+    cache_write = int(request.get("cache_write", 0)) if isinstance(request, dict) else 0
+    cache_read = int(request.get("cache_read", 0)) if isinstance(request, dict) else 0
+    model = str(request.get("model", "")) if isinstance(request, dict) else ""
+    stats = S.record_stats(
+        input_tokens=inp,
+        output_tokens=out,
+        scene=scene,
+        cache_write=cache_write,
+        cache_read=cache_read,
+        model=model,
+    )
     return {"ok": True, "stats": stats}
 
 

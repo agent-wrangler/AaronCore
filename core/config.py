@@ -15,7 +15,7 @@ PATH = {
 
 # ==================== 模型配置 ====================
 MODEL = {
-    "default": "minimax-m2.5",
+    "default": "minimax-m2.7",
     "temperature": 0.7,
     "max_tokens": 2000,
 }

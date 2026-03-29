@@ -1,0 +1,32 @@
+{
+  "name": "内容任务",
+  "keywords": [
+    "内容规划",
+    "内容任务",
+    "继续内容任务",
+    "继续这个项目",
+    "换个题",
+    "选题",
+    "立意",
+    "做一轮内容规划",
+    "做一期内容",
+    "文章选题",
+    "内容创作规划",
+    "写内容"
+  ],
+  "anti_keywords": ["内容安全", "内容审核", "如果做内容", "内容是什么"],
+  "description": "围绕长期内容项目完成选题、立意、大纲和初稿的第一轮规划",
+  "priority": 7,
+  "category": "内容创作",
+  "icon": "🧭",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "用户的原始输入文本"
+      }
+    },
+    "required": ["user_input"]
+  }
+}

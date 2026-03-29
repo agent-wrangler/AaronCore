@@ -71,7 +71,7 @@ def get_evolution() -> dict:
     """获取进化数据"""
     if evolution_file.exists():
         return json.loads(evolution_file.read_text(encoding="utf-8"))
-    return {"skills_used": {}, "user_preferences": {}, "learning": []}
+    return {"skills_used": {}, "user_preferences": {}, "learning": [], "skill_runs": []}
 
 
 def _can_count_skill_usage(skill_used: str) -> bool:
@@ -85,19 +85,145 @@ def _can_count_skill_usage(skill_used: str) -> bool:
     except Exception:
         return False
 
-def evolve(user_input: str, skill_used: str):
+
+def _maybe_promote_success_path(skill_name: str, run_event: dict, now: str):
+    """L6 -> L5: 提炼稳定成功经验，只记录成功 + 已验证 + 无 drift 的技能经验。"""
+    if not isinstance(run_event, dict):
+        return
+    if not bool(run_event.get("success", False)):
+        return
+    if run_event.get("verified") is not True:
+        return
+    if str(run_event.get("drift_reason") or "").strip():
+        return
+
+    action_kind = str(run_event.get("action_kind") or "").strip()
+    target_kind = str(run_event.get("target_kind") or "").strip()
+    outcome = str(run_event.get("outcome") or "").strip()
+    observed_state = str(run_event.get("observed_state") or "").strip()
+    verification_mode = str(run_event.get("verification_mode") or "").strip()
+    summary = str(run_event.get("summary") or "").strip()
+
+    if not action_kind and not outcome and not observed_state:
+        return
+
+    try:
+        kb = get_knowledge()
+        if not isinstance(kb, list):
+            kb = []
+    except Exception:
+        kb = []
+
+    key_parts = [skill_name, action_kind, target_kind, outcome, observed_state]
+    exp_key = "|".join([p for p in key_parts if p])
+    if not exp_key:
+        return
+
+    experience_name = " / ".join([p for p in [skill_name, action_kind or outcome, target_kind] if p])
+    if not experience_name:
+        experience_name = skill_name
+
+    existing = None
+    for item in kb:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("source") or "").strip() != "l6_success_path":
+            continue
+        if str(item.get("experience_key") or "").strip() == exp_key:
+            existing = item
+            break
+
+    if existing is None:
+        kb.append({
+            "source": "l6_success_path",
+            "experience_key": exp_key,
+            "name": experience_name,
+            "核心技能": skill_name,
+            "action_kind": action_kind,
+            "target_kind": target_kind,
+            "outcome": outcome,
+            "observed_state": observed_state,
+            "verification_mode": verification_mode,
+            "summary": summary,
+            "应用示例": summary,
+            "success_count": 1,
+            "使用次数": 1,
+            "learned_at": now,
+            "最近使用时间": now,
+        })
+    else:
+        existing["success_count"] = int(existing.get("success_count", 0)) + 1
+        existing["使用次数"] = int(existing.get("使用次数", 0)) + 1
+        existing["最近使用时间"] = now
+        if summary:
+            existing["summary"] = summary
+            existing["应用示例"] = summary
+        if verification_mode:
+            existing["verification_mode"] = verification_mode
+        if observed_state:
+            existing["observed_state"] = observed_state
+        if outcome:
+            existing["outcome"] = outcome
+
+    try:
+        with open(knowledge_file, 'w', encoding='utf-8') as f:
+            json.dump(kb, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def evolve(user_input: str, skill_used: str, run_event: dict | None = None):
     """L8: 能力进化 - 记录并更新"""
     evo = get_evolution()
     now = datetime.now().isoformat()
     skill_name = str(skill_used or "").strip()
     can_count_skill = _can_count_skill_usage(skill_name)
+    run_event = run_event if isinstance(run_event, dict) else {}
     
     # 记录技能使用
     if can_count_skill:
         if skill_name not in evo.get("skills_used", {}):
-            evo["skills_used"][skill_name] = {"count": 0, "last_used": ""}
+            evo["skills_used"][skill_name] = {
+                "count": 0,
+                "last_used": "",
+                "verified_count": 0,
+                "failure_count": 0,
+                "drift_count": 0,
+                "last_outcome": "",
+            }
         evo["skills_used"][skill_name]["count"] += 1
         evo["skills_used"][skill_name]["last_used"] = now
+        if run_event:
+            if run_event.get("verified") is True:
+                evo["skills_used"][skill_name]["verified_count"] = int(evo["skills_used"][skill_name].get("verified_count", 0)) + 1
+            if run_event.get("success") is False:
+                evo["skills_used"][skill_name]["failure_count"] = int(evo["skills_used"][skill_name].get("failure_count", 0)) + 1
+            if str(run_event.get("drift_reason") or "").strip():
+                evo["skills_used"][skill_name]["drift_count"] = int(evo["skills_used"][skill_name].get("drift_count", 0)) + 1
+            evo["skills_used"][skill_name]["last_outcome"] = str(run_event.get("outcome") or run_event.get("summary") or "").strip()
+
+    if can_count_skill and run_event:
+        runs = evo.get("skill_runs")
+        if not isinstance(runs, list):
+            runs = []
+        runs.append({
+            "skill": skill_name,
+            "at": now,
+            "success": bool(run_event.get("success", True)),
+            "verified": run_event.get("verified"),
+            "summary": str(run_event.get("summary") or "").strip(),
+            "expected_state": str(run_event.get("expected_state") or "").strip(),
+            "observed_state": str(run_event.get("observed_state") or "").strip(),
+            "drift_reason": str(run_event.get("drift_reason") or "").strip(),
+            "repair_hint": str(run_event.get("repair_hint") or "").strip(),
+            "repair_succeeded": bool(run_event.get("repair_succeeded", False)),
+            "action_kind": str(run_event.get("action_kind") or "").strip(),
+            "target_kind": str(run_event.get("target_kind") or "").strip(),
+            "target": str(run_event.get("target") or "").strip(),
+            "outcome": str(run_event.get("outcome") or "").strip(),
+            "verification_mode": str(run_event.get("verification_mode") or "").strip(),
+        })
+        evo["skill_runs"] = runs[-240:]
+        _maybe_promote_success_path(skill_name, run_event, now)
     
     # 检测用户偏好
     user_keywords = []

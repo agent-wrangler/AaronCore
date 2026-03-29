@@ -1,9 +1,19 @@
 {
   "name": "AI画图",
-  "keywords": ["海报", "画图", "生成图片", "做图", "AI画图"],
+  "keywords": ["海报", "画图", "生成图片", "做图", "AI画图", "画一张", "画一个", "画一幅", "画个", "帮我画"],
   "anti_keywords": ["海报设计", "海报尺寸", "画图工具", "画图软件", "怎么画", "如果要画"],
   "description": "用 AI 生成图片或海报",
   "priority": 8,
   "category": "内容创作",
-  "icon": "🎨"
+  "icon": "🎨",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "用户的原始输入文本"
+      }
+    },
+    "required": ["user_input"]
+  }
 }

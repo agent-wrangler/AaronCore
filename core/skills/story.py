@@ -6,9 +6,12 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from core.skills.save_export import execute as save_export_execute
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 HISTORY_PATH = ROOT_DIR / "memory_db" / "msg_history.json"
 STORY_STATE_PATH = ROOT_DIR / "memory_db" / "story_state.json"
+STORY_DIR = Path.home() / "Desktop" / "Nova故事"
 
 FOLLOW_UP_HINTS = ("继续讲", "然后呢", "后来呢", "接着讲", "讲长一点", "有点短", "太短")
 NEW_STORY_HINTS = ("再讲一个", "换一个故事", "换个故事", "重新讲一个")
@@ -95,6 +98,21 @@ def _save_story_state(state: dict):
     STORY_STATE_PATH.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _save_story_to_desktop(story_text: str, query: str) -> Path:
+    STORY_DIR.mkdir(parents=True, exist_ok=True)
+    title = "故事"
+    m = re.search(r'《([^》]+)》', story_text or '')
+    if m:
+        title = m.group(1).strip() or title
+    elif query:
+        title = re.sub(r'[\\/:*?"<>|]', '', query).strip()[:20] or title
+    safe_title = re.sub(r'[\\/:*?"<>|]', '', title).strip()[:30] or '故事'
+    ts = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+    path = STORY_DIR / f"{ts}_{safe_title}.md"
+    path.write_text(story_text, encoding='utf-8')
+    return path
+
+
 def _find_theme_by_id(theme_id: str):
     for theme in THEMES:
         if theme["id"] == theme_id:
@@ -138,15 +156,22 @@ def _generate_new_story(theme: dict, query: str) -> str:
         mood = "风格温暖自然，有画面感。"
 
     prompt = (
-        f"请根据下面的故事种子，写一个完整的短篇童话故事。\n\n"
+        f"请根据下面的故事种子，写一个适合60秒短视频口播的童话故事。\n\n"
         f"故事种子：{seed}\n\n"
         f"要求：\n"
         f"1. {mood}\n"
         f"2. 故事要有起承转合，有一个温暖的结尾\n"
-        f"3. 篇幅 400-600 字左右\n"
+        f"3. 篇幅 150-180 字左右（严格控制字数，确保适合60秒短视频口播，语速适中）\n"
         f"4. 给故事起一个好听的标题，用《》包裹，放在开头\n"
         f"5. 段落之间空一行\n"
         f"6. 直接输出故事，不要加任何解释\n"
+        f"7. 故事结构要紧凑，开头3秒内抓住注意力，结尾有明确的情绪点或金句，便于短视频传播\n"
+        f"8. 故事内容要完整独立，不要出现‘未完待续’、‘下一章’等连载暗示\n"
+        f"9. 故事正文前，请用【】标注一个15字以内的短视频文案/标题建议，例如：【文案：寻找会唱歌的月光井】\n"
+        f"10. 故事正文后，请用【】标注一个15字以内的短视频话题标签建议，例如：【话题：#治愈童话 #睡前故事】\n"
+        f"11. 故事正文中，请用【】标注1-2处适合短视频画面切换或特效的提示，例如：【画面：萤火虫聚成光河】或【转场：银叶钥匙发光】\n"
+        f"12. 故事正文中，请用【】标注一处适合短视频背景音乐（BGM）切换或情绪变化的提示，例如：【BGM：从轻柔钢琴转为空灵弦乐】\n"
+        f"13. 故事正文中，请用【】标注一处适合短视频字幕特效（如关键词放大、变色、浮现）的提示，例如：【字幕特效：‘找到了！’放大并闪烁】\n"
     )
     return _llm_generate(prompt)
 
@@ -165,10 +190,16 @@ def _generate_continuation(theme: dict, previous_text: str, chapter: int, query:
         f"要求：\n"
         f"1. 写第{chapter}章，自然接续上一章的情节\n"
         f"2. 引入新的小波折或发现，但整体温暖\n"
-        f"3. 篇幅 400-600 字左右\n"
+        f"3. 篇幅 150-180 字左右（严格控制字数，确保适合60秒短视频口播，语速适中）\n"
         f"4. 开头标注章节（如《标题\u00b7第X章》）\n"
         f"5. 段落之间空一行\n"
         f"6. 直接输出故事，不要加任何解释\n"
+        f"7. 故事结构要紧凑，适合短视频传播\n"
+        f"8. 故事正文前，请用【】标注一个15字以内的短视频文案/标题建议\n"
+        f"9. 故事正文后，请用【】标注一个15字以内的短视频话题标签建议\n"
+        f"10. 故事正文中，请用【】标注1-2处适合短视频画面切换或特效的提示\n"
+        f"11. 故事正文中，请用【】标注一处适合短视频背景音乐（BGM）切换或情绪变化的提示\n"
+        f"12. 故事正文中，请用【】标注一处适合短视频字幕特效的提示\n"
     )
     return _llm_generate(prompt)
 
@@ -176,6 +207,7 @@ def _generate_continuation(theme: dict, previous_text: str, chapter: int, query:
 def execute(topic=""):
     query = str(topic or "").strip()
     state = _load_story_state()
+    save_to_desktop = any(w in query for w in ("保存到桌面", "存到桌面", "放到桌面", "创建到桌面", "写到桌面", "桌面"))
     follow_up = any(word in query for word in FOLLOW_UP_HINTS)
     should_continue = bool(follow_up and state and state.get("theme_id"))
 
@@ -207,4 +239,22 @@ def execute(topic=""):
         }
 
     _save_story_state(new_state)
+    if save_to_desktop and story_text:
+        try:
+            save_reply = save_export_execute(
+                query,
+                {
+                    'fs_action': {
+                        'payload': {'content': story_text, 'format': 'md'},
+                        'destination': {'path': str(STORY_DIR)},
+                    },
+                    'save_filename': re.sub(r'[\\/:*?"<>|]', '', query).strip()[:30] or '故事',
+                    'save_content': story_text,
+                    'save_format': 'md',
+                    'save_destination': str(STORY_DIR),
+                },
+            )
+            return f"故事写好了，已经保存啦：{save_reply}\n\n{story_text}"
+        except Exception as e:
+            return f"故事写出来了，但保存失败：{e}\n\n{story_text}"
     return story_text

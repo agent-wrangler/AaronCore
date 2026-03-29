@@ -1,0 +1,18 @@
+{
+    "name": "模型配置",
+    "keywords": ["切换模型", "添加模型", "删除模型", "列出模型", "有哪些模型", "当前模型", "现在用的什么模型", "接入模型", "配置模型", "对接模型"],
+    "anti_keywords": ["模型训练", "模型架构", "大模型是什么"],
+    "description": "通过对话管理 LLM 模型配置",
+    "priority": 3,
+    "category": "系统管理",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_input": {
+          "type": "string",
+          "description": "用户的原始输入文本"
+        }
+      },
+      "required": ["user_input"]
+    }
+}

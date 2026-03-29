@@ -1,0 +1,16 @@
+{
+  "name": "移动文件",
+  "keywords": ["移动文件", "移动目录", "重命名文件", "重命名目录", "挪到", "移动到", "改名为"],
+  "anti_keywords": ["如果移动文件", "文件移动原理"],
+  "description": "移动或重命名本地文件和目录",
+  "priority": 7,
+  "category": "本地操作",
+  "icon": "🧳",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "需包含原路径和新路径"}
+    },
+    "required": ["user_input"]
+  }
+}

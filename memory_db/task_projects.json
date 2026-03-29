@@ -1,0 +1,444 @@
+[
+  {
+    "id": "proj_20260324_001",
+    "kind": "content",
+    "title": "default_content_project",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T01:46:59.386514",
+    "updated_at": "2026-03-24T01:51:06.747971",
+    "current_task_id": "task_20260324_003",
+    "goal": {
+      "summary": "持续推进内容任务"
+    },
+    "settings": {
+      "source_mode": "news",
+      "avoid_recent_days": 30
+    },
+    "memory": {}
+  },
+  {
+    "id": "proj_20260324_002",
+    "kind": "content",
+    "title": "Default content pipeline",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T03:23:40.010415",
+    "updated_at": "2026-03-24T03:25:05.563963",
+    "current_task_id": "task_20260324_005",
+    "goal": {
+      "summary": "持续产出内容选题与草稿"
+    },
+    "settings": {
+      "source_mode": "news",
+      "avoid_recent_days": 30
+    },
+    "memory": {
+      "tags": [
+        "content"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_003",
+    "kind": "generic",
+    "title": "Agent loop: 查天气并查新闻",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T03:25:31.865976",
+    "updated_at": "2026-03-24T03:25:31.865976",
+    "current_task_id": null,
+    "goal": {
+      "summary": "查天气并查新闻"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "agent_loop"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_004",
+    "kind": "generic",
+    "title": "file_workflow: 帮我看看桌面的文件夹里有什么",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:22:41.165592",
+    "updated_at": "2026-03-24T05:22:41.182712",
+    "current_task_id": "task_20260324_009",
+    "goal": {
+      "summary": "帮我看看桌面的文件夹里有什么"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_005",
+    "kind": "content",
+    "title": "content: 帮我做一轮内容规划",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:22:41.194672",
+    "updated_at": "2026-03-24T05:22:41.229183",
+    "current_task_id": "task_20260324_010",
+    "goal": {
+      "summary": "帮我做一轮内容规划"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "content"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_006",
+    "kind": "development",
+    "title": "development: 帮我修复这个报错",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:22:41.239657",
+    "updated_at": "2026-03-24T05:22:41.267428",
+    "current_task_id": "task_20260324_011",
+    "goal": {
+      "summary": "帮我修复这个报错"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "development"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_007",
+    "kind": "generic",
+    "title": "file_workflow: 帮我看看桌面的文件夹里有什么",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:25:25.358965",
+    "updated_at": "2026-03-24T05:25:25.388546",
+    "current_task_id": "task_20260324_012",
+    "goal": {
+      "summary": "帮我看看桌面的文件夹里有什么"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_008",
+    "kind": "content",
+    "title": "content: 帮我做一轮内容规划",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:25:25.401247",
+    "updated_at": "2026-03-24T05:25:25.430157",
+    "current_task_id": "task_20260324_013",
+    "goal": {
+      "summary": "帮我做一轮内容规划"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "content"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_009",
+    "kind": "development",
+    "title": "development: 帮我修复这个报错",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:25:25.440159",
+    "updated_at": "2026-03-24T05:25:25.469530",
+    "current_task_id": "task_20260324_014",
+    "goal": {
+      "summary": "帮我修复这个报错"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "development"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_010",
+    "kind": "generic",
+    "title": "file_workflow: 复制文件 \"C:/a\" \"C:/b\"",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:25:25.480992",
+    "updated_at": "2026-03-24T05:25:25.507695",
+    "current_task_id": "task_20260324_015",
+    "goal": {
+      "summary": "复制文件 \"C:/a\" \"C:/b\""
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_011",
+    "kind": "development",
+    "title": "development: 帮我修复这个报错",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:30:27.381021",
+    "updated_at": "2026-03-24T05:30:27.408927",
+    "current_task_id": "task_20260324_016",
+    "goal": {
+      "summary": "帮我修复这个报错"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "development"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_012",
+    "kind": "development",
+    "title": "Default development pipeline",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T05:30:28.343351",
+    "updated_at": "2026-03-24T09:59:19.962996",
+    "current_task_id": "task_20260324_030",
+    "goal": {
+      "summary": "持续推进开发/修复任务"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "development"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_013",
+    "kind": "generic",
+    "title": "file_workflow: 看下桌面都有哪些文件夹",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T09:37:16.542848",
+    "updated_at": "2026-03-24T09:37:16.561390",
+    "current_task_id": "task_20260324_022",
+    "goal": {
+      "summary": "看下桌面都有哪些文件夹"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_014",
+    "kind": "development",
+    "title": "development: 你再去看看",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T09:41:50.781649",
+    "updated_at": "2026-03-24T09:41:50.797595",
+    "current_task_id": "task_20260324_023",
+    "goal": {
+      "summary": "你再去看看"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "development"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_015",
+    "kind": "generic",
+    "title": "file_workflow: 你拥有访问桌面文件的能力，去看下我桌面都有哪些文件",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T09:51:45.430484",
+    "updated_at": "2026-03-24T09:51:45.449288",
+    "current_task_id": "task_20260324_028",
+    "goal": {
+      "summary": "你拥有访问桌面文件的能力，去看下我桌面都有哪些文件"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_016",
+    "kind": "development",
+    "title": "development: 我不是已经给了你路径了吗",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T09:59:09.211543",
+    "updated_at": "2026-03-24T09:59:09.227657",
+    "current_task_id": "task_20260324_029",
+    "goal": {
+      "summary": "我不是已经给了你路径了吗"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "development"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_017",
+    "kind": "generic",
+    "title": "file_workflow: 看下桌面的文件夹有哪些",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T17:18:49.082861",
+    "updated_at": "2026-03-24T17:18:49.098808",
+    "current_task_id": "task_20260324_034",
+    "goal": {
+      "summary": "看下桌面的文件夹有哪些"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_018",
+    "kind": "generic",
+    "title": "file_workflow: 再试试看 能看到桌面的文件夹吗",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T19:30:33.450084",
+    "updated_at": "2026-03-24T19:30:33.466031",
+    "current_task_id": "task_20260324_035",
+    "goal": {
+      "summary": "再试试看 能看到桌面的文件夹吗"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_019",
+    "kind": "generic",
+    "title": "file_workflow: 看看桌面里有什么",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T19:51:10.748480",
+    "updated_at": "2026-03-24T19:51:10.764264",
+    "current_task_id": "task_20260324_036",
+    "goal": {
+      "summary": "看看桌面里有什么"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260324_020",
+    "kind": "generic",
+    "title": "file_workflow: 就是桌面的都有什么文件 和我说",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-24T20:04:13.459891",
+    "updated_at": "2026-03-24T20:04:13.476225",
+    "current_task_id": "task_20260324_037",
+    "goal": {
+      "summary": "就是桌面的都有什么文件 和我说"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260325_021",
+    "kind": "file_workflow",
+    "title": "file_workflow: 打开桌面上的minimax客户端",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-25T03:25:39.995361",
+    "updated_at": "2026-03-25T03:25:40.014468",
+    "current_task_id": "task_20260325_038",
+    "goal": {
+      "summary": "打开桌面上的minimax客户端"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  },
+  {
+    "id": "proj_20260325_022",
+    "kind": "file_workflow",
+    "title": "file_workflow: 打卡我桌面上的微信",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-25T04:39:03.047379",
+    "updated_at": "2026-03-25T04:39:03.064287",
+    "current_task_id": "task_20260325_039",
+    "goal": {
+      "summary": "打卡我桌面上的微信"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "file_workflow"
+      ]
+    }
+  }
+]

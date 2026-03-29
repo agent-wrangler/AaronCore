@@ -62,6 +62,10 @@ knowledge_llm_call = None
 l2_add_memory = None
 l2_search_relevant = None
 
+# history recall
+detect_recall_intent = None
+recall_by_time = None
+
 # L8
 l8_auto_learn = None
 find_relevant_knowledge = None
@@ -83,6 +87,7 @@ apply_self_repair_report = None
 l7_record_feedback_v2 = None
 l8_touch = None
 run_l8_autolearn_task = None
+run_l8_feedback_relearn_task = None
 trigger_self_repair_from_error = None
 build_l8_diagnosis = None
 search_relevant_rules = None
@@ -94,6 +99,9 @@ load_current_model = None
 list_primary_capabilities = None
 get_skill_display_name = None
 unified_chat_reply = None
+unified_chat_reply_stream = None
+unified_reply_with_tools = None
+unified_reply_with_tools_stream = None
 format_skill_fallback = None
 format_skill_error_reply = None
 format_story_reply = None
@@ -104,10 +112,12 @@ _build_latest_status_summary = None
 
 # context_builder
 build_dialogue_context = None
+render_dialogue_context = None
 extract_session_context = None
 
 # route_resolver
 resolve_route = None
+resolve_route_fast = None
 looks_like_news_request = None
 is_registered_skill_name = None
 
@@ -147,3 +157,7 @@ RESTORED_OUTPUT_JS_FILE = None
 
 # load_json
 load_json = None
+
+# skill store
+get_all_skills_for_ui = None
+set_skill_enabled = None

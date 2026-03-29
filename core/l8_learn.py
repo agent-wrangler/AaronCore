@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-import requests
+from core.network_protocol import get_with_network_strategy, post_with_network_strategy
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,9 +38,12 @@ DEFAULT_CONFIG = {
     "self_repair_apply_mode": "confirm",
     "self_repair_test_timeout_sec": 45,
     "min_query_length": 4,
-    "search_timeout_sec": 5,
+    "search_timeout_sec": 8,
     "max_results": 5,
     "max_summary_length": 360,
+    "search_engine": "tavily",
+    "tavily_api_key": "",
+    "brave_api_key": "",
 }
 
 GREETING_WORDS = [
@@ -74,7 +77,6 @@ QUESTION_HINTS = [
     "怎么办",
     "怎么用",
     "怎么做",
-    "怎么回事",
     "如何",
     "怎样",
     "区别",
@@ -356,7 +358,8 @@ def should_surface_knowledge_entry(entry: dict) -> bool:
 def _entry_has_topic_overlap(query: str, entry: dict) -> bool:
     keywords = extract_keywords(query)
     if not keywords:
-        return True
+        # 没提取到关键词 → 不匹配（而不是放行一切）
+        return False
 
     summary_text = " ".join(
         [
@@ -377,7 +380,7 @@ def _entry_has_topic_overlap(query: str, entry: dict) -> bool:
         return any(keyword in summary_text for keyword in ascii_keywords)
     if chinese_keywords:
         return any(keyword in summary_text for keyword in chinese_keywords)
-    return True
+    return False
 
 
 def _score_entry(query: str, entry: dict) -> int:
@@ -409,7 +412,7 @@ def _score_entry(query: str, entry: dict) -> int:
     return score
 
 
-def find_relevant_knowledge(query: str, limit: int = 3, min_score: int = 6, touch: bool = False) -> list[dict]:
+def find_relevant_knowledge(query: str, limit: int = 3, min_score: int = 12, touch: bool = False) -> list[dict]:
     entries = _load_json(KNOWLEDGE_BASE_FILE, [])
     if not isinstance(entries, list):
         return []
@@ -551,57 +554,111 @@ def _filter_results_by_query(query: str, results: list[dict]) -> list[dict]:
     return []
 
 
-def search_web_results(query: str, max_results: int = 5, timeout_sec: int = 5, skip_filter: bool = False) -> list[dict]:
-    candidates = _build_search_queries(query)
-    fallback = []
-    has_focus_keywords = bool(extract_keywords(query))
+def search_web_results(query: str, max_results: int = 5, timeout_sec: int = 8, skip_filter: bool = False) -> list[dict]:
+    """搜索引擎统一入口：Tavily 优先 → Brave(Google级) 兜底"""
+    config = load_autolearn_config()
+    tavily_key = str(config.get("tavily_api_key", "")).strip()
+    brave_key = str(config.get("brave_api_key", "")).strip()
 
-    for candidate in candidates:
-        url = f"https://www.bing.com/search?format=rss&q={quote(candidate)}"
-        resp = requests.get(
-            url,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-            timeout=max(timeout_sec, 3),
+    # 优先 Tavily（专为 AI Agent 设计）
+    if tavily_key:
+        results = _search_tavily(query, tavily_key, max_results, timeout_sec)
+        if results:
+            return results
+        print("[L8] Tavily failed, trying Brave...")
+
+    # 兜底 Brave Search API
+    if brave_key:
+        results = _search_brave(query, brave_key, max_results, timeout_sec)
+        if results:
+            return results
+        print("[L8] Brave also failed")
+
+    # 都没配 key → 提示配置
+    if not tavily_key and not brave_key:
+        print("[L8] No search API configured. Set tavily_api_key or brave_api_key in autolearn_config.json")
+
+    return []
+
+
+def _search_tavily(query: str, api_key: str, max_results: int = 5, timeout_sec: int = 8) -> list[dict]:
+    """Tavily Search API — 专为 AI/RAG 设计，返回清洗过的结构化结果"""
+    try:
+        resp = post_with_network_strategy(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": api_key,
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
+                "include_answer": True,
+            },
+            timeout=max(timeout_sec, 5),
         )
         resp.raise_for_status()
+        data = resp.json()
 
-        root = ET.fromstring(resp.text)
-        raw_results = []
-        for item in root.findall(".//item"):
-            title = item.findtext("title", default="")
-            description = item.findtext("description", default="")
-            link = item.findtext("link", default="")
-            cleaned_title = _clean_text(title, 90)
-            cleaned_desc = _clean_text(description, 180)
-            if cleaned_title:
-                raw_results.append(
-                    {
-                        "title": cleaned_title,
-                        "snippet": cleaned_desc,
-                        "link": link.strip(),
-                    }
-                )
-            if len(raw_results) >= max_results:
-                break
+        results = []
+        for item in data.get("results", []):
+            title = _clean_text(str(item.get("title", "")), 90)
+            content = _clean_text(str(item.get("content", "")), 300)
+            url = str(item.get("url", "")).strip()
+            if title and content:
+                results.append({
+                    "title": title,
+                    "snippet": content,
+                    "link": url,
+                })
 
-        # skip_filter: 跳过严格过滤，直接返回原始结果（交给 LLM 判断相关性）
-        if skip_filter and raw_results:
-            return raw_results[:max_results]
+        # Tavily 还会返回一个 AI 生成的 answer，附在第一条结果里
+        answer = str(data.get("answer", "")).strip()
+        if answer and results:
+            results[0]["tavily_answer"] = _clean_text(answer, 200)
 
-        filtered = _filter_results_by_query(query, raw_results)
-        if filtered:
-            return filtered[:max_results]
-        if raw_results and not fallback:
-            fallback = raw_results[:max_results]
+        return results[:max_results]
+    except Exception as e:
+        print(f"[L8] Tavily error: {e}")
+        return []
 
-    # 即使过滤没命中，也返回原始结果作为 fallback（总比空结果好）
-    return fallback[:max_results]
+
+def _search_brave(query: str, api_key: str, max_results: int = 5, timeout_sec: int = 8) -> list[dict]:
+    """Brave Search API — 2000 次/月免费，结果质量接近 Google"""
+    try:
+        resp = get_with_network_strategy(
+            "https://api.search.brave.com/res/v1/web/search",
+            params={"q": query, "count": max_results},
+            headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+            timeout=max(timeout_sec, 5),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        results = []
+        for item in data.get("web", {}).get("results", []):
+            title = _clean_text(str(item.get("title", "")), 90)
+            snippet = _clean_text(str(item.get("description", "")), 300)
+            url = str(item.get("url", "")).strip()
+            if title and snippet:
+                results.append({
+                    "title": title,
+                    "snippet": snippet,
+                    "link": url,
+                })
+
+        return results[:max_results]
+    except Exception as e:
+        print(f"[L8] Brave error: {e}")
+        return []
 
 
 def search_web(query: str):
     try:
         config = load_autolearn_config()
-        results = search_web_results(query, max_results=int(config.get("max_results", 5)), timeout_sec=int(config.get("search_timeout_sec", 5)))
+        results = search_web_results(
+            query,
+            max_results=int(config.get("max_results", 5)),
+            timeout_sec=int(config.get("search_timeout_sec", 8)),
+        )
         if not results:
             return None
         return _format_search_results(results)
@@ -702,6 +759,55 @@ def _build_summary(query: str, results: list[dict], max_length: int = 360) -> st
     return _clean_text(summary, max_length)
 
 
+# ── L8 入库质量检查 ──────────────────────────────────────────
+
+def _check_entry_quality(query: str, summary: str) -> str:
+    """
+    检查知识条目质量，返回拒绝原因（空字符串=通过）。
+    防止垃圾数据进入知识库，避免污染后续检索。
+    """
+    q = str(query or "").strip()
+    s = str(summary or "").strip()
+
+    # 1. 包含 LLM 思考标签 → 说明 LLM 输出没处理干净
+    if "<think>" in q.lower() or "<think>" in s.lower():
+        return "contains_think_tag"
+
+    # 2. query 太短或太长（不像正常的知识查询）
+    if len(q) < 3:
+        return "query_too_short"
+    if len(q) > 80:
+        return "query_too_long_likely_raw_msg"
+
+    # 3. summary 太短（没有实际知识内容）
+    if len(s) < 15:
+        return "summary_too_short"
+
+    # 4. query 是用户抱怨/吐槽，不是知识查询
+    _complaint_markers = [
+        "是不是蠢", "我晕", "我服了", "太尴尬", "脑子就没",
+        "什么理解力", "为什么不", "怎么办", "你没忘",
+        "你看不到", "你还有", "我让你", "你自己说",
+    ]
+    if any(m in q for m in _complaint_markers):
+        return "query_is_complaint"
+
+    # 5. summary 里大部分是 LLM 的自我对话，不是知识
+    _noise_markers = [
+        "让我分析", "让我看看", "用户要求我", "用户的话",
+        "人家", "主人", "💕", "嘿嘿",
+    ]
+    noise_count = sum(1 for m in _noise_markers if m in s[:100])
+    if noise_count >= 2:
+        return "summary_is_llm_chatter"
+
+    # 6. summary 跟 query 几乎一样（没有新信息）
+    if s.replace(q, "").strip() == "" or len(s) < len(q) + 10:
+        return "summary_no_new_info"
+
+    return ""  # 通过
+
+
 def save_learned_knowledge(
     query: str,
     summary: str,
@@ -711,6 +817,12 @@ def save_learned_knowledge(
     feedback_scene: str = "",
     route_result: dict | None = None,
 ) -> dict:
+    # ── L8 入库质量检查：垃圾不让进 ──
+    _reject_reason = _check_entry_quality(query, summary)
+    if _reject_reason:
+        print(f"[L8] Rejected: {_reject_reason} | query={query[:40]}")
+        return {"saved": False, "reason": _reject_reason}
+
     now = datetime.now()
     normalized_query = _normalize_query(query)
     keywords = extract_keywords(query)
@@ -976,14 +1088,18 @@ def should_trigger_auto_learn(user_input: str, route_result: dict | None = None,
     # 排除闲聊/感叹/评价类短句
     _casual = ['有意思','没意思','不错','还行','厉害','好玩','无聊',
                '哈哈','嘿嘿','呵呵','嗯嗯','好的','知道了','明白',
-               '懂了','可以','牛','真的吗','是吗','对吧']
+               '懂了','可以','牛','真的吗','是吗','对吧',
+               '怎么回事','咋回事','搞什么','什么情况','啥情况']
     if any(c in text for c in _casual):
         return False, "casual_chat"
 
     # 排除自指话题：讨论 AI/系统/记忆本身的不是知识
-    _self_ref = ['\u8bb0\u5fc6\u91cc', '\u77e5\u8bc6\u5e93', '\u77e5\u8bc6\u70b9', 'L2', 'L3', 'L4', 'L7', 'L8',
+    _self_ref = ['\u8bb0\u5fc6\u91cc', '\u8bb0\u5fc6', '\u77e5\u8bc6\u5e93', '\u77e5\u8bc6\u70b9', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8',
                  '\u4e2d\u67a2', '\u6253\u5206', '\u8def\u7531', '\u7cfb\u7edf\u901a', '\u540e\u53f0',
-                 '\u7ed3\u6676', '\u6c89\u6dc0', '\u5b58\u5230', '\u5b58\u8fdb']
+                 '\u7ed3\u6676', '\u6c89\u6dc0', '\u5b58\u5230', '\u5b58\u8fdb',
+                 '\u80fd\u529b\u8fdb\u5316', '\u6280\u80fd\u77e9\u9635', '\u4eba\u683c\u56fe\u8c31', '\u53cd\u9988\u89c4\u5219',
+                 '\u8bb0\u5fc6\u7c92\u5b50', '\u8bb0\u5fc6\u5c42', '\u8bb0\u5fc6\u7cfb\u7edf', '\u51e0\u5c42\u8bb0\u5fc6', '\u5c42\u8bb0\u5fc6',
+                 'NovaCore', 'Nova\u7684']
     if any(s in text for s in _self_ref):
         return False, "self_referential"
 
@@ -1034,6 +1150,8 @@ def _extract_search_query(user_input: str) -> str | None:
             "\u300c你怎么不记得群里的聊天\u300d→ NO\n"
             "\u300c帮我查一下量子计算\u300d→ 量子计算\n"
             "\u300c你又搜了一堆垃圾\u300d→ NO\n"
+            "\u300c我们的8层记忆都是什么\u300d→ NO\n"
+            "\u300c你的记忆系统怎么工作的\u300d→ NO\n"
             "\n"
             "只输出查询词或NO，不要解释。"
         )

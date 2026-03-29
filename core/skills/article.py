@@ -6,6 +6,8 @@ import re
 import time
 from datetime import date
 
+from core.skills.save_export import execute as save_export_execute
+
 # 状态文件：缓存新闻列表 + 最近生成的文章
 _state_path = os.path.join(os.path.dirname(__file__), '.article_state.json')
 
@@ -34,16 +36,10 @@ def _llm_call(prompt, max_tokens=3000, temperature=0.75):
     if not cfg.get("api_key"):
         return None
     try:
-        resp = requests.post(
-            f"{cfg['base_url']}/chat/completions",
-            headers={"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"},
-            json={"model": cfg["model"], "messages": [{"role": "user", "content": prompt}],
-                  "max_tokens": max_tokens, "temperature": temperature},
-            timeout=30,
-        )
-        if resp.status_code != 200:
-            return None
-        return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        from brain import llm_call
+        result = llm_call(cfg, [{"role": "user", "content": prompt}],
+                          max_tokens=max_tokens, temperature=temperature, timeout=30)
+        return result.get("content", "") or None
     except Exception:
         return None
 
@@ -93,17 +89,28 @@ def _load_full_state():
         return None
 
 
+def _save_article_via_export(article_text, news_title):
+    save_reply = save_export_execute(
+        news_title,
+        {
+            'fs_action': {
+                'payload': {'content': article_text, 'format': 'md'},
+                'destination': {'path': ARTICLE_DIR},
+            },
+            'save_filename': news_title,
+            'save_content': article_text,
+            'save_format': 'md',
+            'save_destination': ARTICLE_DIR,
+        },
+    )
+    m = re.search(r'`([^`]+)`', save_reply or '')
+    return m.group(1) if m else save_reply
+
+
 # ── 文件保存 ──
 
 def _save_article_to_desktop(article_text, news_title):
-    os.makedirs(ARTICLE_DIR, exist_ok=True)
-    safe_title = re.sub(r'[\\/:*?"<>|]', '', news_title)[:30].strip()
-    today = date.today().strftime("%Y-%m-%d")
-    filename = f"{today}_{safe_title}.md"
-    filepath = os.path.join(ARTICLE_DIR, filename)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(article_text)
-    return filepath
+    return _save_article_via_export(article_text, news_title)
 
 
 def _extract_article_title(article_text):

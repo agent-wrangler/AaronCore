@@ -1,0 +1,30 @@
+{
+  "name": "看文件夹",
+  "keywords": [
+    "看看文件夹",
+    "看下文件夹",
+    "看看目录",
+    "看下目录",
+    "这个文件夹里有什么",
+    "这个目录里有什么",
+    "帮我看看这个路径",
+    "看这个路径",
+    "浏览文件夹",
+    "浏览目录"
+  ],
+  "anti_keywords": ["文件夹图标", "目录结构图", "如果看文件夹"],
+  "description": "读取本地文件夹结构，挑几个关键文件先看，再给出目录总结",
+  "priority": 7,
+  "category": "本地探索",
+  "icon": "📁",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "用户原始输入，需包含本地文件夹路径"
+      }
+    },
+    "required": ["user_input"]
+  }
+}

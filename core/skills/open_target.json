@@ -1,0 +1,23 @@
+{
+  "name": "打开目标",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Open a folder, file, or web destination. Infer and complete the concrete target from user intent, current context, and task state.",
+  "priority": 8,
+  "category": "本地操作",
+  "icon": "📨",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      },
+      "path": {
+        "type": "string",
+        "description": "Target path or URL inferred from user intent, current context, and task state."
+      }
+    },
+    "required": ["user_input", "path"]
+  }
+}

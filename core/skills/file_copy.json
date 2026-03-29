@@ -1,0 +1,16 @@
+{
+  "name": "复制文件",
+  "keywords": ["复制文件", "拷贝文件", "复制目录", "拷贝目录", "复制到", "拷贝到"],
+  "anti_keywords": ["如果复制文件", "文件复制原理"],
+  "description": "复制本地文件或目录到目标位置",
+  "priority": 7,
+  "category": "本地操作",
+  "icon": "📄",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {"type": "string", "description": "需包含源路径和目标路径"}
+    },
+    "required": ["user_input"]
+  }
+}

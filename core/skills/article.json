@@ -18,5 +18,15 @@
   "description": "根据新闻素材生成头条号风格文章，支持重写和桌面保存",
   "priority": 6,
   "category": "内容创作",
-  "icon": "📝"
+  "icon": "📝",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "用户的原始输入文本"
+      }
+    },
+    "required": ["user_input"]
+  }
 }

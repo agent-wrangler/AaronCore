@@ -2,6 +2,7 @@
 # 从 agent_final.py 提取
 
 from datetime import datetime
+from pathlib import Path
 
 from core.state_loader import PRIMARY_STATE_DIR
 
@@ -49,16 +50,16 @@ def init(*, debug_write=None, load_autolearn_config=None,
 
 # ── 反馈记录 ──────────────────────────────────────────────
 
+_NEGATIVE_WORDS = [
+    "\u4e0d\u5bf9", "\u9519\u4e86", "\u4e0d\u597d\u7528", "\u7406\u89e3\u9519\u4e86",
+    "\u4e0d\u662f\u8fd9\u6837", "\u7b54\u504f\u4e86", "\u4f60\u6ca1\u542c\u61c2",
+    "\u53c8\u6765\u4e86", "\u70e6\u6b7b\u4e86", "\u600e\u4e48\u53c8", "\u8001\u662f", "\u4e00\u76f4",
+]
+
+
 def _is_negative_feedback(msg: str) -> bool:
-    """用 v2 路由分类判断是否为真正的负反馈/纠偏，替代粗暴的关键词列表。"""
-    try:
-        from core.router import classify_stage, classify_tone
-        stage = classify_stage(msg, {})
-        tone = classify_tone(msg)
-        return stage == 'correct' or tone in ('correct', 'complaint')
-    except Exception:
-        # fallback: 如果路由模块不可用，退回最小关键词集
-        return any(w in msg for w in ["\u4e0d\u5bf9", "\u9519\u4e86", "\u4e0d\u597d\u7528", "\u7406\u89e3\u9519\u4e86"])
+    """检测负反馈/纠偏信号。"""
+    return any(w in msg for w in _NEGATIVE_WORDS)
 
 
 def l7_record_feedback(msg: str, history: list, background_tasks=None):
@@ -83,7 +84,7 @@ def l7_record_feedback(msg: str, history: list, background_tasks=None):
 
 # ── self-repair：系统故障 + 用户反馈中的代码级问题 ────────
 # 代码级问题（路由调度等）需要真正改代码才能修，仅靠 prompt 提示不够
-_SELF_REPAIR_CATEGORIES = {"路由调度", "系统故障"}
+_SELF_REPAIR_CATEGORIES = {"路由调度", "系统故障", "意图理解"}
 
 
 def trigger_self_repair_from_error(
@@ -135,7 +136,7 @@ def trigger_self_repair_from_error(
 
 def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tasks=None):
     """效果追踪：如果有旧规则最近命中过但用户仍不满意，升级处理强度。
-    L1(prompt) fail>=2 → 补生成 L2 约束
+    L1(prompt) fail>=2 → 补生成 L2 约束 + 交互风格类写回 L4
     L2(约束) fail>=2 → 触发 L3 self-repair
     """
     from core.feedback_classifier import _load_rules, _save_rules, _extract_routing_constraint
@@ -182,6 +183,10 @@ def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tas
                 rule["constraint"] = constraint
                 _debug_write("l7_escalate_l1_to_l2", {"rule_id": rule.get("id")})
 
+            # 所有类别反馈 → 修正案机制（L7→L4/L5）
+            if not rule.get("l4_amended"):
+                _l7_apply_amendment(rule)
+
         # L2 → L3 升级：路由约束也失败 2 次，触发 self-repair
         elif fail_count >= 4 and rule.get("constraint"):
             l8_config = _load_autolearn_config()
@@ -195,6 +200,114 @@ def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tas
 
     if dirty:
         _save_rules(rules)
+
+
+def _l7_apply_amendment(rule: dict):
+    """L7 修正案：按反馈类别分发到 L4/L5，实现全闭环进化。
+    - 交互风格 → L4 interaction_rules（性格调节）
+    - 内容生成 → L4 interaction_rules（输出偏好）
+    - 路由调度 → L4 interaction_rules + L5 anti_keywords（路由修正）
+    - 意图理解 → L4 interaction_rules（认知偏置修正）
+    """
+    category = rule.get("category", "")
+    fix = str(rule.get("fix", "")).strip()
+    feedback = str(rule.get("user_feedback", "")).strip()
+    amendment = fix if fix and fix != "keep_observing_and_refine" else feedback
+    if not amendment or len(amendment) < 4:
+        return
+
+    # 所有类别都写入 L4 interaction_rules（LLM 能看到）
+    _amend_l4_rules(rule, amendment, category)
+
+    # 路由调度类额外写入 L5 anti_keywords（规则路由也能拦截）
+    # Legacy anti_keywords writeback has been retired.
+
+
+def _amend_l4_rules(rule: dict, amendment: str, category: str):
+    """写入 L4 interaction_rules，按 category 加前缀标注来源"""
+    from core.json_store import load_json, write_json
+
+    # 按类别加语义前缀，让 LLM 理解这条规则的用途
+    _PREFIX = {
+        "\u4ea4\u4e92\u98ce\u683c": "\u98ce\u683c",
+        "\u5185\u5bb9\u751f\u6210": "\u5185\u5bb9",
+        "\u8def\u7531\u8c03\u5ea6": "\u8def\u7531",
+        "\u610f\u56fe\u7406\u89e3": "\u7406\u89e3",
+    }
+    prefix = _PREFIX.get(category, "")
+    tagged = f"[{prefix}] {amendment}" if prefix else amendment
+
+    l4_file = PRIMARY_STATE_DIR / "persona.json"
+    try:
+        persona = load_json(l4_file, {})
+        rules_list = persona.setdefault("interaction_rules", [])
+        # 去重
+        for existing in rules_list:
+            if amendment[:15] in str(existing) or str(existing)[:15] in amendment:
+                _debug_write("l7_amendment_skip", {"reason": "duplicate", "text": amendment[:40]})
+                return
+        rules_list.append(tagged)
+        # changelog
+        changelog = persona.setdefault("_changelog", [])
+        changelog.append({
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "content": f"\u4fee\u6b63\u6848\uff08L7\u2192L4\uff09\uff1a{tagged[:50]}",
+        })
+        if len(changelog) > 50:
+            persona["_changelog"] = changelog[-50:]
+        write_json(l4_file, persona)
+        rule["l4_amended"] = True
+        _debug_write("l7_amend_l4_ok", {"category": category, "text": amendment[:50]})
+    except Exception as e:
+        _debug_write("l7_amend_l4_err", {"err": str(e)})
+
+
+def _amend_l5_anti_keywords(rule: dict):
+    _debug_write("l7_amend_l5_retired", {
+        "reason": "legacy_keyword_routing_retired",
+        "rule_id": str(rule.get("id", "")),
+        "category": str(rule.get("category", "")),
+    })
+    return
+    """路由调度类反馈 → 提取误触技能，写入 skill JSON anti_keywords + 运行时注册表"""
+    import json
+
+    # 从 constraint 中提取被误触的技能名
+    constraint = rule.get("constraint") or {}
+    skill_name = constraint.get("skill", "")
+    if not skill_name:
+        _debug_write("l7_amend_l5_skip", {"reason": "no_skill_name"})
+        return
+
+    last_q = str(rule.get("last_question", ""))
+    if len(last_q) < 2:
+        return
+    neg_kw = last_q[:10]
+
+    # 1. 写入 skill JSON 文件（持久化）
+    skill_json = Path(__file__).resolve().parent / "skills" / f"{skill_name}.json"
+    try:
+        if skill_json.exists():
+            meta = json.loads(skill_json.read_text(encoding="utf-8"))
+            anti_list = meta.setdefault("anti_keywords", [])
+            if neg_kw not in anti_list:
+                anti_list.append(neg_kw)
+                skill_json.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                _debug_write("l7_amend_l5_json", {"skill": skill_name, "anti_kw": neg_kw})
+    except Exception as e:
+        _debug_write("l7_amend_l5_json_err", {"err": str(e)})
+
+    # 2. 更新运行时 _skill_registry（立即生效，不用重启）
+    try:
+        from core.skills import get_skill
+        info = get_skill(skill_name)
+        if info:
+            anti_list = info.setdefault("anti_keywords", [])
+            if neg_kw not in anti_list:
+                anti_list.append(neg_kw)
+                _debug_write("l7_amend_l5_runtime", {"skill": skill_name, "anti_kw": neg_kw})
+    except Exception as e:
+        _debug_write("l7_amend_l5_runtime_err", {"err": str(e)})
 
 
 def l7_record_feedback_v2(msg: str, history: list, background_tasks=None):

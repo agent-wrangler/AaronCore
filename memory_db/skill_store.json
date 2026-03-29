@@ -1,0 +1,11 @@
+{
+  "native": {
+    "weather": {
+      "enabled": true
+    },
+    "story": {
+      "enabled": true
+    }
+  },
+  "mcp": {}
+}
