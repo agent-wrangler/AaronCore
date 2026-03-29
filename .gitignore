@@ -32,4 +32,8 @@ output.html.codex_backup
 static/live2d/_tmp_cubism/
 static/live2d/_tmp/
 companion/node_modules/
+shell/node_modules/
+desktop_runtime/
+desktop_runtime_35/node_modules/
+desktop_runtime_35/package-lock.json
 static/live2d/*/

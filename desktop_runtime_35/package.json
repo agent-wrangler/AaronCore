@@ -1,0 +1,7 @@
+{
+  "name": "novacore-desktop-runtime-35",
+  "private": true,
+  "devDependencies": {
+    "electron": "35.7.5"
+  }
+}

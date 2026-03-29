@@ -13,10 +13,11 @@ function _syncTitleBar(theme){
 
 function _syncWindowBackdrop(theme){
  var bg=theme==='light'?'#ffffff':'#161618';
- document.documentElement.style.backgroundColor=bg;
+ var useTransparentShell=!!(window.novaShell&&window.novaShell.windowControlsMode==='custom-html');
  document.documentElement.classList.remove('theme-light','theme-dark');
  document.documentElement.classList.add(theme==='light'?'theme-light':'theme-dark');
- if(document.body) document.body.style.backgroundColor=bg;
+ document.documentElement.style.backgroundColor=useTransparentShell?'transparent':bg;
+ if(document.body) document.body.style.backgroundColor=useTransparentShell?'transparent':bg;
  var shell=document.getElementById('windowShell');
  if(shell) shell.style.backgroundColor=bg;
 }

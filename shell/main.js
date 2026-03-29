@@ -86,7 +86,7 @@ function createWindow() {
 
   nativeTheme.themeSource = 'light';
   const getWindowPalette = (theme) => ({
-    backgroundColor: theme === 'dark' ? '#161618' : '#ffffff',
+    backgroundColor: theme === 'dark' ? '#00161618' : '#00ffffff',
     overlayColor: theme === 'dark' ? '#161618' : '#ffffff',
     symbolColor: theme === 'dark' ? '#ebebf0' : '#334155',
   });
@@ -97,7 +97,10 @@ function createWindow() {
     height: wh,
     x: Math.round((sw - ww) / 2),
     y: Math.round((sh - wh) / 2),
-    titleBarStyle: 'hidden',
+    frame: false,
+    transparent: true,
+    roundedCorners: true,
+    thickFrame: true,
     ...(WINDOW_CONTROLS_MODE === 'native-overlay' ? {
       titleBarOverlay: {
         color: palette.overlayColor,
@@ -116,14 +119,6 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
-
-  if (process.platform === 'win32' && typeof win.setBackgroundMaterial === 'function') {
-    try {
-      win.setBackgroundMaterial('none');
-    } catch (_err) {
-      // Older Windows / Electron builds may ignore this capability.
-    }
-  }
 
   win.loadURL('http://localhost:8090/');
   win.webContents.on('did-finish-load', emitWindowState);
