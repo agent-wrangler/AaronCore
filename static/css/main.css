@@ -1,6 +1,7 @@
 *{margin:0;padding:0;box-sizing:border-box;user-select:text}
-html{background:#161618}
-html:has(body.dark){background:#161618}
+html{background:#FFFFFF}
+html.theme-light{background:#FFFFFF}
+html.theme-dark{background:#161618}
 
 /* 旧的 frameless 缩放触发层（当前 Electron 原生缩放为主，保留不显示） */
 .resize-edge,.resize-corner{display:none!important}
@@ -91,8 +92,6 @@ body.light .mem-tag-L6{background:#cffafe;color:#0891b2}
 body.light .mem-tag-L7{background:#dbeafe;color:#2563eb}
 body.light .mem-tag-L8{background:#ede9fe;color:#7c3aed}
 body.light .mem-tag-default{background:#f1f5f9;color:#475569}
-html:has(body.light){background:#FFFFFF}
-html:has(body.dark){background:#161618}
 body.light .sidebar{background:#ffffff;box-shadow:2px 0 18px rgba(22,22,24,0.06)}
 body.light .menu{color:#334155}
 body.light .menu:hover{background:#eff6ff;color:#374151}
@@ -241,7 +240,7 @@ body{
  flex-direction:column;
  overflow:hidden;
   border-radius:16px;
-  background:transparent;
+  background:var(--bg-app);
  box-shadow:none;
   isolation:isolate;
 }
@@ -656,6 +655,7 @@ body.light .welcome-news-item:hover { color: #111; }
 
 .msg.assistant .msg-content {
   align-items: flex-start;
+  padding-left: 19px;  /* 和 step-item 的 icon(12px)+gap(7px) 对齐 */
 }
 
 .msg.user .msg-content {

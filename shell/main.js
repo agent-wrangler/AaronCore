@@ -10,6 +10,7 @@ const { execSync, spawn } = require('child_process');
 Menu.setApplicationMenu(null);
 
 let win;
+const WINDOW_CONTROLS_MODE = 'custom-html';
 
 function emitWindowState() {
   if (!win || win.isDestroyed()) return;
@@ -97,11 +98,13 @@ function createWindow() {
     x: Math.round((sw - ww) / 2),
     y: Math.round((sh - wh) / 2),
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: palette.overlayColor,
-      symbolColor: palette.symbolColor,
-      height: 60,
-    },
+    ...(WINDOW_CONTROLS_MODE === 'native-overlay' ? {
+      titleBarOverlay: {
+        color: palette.overlayColor,
+        symbolColor: palette.symbolColor,
+        height: 60,
+      },
+    } : {}),
     hasShadow: true,
     resizable: true,
     minWidth: 800,
@@ -140,7 +143,7 @@ function createWindow() {
     if (typeof win.setBackgroundColor === 'function') {
       win.setBackgroundColor(nextPalette.backgroundColor);
     }
-    if (typeof win.setTitleBarOverlay === 'function') {
+    if (WINDOW_CONTROLS_MODE === 'native-overlay' && typeof win.setTitleBarOverlay === 'function') {
       win.setTitleBarOverlay({
         color: nextPalette.overlayColor,
         symbolColor: nextPalette.symbolColor,

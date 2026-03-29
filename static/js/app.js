@@ -11,18 +11,30 @@ function _syncTitleBar(theme){
   window.pywebview.api.set_theme(theme);
 }
 
+function _syncWindowBackdrop(theme){
+ var bg=theme==='light'?'#ffffff':'#161618';
+ document.documentElement.style.backgroundColor=bg;
+ document.documentElement.classList.remove('theme-light','theme-dark');
+ document.documentElement.classList.add(theme==='light'?'theme-light':'theme-dark');
+ if(document.body) document.body.style.backgroundColor=bg;
+ var shell=document.getElementById('windowShell');
+ if(shell) shell.style.backgroundColor=bg;
+}
+
 function toggleTheme(){
  var body=document.body;
  if(body.classList.contains('dark')){
   body.classList.remove('dark');
   body.classList.add('light');
   localStorage.setItem('nova_theme','light');
+  _syncWindowBackdrop('light');
   _syncTitleBar('light');
   _syncThemeIcon();
  }else{
   body.classList.remove('light');
   body.classList.add('dark');
   localStorage.setItem('nova_theme','dark');
+  _syncWindowBackdrop('dark');
   _syncTitleBar('dark');
   _syncThemeIcon();
  }
@@ -155,12 +167,13 @@ window.onload=function(){
  })();
 
  // 加载保存的主题，默认白天
- var savedTheme=localStorage.getItem('nova_theme')||'light';
- if(savedTheme==='light'){
-  document.body.classList.remove('dark');
-  document.body.classList.add('light');
- }
- _syncThemeIcon();
+var savedTheme=localStorage.getItem('nova_theme')||'light';
+if(savedTheme==='light'){
+ document.body.classList.remove('dark');
+ document.body.classList.add('light');
+}
+_syncWindowBackdrop(savedTheme==='light'?'light':'dark');
+_syncThemeIcon();
  // pywebview API 可能延迟就绪，等一下再同步标题栏颜色
  setTimeout(function(){
   _syncTitleBar(savedTheme==='light'?'light':'dark');
