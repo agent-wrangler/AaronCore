@@ -54,8 +54,6 @@ def _detect_type(text: str) -> str:
     t = text.lower()
     # 纠正/不满 → L7
     if any(k in t for k in ['不对','错了','不好','太短','太长','不是这个','说错']): return 'correction'
-    # 技能需求（"帮我做/能不能/怎么用" + 不存在的能力）→ L5
-    if any(k in t for k in ['帮我做','能不能','你会不会','有没有功能','可以帮我']): return 'skill_demand'
     # 知识类 → L8（严格匹配，防止"有意思""是什么模式"等误判）
     _knowledge_phrases = ['什么是','怎么回事','是谁','什么意思','意思是什么','什么原理','原理是']
     # "为什么"单独处理：排除"你为什么/我让你为什么"等元对话
@@ -248,10 +246,6 @@ def _try_crystallize(entry):
     # L7: 纠正/不满 — 不要求高分，只要检测到就推
     if mtype == "correction":
         _to_l7(text, ai_text)
-
-    # L5: 技能需求 — 不要求高分，记录需求信号
-    if mtype == "skill_demand":
-        _to_l5(text)
 
     # L8: 知识类 — 需要二次验证确实是知识问答，防止闲聊污染
     if mtype == "knowledge" and len(ai_text) > 20:
@@ -447,37 +441,6 @@ def _to_l4(text, mtype):
             _debug_write("l2_crystal_l4", {"text":text[:50]})
     except Exception as e:
         _debug_write("l2_crystal_l4_err", {"err":str(e)})
-
-def _to_l5(text):
-    try:
-        _debug_write("l2_to_l5_retired", {"text": str(text or "")[:50]})
-    except Exception:
-        pass
-    return
-    """L2→L5：记录技能需求信号，帮助发现用户需要但还没有的技能"""
-    try:
-        l5 = load_json(L5_FILE, [])
-        # 检查是否已有此需求记录
-        for item in l5:
-            if isinstance(item, dict) and item.get("source") == "l2_demand":
-                if text[:30] in str(item.get("trigger", [])):
-                    # 已有，累加计数
-                    item["demand_count"] = item.get("demand_count", 1) + 1
-                    item["last_demand"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    write_json(L5_FILE, l5)
-                    return
-        # 新增需求记录
-        l5.append({
-            "source": "l2_demand",
-            "trigger": [text[:50]],
-            "demand_count": 1,
-            "last_demand": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "status": "unmet",
-        })
-        write_json(L5_FILE, l5)
-        _debug_write("l2_crystal_l5", {"text": text[:50]})
-    except Exception as e:
-        _debug_write("l2_crystal_l5_err", {"err": str(e)})
 
 def _to_l7(text, ai_text):
     """L2→L7：检测到纠正/不满时，带上对话上下文推给L7，让反馈更精准"""
@@ -742,3 +705,43 @@ def cleanup_stale_memories() -> dict:
         })
 
     return {"before": len(store), "after": len(kept), "removed": removed}
+
+
+def prune_legacy_l2_demands_from_l5(make_backup: bool = True, reason: str = "manual_cleanup") -> dict:
+    """清理旧版 L2→L5 遗留的 l2_demand 条目。"""
+    store = load_json(L5_FILE, [])
+    if not isinstance(store, list):
+        return {"success": False, "reason": "invalid_knowledge_store"}
+
+    kept = []
+    removed = []
+    for item in store:
+        if isinstance(item, dict) and str(item.get("source") or "").strip() == "l2_demand":
+            removed.append(item)
+            continue
+        kept.append(item)
+
+    backup_path = None
+    if removed and make_backup and L5_FILE.exists():
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = L5_FILE.with_name(f"{L5_FILE.stem}.backup_{stamp}{L5_FILE.suffix}")
+        backup_path.write_text(L5_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    if removed:
+        write_json(L5_FILE, kept)
+
+    result = {
+        "success": True,
+        "reason": reason,
+        "original_count": len(store),
+        "kept_count": len(kept),
+        "removed_count": len(removed),
+        "backup_created": bool(backup_path),
+        "backup_path": str(backup_path) if backup_path else "",
+        "removed_triggers": [
+            str(((item.get("trigger") or [""]) if isinstance(item, dict) else [""])[0] or "")[:80]
+            for item in removed
+        ],
+    }
+    _debug_write("l2_l5_legacy_prune", result)
+    return result
