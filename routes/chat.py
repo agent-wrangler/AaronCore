@@ -592,19 +592,16 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             pass
 
         user_turns = len([m for m in l1 if isinstance(m, dict) and m.get("role") == "user"])
-        l1_count = len([m for m in l1 if isinstance(m, dict)])
-        l2_ready = bool(isinstance(l2, dict) and any(bool(v) for v in l2.values()))
         mem_parts = []
-        if l1_count:
-            mem_parts.append(f"L1\u6700\u8fd1{l1_count}\u6761\u6d88\u606f\u5df2\u63a5\u5165")
+        # 上下文对话（L1）
+        if user_turns:
+            mem_parts.append("\u4e0a\u4e0b\u6587\u8f7d\u5165\u5b8c\u6210")
         else:
-            mem_parts.append("\u5f53\u524d\u662f\u7b2c\u4e00\u53e5\u5bf9\u8bdd")
-        if l2_ready:
-            mem_parts.append("L2\u4f1a\u8bdd\u72b6\u6001\u5df2\u63a5\u5165")
-        if persona_name:
-            mem_parts.append(f"{persona_name} \u4eba\u683c\u56fe\u8c31\u5c31\u7eea")
-        else:
-            mem_parts.append("Nova \u4eba\u683c\u56fe\u8c31\u5c31\u7eea")
+            mem_parts.append("\u9996\u8f6e\u5bf9\u8bdd")
+        # 记忆模块（L2 会话理解 + L7 反馈规则）
+        mem_parts.append("\u8bb0\u5fc6\u6a21\u5757\u6fc0\u6d3b")
+        # 人格图谱（L4）
+        mem_parts.append("\u4eba\u683c\u56fe\u8c31\u5bf9\u9f50")
         if l2_memories:
             mem_parts.append(f"\u5524\u9192{len(l2_memories)}\u6761\u6301\u4e45\u8bb0\u5fc6")
         if recall_result:
