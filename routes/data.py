@@ -1,5 +1,6 @@
 """数据查询路由：memory, docs, history, stats, nova_name"""
 import json
+import re
 from datetime import datetime
 from fastapi import APIRouter
 from core import shared as S
@@ -41,6 +42,73 @@ def _l8_source_label(kind: str) -> str:
     return "自主学习"
 
 
+def _l2_type_label(memory_type: str) -> str:
+    memory_type = str(memory_type or "").strip().lower()
+    mapping = {
+        "fact": "事实印象",
+        "preference": "偏好印象",
+        "rule": "规则印象",
+        "project": "项目线索",
+        "goal": "目标意图",
+        "decision": "决策印象",
+        "knowledge": "知识线索",
+        "correction": "纠正印象",
+        "skill_demand": "需求线索",
+        "general": "对话印象",
+    }
+    return mapping.get(memory_type, "对话印象")
+
+
+def _build_l2_meta(item: dict, ai_brief: str) -> dict:
+    memory_type = str(item.get("memory_type") or "general").strip().lower() or "general"
+    return {
+        "kind": "l2_impression",
+        "memory_type": memory_type,
+        "type_label": _l2_type_label(memory_type),
+        "user_text": str(item.get("user_text") or "").strip(),
+        "ai_brief": ai_brief,
+        "hit_count": int(item.get("hit_count") or 0),
+        "crystallized": bool(item.get("crystallized")),
+    }
+
+
+def _build_l2_ai_brief(ai_text: str) -> str:
+    ai_text = str(ai_text or "").strip()
+    ai_clean = re.sub(r'^[\s\uff08\u0028][^\uff09\u0029]*[\uff09\u0029]\s*', '', ai_text)
+    ai_clean = ai_clean.replace("\n", " ").strip()
+    if not ai_clean:
+        ai_clean = ai_text.replace("\n", " ").strip()
+    ai_brief = ai_clean
+    for sep in ["。", "！", "？", "～", "~"]:
+        if sep in ai_brief:
+            ai_brief = ai_brief[:ai_brief.index(sep) + 1]
+            break
+    if len(ai_brief) > 40:
+        ai_brief = ai_brief[:40] + "…"
+    return ai_brief
+
+
+def _build_l2_event(item: dict, ai_brief: str, repeat_count: int = 1, hit_count: int | None = None, crystallized: bool | None = None) -> dict:
+    user_text = str(item.get("user_text") or "").strip()
+    content = f"“{user_text}”"
+    if ai_brief:
+        content += f" —— {ai_brief}"
+    meta = _build_l2_meta(item, ai_brief)
+    meta["repeat_count"] = max(1, int(repeat_count or 1))
+    if hit_count is not None:
+        meta["hit_count"] = int(hit_count or 0)
+    if crystallized is not None:
+        meta["crystallized"] = bool(crystallized)
+    return {
+        "time": S.normalize_event_time(item.get("created_at") or item.get("time")),
+        "layer": "L2",
+        "event_type": "impression",
+        "title": _l2_type_label(item.get("memory_type")),
+        "content": content,
+        "meta": meta,
+    }
+
+
 def _safe_stringify(value) -> str:
     formatter = getattr(S, "stringify_event_value", None)
     if callable(formatter):
@@ -75,36 +143,49 @@ async def get_memory():
             l2_data = json.loads(l2_file.read_text(encoding="utf-8"))
             if isinstance(l2_data, list):
                 counts["L2"] = len(l2_data)
+                general_groups = {}
                 for item in l2_data:
                     imp = item.get("importance") or 0
                     if imp >= 0.7:
                         user_text = str(item.get("user_text") or "").strip()
                         if not user_text:
                             continue
-                        ai_text = str(item.get("ai_text") or "").strip()
-                        # 跳过开头的括号表情，提取第一句有意义的内容
-                        import re
-                        ai_clean = re.sub(r'^[\s\uff08\u0028][^\uff09\u0029]*[\uff09\u0029]\s*', '', ai_text)
-                        ai_clean = ai_clean.replace("\n", " ").strip()
-                        if not ai_clean:
-                            ai_clean = ai_text.replace("\n", " ").strip()
-                        ai_brief = ai_clean
-                        for sep in ["\u3002", "\uff01", "\uff1f", "\uff5e", "~"]:
-                            if sep in ai_brief:
-                                ai_brief = ai_brief[:ai_brief.index(sep) + 1]
-                                break
-                        if len(ai_brief) > 40:
-                            ai_brief = ai_brief[:40] + "\u2026"
-                        content = f"\u201c{user_text}\u201d"
-                        if ai_brief:
-                            content += f" \u2014\u2014 {ai_brief}"
-                        events.append({
-                            "time": S.normalize_event_time(item.get("time")),
-                            "layer": "L2",
-                            "event_type": "impression",
-                            "title": "\u8bb0\u5fc6\u51dd\u7ed3",
-                            "content": content,
-                        })
+                        ai_brief = _build_l2_ai_brief(item.get("ai_text"))
+                        memory_type = str(item.get("memory_type") or "general").strip().lower() or "general"
+                        if memory_type == "general":
+                            group = general_groups.get(user_text)
+                            raw_time = str(item.get("created_at") or item.get("time") or "").strip()
+                            if not group:
+                                general_groups[user_text] = {
+                                    "item": item,
+                                    "ai_brief": ai_brief,
+                                    "time_raw": raw_time,
+                                    "repeat_count": 1,
+                                    "hit_count": int(item.get("hit_count") or 0),
+                                    "crystallized": bool(item.get("crystallized")),
+                                }
+                            else:
+                                group["repeat_count"] += 1
+                                group["hit_count"] += int(item.get("hit_count") or 0)
+                                group["crystallized"] = group["crystallized"] or bool(item.get("crystallized"))
+                                if raw_time and (not group["time_raw"] or raw_time >= group["time_raw"]):
+                                    group["item"] = item
+                                    group["ai_brief"] = ai_brief
+                                    group["time_raw"] = raw_time
+                            continue
+
+                        events.append(_build_l2_event(item, ai_brief))
+
+                for group in general_groups.values():
+                    events.append(
+                        _build_l2_event(
+                            group["item"],
+                            group["ai_brief"],
+                            repeat_count=group["repeat_count"],
+                            hit_count=group["hit_count"],
+                            crystallized=group["crystallized"],
+                        )
+                    )
         except Exception:
             pass
 

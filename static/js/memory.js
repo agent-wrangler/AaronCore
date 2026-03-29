@@ -436,6 +436,7 @@ function extractLegacyExecutionSummary(content, skill) {
 }
 
 function memoryEventTitle(layer, meta, rawTitle) {
+  if (meta.kind === "l2_impression") return safeText(meta.type_label) || "记忆凝结";
   if (meta.kind === "method_experience") return "方法经验";
   if (meta.kind === "ability_hint") return "能力线索";
   if (meta.kind === "execution_trace" || meta.kind === "execution_count") return "执行轨迹";
@@ -446,6 +447,7 @@ function memoryEventTitle(layer, meta, rawTitle) {
 }
 
 function memoryEventContent(layer, meta, rawContent, type) {
+  if (meta.kind === "l2_impression") return buildL2ImpressionContent(meta, rawContent);
   if (meta.kind === "method_experience") return buildMethodExperienceContent(meta, rawContent);
   if (meta.kind === "ability_hint") return buildAbilityHintContent(meta, rawContent);
   if (meta.kind === "execution_trace") return buildExecutionTraceContent(meta, rawContent);
@@ -454,6 +456,38 @@ function memoryEventContent(layer, meta, rawContent, type) {
     return buildL8KnowledgeContent(meta, rawContent);
   }
   return buildGenericMemoryContent(layer, rawContent, type);
+}
+
+function buildL2ImpressionContent(meta, rawContent) {
+  var memoryType = safeText(meta.memory_type || "general");
+  var userText = safeText(meta.user_text || "");
+  var aiBrief = safeMultiline(meta.ai_brief || "");
+  var hitCount = Number(meta.hit_count) || 0;
+  var repeatCount = Number(meta.repeat_count) || 1;
+  var crystallized = meta.crystallized === true;
+  var lines = [];
+
+  if (memoryType === "fact") lines.push("记住了一个用户事实：" + userText);
+  else if (memoryType === "preference") lines.push("捕捉到一个偏好倾向：" + userText);
+  else if (memoryType === "rule") lines.push("留住了一条当前约束：" + userText);
+  else if (memoryType === "project") lines.push("捕捉到一个项目线索：" + userText);
+  else if (memoryType === "goal") lines.push("识别到一个目标方向：" + userText);
+  else if (memoryType === "decision") lines.push("留住了一次选择倾向：" + userText);
+  else if (memoryType === "knowledge") lines.push("留下了一个知识问题：" + userText);
+  else if (memoryType === "correction") lines.push("记下了一次纠正反馈：" + userText);
+  else if (memoryType === "skill_demand") lines.push("保留了一条需求线索：" + userText);
+  else if (userText && repeatCount > 1) lines.push("近期反复出现的对话印象：" + userText);
+  else if (userText) lines.push("凝结了一段对话印象：" + userText);
+  else if (rawContent && !isDirtyText(rawContent)) lines.push("凝结了一段对话印象：" + safeMultiline(rawContent));
+  else lines.push("凝结了一段对话印象，留作短期上下文的兜底记忆。");
+
+  if (aiBrief) lines.push("当时回应：" + aiBrief);
+  if (repeatCount > 1) lines.push("重复出现：" + repeatCount + " 次");
+  if (crystallized) lines.push("状态：已分发到更高层继续沉淀");
+  else if (hitCount > 0) lines.push("复用：" + hitCount + " 次");
+  else lines.push("状态：保留在 L2 作为短期兜底记忆");
+
+  return lines.join("<br>");
 }
 
 function buildMethodExperienceContent(meta, rawContent) {

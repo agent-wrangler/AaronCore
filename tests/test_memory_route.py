@@ -9,9 +9,11 @@ import routes.data as data_module
 
 
 class MemoryRouteTests(unittest.TestCase):
-    def _load_memory(self, knowledge=None, evolution=None, knowledge_base=None):
+    def _load_memory(self, l2=None, knowledge=None, evolution=None, knowledge_base=None):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            if l2 is not None:
+                (tmp / "l2_short_term.json").write_text(json.dumps(l2, ensure_ascii=False), encoding="utf-8")
             if knowledge is not None:
                 (tmp / "knowledge.json").write_text(json.dumps(knowledge, ensure_ascii=False), encoding="utf-8")
             if evolution is not None:
@@ -27,6 +29,100 @@ class MemoryRouteTests(unittest.TestCase):
                 side_effect=lambda value: str(value or "2026-03-29 00:00"),
             ), patch.object(data_module, "_is_live_skill_name", return_value=True):
                 return asyncio.run(data_module.get_memory())
+
+    def test_memory_route_surfaces_typed_l2_impressions(self):
+        result = self._load_memory(
+            l2=[
+                {
+                    "user_text": "你必须调用工具来执行操作，不要在文本里模拟执行结果",
+                    "ai_text": "收到，后续我会优先走真实工具执行链。",
+                    "importance": 0.92,
+                    "memory_type": "rule",
+                    "created_at": "2026-03-29 10:10",
+                    "hit_count": 2,
+                    "crystallized": False,
+                },
+                {
+                    "user_text": "我在常州",
+                    "ai_text": "记住了，后续涉及天气或本地信息会按常州来判断。",
+                    "importance": 0.88,
+                    "memory_type": "fact",
+                    "created_at": "2026-03-29 10:20",
+                    "hit_count": 0,
+                    "crystallized": True,
+                },
+                {
+                    "user_text": "今天天气",
+                    "ai_text": "我来查一下。",
+                    "importance": 0.4,
+                    "memory_type": "general",
+                    "created_at": "2026-03-29 10:30",
+                },
+            ]
+        )
+
+        l2_events = [item for item in result["events"] if item.get("layer") == "L2"]
+        self.assertEqual(result["counts"]["L2"], 3)
+        self.assertEqual(len(l2_events), 2)
+
+        titles = {item["title"] for item in l2_events}
+        self.assertEqual(titles, {"规则印象", "事实印象"})
+
+        rule_event = next(item for item in l2_events if item["title"] == "规则印象")
+        fact_event = next(item for item in l2_events if item["title"] == "事实印象")
+
+        self.assertEqual(rule_event["meta"]["kind"], "l2_impression")
+        self.assertEqual(rule_event["meta"]["memory_type"], "rule")
+        self.assertEqual(rule_event["meta"]["hit_count"], 2)
+        self.assertFalse(rule_event["meta"]["crystallized"])
+
+        self.assertEqual(fact_event["meta"]["memory_type"], "fact")
+        self.assertTrue(fact_event["meta"]["crystallized"])
+
+    def test_memory_route_merges_repeated_general_l2_impressions(self):
+        result = self._load_memory(
+            l2=[
+                {
+                    "user_text": "停止监听",
+                    "ai_text": "好的，我先停掉监听。",
+                    "importance": 0.82,
+                    "memory_type": "general",
+                    "created_at": "2026-03-29 10:10",
+                    "hit_count": 1,
+                    "crystallized": False,
+                },
+                {
+                    "user_text": "停止监听",
+                    "ai_text": "已经停止监听了。",
+                    "importance": 0.85,
+                    "memory_type": "general",
+                    "created_at": "2026-03-29 10:20",
+                    "hit_count": 2,
+                    "crystallized": True,
+                },
+                {
+                    "user_text": "打开百度",
+                    "ai_text": "我来打开百度。",
+                    "importance": 0.81,
+                    "memory_type": "general",
+                    "created_at": "2026-03-29 10:30",
+                    "hit_count": 0,
+                    "crystallized": False,
+                },
+            ]
+        )
+
+        l2_events = [item for item in result["events"] if item.get("layer") == "L2"]
+        self.assertEqual(result["counts"]["L2"], 3)
+        self.assertEqual(len(l2_events), 2)
+
+        merged_event = next(item for item in l2_events if item.get("meta", {}).get("user_text") == "停止监听")
+        self.assertEqual(merged_event["title"], "对话印象")
+        self.assertEqual(merged_event["meta"]["memory_type"], "general")
+        self.assertEqual(merged_event["meta"]["repeat_count"], 2)
+        self.assertEqual(merged_event["meta"]["hit_count"], 3)
+        self.assertTrue(merged_event["meta"]["crystallized"])
+        self.assertEqual(merged_event["time"], "2026-03-29 10:20")
 
     def test_memory_route_surfaces_l5_method_experience_and_ability_hint(self):
         result = self._load_memory(

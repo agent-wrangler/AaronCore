@@ -532,7 +532,7 @@ def _build_l1_messages(bundle: dict, limit: int = 10) -> list[dict]:
     return messages
 
 
-def _build_recent_dialogue_text(bundle: dict, limit: int = 6) -> str:
+def _build_recent_dialogue_text(bundle: dict, limit: int = 10) -> str:
     """把最近几轮 L1 对话压成简短文本，供普通聊天 prompt 使用。"""
     messages = _build_l1_messages(bundle, limit=limit)
     if not messages:
@@ -1149,7 +1149,7 @@ def _build_light_chat_prompt(bundle: dict) -> str:
     recall_context = bundle.get("recall_context", "")
     flashback = bundle.get("flashback_hint")
 
-    l1_text = _build_recent_dialogue_text(bundle, limit=6) or "\u6682\u65e0"
+    l1_text = _build_recent_dialogue_text(bundle, limit=10) or "\u6682\u65e0"
     l2_text = _build_session_context_text(l2_session) or "\u6682\u65e0"
     l4_text = _condense_l4(l4) or "\u6682\u65e0"
     l7_text = format_l7_context(l7) or "\u6682\u65e0"
