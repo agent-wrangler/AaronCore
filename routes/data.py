@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from fastapi import APIRouter
 from core import shared as S
+from core.l2_memory import classify_retention_bucket
 from core.l8_learn import classify_l8_entry_kind, should_show_l8_timeline_entry
 from core.state_loader import get_model_price, MODEL_PRICES
 
@@ -59,16 +60,26 @@ def _l2_type_label(memory_type: str) -> str:
     return mapping.get(memory_type, "对话印象")
 
 
-def _build_l2_meta(item: dict, ai_brief: str) -> dict:
+def _build_l2_meta(item: dict, ai_brief: str, *, hit_count: int | None = None, crystallized: bool | None = None) -> dict:
     memory_type = str(item.get("memory_type") or "general").strip().lower() or "general"
+    retention_entry = dict(item)
+    if hit_count is not None:
+        retention_entry["hit_count"] = int(hit_count or 0)
+    if crystallized is not None:
+        retention_entry["crystallized"] = bool(crystallized)
+    retention = classify_retention_bucket(retention_entry)
     return {
         "kind": "l2_impression",
         "memory_type": memory_type,
         "type_label": _l2_type_label(memory_type),
         "user_text": str(item.get("user_text") or "").strip(),
         "ai_brief": ai_brief,
-        "hit_count": int(item.get("hit_count") or 0),
-        "crystallized": bool(item.get("crystallized")),
+        "hit_count": int(retention_entry.get("hit_count") or 0),
+        "crystallized": bool(retention_entry.get("crystallized")),
+        "retention_tier": retention["tier"],
+        "retention_label": retention["label"],
+        "retention_reason": retention["reason"],
+        "age_days": retention["age_days"],
     }
 
 
@@ -93,12 +104,8 @@ def _build_l2_event(item: dict, ai_brief: str, repeat_count: int = 1, hit_count:
     content = f"“{user_text}”"
     if ai_brief:
         content += f" —— {ai_brief}"
-    meta = _build_l2_meta(item, ai_brief)
+    meta = _build_l2_meta(item, ai_brief, hit_count=hit_count, crystallized=crystallized)
     meta["repeat_count"] = max(1, int(repeat_count or 1))
-    if hit_count is not None:
-        meta["hit_count"] = int(hit_count or 0)
-    if crystallized is not None:
-        meta["crystallized"] = bool(crystallized)
     return {
         "time": S.normalize_event_time(item.get("created_at") or item.get("time")),
         "layer": "L2",

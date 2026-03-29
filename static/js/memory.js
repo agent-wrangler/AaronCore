@@ -465,6 +465,8 @@ function buildL2ImpressionContent(meta, rawContent) {
   var hitCount = Number(meta.hit_count) || 0;
   var repeatCount = Number(meta.repeat_count) || 1;
   var crystallized = meta.crystallized === true;
+  var retentionLabel = safeText(meta.retention_label || "");
+  var retentionReason = safeText(meta.retention_reason || "");
   var lines = [];
 
   if (memoryType === "fact") lines.push("记住了一个用户事实：" + userText);
@@ -486,6 +488,9 @@ function buildL2ImpressionContent(meta, rawContent) {
   if (crystallized) lines.push("状态：已分发到更高层继续沉淀");
   else if (hitCount > 0) lines.push("复用：" + hitCount + " 次");
   else lines.push("状态：保留在 L2 作为短期兜底记忆");
+  if (retentionLabel) {
+    lines.push("保留策略：" + retentionLabel + (retentionReason ? "（" + retentionReason + "）" : ""));
+  }
 
   return lines.join("<br>");
 }

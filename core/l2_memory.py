@@ -105,6 +105,115 @@ def _extract_kw(text: str) -> list:
             found.append(bg)
     return found[:20]
 
+
+_SIGNAL_GROUPS = {
+    "repair": ["修", "修复", "排查", "修正", "设置", "配置"],
+    "failure": ["没成功", "失败", "报错", "卡住", "不对", "出错", "哪里的问题", "问题"],
+    "success": ["修好了", "搞定", "成功", "好了没", "好了吗", "完成"],
+    "continuation": ["继续", "还是", "又", "刚才", "现在呢", "然后"],
+    "rejection": ["不要", "别", "不想", "拒绝", "算了"],
+    "story": ["故事", "小说", "笑话", "冷笑话"],
+    "game": ["游戏", "玩"],
+    "fatigue": ["累", "疲惫", "熬夜", "困"],
+    "stress": ["烦", "焦", "崩溃", "无语", "压力", "头疼"],
+    "memory": ["记忆", "想起", "记得", "上次", "之前", "以前", "当初"],
+    "dev": ["代码", "前端", "后端", "客户端", "文件", "窗口", "主链", "路由", "监听", "工具"],
+    "model": ["模型", "claude", "gpt", "nova", "agent", "codex"],
+    "weather": ["天气", "气温", "温度"],
+    "stock": ["股票", "股价", "a股"],
+    "image": ["海报", "画", "图片"],
+    "news": ["新闻", "热点", "头条"],
+    "knowledge": ["知识", "学习", "教程", "原理", "是什么", "为什么", "怎么回事"],
+}
+
+_SIGNAL_FILLERS = "吗呢吧啊呀嘛啦喔哦"
+_SIGNATURE_EXCLUDED_TAGS = {"question", "structured", "longform", "continuation"}
+
+
+def _normalize_signal_text(text: str) -> str:
+    text = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", str(text or "").lower())
+    return text.strip()
+
+
+def build_signal_profile(text: str) -> set[str]:
+    """构建轻量信号画像：任务连续性、情绪、场景主题等。"""
+    raw = str(text or "").strip().lower()
+    normalized = _normalize_signal_text(raw)
+    if not normalized:
+        return set()
+
+    profile = set()
+    for tag, triggers in _SIGNAL_GROUPS.items():
+        if any(trigger in normalized for trigger in triggers):
+            profile.add(tag)
+
+    if any(sig in raw for sig in ("?", "？", "什么", "怎么", "为什么", "哪里", "哪个")):
+        profile.add("question")
+    if any(sig in raw for sig in (":", "：", "\n")) or any(ch.isdigit() for ch in normalized):
+        profile.add("structured")
+    if len(normalized) >= 12:
+        profile.add("longform")
+    return profile
+
+
+def _signal_overlap(query_profile: set[str], candidate_profile: set[str]) -> float:
+    if not query_profile or not candidate_profile:
+        return 0.0
+    shared = query_profile & candidate_profile
+    if not shared:
+        return 0.0
+    score = len(shared) / max(len(query_profile), 1)
+    if {"repair", "failure"} <= shared:
+        score = max(score, 0.9)
+    elif {"rejection", "story"} <= shared:
+        score = max(score, 0.82)
+    elif "fatigue" in shared or "stress" in shared:
+        score = max(score, 0.72)
+    elif "continuation" in shared and ("repair" in shared or "success" in shared):
+        score = max(score, 0.75)
+    return min(score, 1.0)
+
+
+def _normalize_signature_anchor(text: str) -> str:
+    normalized = _normalize_signal_text(text)
+    for filler in _SIGNAL_FILLERS:
+        normalized = normalized.replace(filler, "")
+    return normalized[:8]
+
+
+def _is_low_signal_general_candidate(text: str) -> bool:
+    text = str(text or "").strip()
+    normalized = _normalize_signal_text(text)
+    if not normalized:
+        return True
+    if len(normalized) <= 2:
+        return True
+    return _looks_like_low_signal_general(text)
+
+
+def _build_retrieval_signature(entry: dict) -> str:
+    memory_type = str(entry.get("memory_type") or "general").strip().lower() or "general"
+    text = str(entry.get("user_text") or "").strip()
+    profile = sorted(tag for tag in build_signal_profile(text) if tag not in _SIGNATURE_EXCLUDED_TAGS)
+    parts = []
+    if profile:
+        parts.extend(profile[:2])
+    anchor = _normalize_signature_anchor(text)
+    if anchor:
+        parts.append(anchor)
+    elif text:
+        parts.append(text[:8])
+    return f"{memory_type}:{'|'.join(parts[:3])}"
+
+
+def _memory_type_retrieval_bonus(memory_type: str) -> float:
+    memory_type = str(memory_type or "general").strip().lower() or "general"
+    if memory_type in ("rule", "fact", "preference", "goal"):
+        return 0.1
+    if memory_type in ("project", "decision", "correction", "knowledge"):
+        return 0.08
+    return 0.04
+
 # ── 文本相关度 ──
 def _relevance(query: str, stored: str, stored_kw: list) -> float:
     qkw = _extract_kw(query)
@@ -174,21 +283,82 @@ def add_memory(user_input: str, ai_response: str):
     return {"id": mid, "importance": imp, "type": mtype}
 
 def search_relevant(query: str, limit: int = 8) -> list:
-    """关键词+文本匹配检索，final = relevance*0.7 + freshness*0.3"""
+    """多信号相关度检索：不再只靠关键词和 freshness。"""
     if not query or not query.strip():
         return []
     store = _load()
     if not store:
         return []
+    query_profile = build_signal_profile(query)
+    query_anchor = _normalize_signature_anchor(query)
     scored = []
     for m in store:
-        rel = _relevance(query, m.get("user_text",""), m.get("keywords",[]))
+        user_text = str(m.get("user_text", ""))
+        ai_text = str(m.get("ai_text", ""))
+        candidate_text = f"{user_text} {ai_text}".strip()
+        rel = _relevance(query, user_text, m.get("keywords",[]))
+        signal_score = _signal_overlap(query_profile, build_signal_profile(candidate_text))
+        anchor = _normalize_signature_anchor(user_text)
+        direct_score = 0.0
+        if query_anchor and anchor:
+            if query_anchor == anchor:
+                direct_score = 1.0
+            elif len(anchor) >= 3 and (anchor in query_anchor or query_anchor in anchor):
+                direct_score = 0.82
+
+        if rel <= 0 and signal_score <= 0 and direct_score <= 0:
+            continue
+
+        memory_type = str(m.get("memory_type") or "general").strip().lower() or "general"
+        if memory_type == "general" and _is_low_signal_general_candidate(user_text) and direct_score < 1.0 and signal_score < 0.7:
+            continue
+
+        retention = classify_retention_bucket(m)
+        if retention.get("tier") == "prune":
+            continue
+
         frs = _freshness(m.get("created_at",""))
-        fs = rel * 0.7 + frs * 0.3
+        hit_bonus = min(int(m.get("hit_count", 0) or 0) / 8.0, 1.0)
+        retention_bonus = 0.08 if retention.get("tier") == "keep" else 0.04
+        type_bonus = _memory_type_retrieval_bonus(memory_type)
+        fs = (
+            rel * 0.38
+            + signal_score * 0.24
+            + direct_score * 0.16
+            + frs * 0.10
+            + hit_bonus * 0.06
+            + type_bonus * 0.04
+            + retention_bonus * 0.02
+        )
         if fs > 0.15:
-            scored.append({**m, "relevance":round(rel,3), "freshness":round(frs,3), "final_score":round(fs,3)})
-    scored.sort(key=lambda x: x["final_score"], reverse=True)
-    result = scored[:limit]
+            scored.append({
+                **m,
+                "relevance": round(rel, 3),
+                "signal_score": round(signal_score, 3),
+                "freshness": round(frs, 3),
+                "direct_score": round(direct_score, 3),
+                "final_score": round(fs, 3),
+            })
+    scored.sort(
+        key=lambda x: (
+            x["final_score"],
+            x.get("signal_score", 0),
+            x.get("direct_score", 0),
+            x.get("relevance", 0),
+            x.get("freshness", 0),
+        ),
+        reverse=True,
+    )
+    result = []
+    seen_signatures = set()
+    for item in scored:
+        signature = _build_retrieval_signature(item)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        result.append(item)
+        if len(result) >= limit:
+            break
     if result:
         _bump_hits([r["id"] for r in result])
     return result
@@ -646,53 +816,141 @@ def get_stats() -> dict:
         "crystallized": sum(1 for m in store if m.get("crystallized")),
     }
 
-# ── 定期清理低分记忆 ──
-# 规则：
-#   永久保留：importance >= 0.7 或 已结晶(crystallized=True)
-#   30天清理：importance < 0.5 且 hit_count == 0（存了30天没人检索过）
-#   60天清理：importance < 0.5 且 hit_count <= 2（60天内几乎没用过）
-#   90天清理：importance < 0.7 且 hit_count <= 1（90天兜底）
+def _entry_age_days(entry: dict, now: datetime | None = None) -> int:
+    now = now or datetime.now()
+    try:
+        return max(0, (now - datetime.fromisoformat(str(entry.get("created_at") or ""))).days)
+    except Exception:
+        return 999
 
-def cleanup_stale_memories() -> dict:
+
+_GENERAL_ACTIVE_SIGNALS = [
+    "问题", "修", "修复", "设置", "代码", "文件", "前端", "后端", "客户端",
+    "工具", "权限", "监听", "打开", "时间线", "步骤", "流程", "为什么", "怎么",
+    "还是", "成功", "失败", "报错", "不对", "继续", "刚才", "现在", "这个对话",
+    "生成", "分割线", "卡住", "主链", "记忆", "路由", "窗口",
+]
+
+_GENERAL_LOW_SIGNAL_PATTERNS = [
+    "哈哈", "牛", "厉害", "聪明", "困", "我来了", "好神奇", "越来越聪明",
+    "哇", "太牛了", "真不错", "挺好", "可以啊", "好厉害",
+]
+
+
+def _looks_like_active_general_context(text: str) -> bool:
+    text = str(text or "").strip()
+    if not text:
+        return False
+    if any(sig in text for sig in _GENERAL_ACTIVE_SIGNALS):
+        return True
+    if len(text) >= 28 and ("：" in text or ":" in text or "\n" in text):
+        return True
+    return False
+
+
+def _looks_like_low_signal_general(text: str) -> bool:
+    text = str(text or "").strip()
+    if not text:
+        return True
+    if len(text) <= 4:
+        return True
+    return any(sig in text for sig in _GENERAL_LOW_SIGNAL_PATTERNS)
+
+
+def classify_retention_bucket(entry: dict, now: datetime | None = None) -> dict:
+    """给 L2 条目分配保留层级：keep / compress / prune。"""
+    now = now or datetime.now()
+    user_text = str(entry.get("user_text") or "").strip()
+    memory_type = str(entry.get("memory_type") or "general").strip().lower() or "general"
+    importance = float(entry.get("importance", 0.5) or 0.5)
+    hits = int(entry.get("hit_count", 0) or 0)
+    crystallized = bool(entry.get("crystallized"))
+    age_days = _entry_age_days(entry, now)
+
+    tier = "compress"
+    label = "压缩类"
+    reason = "适合在 L2 保留轻量痕迹，不必长期保留完整原文"
+
+    if memory_type in ("fact", "rule", "preference", "goal"):
+        if crystallized:
+            reason = "已分发到更高层，L2 保留轻量痕迹即可"
+        else:
+            tier = "keep"
+            label = "永保类"
+            reason = "结构化高价值信息，适合作为 L2 的核心兜底"
+    elif memory_type in ("project", "decision"):
+        if crystallized:
+            reason = "项目或决策已被更高层接住，L2 只需保留轻量痕迹"
+        elif age_days <= 30 or hits > 0 or importance >= 0.7:
+            tier = "keep"
+            label = "永保类"
+            reason = "当前阶段仍可能持续推进，保留原始印象更稳"
+        elif age_days >= 120 and hits == 0 and importance < 0.6:
+            tier = "prune"
+            label = "淘汰候选"
+            reason = "项目或决策长期没有再被提及，继续保留价值较低"
+    elif memory_type in ("knowledge", "correction", "skill_demand"):
+        if crystallized:
+            reason = "已完成分发或纠偏，L2 只需保留轻量痕迹"
+        elif age_days >= 90 and hits == 0:
+            tier = "prune"
+            label = "淘汰候选"
+            reason = "线索长期未复用，继续保留的收益较低"
+        else:
+            reason = "更适合作为短中期线索保留，而不是长期保留原始对话"
+    else:
+        active_general = _looks_like_active_general_context(user_text)
+        if age_days <= 3 and active_general:
+            tier = "keep"
+            label = "永保类"
+            reason = "最近几天仍在推进的任务型对话印象，保留原始上下文更稳"
+        elif age_days <= 7 and hits >= 5 and active_general:
+            tier = "keep"
+            label = "永保类"
+            reason = "高复用且带任务连续性信号，说明仍在承担短中期上下文"
+        elif age_days <= 7 and _looks_like_low_signal_general(user_text):
+            reason = "近期但低信号的一般对话印象，更适合压成轻量痕迹"
+        elif age_days <= 7:
+            reason = "近期一般对话印象，先压成轻量痕迹观察是否继续承接"
+        elif age_days >= 30 and importance < 0.5 and hits == 0:
+            tier = "prune"
+            label = "淘汰候选"
+            reason = "陈旧且未复用的一般对话印象"
+        elif age_days >= 90 and importance < 0.7 and hits <= 1:
+            tier = "prune"
+            label = "淘汰候选"
+            reason = "长期没有承接价值的一般对话印象"
+        else:
+            reason = "一般对话印象更适合压成轻量痕迹，避免 L2 臃肿"
+
+    return {
+        "tier": tier,
+        "label": label,
+        "reason": reason,
+        "memory_type": memory_type,
+        "importance": importance,
+        "hit_count": hits,
+        "crystallized": crystallized,
+        "age_days": age_days,
+    }
+
+
+def cleanup_stale_memories(now: datetime | None = None) -> dict:
     """定期清理低价值记忆，返回清理统计"""
     store = _load()
     if not store:
         return {"before": 0, "after": 0, "removed": 0}
 
-    now = datetime.now()
+    now = now or datetime.now()
     kept = []
     removed = 0
+    retention_counts = {"keep": 0, "compress": 0, "prune": 0}
 
     for m in store:
-        imp = m.get("importance", 0.5)
-        hits = m.get("hit_count", 0)
-        crystal = m.get("crystallized", False)
-
-        # 已结晶的永远保留
-        if crystal:
-            kept.append(m)
-            continue
-        # 高分永远保留
-        if imp >= 0.7:
-            kept.append(m)
-            continue
-
-        # 算天数
-        try:
-            age_days = (now - datetime.fromisoformat(m.get("created_at", ""))).days
-        except Exception:
-            age_days = 999
-
-        # 30天：低分+零检索 → 清掉
-        if age_days >= 30 and imp < 0.5 and hits == 0:
-            removed += 1
-            continue
-        # 60天：低分+几乎没用 → 清掉
-        if age_days >= 60 and imp < 0.5 and hits <= 2:
-            removed += 1
-            continue
-        # 90天：中分+几乎没用 → 清掉
-        if age_days >= 90 and imp < 0.7 and hits <= 1:
+        retention = classify_retention_bucket(m, now=now)
+        tier = retention["tier"]
+        retention_counts[tier] = retention_counts.get(tier, 0) + 1
+        if tier == "prune":
             removed += 1
             continue
 
@@ -701,10 +959,16 @@ def cleanup_stale_memories() -> dict:
     if removed > 0:
         _save(kept)
         _debug_write("l2_cleanup", {
-            "before": len(store), "after": len(kept), "removed": removed
+            "before": len(store), "after": len(kept), "removed": removed,
+            "retention_counts": retention_counts,
         })
 
-    return {"before": len(store), "after": len(kept), "removed": removed}
+    return {
+        "before": len(store),
+        "after": len(kept),
+        "removed": removed,
+        "retention_counts": retention_counts,
+    }
 
 
 def prune_legacy_l2_demands_from_l5(make_backup: bool = True, reason: str = "manual_cleanup") -> dict:

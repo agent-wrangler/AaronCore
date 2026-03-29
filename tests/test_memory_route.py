@@ -75,9 +75,13 @@ class MemoryRouteTests(unittest.TestCase):
         self.assertEqual(rule_event["meta"]["memory_type"], "rule")
         self.assertEqual(rule_event["meta"]["hit_count"], 2)
         self.assertFalse(rule_event["meta"]["crystallized"])
+        self.assertEqual(rule_event["meta"]["retention_tier"], "keep")
+        self.assertEqual(rule_event["meta"]["retention_label"], "永保类")
 
         self.assertEqual(fact_event["meta"]["memory_type"], "fact")
         self.assertTrue(fact_event["meta"]["crystallized"])
+        self.assertEqual(fact_event["meta"]["retention_tier"], "compress")
+        self.assertEqual(fact_event["meta"]["retention_label"], "压缩类")
 
     def test_memory_route_merges_repeated_general_l2_impressions(self):
         result = self._load_memory(
@@ -122,6 +126,7 @@ class MemoryRouteTests(unittest.TestCase):
         self.assertEqual(merged_event["meta"]["repeat_count"], 2)
         self.assertEqual(merged_event["meta"]["hit_count"], 3)
         self.assertTrue(merged_event["meta"]["crystallized"])
+        self.assertEqual(merged_event["meta"]["retention_tier"], "keep")
         self.assertEqual(merged_event["time"], "2026-03-29 10:20")
 
     def test_memory_route_surfaces_l5_method_experience_and_ability_hint(self):
