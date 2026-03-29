@@ -140,15 +140,28 @@ async def get_memory():
                     success_count = int(item.get("success_count", item.get("\u4f7f\u7528\u6b21\u6570", 0)) or 0)
                     events.append({
                         "time": S.normalize_event_time(item.get("learned_at") or item.get("\u6700\u8fd1\u4f7f\u7528\u65f6\u95f4")),
-                        "layer": "L5", "event_type": "skill", "title": "\u6210\u529f\u7ecf\u9a8c",
+                        "layer": "L5", "event_type": "method_experience", "title": "\u65b9\u6cd5\u7ecf\u9a8c",
                         "content": f"{skill_name} / {content} / \u5df2\u6c89\u6dc0 {success_count} \u6b21",
+                        "meta": {
+                            "kind": "method_experience",
+                            "skill": skill_name,
+                            "summary": content,
+                            "success_count": success_count,
+                            "source": source,
+                        },
                     })
                     counts["L5"] += 1
                     continue
                 events.append({
                     "time": S.normalize_event_time(item.get("learned_at") or item.get("\u6700\u8fd1\u4f7f\u7528\u65f6\u95f4")),
-                    "layer": "L5", "event_type": "skill", "title": "\u6280\u80fd\u77e9\u9635",
-                    "content": f"\u89e3\u9501\u65b0\u6280\u80fd\uff1a\u300c{skill_name}\u300d\uff08\u5df2\u638c\u63e1 {skill_count} \u9879\u6280\u80fd\uff09",
+                    "layer": "L5", "event_type": "ability_hint", "title": "\u80fd\u529b\u7ebf\u7d22",
+                    "content": f"\u8bb0\u5f55\u4e86\u300c{skill_name}\u300d\u8fd9\u6761\u80fd\u529b\u7ebf\u7d22\uff08\u5f53\u524d L5 \u53ef\u89c1 {skill_count} \u9879\uff09",
+                    "meta": {
+                        "kind": "ability_hint",
+                        "skill": skill_name,
+                        "visible_count": skill_count,
+                        "source": source,
+                    },
                 })
                 counts["L5"] += 1
         except Exception:
@@ -181,8 +194,16 @@ async def get_memory():
                         parts.append(f"observed={observed}")
                     events.append({
                         "time": S.normalize_event_time(item.get("at")),
-                        "layer": "L6", "event_type": "evolution", "title": "\u6267\u884c\u8f68\u8ff9",
+                        "layer": "L6", "event_type": "execution_trace", "title": "\u6267\u884c\u8f68\u8ff9",
                         "content": " / ".join([p for p in parts if p]),
+                        "meta": {
+                            "kind": "execution_trace",
+                            "skill": skill_name,
+                            "summary": summary,
+                            "verified": verified,
+                            "observed_state": observed,
+                            "drift_reason": drift_reason,
+                        },
                     })
                     counts["L6"] += 1
             else:
@@ -194,8 +215,14 @@ async def get_memory():
                     tail = "\u8d8a\u6765\u8d8a\u719f\u7ec3\u4e86" if count >= 3 else "\u5df2\u7ecf\u7559\u4e0b\u7b2c\u4e00\u6b21\u6267\u884c\u75d5\u8ff9"
                     events.append({
                         "time": S.normalize_event_time(data.get("last_used")),
-                        "layer": "L6", "event_type": "evolution", "title": "\u6280\u80fd\u6267\u884c",
+                        "layer": "L6", "event_type": "execution_trace", "title": "\u6267\u884c\u8f68\u8ff9",
                         "content": f"\u4f7f\u7528\u4e86\uff1a\u300c{skill_name}\u300d \uff08{tail}\uff0c\u7d2f\u8ba1 {count} \u6b21\uff09",
+                        "meta": {
+                            "kind": "execution_count",
+                            "skill": skill_name,
+                            "count": count,
+                            "status_note": tail,
+                        },
                     })
                     counts["L6"] += 1
         except Exception:

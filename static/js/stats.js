@@ -201,9 +201,9 @@ function buildMemoryModule(s){
 
   // 神经动能：状态名 + 文案
   var kinState, kinTxt;
-  if(neuralKin>20){ kinState='高能演化'; kinTxt='技能矩阵已激活，L7 纠偏力矩稳定'; }
+  if(neuralKin>20){ kinState='高能演化'; kinTxt='方法经验已开始沉淀，L7 纠偏力矩稳定'; }
   else if(neuralKin>=5){ kinState='常规运行'; kinTxt='神经动能低速运行，状态稳定'; }
-  else if(neuralKin>0){ kinState='初始化中'; kinTxt='执行矩阵初始化，等待神经脉冲'; }
+  else if(neuralKin>0){ kinState='初始化中'; kinTxt='执行轨迹开始累积，等待更多神经脉冲'; }
   else{ kinState='静息状态'; kinTxt='静态闭环，等待动作触发'; }
 
   // 视觉含义（tooltip）
