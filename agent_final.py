@@ -521,13 +521,13 @@ async def home():
             css_file = static_dir / "css" / "main.css"
             if css_file.exists():
                 css = css_file.read_text(encoding="utf-8")
-                html = html.replace(
-                    '<link rel="stylesheet" href="/static/css/main.css">',
-                    f"<style>{css}</style>",
-                )
+                import re as _re_inline
+                css_pattern = r'<link rel="stylesheet" href="/static/css/main\.css[^"]*">'
+                css_match = _re_inline.search(css_pattern, html)
+                if css_match:
+                    html = html[:css_match.start()] + f"<style>{css}</style>" + html[css_match.end():]
             js_dir = static_dir / "js"
             js_order = ["i18n.js", "utils.js", "awareness.js", "chat.js", "memory.js", "settings.js", "docs.js", "stats.js", "app.js"]
-            import re as _re_inline
             for js_name in js_order:
                 js_file = js_dir / js_name
                 if js_file.exists():
