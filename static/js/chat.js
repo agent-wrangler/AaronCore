@@ -236,7 +236,6 @@ function buildPendingAssistantMessage(){
  contentArea.className='msg-content';
  contentArea.style.display='none';
 
- wrap.appendChild(planStrip);
  wrap.appendChild(tracker);
  wrap.appendChild(status);
  wrap.appendChild(contentArea);

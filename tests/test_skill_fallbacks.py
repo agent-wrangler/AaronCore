@@ -8,6 +8,7 @@ import core.l8_learn as l8_learn_module
 import core.reply_formatter as reply_formatter_module
 import core.tool_adapter as tool_adapter_module
 import core.executor as executor_module
+import core.fs_protocol as fs_protocol_module
 import memory as memory_module
 import routes.chat as chat_module
 from agent_final import normalize_route_result, resolve_route, unified_chat_reply
@@ -30,6 +31,33 @@ class SkillFallbackTests(unittest.TestCase):
                 {"label": "调用技能", "detail": "folder_explore", "status": "done"},
             ],
         )
+
+    def test_block_task_plan_after_failure_marks_current_item_blocked(self):
+        plan = {
+            "goal": "改进 NovaNotes 前端",
+            "phase": "1",
+            "summary": "改进 NovaNotes 前端",
+            "items": [
+                {"id": "1", "title": "重写 index.html", "status": "running", "detail": ""},
+                {"id": "2", "title": "测试 Flask", "status": "pending", "detail": ""},
+            ],
+            "current_item_id": "1",
+        }
+
+        with patch("core.task_store.save_task_plan_snapshot", return_value=({}, None)):
+            blocked = chat_module._block_task_plan_after_failure(
+                plan,
+                goal_hint="改进 NovaNotes 前端",
+                tool_used="write_file",
+                action_summary="目标：C:/Users/36459/NovaNotes/templates/index.html",
+                tool_response="执行失败: 缺少 content。",
+            )
+
+        self.assertEqual(blocked.get("phase"), "blocked")
+        self.assertEqual(blocked.get("current_item_id"), "1")
+        self.assertEqual((blocked.get("items") or [])[0].get("status"), "blocked")
+        self.assertIn("write_file", (blocked.get("summary") or ""))
+        self.assertIn("缺少 content", ((blocked.get("items") or [])[0].get("detail") or ""))
 
     def test_normalize_route_result_downgrades_unknown_skill_to_missing_skill_intent(self):
         # 使用一个确实不存在的技能名来测试降级逻辑
@@ -455,6 +483,8 @@ class RunEventMappingTests(unittest.TestCase):
         )
 
         self.assertIn("immediately call write_file again", note)
+        self.assertIn("call search_replace instead", note)
+        self.assertIn("call edit_file", note)
         self.assertIn("inspect with list_files or read_file first", note)
         self.assertIn("Only stop calling tools", note)
 
@@ -466,7 +496,87 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertIn("Do not send natural-language promises", note)
         self.assertIn("call write_file with the SAME file_path", note)
+        self.assertIn("call search_replace", note)
+        self.assertIn("call edit_file", note)
         self.assertIn("Do not repeat write_file without content", note)
+
+    def test_execute_edit_file_action_updates_existing_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "index.html"
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            def fake_stream(_cfg, _messages, **_kwargs):
+                yield "<html><body>new</body></html>"
+
+            with patch("brain.llm_call_stream", side_effect=fake_stream):
+                result = fs_protocol_module.execute_edit_file_action(
+                    {
+                        "file_path": str(target),
+                        "change_request": "把 old 改成 new",
+                    }
+                )
+
+            self.assertTrue(result.get("success"))
+            self.assertEqual(target.read_text(encoding="utf-8"), "<html><body>new</body></html>")
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("action_kind"), "edit_file")
+            self.assertEqual(action.get("outcome"), "edited")
+
+    def test_execute_search_replace_action_replaces_single_match(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "index.html"
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            result = fs_protocol_module.execute_search_replace_action(
+                {
+                    "file_path": str(target),
+                    "old_text": "old",
+                    "new_text": "new",
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            self.assertEqual(target.read_text(encoding="utf-8"), "<html><body>new</body></html>")
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("action_kind"), "search_replace")
+            self.assertEqual(action.get("outcome"), "edited")
+
+    def test_execute_search_replace_action_blocks_ambiguous_single_replace(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "sample.txt"
+            target.write_text("foo\nfoo\n", encoding="utf-8")
+
+            result = fs_protocol_module.execute_search_replace_action(
+                {
+                    "file_path": str(target),
+                    "old_text": "foo",
+                    "new_text": "bar",
+                }
+            )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            drift = meta.get("drift") or {}
+            self.assertEqual(drift.get("reason"), "search_text_ambiguous")
+            self.assertIn("match_count=2", (meta.get("action") or {}).get("verification_detail", ""))
+
+    def test_execute_search_replace_action_allows_empty_new_text_for_delete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "sample.txt"
+            target.write_text("alpha beta", encoding="utf-8")
+
+            result = fs_protocol_module.execute_search_replace_action(
+                {
+                    "file_path": str(target),
+                    "old_text": " beta",
+                    "new_text": "",
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            self.assertEqual(target.read_text(encoding="utf-8"), "alpha")
 
     def test_unified_reply_with_tools_stream_allows_one_more_write_file_repair_attempt(self):
         executed = []
@@ -958,6 +1068,21 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(action.get("verification_mode"), "argument_check")
         self.assertIn("missing_fields=content", action.get("verification_detail", ""))
 
+    def test_execute_tool_call_routes_search_replace_into_protocol_base(self):
+        result = tool_adapter_module.execute_tool_call(
+            "search_replace",
+            {"file_path": "notes_app/templates/__missing_search_replace__.html", "old_text": "<body>", "new_text": "<body class='x'>"},
+            {},
+        )
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("skill"), "search_replace")
+        meta = result.get("meta") or {}
+        action = meta.get("action") or {}
+        self.assertEqual(action.get("action_kind"), "search_replace")
+        self.assertEqual(action.get("target_kind"), "file")
+        self.assertEqual(action.get("verification_mode"), "path_exists")
+
     def test_repair_tool_args_recovers_folder_target_from_recent_project_history(self):
         repaired = reply_formatter_module._repair_tool_args_from_context(
             "folder_explore",
@@ -1007,6 +1132,90 @@ class RunEventMappingTests(unittest.TestCase):
             str((seen[1]["context"].get("fs_target") or {}).get("path") or "").replace("\\", "/"),
             "C:/Users/36459/NovaNotes",
         )
+
+    def test_execute_tool_call_explicit_path_overrides_stale_folder_target(self):
+        seen = []
+
+        def fake_execute(skill_route, user_input, context):
+            seen.append({"skill": skill_route.get("skill"), "user_input": user_input, "context": dict(context)})
+            return {"success": True, "skill": skill_route.get("skill"), "response": "ok", "meta": {}}
+
+        shared_context = {
+            "path": "C:/Users/36459/Desktop",
+            "fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect", "source": "memory"},
+            "context_data": {"fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect", "source": "memory"}},
+        }
+
+        with patch.object(tool_adapter_module, "_execute", side_effect=fake_execute):
+            tool_adapter_module.execute_tool_call(
+                "folder_explore",
+                {"user_input": "看这个目录", "path": "E:/文字红包"},
+                shared_context,
+            )
+
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(
+            str((seen[0]["context"].get("fs_target") or {}).get("path") or "").replace("\\", "/"),
+            "E:/文字红包",
+        )
+        self.assertEqual(str(seen[0]["context"].get("path") or "").replace("\\", "/"), "E:/文字红包")
+
+    def test_execute_tool_call_explicit_user_input_path_overrides_stale_folder_target(self):
+        seen = []
+
+        def fake_execute(skill_route, user_input, context):
+            seen.append({"skill": skill_route.get("skill"), "user_input": user_input, "context": dict(context)})
+            return {"success": True, "skill": skill_route.get("skill"), "response": "ok", "meta": {}}
+
+        shared_context = {
+            "path": "C:/Users/36459/Desktop",
+            "fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect", "source": "memory"},
+            "context_data": {"fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect", "source": "memory"}},
+        }
+
+        with patch.object(tool_adapter_module, "_execute", side_effect=fake_execute), patch(
+            "core.context_pull.pull_context_data",
+            return_value={
+                "fs_target": {"path": "E:/文字红包", "option": "inspect", "source": "context_pull"},
+                "fs_action": {"action": "inspect", "target": {"path": "E:/文字红包"}},
+            },
+        ):
+            tool_adapter_module.execute_tool_call(
+                "folder_explore",
+                {"user_input": "看看 E:/文字红包"},
+                shared_context,
+            )
+
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(
+            str((seen[0]["context"].get("fs_target") or {}).get("path") or "").replace("\\", "/"),
+            "E:/文字红包",
+        )
+        self.assertEqual(str(seen[0]["context"].get("path") or "").replace("\\", "/"), "E:/文字红包")
+    def test_execute_tool_call_generic_request_does_not_reuse_stale_desktop_target(self):
+        seen = []
+
+        def fake_execute(skill_route, user_input, context):
+            seen.append({"skill": skill_route.get("skill"), "user_input": user_input, "context": dict(context)})
+            return {"success": True, "skill": skill_route.get("skill"), "response": "ok", "meta": {}}
+
+        shared_context = {
+            "path": "C:/Users/36459/Desktop",
+            "fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect", "source": "memory"},
+            "context_data": {"fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect", "source": "memory"}},
+        }
+
+        with patch.object(tool_adapter_module, "_execute", side_effect=fake_execute):
+            tool_adapter_module.execute_tool_call(
+                "folder_explore",
+                {"user_input": "find selfie files"},
+                shared_context,
+            )
+
+        self.assertEqual(len(seen), 1)
+        self.assertFalse((seen[0]["context"].get("fs_target") or {}).get("path"))
+        self.assertEqual(str(seen[0]["context"].get("path") or "").replace("\\", "/"), "")
+        self.assertFalse((((seen[0]["context"].get("context_data") or {}).get("fs_target") or {}).get("path")))
 
 
 class MemoryEvolutionTests(unittest.TestCase):

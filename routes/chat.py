@@ -1,5 +1,6 @@
 """核心对话路由：/chat SSE 流式"""
 import asyncio
+import copy
 import json
 import requests
 from datetime import datetime
@@ -92,6 +93,76 @@ def _extract_task_plan_from_meta(meta: dict | None) -> dict | None:
     if not task_plan or not items:
         return None
     return task_plan
+
+
+def _is_task_plan_terminal(plan: dict | None) -> bool:
+    plan = plan if isinstance(plan, dict) else {}
+    items = plan.get("items") if isinstance(plan.get("items"), list) else []
+    phase = str(plan.get("phase") or "").strip().lower()
+    if phase in {"done", "failed", "blocked", "cancelled"}:
+        return True
+    if not items:
+        return True
+    return not any(
+        str((item or {}).get("status") or "").strip() in {"pending", "running", "waiting_user"}
+        for item in items
+    )
+
+
+def _block_task_plan_after_failure(
+    plan: dict | None,
+    *,
+    goal_hint: str = "",
+    tool_used: str = "",
+    action_summary: str = "",
+    tool_response: str = "",
+) -> dict | None:
+    plan = copy.deepcopy(plan if isinstance(plan, dict) else {})
+    items = plan.get("items") if isinstance(plan.get("items"), list) else []
+    if not items or _is_task_plan_terminal(plan):
+        return plan or None
+
+    summary = _summarize_execution_text(tool_response) or _summarize_execution_text(action_summary)
+    if tool_used and summary:
+        summary = f"{tool_used} 未完成：{summary}"
+    elif tool_used:
+        summary = f"{tool_used} 未完成"
+    elif not summary:
+        summary = "当前步骤执行失败"
+
+    current_item_id = str(plan.get("current_item_id") or "").strip()
+    target = None
+    if current_item_id:
+        target = next((item for item in items if str((item or {}).get("id") or "").strip() == current_item_id), None)
+    if not target:
+        target = next((item for item in items if str((item or {}).get("status") or "").strip() == "running"), None)
+    if not target:
+        target = next((item for item in items if str((item or {}).get("status") or "").strip() == "pending"), None)
+    if not target and items:
+        target = items[-1]
+
+    if target:
+        target["status"] = "blocked"
+        if summary:
+            target["detail"] = summary
+        plan["current_item_id"] = str(target.get("id") or "").strip()
+
+    plan["phase"] = "blocked"
+    if summary:
+        plan["summary"] = summary
+
+    try:
+        from core.task_store import normalize_task_plan_snapshot, save_task_plan_snapshot
+
+        normalized = normalize_task_plan_snapshot(plan, goal=str(plan.get("goal") or goal_hint or "").strip())
+        _, saved_plan = save_task_plan_snapshot(
+            str(normalized.get("goal") or goal_hint or "").strip(),
+            normalized,
+            source="task_plan_runtime",
+        )
+        return saved_plan if isinstance(saved_plan, dict) else normalized
+    except Exception:
+        return plan
 
 
 def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
@@ -1019,6 +1090,17 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     action_summary=_tool_action_summary,
                     run_meta=_tool_run_meta,
                 )
+                if _task_plan and _tool_success is False:
+                    _blocked_plan = _block_task_plan_after_failure(
+                        _task_plan,
+                        goal_hint=msg,
+                        tool_used=_tool_used or "",
+                        action_summary=_tool_action_summary,
+                        tool_response=_tool_response_text or response,
+                    )
+                    if _blocked_plan and _blocked_plan != _task_plan:
+                        _task_plan = _blocked_plan
+                        yield {"event": "plan", "data": json.dumps(_blocked_plan, ensure_ascii=False)}
                 S.debug_write("pre_reply_yield", {"response_len": len(response), "response_preview": response[:100]})
                 await asyncio.sleep(0.05)
                 yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}

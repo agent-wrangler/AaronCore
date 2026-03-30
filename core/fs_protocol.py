@@ -10,6 +10,8 @@ DANGEROUS_SUFFIXES = {'.exe', '.bat', '.cmd', '.ps1', '.lnk'}
 INVALID_CHARS = r'[\\/:*?"<>|]'
 PROTOCOL_REQUIRED_FIELDS = {
     'write_file': ('file_path', 'content'),
+    'edit_file': ('file_path', 'change_request'),
+    'search_replace': ('file_path', 'old_text', 'new_text'),
 }
 
 
@@ -361,8 +363,14 @@ def is_allowed_write_target(target: str | Path | None) -> bool:
 
 def missing_required_protocol_fields(tool_name: str, tool_args: dict | None) -> list[str]:
     args = dict(tool_args or {})
+    normalized_tool = str(tool_name or '').strip()
     missing = []
-    for field in PROTOCOL_REQUIRED_FIELDS.get(str(tool_name or '').strip(), ()):
+    for field in PROTOCOL_REQUIRED_FIELDS.get(normalized_tool, ()):
+        if normalized_tool == 'search_replace' and field == 'new_text':
+            aliases = ('new_text', 'replacement', 'replace_text', 'after')
+            if not any(alias in args for alias in aliases):
+                missing.append(field)
+            continue
         value = args.get(field)
         if isinstance(value, str):
             if not value.strip():
@@ -516,7 +524,7 @@ def verify_post_condition(action: str, target_value: str = '', **kwargs) -> dict
         exists = p.exists()
         return {'ok': exists, 'expected': 'artifact_saved', 'observed': 'artifact_present' if exists else 'artifact_missing', 'drift': '' if exists else 'artifact_not_persisted', 'hint': '' if exists else 'fallback_to_desktop'}
 
-    if action in {'write', 'write_file'}:
+    if action in {'write', 'write_file', 'edit_file', 'search_replace'}:
         p = Path(str(target_value or '').strip())
         exists = p.exists()
         return {
@@ -740,6 +748,160 @@ def record_saved_artifact(path: str, fmt: str):
     })
 
 
+def build_protocol_arg_failure_feedback(tool_name: str, tool_args: dict | None, missing_fields: list[str]) -> str:
+    signature = protocol_arg_failure_signature(tool_name, tool_args, missing_fields)
+    target = signature.get('target') or '未提供目标'
+    if tool_name == 'write_file' and 'content' in missing_fields:
+        return (
+            '执行失败: 缺少 content。\n'
+            f'write_file 必须同时提供 file_path 和完整文件内容；当前目标是 {target}。\n'
+            '不要重复只带 file_path 的调用。\n'
+            '如果你已经知道这个文件要写什么，就直接重新调用 write_file，并把该文件的完整 content 一次性传入。\n'
+            '如果你已经知道文件里哪段 old_text 要替换成 new_text，直接调用 search_replace。\n'
+            '如果是在已有文件上按需求修改，直接调用 edit_file，传 file_path + change_request。\n'
+            '如果还缺项目结构或相邻文件信息，先调用 list_files / read_file 再决定写入。\n'
+            '只有在文件内容真的依赖用户选择，或你确实缺少必要上下文时，才停止工具调用并向用户解释阻塞。'
+        )
+    if tool_name == 'edit_file' and 'change_request' in missing_fields:
+        return (
+            '执行失败: 缺少 change_request。\n'
+            f'edit_file 需要目标文件和要怎么改的明确说明；当前目标是 {target}。\n'
+            '请写明要改哪里、要达到什么效果。如果还需要上下文，先调用 list_files / read_file。'
+        )
+    if tool_name == 'search_replace':
+        if 'old_text' in missing_fields:
+            return (
+                '执行失败: 缺少 old_text。\n'
+                f'search_replace 需要明确知道要替换的原始文本；当前目标是 {target}。\n'
+                '请提供文件里当前实际存在的精确文本片段；如果还不确定，先调用 read_file。'
+            )
+        if 'new_text' in missing_fields:
+            return (
+                '执行失败: 缺少 new_text。\n'
+                f'search_replace 需要明确知道替换成什么；当前目标是 {target}。\n'
+                '请提供 new_text；如果是删除旧文本，也要显式传空字符串而不是省略字段。'
+            )
+    return f"执行失败: 缺少必要参数 {', '.join(missing_fields)}。请补全参数后再继续。"
+
+
+def build_protocol_arg_failure_system_note(tool_name: str, tool_args: dict | None, missing_fields: list[str]) -> str:
+    signature = protocol_arg_failure_signature(tool_name, tool_args, missing_fields)
+    target = signature.get('target') or 'unknown target'
+    missing = ', '.join(signature.get('missing_fields') or ())
+    if tool_name == 'write_file':
+        return (
+            f'The previous write_file call for {target} failed because required arguments were missing: {missing}. '
+            'Do not repeat the same incomplete write_file call. '
+            'If you already know what the file should contain, immediately call write_file again with the same file_path and the COMPLETE file content string. '
+            'If you already know the exact old_text and new_text for a local change, call search_replace instead. '
+            'If the target file already exists and you need to modify it from instructions, call edit_file with the same file_path and a precise change_request instead. '
+            'If you still need project structure or neighboring file context, inspect with list_files or read_file first, then rebuild the full content. '
+            'Only stop calling tools and explain the blocker if the file content genuinely depends on a missing user choice or missing context you cannot infer.'
+        )
+    if tool_name == 'edit_file':
+        return (
+            f'The previous edit_file call for {target} failed because required arguments were missing: {missing}. '
+            'Do not repeat the same incomplete edit_file call. '
+            'Call edit_file again with the same file_path and a precise change_request that describes the intended modification. '
+            'If you still need surrounding project context, inspect with list_files or read_file first. '
+            'Only stop calling tools if the change request depends on a missing user choice you cannot infer.'
+        )
+    if tool_name == 'search_replace':
+        return (
+            f'The previous search_replace call for {target} failed because required arguments were missing: {missing}. '
+            'Do not repeat the same incomplete search_replace call. '
+            'Call search_replace again with the same file_path, the exact existing old_text, and an explicit new_text field. '
+            'If you are not certain what text currently exists in the file, inspect with read_file first.'
+        )
+    return (
+        f'The previous tool call failed because required arguments were missing: {missing}. '
+        'Do not repeat the same incomplete call. Either provide the missing arguments or stop and explain the blocker.'
+    )
+
+
+def build_protocol_retry_note(tool_name: str, tool_args: dict | None, exec_result: dict | None) -> str:
+    if not isinstance(exec_result, dict) or exec_result.get('success', False):
+        return ''
+
+    missing_fields = missing_required_protocol_fields(tool_name, tool_args)
+    if missing_fields:
+        return build_protocol_arg_failure_system_note(tool_name, tool_args, missing_fields)
+
+    file_tools = {'write_file', 'edit_file', 'search_replace', 'read_file', 'list_files'}
+    environment_tools = {'open_target', 'app_target', 'ui_interaction', 'folder_explore', 'sense_environment', 'screen_capture'}
+    command_tools = {'run_command'}
+
+    if tool_name in file_tools:
+        return (
+            'The previous file/code action failed. Do not repeat the exact same call blindly. '
+            'If the current project structure or nearby files may matter, inspect with list_files or read_file first, then choose the next action.'
+        )
+
+    if tool_name in environment_tools:
+        return (
+            'The previous environment action failed. Do not repeat the exact same desktop action blindly. '
+            'Inspect the current state with sense_environment or screen_capture first, then choose the next step.'
+        )
+
+    if tool_name in command_tools:
+        return (
+            'The previous local build, package, install, or test command failed. '
+            'Do not blindly repeat the same command. Inspect the output, workdir, and expected_artifacts first, '
+            'then adjust the command or fix the relevant files.'
+        )
+
+    return (
+        'The previous tool call failed. Do not repeat the same failing call without changing arguments, checking state, or choosing a more informative tool first.'
+    )
+
+
+def _strip_llm_code_fence(text: str) -> str:
+    content = str(text or '').strip()
+    if not content.startswith('```'):
+        return content
+    lines = content.splitlines()
+    if lines and lines[0].startswith('```'):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == '```':
+        lines = lines[:-1]
+    return '\n'.join(lines).strip()
+
+
+def _generate_edited_file_content(target: Path, original_content: str, change_request: str) -> str:
+    from brain import LLM_CONFIG, llm_call_stream
+
+    prompt = (
+        'You are modifying an existing local file.\n'
+        'Return ONLY the final complete file content.\n'
+        'Do not explain changes.\n'
+        'Do not wrap the answer in markdown fences.\n\n'
+        f'File path: {target}\n'
+        f'Change request: {change_request}\n\n'
+        'Current file content:\n'
+        '```text\n'
+        f'{original_content}\n'
+        '```'
+    )
+
+    chunks = []
+    for token in llm_call_stream(
+        dict(LLM_CONFIG),
+        [{"role": "user", "content": prompt}],
+        temperature=0.1,
+        max_tokens=8192,
+        timeout=60,
+    ):
+        if isinstance(token, str):
+            chunks.append(token)
+
+    rewritten = _strip_llm_code_fence(''.join(chunks))
+    if not rewritten:
+        raise ValueError('model_returned_empty_content')
+    if original_content and len(rewritten) < max(20, int(len(original_content) * 0.2)):
+        raise ValueError('model_returned_truncated_content')
+    return rewritten
+
+
 def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -> dict:
     args = dict(arguments or {})
     file_path = str(
@@ -861,6 +1023,484 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
         verification_detail=str(target),
         post_condition=post,
         verified=bool(post.get('ok', False)),
+    )
+
+
+def execute_edit_file_action(arguments: dict | None, *, user_input: str = '') -> dict:
+    args = dict(arguments or {})
+    file_path = str(
+        args.get('file_path', '')
+        or args.get('path', '')
+        or args.get('target', '')
+        or args.get('filename', '')
+        or ''
+    ).strip()
+    change_request = str(
+        args.get('change_request', '')
+        or args.get('instructions', '')
+        or args.get('problem', '')
+        or args.get('description', '')
+        or user_input
+        or ''
+    ).strip()
+
+    missing = missing_required_protocol_fields('edit_file', {'file_path': file_path, 'change_request': change_request})
+    target_hint = file_path.strip()
+    if missing:
+        feedback = build_protocol_arg_failure_feedback(
+            'edit_file',
+            {'file_path': file_path, 'change_request': change_request},
+            missing,
+        )
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='edit_ready',
+            observed_state='missing_required_args',
+            drift_reason='missing_required_args',
+            repair_hint='provide_change_request',
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='edit_file',
+            target_kind='file',
+            target=target_hint,
+            outcome='blocked',
+            display_hint=f"修改文件缺少必要参数：{Path(target_hint).name if target_hint else '未提供目标'}",
+            verification_mode='argument_check',
+            verification_detail=f"missing_fields={','.join(missing)}",
+            verified=False,
+        )
+
+    target = resolve_user_file_target(file_path)
+    if not target:
+        feedback = '执行失败: 缺少 file_path。'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='edit_ready',
+            observed_state='path_unresolved',
+            drift_reason='missing_edit_target',
+            repair_hint='provide_valid_file_path',
+            action_kind='edit_file',
+            target_kind='file',
+            target='',
+            outcome='unresolved',
+            display_hint='修改文件时没有解析出目标路径',
+            verification_mode='path_resolution',
+            verification_detail='target_unresolved',
+            verified=False,
+        )
+
+    if not target.exists() or not target.is_file():
+        feedback = f'执行失败: 目标文件不存在：{target}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='editable_file_present',
+            observed_state='file_missing',
+            drift_reason='edit_target_missing',
+            repair_hint='read_or_create_target_first',
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'目标文件不存在：{target.name}',
+            verification_mode='path_exists',
+            verification_detail=str(target),
+            verified=False,
+        )
+
+    if not is_allowed_write_target(target):
+        feedback = f'执行失败: 目标路径不可修改：`{target}`'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='edit_allowed',
+            observed_state='edit_blocked',
+            drift_reason='write_target_protected',
+            repair_hint='choose_safe_workspace_path',
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'修改被保护策略拦下：{target.name}',
+            verification_mode='write_guard',
+            verification_detail='protected_target',
+            verified=False,
+        )
+
+    try:
+        original_content = target.read_text(encoding='utf-8')
+    except Exception as exc:
+        feedback = f'读取失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='file_readable',
+            observed_state='read_exception',
+            drift_reason='read_exception',
+            repair_hint='check_path_permissions_or_encoding',
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'读取目标文件失败：{target.name}',
+            verification_mode='read_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    try:
+        updated_content = _generate_edited_file_content(target, original_content, change_request)
+    except Exception as exc:
+        feedback = f'修改失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='edited_content_ready',
+            observed_state='generation_failed',
+            drift_reason='edit_generation_failed',
+            repair_hint='refine_change_request_or_read_context',
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'生成修改内容失败：{target.name}',
+            verification_mode='content_generation',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    try:
+        target.write_text(updated_content, encoding='utf-8')
+        observed_content = target.read_text(encoding='utf-8')
+    except Exception as exc:
+        feedback = f'写入失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='file_edited',
+            observed_state='write_exception',
+            drift_reason='write_exception',
+            repair_hint='check_path_permissions_or_content',
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'修改文件失败：{target.name}',
+            verification_mode='write_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    verified = observed_content == updated_content
+    post = {
+        'ok': verified,
+        'expected': 'file_edited',
+        'observed': 'file_edited' if verified else 'file_edit_unconfirmed',
+        'drift': '' if verified else 'edit_not_persisted',
+        'hint': '' if verified else 'retry_or_check_write_target',
+    }
+    summary = f'已修改文件：{target}'
+    return build_protocol_exec_result(
+        verified,
+        f"{summary}\n变更：{change_request}",
+        error='' if verified else '修改后未能确认文件内容已持久化',
+        expected_state='file_edited',
+        observed_state=str(post.get('observed') or ''),
+        drift_reason=str(post.get('drift') or ''),
+        repair_hint=str(post.get('hint') or ''),
+        repair_attempted=False,
+        repair_succeeded=verified,
+        action_kind='edit_file',
+        target_kind='file',
+        target=str(target),
+        outcome='edited' if verified else 'edit_unconfirmed',
+        display_hint=f'已修改文件：{target.name}' if verified else f'修改后未确认文件：{target.name}',
+        verification_mode='content_roundtrip',
+        verification_detail=str(target),
+        post_condition=post,
+        verified=verified,
+    )
+
+
+def execute_search_replace_action(arguments: dict | None, *, user_input: str = '') -> dict:
+    args = dict(arguments or {})
+    file_path = str(
+        args.get('file_path', '')
+        or args.get('path', '')
+        or args.get('target', '')
+        or args.get('filename', '')
+        or ''
+    ).strip()
+    old_text = args.get('old_text')
+    if old_text is None:
+        old_text = args.get('search_text')
+    if old_text is None:
+        old_text = args.get('find_text')
+    if old_text is None:
+        old_text = args.get('before')
+    old_text = str(old_text or '')
+
+    new_text_value = None
+    for key in ('new_text', 'replacement', 'replace_text', 'after'):
+        if key in args:
+            new_text_value = args.get(key)
+            break
+    new_text = '' if new_text_value is None else str(new_text_value)
+    replace_all_raw = args.get('replace_all', False)
+    if isinstance(replace_all_raw, str):
+        replace_all = replace_all_raw.strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+    else:
+        replace_all = bool(replace_all_raw)
+
+    missing = missing_required_protocol_fields(
+        'search_replace',
+        {'file_path': file_path, 'old_text': old_text, 'new_text': new_text, **args},
+    )
+    target_hint = file_path.strip()
+    if missing:
+        feedback = build_protocol_arg_failure_feedback(
+            'search_replace',
+            {'file_path': file_path, 'old_text': old_text, 'new_text': new_text, **args},
+            missing,
+        )
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='search_replace_ready',
+            observed_state='missing_required_args',
+            drift_reason='missing_required_args',
+            repair_hint='provide_search_replace_arguments',
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='search_replace',
+            target_kind='file',
+            target=target_hint,
+            outcome='blocked',
+            display_hint=f"替换文本缺少必要参数：{Path(target_hint).name if target_hint else '未提供目标'}",
+            verification_mode='argument_check',
+            verification_detail=f"missing_fields={','.join(missing)}",
+            verified=False,
+        )
+
+    target = resolve_user_file_target(file_path)
+    if not target:
+        feedback = '执行失败: 缺少 file_path。'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='search_replace_ready',
+            observed_state='path_unresolved',
+            drift_reason='missing_replace_target',
+            repair_hint='provide_valid_file_path',
+            action_kind='search_replace',
+            target_kind='file',
+            target='',
+            outcome='unresolved',
+            display_hint='替换文本时没有解析出目标路径',
+            verification_mode='path_resolution',
+            verification_detail='target_unresolved',
+            verified=False,
+        )
+
+    if not target.exists() or not target.is_file():
+        feedback = f'执行失败: 目标文件不存在：{target}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='replace_target_present',
+            observed_state='file_missing',
+            drift_reason='replace_target_missing',
+            repair_hint='read_or_create_target_first',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'目标文件不存在：{target.name}',
+            verification_mode='path_exists',
+            verification_detail=str(target),
+            verified=False,
+        )
+
+    if not is_allowed_write_target(target):
+        feedback = f'执行失败: 目标路径不可修改：`{target}`'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='replace_allowed',
+            observed_state='replace_blocked',
+            drift_reason='write_target_protected',
+            repair_hint='choose_safe_workspace_path',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'替换被保护策略拦下：{target.name}',
+            verification_mode='write_guard',
+            verification_detail='protected_target',
+            verified=False,
+        )
+
+    try:
+        original_content = target.read_text(encoding='utf-8')
+    except Exception as exc:
+        feedback = f'读取失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='file_readable',
+            observed_state='read_exception',
+            drift_reason='read_exception',
+            repair_hint='check_path_permissions_or_encoding',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'读取目标文件失败：{target.name}',
+            verification_mode='read_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    occurrences = original_content.count(old_text)
+    if occurrences <= 0:
+        feedback = f'执行失败: 目标文件里没有找到指定 old_text：{target}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='match_found',
+            observed_state='match_missing',
+            drift_reason='search_text_not_found',
+            repair_hint='read_file_or_use_more_precise_old_text',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'未找到可替换文本：{target.name}',
+            verification_mode='text_match',
+            verification_detail='match_count=0',
+            verified=False,
+        )
+
+    if occurrences > 1 and not replace_all:
+        feedback = (
+            f'执行失败: old_text 在目标文件里匹配到 {occurrences} 处，单次替换不够明确：{target}\n'
+            '请提供更精确的 old_text，或者显式传 replace_all=true。'
+        )
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='single_match_found',
+            observed_state='multiple_matches',
+            drift_reason='search_text_ambiguous',
+            repair_hint='use_more_precise_old_text_or_replace_all',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'替换文本匹配过多：{target.name}',
+            verification_mode='text_match',
+            verification_detail=f'match_count={occurrences}',
+            verified=False,
+        )
+
+    if old_text == new_text:
+        feedback = (
+            f'执行失败: old_text 和 new_text 完全相同，没有实际变更：{target}\n'
+            '请确认你要替换成的新内容，或者改用 read_file 先检查当前文件。'
+        )
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='effective_change_ready',
+            observed_state='no_effective_change',
+            drift_reason='search_replace_noop',
+            repair_hint='provide_distinct_new_text',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'替换内容没有变化：{target.name}',
+            verification_mode='argument_check',
+            verification_detail='old_text_equals_new_text',
+            verified=False,
+        )
+
+    updated_content = (
+        original_content.replace(old_text, new_text)
+        if replace_all
+        else original_content.replace(old_text, new_text, 1)
+    )
+
+    try:
+        target.write_text(updated_content, encoding='utf-8')
+        observed_content = target.read_text(encoding='utf-8')
+    except Exception as exc:
+        feedback = f'写入失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='file_replaced',
+            observed_state='write_exception',
+            drift_reason='write_exception',
+            repair_hint='check_path_permissions_or_content',
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'替换文本失败：{target.name}',
+            verification_mode='write_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    verified = observed_content == updated_content
+    replaced_count = occurrences if replace_all else 1
+    post = {
+        'ok': verified,
+        'expected': 'file_edited',
+        'observed': 'file_edited' if verified else 'file_edit_unconfirmed',
+        'drift': '' if verified else 'replace_not_persisted',
+        'hint': '' if verified else 'retry_or_check_write_target',
+    }
+    summary = f'已替换文件内容：{target}'
+    detail = f'匹配 {occurrences} 处，实际替换 {replaced_count} 处'
+    return build_protocol_exec_result(
+        verified,
+        f"{summary}\n{detail}",
+        error='' if verified else '替换后未能确认文件内容已持久化',
+        expected_state='file_edited',
+        observed_state=str(post.get('observed') or ''),
+        drift_reason=str(post.get('drift') or ''),
+        repair_hint=str(post.get('hint') or ''),
+        repair_attempted=False,
+        repair_succeeded=verified,
+        action_kind='search_replace',
+        target_kind='file',
+        target=str(target),
+        outcome='edited' if verified else 'edit_unconfirmed',
+        display_hint=f'已替换文件内容：{target.name}' if verified else f'替换后未确认文件：{target.name}',
+        verification_mode='content_roundtrip',
+        verification_detail=f'{target} | match_count={occurrences} | replaced_count={replaced_count}',
+        post_condition=post,
+        verified=verified,
     )
 
 

@@ -1,12 +1,20 @@
 # Executor - 技能执行层
 # 负责：统一调用技能、处理结果、封装异常、注入用户上下文
 
-from core.fs_protocol import attempt_fs_repair, execute_write_file_action, verify_post_condition
+from core.fs_protocol import (
+    attempt_fs_repair,
+    execute_edit_file_action,
+    execute_search_replace_action,
+    execute_write_file_action,
+    verify_post_condition,
+)
 from core.skills import get_skill
 
-_PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction', 'write_file'}
+_PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction', 'write_file', 'edit_file', 'search_replace'}
 _DIRECT_PROTOCOL_EXECUTORS = {
     'write_file': execute_write_file_action,
+    'edit_file': execute_edit_file_action,
+    'search_replace': execute_search_replace_action,
 }
 
 
@@ -69,6 +77,11 @@ def _derive_protocol_post_check(skill_name: str, user_input: str, context: dict)
         target_value = str(context.get('file_path') or context.get('path') or context.get('target') or context.get('filename') or '').strip()
         if target_value:
             return 'write_file', target_value, {}
+
+    if skill_name == 'edit_file':
+        target_value = str(context.get('file_path') or context.get('path') or context.get('target') or context.get('filename') or '').strip()
+        if target_value:
+            return 'edit_file', target_value, {}
 
     if skill_name == 'app_target':
         target_value = str(context.get('target') or context.get('app') or context.get('path') or '').strip()

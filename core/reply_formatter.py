@@ -318,7 +318,7 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
             args["user_input"] = user_input
         return args
 
-    if tool_name != "write_file":
+    if tool_name not in {"write_file", "edit_file", "search_replace"}:
         if user_input and "user_input" not in args:
             args["user_input"] = user_input
         return args
@@ -335,6 +335,33 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
             if wants_html and candidate.suffix.lower() != ".html":
                 candidate = candidate.with_suffix(".html")
             args["file_path"] = str(candidate)
+
+    if tool_name == "edit_file":
+        change_request = str(
+            args.get("change_request")
+            or args.get("instructions")
+            or args.get("problem")
+            or args.get("description")
+            or ""
+        ).strip()
+        if change_request and "change_request" not in args:
+            args["change_request"] = change_request
+
+    if tool_name == "search_replace":
+        old_text = str(
+            args.get("old_text")
+            or args.get("search_text")
+            or args.get("find_text")
+            or args.get("before")
+            or ""
+        )
+        if old_text and "old_text" not in args:
+            args["old_text"] = old_text
+        if "new_text" not in args:
+            for alias in ("replacement", "replace_text", "after"):
+                if alias in args:
+                    args["new_text"] = args.get(alias)
+                    break
 
     if user_input and "user_input" not in args:
         args["user_input"] = user_input
@@ -501,7 +528,9 @@ def _build_strict_write_file_retry_note(tool_args: dict | None, signature: dict 
         "Do not send natural-language promises in the next turn. "
         "Your next assistant turn must do exactly one of these: "
         "(1) call write_file with the SAME file_path and the COMPLETE final content string; "
-        "(2) if you still need surrounding project context, call list_files or read_file first. "
+        "(2) if you know the exact old_text and new_text for a local change, call search_replace with the SAME file_path; "
+        "(3) if the file already exists and you need to modify it from instructions, call edit_file with the SAME file_path and a precise change_request; "
+        "(4) if you still need surrounding project context, call list_files or read_file first. "
         "Do not repeat write_file without content."
     )
 
@@ -532,6 +561,8 @@ def _tool_preview(name: str, arguments: dict) -> str:
         "open_target": ("path", "url", "target"),
         "read_file": ("file_path", "path"),
         "list_files": ("path", "file_path"),
+        "search_replace": ("file_path", "path", "target", "filename"),
+        "edit_file": ("file_path", "path", "target", "filename"),
         "write_file": ("file_path", "path", "target", "filename"),
         "save_export": ("filename", "destination"),
         "web_search": ("query", "intent"),
@@ -1651,6 +1682,9 @@ def _build_cod_system_prompt(bundle: dict) -> str:
         "\n- Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction."
         "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
         "\n- For file or code tasks, if the next step depends on project structure or existing files, inspect with list_files or read_file before writing."
+        "\n- Use search_replace when you know the exact old_text and new_text inside an existing file."
+        "\n- Use edit_file when an existing file must be modified from instructions but you do not have an exact search/replace block yet."
+        "\n- Use write_file only when the complete final file content is already determined."
         "\n- For uncertain desktop or app state, inspect with sense_environment or screen_capture before repeating the same action."
         "\n- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes."
         "\n- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
