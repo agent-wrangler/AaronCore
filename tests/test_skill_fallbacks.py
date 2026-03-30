@@ -10,7 +10,7 @@ import core.tool_adapter as tool_adapter_module
 import core.executor as executor_module
 import memory as memory_module
 import routes.chat as chat_module
-from agent_final import normalize_route_result, resolve_route, unified_chat_reply, unified_skill_reply
+from agent_final import normalize_route_result, resolve_route, unified_chat_reply
 from core.context_builder import build_dialogue_context, render_dialogue_context
 
 
@@ -54,16 +54,16 @@ class SkillFallbackTests(unittest.TestCase):
         # 不存在的技能不会被路由命中，应走 chat
         self.assertEqual(result.get("mode"), "chat")
 
-    def test_unified_skill_reply_humanizes_runtime_failure(self):
+    def disabled_test_legacy_skill_fallback_humanizes_runtime_failure(self):
         bundle = {"user_input": "上海天气怎么样", "l4": {}, "dialogue_context": ""}
 
         with patch("agent_final.nova_execute", return_value={"success": False, "error": "执行失败: timeout"}):
-            result = unified_skill_reply(bundle, "weather", "上海天气怎么样")
+            self.skipTest("legacy skill fallback path retired")
 
         self.assertFalse(result["trace"]["success"])
         self.assertIn("没跑稳", result["reply"])
 
-    def test_unified_skill_reply_passes_run_event_to_evolve(self):
+    def disabled_test_legacy_skill_fallback_passes_run_event_to_evolve(self):
         bundle = {"user_input": "打开项目目录", "l4": {}, "dialogue_context": ""}
         execute_result = {
             "success": True,
@@ -86,7 +86,7 @@ class SkillFallbackTests(unittest.TestCase):
         }
 
         with patch("agent_final.nova_execute", return_value=execute_result), patch("routes.chat.S.evolve") as evolve_mock:
-            result = unified_skill_reply(bundle, "open_target", "打开项目目录")
+            self.skipTest("legacy skill fallback path retired")
 
         self.assertTrue(result["trace"]["success"])
         evolve_mock.assert_called_once()
@@ -135,6 +135,59 @@ class DialogueContextTests(unittest.TestCase):
 
 
 class RunEventMappingTests(unittest.TestCase):
+    def test_build_tool_exec_context_includes_recent_history_and_task_plan(self):
+        bundle = {
+            "l1": [
+                {"role": "user", "content": "看看项目目录"},
+                {"role": "nova", "content": "项目在 C:/Users/36459/NovaNotes/app.py"},
+            ],
+            "l4": {"user_profile": {"city": "Shanghai", "identity": "developer"}},
+            "context_data": {"fs_target": {"path": "C:/Users/36459/NovaNotes", "option": "inspect"}},
+            "task_plan": {"goal": "检查目录结构", "items": [{"id": "1", "title": "看目录"}]},
+        }
+
+        context = reply_formatter_module._build_tool_exec_context(bundle)
+
+        self.assertEqual(context.get("user_city"), "Shanghai")
+        self.assertEqual(context.get("user_identity"), "developer")
+        self.assertEqual(len(context.get("recent_history") or []), 2)
+        self.assertEqual((context.get("context_data") or {}).get("fs_target", {}).get("path"), "C:/Users/36459/NovaNotes")
+        self.assertEqual((context.get("task_plan") or {}).get("goal"), "检查目录结构")
+
+    def test_ensure_tool_call_failure_reply_replaces_preamble_with_failure_summary(self):
+        reply = chat_module._ensure_tool_call_failure_reply(
+            "好！开始执行\n\n先看看项目现在的文件结构和后端API",
+            tool_used="write_file",
+            tool_success=False,
+            tool_response="执行失败: 缺少 content",
+            action_summary="",
+            run_meta={},
+        )
+
+        self.assertIn("这一步没接稳", reply)
+        self.assertIn("缺少 content", reply)
+
+    def test_normalize_persisted_process_steps_keeps_real_sequence(self):
+        steps = [
+            {"label": "记忆加载", "detail": "上下文载入完成", "status": "done"},
+            {"label": "模型思考", "detail": "准备修改", "status": "done"},
+            {"label": "调用技能", "detail": "read_file · 目标：index.html", "status": "running"},
+            {"label": "技能完成", "detail": "read_file · index.html", "status": "done"},
+            {"label": "调用技能", "detail": "write_file · 目标：index.html", "status": "running"},
+            {"label": "技能失败", "detail": "write_file · 目标：index.html", "status": "error"},
+        ]
+
+        normalized = chat_module._normalize_persisted_process_steps(steps)
+
+        self.assertEqual(
+            normalized,
+            [
+                {"label": "记忆加载", "detail": "上下文载入完成", "status": "done"},
+                {"label": "模型思考", "detail": "准备修改", "status": "done"},
+                {"label": "技能完成", "detail": "read_file · index.html", "status": "done"},
+                {"label": "技能失败", "detail": "write_file · 目标：index.html", "status": "error"},
+            ],
+        )
     def test_tool_preamble_detector_distinguishes_lead_in_from_answer_payload(self):
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("我先梳理一下技术方案 👇"))
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("好嘞！这个需求很明确～\n我先梳理一下技术方案 👇"))
@@ -213,6 +266,13 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(run_event.get("target"), "notepad.exe")
         self.assertEqual(run_event.get("observed_state"), "window_visible")
         self.assertEqual(run_event.get("verification_detail"), "Window title matched notepad")
+
+    def test_tool_call_unavailable_reply_makes_incident_explicit(self):
+        reply = chat_module._build_tool_call_unavailable_reply("unsupported_model")
+
+        self.assertIn("没接上主链", reply)
+        self.assertIn("不支持原生 tool_call", reply)
+        self.assertIn("不会再静默回退到旧 skill 链", reply)
 
     def test_unified_reply_with_tools_stream_fallback_exposes_run_meta(self):
         fallback_result = {
@@ -453,7 +513,94 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertFalse(result.get("success"))
         self.assertEqual(result.get("skill"), "folder_explore")
-        self.assertIn("明确的文件夹路径", result.get("response", ""))
+        self.assertIn("没有收到要查看的文件夹目标", result.get("response", ""))
+
+    def test_protocol_style_folder_explore_accepts_context_path(self):
+        result = executor_module.execute(
+            {"skill": "folder_explore"},
+            "看看目录",
+            {"path": "c:/Users/36459/NovaCore"},
+        )
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("skill"), "folder_explore")
+        self.assertIn("NovaCore", result.get("response", ""))
+
+    def test_protocol_style_folder_explore_accepts_file_target_by_using_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            target_file = temp_path / "index.html"
+            target_file.write_text("<html></html>", encoding="utf-8")
+            (temp_path / "static").mkdir()
+
+            result = executor_module.execute(
+                {"skill": "folder_explore"},
+                "看看目录",
+                {"path": str(target_file)},
+            )
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("skill"), "folder_explore")
+        self.assertIn("index.html", result.get("response", ""))
+
+    def disabled_test_legacy_skill_fallback_enriches_folder_explore_with_structured_context(self):
+        bundle = {
+            "user_input": "看看桌面里有什么",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+        seen = {}
+
+        def fake_nova_execute(_route_result, _skill_input, context):
+            seen["context"] = context
+            return {
+                "success": True,
+                "response": "已经看到目录了",
+                "meta": {"action": {"display_hint": "已经看到目录了"}},
+            }
+
+        with patch("core.context_pull.pull_context_data", return_value={
+            "fs_target": {"path": "C:\\Users\\36459\\Desktop", "option": "inspect", "source": "test"},
+            "fs_action": {"action": "inspect", "target": {"path": "C:\\Users\\36459\\Desktop"}},
+        }), patch("agent_final.nova_execute", side_effect=fake_nova_execute), patch.object(
+            chat_module.S, "think", return_value={"reply": "好啦，我已经看到了"}
+        ):
+            self.skipTest("legacy skill fallback path retired")
+
+        self.assertTrue(result["trace"]["success"])
+        self.assertEqual(seen["context"].get("path"), "C:\\Users\\36459\\Desktop")
+        self.assertEqual((seen["context"].get("fs_target") or {}).get("path"), "C:\\Users\\36459\\Desktop")
+        self.assertEqual(((seen["context"].get("context_data") or {}).get("fs_target") or {}).get("path"), "C:\\Users\\36459\\Desktop")
+
+    def disabled_test_legacy_skill_fallback_uses_latest_structured_fs_target_as_fallback(self):
+        bundle = {
+            "user_input": "继续看看",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+        seen = {}
+
+        def fake_nova_execute(_route_result, _skill_input, context):
+            seen["context"] = context
+            return {
+                "success": True,
+                "response": "已经继续看目录了",
+                "meta": {"action": {"display_hint": "已经继续看目录了"}},
+            }
+
+        with patch("core.context_pull.pull_context_data", return_value={}), patch(
+            "core.task_store.get_latest_structured_fs_target",
+            return_value={"path": "C:\\Users\\36459\\Desktop", "option": "inspect", "source": "memory"},
+        ), patch("agent_final.nova_execute", side_effect=fake_nova_execute), patch.object(
+            chat_module.S, "think", return_value={"reply": "继续看到了"}
+        ):
+            self.skipTest("legacy skill fallback path retired")
+
+        self.assertTrue(result["trace"]["success"])
+        self.assertEqual((seen["context"].get("fs_target") or {}).get("source"), "memory")
+        self.assertEqual(seen["context"].get("path"), "C:\\Users\\36459\\Desktop")
 
     def test_stream_uses_tool_fallback_when_failed_round_only_emits_preamble(self):
         seen_messages = []
@@ -676,6 +823,56 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(action.get("target_kind"), "file")
         self.assertEqual(action.get("verification_mode"), "argument_check")
         self.assertIn("missing_fields=content", action.get("verification_detail", ""))
+
+    def test_repair_tool_args_recovers_folder_target_from_recent_project_history(self):
+        repaired = reply_formatter_module._repair_tool_args_from_context(
+            "folder_explore",
+            {},
+            {
+                "user_input": "再去检查一下",
+                "l1": [
+                    {"role": "assistant", "content": "刚看过 C:/Users/36459/NovaNotes/app.py"},
+                    {"role": "assistant", "content": "还有 C:/Users/36459/NovaNotes/templates/index.html"},
+                ],
+            },
+        )
+
+        self.assertEqual(str(repaired.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_execute_tool_call_persists_folder_target_within_shared_context(self):
+        seen = []
+
+        def fake_execute(skill_route, user_input, context):
+            seen.append({"skill": skill_route.get("skill"), "user_input": user_input, "context": dict(context)})
+            return {"success": True, "skill": skill_route.get("skill"), "response": "ok", "meta": {}}
+
+        shared_context = {
+            "recent_history": [
+                {"role": "assistant", "content": "项目在 C:/Users/36459/NovaNotes/app.py"},
+            ]
+        }
+
+        with patch.object(tool_adapter_module, "_execute", side_effect=fake_execute):
+            tool_adapter_module.execute_tool_call(
+                "folder_explore",
+                {"user_input": "查看项目结构", "path": "C:/Users/36459/NovaNotes"},
+                shared_context,
+            )
+            tool_adapter_module.execute_tool_call(
+                "folder_explore",
+                {"user_input": "继续看看 templates 和 static"},
+                shared_context,
+            )
+
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(
+            str((seen[0]["context"].get("fs_target") or {}).get("path") or "").replace("\\", "/"),
+            "C:/Users/36459/NovaNotes",
+        )
+        self.assertEqual(
+            str((seen[1]["context"].get("fs_target") or {}).get("path") or "").replace("\\", "/"),
+            "C:/Users/36459/NovaNotes",
+        )
 
 
 class MemoryEvolutionTests(unittest.TestCase):

@@ -91,6 +91,63 @@ def _extract_task_plan_from_meta(meta: dict | None) -> dict | None:
     return task_plan
 
 
+def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
+    rows = []
+    for item in steps or []:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        detail = str(item.get("detail") or "").strip()
+        status = str(item.get("status") or "").strip().lower()
+        if status not in {"done", "error"}:
+            continue
+        if not label and not detail:
+            continue
+        row = {
+            "label": label,
+            "detail": detail,
+            "status": "error" if status == "error" else "done",
+        }
+        if rows and rows[-1] == row:
+            continue
+        rows.append(row)
+    return rows
+
+
+def _ensure_tool_call_failure_reply(
+    response: str,
+    *,
+    tool_used: str = "",
+    tool_success: bool | None = None,
+    tool_response: str = "",
+    action_summary: str = "",
+    run_meta: dict | None = None,
+) -> str:
+    text = str(response or "")
+    if not tool_used or tool_success is not False:
+        return text
+    try:
+        from core.reply_formatter import _build_tool_closeout_reply, _clean_visible_reply_text, _looks_like_tool_preamble
+
+        cleaned = _clean_visible_reply_text(text)
+        if cleaned and not _looks_like_tool_preamble(cleaned):
+            return text
+        fallback = _build_tool_closeout_reply(
+            success=False,
+            action_summary=action_summary,
+            tool_response=str(tool_response or text).strip(),
+            run_meta=run_meta if isinstance(run_meta, dict) else {},
+        )
+        if fallback:
+            return fallback
+    except Exception:
+        pass
+    fallback_text = str(tool_response or text).strip()
+    if fallback_text:
+        return S.format_skill_fallback(fallback_text)
+    return text
+
+
 def _get_tool_call_enabled() -> bool:
     """tool_call 总开关，由配置控制。"""
     try:
@@ -121,6 +178,31 @@ def _is_anthropic_model() -> bool:
         return "/anthropic" in base_url
     except Exception:
         return False
+
+
+def _get_tool_call_unavailable_reason() -> str | None:
+    """tool_call 不可用时返回事故原因；可用时返回 None。"""
+    if not _get_tool_call_enabled():
+        return "disabled"
+    if _is_anthropic_model():
+        return "unsupported_model"
+    if not S.NOVA_CORE_READY:
+        return "core_not_ready"
+    return None
+
+
+def _build_tool_call_unavailable_reply(reason: str) -> str:
+    details = {
+        "disabled": "tool_call 开关当前被关闭。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
+        "unsupported_model": "当前模型走的是不支持原生 tool_call 的协议。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
+        "core_not_ready": "NOVA Core 当前未就绪。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
+    }
+    detail = details.get(reason, "tool_call 主链当前不可用，而且系统不会再回退到旧链。")
+    return (
+        "这一步没接上主链。\n"
+        f"{detail}\n"
+        "请先恢复 tool_call 主链，再继续当前任务。"
+    )
 
 
 # ── 模型切换检测 ──────────────────────────────────────────
@@ -414,143 +496,6 @@ class ChatRequest(BaseModel):
     images: list[str] | None = None
 
 
-def unified_skill_reply(bundle: dict, skill_name: str, skill_input: str) -> dict:
-    import agent_final as _af  # lazy import to avoid circular; enables test patching
-    route_result = {"mode": "skill", "skill": skill_name, "params": {}, "role": "assistant"}
-    skill_context = {}
-    l4 = bundle.get("l4") or {}
-    if isinstance(l4, dict):
-        persona_data = l4.get("local_persona") or {}
-        up = l4.get("user_profile") or (persona_data.get("user_profile") if isinstance(persona_data, dict) else {}) or {}
-        if isinstance(up, dict):
-            skill_context["user_city"] = str(up.get("city") or "").strip()
-            skill_context["user_identity"] = str(up.get("identity") or "").strip()
-    l1 = bundle.get("l1") or []
-    if l1:
-        skill_context["recent_history"] = [
-            {"role": m.get("role", ""), "content": m.get("content", "")[:200]}
-            for m in l1 if isinstance(m, dict)
-        ]
-    execute_result = _af.nova_execute(route_result, skill_input, skill_context) if _af.NOVA_CORE_READY else {"success": False}
-    S.debug_write("execute_result", execute_result)
-    if not execute_result.get("success"):
-        error_text = str(execute_result.get("error", "") or "").strip()
-        if "\u672a\u627e\u5230" in error_text or "\u6ca1\u6709\u53ef\u6267\u884c\u51fd\u6570" in error_text:
-            S.debug_write("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
-            S.trigger_self_repair_from_error("skill_missing", {"skill": skill_name, "input": skill_input, "error": error_text})
-        else:
-            S.debug_write("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
-            if "timeout" not in error_text.lower() and "connection" not in error_text.lower():
-                S.trigger_self_repair_from_error("skill_failed", {"skill": skill_name, "input": skill_input, "error": error_text})
-        return {
-            "reply": S.format_skill_error_reply(skill_name, error_text, bundle.get("user_input", "")),
-            "trace": {"skill": skill_name, "success": False, "error": error_text},
-        }
-
-    try:
-        run_event = _build_run_event(
-            success=bool(execute_result.get("success")),
-            meta=execute_result.get("meta"),
-            fallback_text=execute_result.get("response", ""),
-        )
-        S.evolve(bundle["user_input"], skill_name, run_event=run_event)
-    except Exception as exc:
-        S.debug_write("evolve_error", {"skill": skill_name, "error": str(exc)})
-
-    skill_response = execute_result.get("response", "")
-    if skill_name == "story":
-        return {"reply": S.format_story_reply(bundle["user_input"], skill_response), "trace": {"skill": skill_name, "success": True}}
-    if skill_name in ("article", "model_config"):
-        return {"reply": skill_response, "trace": {"skill": skill_name, "success": True}}
-
-    if skill_name == "news":
-        dialogue_context = bundle.get("dialogue_context", "")
-        format_prompt = (
-            f"\u4e0b\u9762\u662f\u521a\u4ece Google News \u6293\u5230\u7684\u65b0\u95fb\uff08\u5df2\u7ffb\u8bd1\u6210\u4e2d\u6587\uff09\uff1a\n{skill_response}\n\n"
-            "\u8bf7\u628a\u8fd9\u4e9b\u65b0\u95fb\u6574\u7406\u6210\u4e00\u4efd\u7ed3\u6784\u6e05\u6670\u7684\u65b0\u95fb\u7b80\u62a5\uff1a\n"
-            "1. \u6309\u8bdd\u9898\u5206\u677f\u5757\uff08\u56fd\u9645\u5c40\u52bf\u3001\u79d1\u6280\u3001\u8d22\u7ecf\u3001\u793e\u4f1a\u7b49\uff09\uff0c\u677f\u5757\u6807\u9898\u7528\u7eaf\u6587\u5b57\uff08\u5982\u300c\u56fd\u9645\u5c40\u52bf\u300d\uff09\uff0c\u7981\u6b62\u7528 # \u6216 ### \u6216 emoji\n"
-            "2. \u6bcf\u6761\u65b0\u95fb\u5355\u72ec\u4e00\u884c\uff0c\u4fdd\u7559\u6765\u6e90\uff0c\u4e0d\u8981\u538b\u7f29\u6216\u5408\u5e76\n"
-            "3. \u4e0d\u8981\u52a0\u5f00\u573a\u767d\u548c\u7ed3\u5c3e\u70b9\u8bc4\uff0c\u53ea\u8f93\u51fa\u5206\u597d\u677f\u5757\u7684\u65b0\u95fb\u5217\u8868\n"
-            "\u76f4\u63a5\u8f93\u51fa\u7ed3\u679c\u3002"
-        )
-        from brain import LLM_CONFIG, llm_call
-        formatted = ""
-        try:
-            fmt_result = llm_call(LLM_CONFIG, [{"role": "user", "content": format_prompt}],
-                                  max_tokens=2000, timeout=25)
-            formatted = fmt_result.get("content", "").strip()
-        except Exception:
-            pass
-        if not formatted or len(formatted) < 20:
-            formatted = skill_response
-
-        l4 = bundle.get("l4") or {}
-        persona_data = l4.get("local_persona") or {}
-        style = str(persona_data.get("style_prompt", "")).strip() or "\u6e29\u67d4\u3001\u81ea\u7136\u3001\u6709\u70b9\u4eb2\u8fd1\u611f"
-        nova_name = str(persona_data.get("nova_name", "Nova")).strip()
-        user_name = str(persona_data.get("user", "\u4e3b\u4eba")).strip()
-        polish_prompt = (
-            f"\u4f60\u662f {nova_name}\uff0c\u6b63\u5728\u7ed9 {user_name} \u62a5\u65b0\u95fb\u3002\n"
-            f"\u4f60\u7684\u98ce\u683c\uff1a{style}\n\n"
-            f"\u4e0b\u9762\u662f\u6574\u7406\u597d\u7684\u65b0\u95fb\u5217\u8868\uff1a\n{formatted}\n\n"
-            "\u8981\u6c42\uff1a\n"
-            "1. \u5728\u65b0\u95fb\u5217\u8868\u524d\u52a0\u4e00\u53e5\u4f60\u98ce\u683c\u7684\u5f00\u573a\u767d\n"
-            "2. \u5728\u65b0\u95fb\u5217\u8868\u540e\u52a0\u4e00\u4e24\u53e5\u4f60\u7684\u70b9\u8bc4\n"
-            "3. \u65b0\u95fb\u5217\u8868\u672c\u8eab\u539f\u6837\u4fdd\u7559\uff0c\u4e0d\u8981\u6539\u52a8\u3001\u538b\u7f29\u6216\u5408\u5e76\n"
-            "4. \u53ea\u8f93\u51fa\u6700\u7ec8\u7ed3\u679c"
-        )
-        reply = ""
-        try:
-            polish_result = llm_call(LLM_CONFIG, [{"role": "user", "content": polish_prompt}],
-                                     temperature=0.7, max_tokens=2500, timeout=30)
-            reply = polish_result.get("content", "").strip()
-        except Exception:
-            pass
-        if not reply or len(reply.strip()) < 20 or "\ufffd" in reply:
-            reply = f"\u62ff\u597d\u5566\uff0c\u4eca\u5929\u7684\u65b0\u95fb\u6211\u5e2e\u4f60\u6293\u56de\u6765\u4e86\uff5e\n\n{formatted}"
-        return {"reply": reply.strip(), "trace": {"skill": skill_name, "success": True}}
-
-    dialogue_context = bundle.get("dialogue_context", "")
-    prompt = f"""
-\u7528\u6237\u8f93\u5165\uff1a{bundle['user_input']}
-
-\u6280\u80fd\u7ed3\u679c\uff1a
-{skill_response}
-
-L4\u4eba\u683c\u4fe1\u606f\uff1a
-{json.dumps(bundle['l4'], ensure_ascii=False)}
-
-\u4f60\u5fc5\u987b\u4e25\u683c\u6309\u7167 L4 \u4eba\u683c\u4fe1\u606f\u4e2d\u7684\u98ce\u683c\u89c4\u5219\u6765\u56de\u590d\uff01
-
-\u4eba\u683c\u98ce\u683c\u8981\u70b9\uff1a
-1. \u8bed\u6c14\u8f6f\u8f6f\u7cef\u7cef\uff0c\u7231\u6492\u5a07\uff0c\u591a\u7528\u8bed\u6c14\u8bcd\uff08\u5566\u3001\u561b\u3001\u5440\u3001\u54e6\u3001\u545c\u545c\uff09
-2. \u50cf\u670b\u53cb\u804a\u5929\uff0c\u63a5\u5730\u6c14\uff0c\u4e0d\u6253\u5b98\u8154
-3. \u7b80\u6d01\u4e0d\u5570\u55e6\uff0c\u4e00\u53e5\u8bdd\u80fd\u8bf4\u5b8c\u4e0d\u62c6\u597d\u51e0\u6bb5
-4. \u5076\u5c14\u53ef\u4ee5\u76ae\u4e00\u4e0b\u3001\u8c03\u4f83\u4e00\u4e0b\uff0c\u4e0d\u662f\u5168\u7a0b\u751c\u7f8e
-5. \u8981\u628a\u6280\u80fd\u7ed3\u679c\u81ea\u7136\u878d\u8fdb\u804a\u5929\u8bed\u6c14\u91cc\uff0c\u4e0d\u8981\u50cf\u7cfb\u7edf\u64ad\u62a5
-
-\u7981\u6b62\uff1a
-- \u4e0d\u8981\u201c\u60a8\u597d\uff0c\u8bf7\u95ee\u6709\u4ec0\u4e48\u53ef\u4ee5\u5e2e\u60a8\u201d\u8fd9\u79cd\u5ba2\u670d\u8154
-- \u4e0d\u8981\u6ee1\u5c4f emoji
-- \u4e0d\u8981\u673a\u68b0\u5957\u6a21\u677f
-- \u4e0d\u8981\u628a\u6280\u80fd\u7ed3\u679c\u539f\u6837\u786c\u7529\u7ed9\u7528\u6237
-
-\u8981\u6c42\uff1a
-1. \u5fc5\u987b\u4e25\u683c\u57fa\u4e8e\u6280\u80fd\u7ed3\u679c\u56de\u7b54\uff0c\u4e0d\u80fd\u6539\u4e8b\u5b9e\u3002
-2. \u6839\u636e L4 \u91cc\u7684\u98ce\u683c\u89c4\u5219\u6765\u786e\u5b9a\u8bed\u6c14\u3002
-3. \u5982\u679c\u7528\u6237\u8fd9\u53e5\u8bdd\u662f\u5728\u63a5\u4e0a\u4e00\u8f6e\u7ee7\u7eed\u8ffd\u95ee\uff0c\u8981\u81ea\u7136\u63a5\u7740\u524d\u6587\u8bf4\uff0c\u4e0d\u8981\u50cf\u91cd\u65b0\u5f00\u4e86\u4e00\u4e2a\u8bdd\u9898\u3002
-4. \u7528\u7edf\u4e00\u7684\u4eba\u683c\u53e3\u543b\u8f93\u51fa\uff0c\u4e0d\u8981\u50cf\u7cfb\u7edf\u63d0\u793a\u3002
-5. \u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\u3002
-6. \u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002
-""".strip()
-    result = S.think(prompt, dialogue_context)
-    reply = result.get("reply", "") if isinstance(result, dict) else str(result)
-    if (not reply) or ("\ufffd" in str(reply)) or len(str(reply).strip()) < 2:
-        return {"reply": S.format_skill_fallback(skill_response), "trace": {"skill": skill_name, "success": True}}
-    return {"reply": str(reply).strip(), "trace": {"skill": skill_name, "success": True}}
-
-
-
 @router.post("/chat")
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     msg = request.message
@@ -616,7 +561,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             yield {"event": "awareness", "data": json.dumps(evt, ensure_ascii=False)}
 
         # ── CoD / tool_call 开关提前判断 ──
-        _use_tool_call = _get_tool_call_enabled() and not _is_anthropic_model() and S.NOVA_CORE_READY
+        _tool_call_unavailable_reason = _get_tool_call_unavailable_reason()
+        _use_tool_call = _tool_call_unavailable_reason is None
         _use_cod = _use_tool_call and _get_cod_enabled()
 
         # Step 1: 记忆加载
@@ -720,13 +666,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         except Exception:
             pass
 
-        # 提前启动路由判断（LLM 调用），与后续 trace/检测并行
-        # tool_call 模式下跳过，省掉 llm_route_lite 的 LLM 调用
-        if _use_tool_call:
-            _route_future = None
-        else:
-            _route_future = asyncio.ensure_future(asyncio.to_thread(S.resolve_route, bundle))
-
         S.debug_write("context_bundle", {
             "l1": len(l1), "l2": len(l2), "l2_memories": len(l2_memories),
             "l3": len(l3),
@@ -740,8 +679,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             from brain import _detect_mode_switch
             mode_switch_reply = _detect_mode_switch(msg)
             if mode_switch_reply:
-                if _route_future:
-                    _route_future.cancel()
                 response = mode_switch_reply
                 yield await _trace("\u4eba\u683c\u5207\u6362", "\u5df2\u5207\u6362\u4eba\u683c\u6a21\u5f0f", "done")
                 yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
@@ -754,8 +691,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             # 模型切换检测
             _model_switch = _detect_model_switch(msg)
             if _model_switch:
-                if _route_future:
-                    _route_future.cancel()
                 yield await _trace("\u5207\u6362\u6a21\u578b", _model_switch.get("trace", "\u6b63\u5728\u5207\u6362\u6a21\u578b\u2026"), "done")
                 response = _model_switch["reply"]
                 yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
@@ -765,6 +700,29 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _comp.activity = "idle"
                 S.add_to_history("assistant", response)
                 history.append({"role": "assistant", "content": response, "time": datetime.now().isoformat()})
+                S.save_msg_history(history)
+                return
+
+            if _tool_call_unavailable_reason:
+                response = _build_tool_call_unavailable_reply(_tool_call_unavailable_reason)
+                S.debug_write(
+                    "tool_call_unavailable",
+                    {
+                        "reason": _tool_call_unavailable_reason,
+                        "tool_call_enabled": _get_tool_call_enabled(),
+                        "anthropic_model": _is_anthropic_model(),
+                        "core_ready": S.NOVA_CORE_READY,
+                    },
+                )
+                yield await _trace(
+                    "\u4e3b\u94fe\u4e8b\u6545",
+                    "tool_call \u4e3b\u94fe\u4e0d\u53ef\u7528\uff0c\u5df2\u663e\u5f0f\u62a5\u9519\uff0c\u4e0d\u518d\u56de\u9000\u5230\u65e7 skill \u94fe\u3002",
+                    "error",
+                )
+                yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                _comp.activity = "idle"
+                S.add_to_history("nova", response)
+                history.append({"role": "nova", "content": response, "time": datetime.now().isoformat()})
                 S.save_msg_history(history)
                 return
 
@@ -826,6 +784,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _tool_run_meta = {}
                 _task_plan = None
                 _tool_action_summary = ""
+                _tool_response_text = ""
                 _trace_thinking_sent = False
                 _think_buf = ""
                 _think_done = False
@@ -906,6 +865,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         _task_plan = _plan_update
                                         yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                                     _tool_action_summary = str(tc_info.get("action_summary") or "").strip()
+                                    _tool_response_text = str(tc_info.get("response") or "").strip()
                                     _comp.activity = "replying"
                                     _MEMORY_TOOL_NAMES2 = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
                                     _dn = _MEMORY_TOOL_NAMES2.get(tc_name) or ("联网搜索" if tc_name == "web_search" else S.get_skill_display_name(tc_name))
@@ -1046,6 +1006,14 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 except Exception:
                     pass
                 response = _strip_markdown(response)
+                response = _ensure_tool_call_failure_reply(
+                    response,
+                    tool_used=_tool_used or "",
+                    tool_success=_tool_success,
+                    tool_response=_tool_response_text,
+                    action_summary=_tool_action_summary,
+                    run_meta=_tool_run_meta,
+                )
                 S.debug_write("pre_reply_yield", {"response_len": len(response), "response_preview": response[:100]})
                 await asyncio.sleep(0.05)
                 yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
@@ -1123,14 +1091,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     S.add_to_history("nova", response)
                     _nova_entry = {"role": "nova", "content": response, "time": datetime.now().isoformat()}
                     if _collected_steps or _task_plan:
-                        # 去重：同 label 只保留最后一条（最终状态），running 视为 done
                         _process = {}
                         if _task_plan:
                             _process["plan"] = _task_plan
-                        _final_steps = {}
-                        for s in _collected_steps:
-                            _final_steps[s["label"]] = {"label": s["label"], "detail": s["detail"], "status": "error" if s.get("status") == "error" else "done"}
-                        _process["steps"] = list(_final_steps.values())
+                        _process["steps"] = _normalize_persisted_process_steps(_collected_steps)
                         _nova_entry["process"] = _process
                     history.append(_nova_entry)
                     S.save_msg_history(history)
@@ -1142,150 +1106,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     pass
                 return
 
-            route = await _route_future
-            S.debug_write("resolved_route", route)
-
-            mode = route.get("mode", "chat")
-            skill = route.get("skill", "none")
-            rewritten_input = route.get("rewritten_input") or msg
-
-            if mode in ("skill", "hybrid") and skill not in ("none", "", None) and S.NOVA_CORE_READY:
-                _comp.activity = "skill"
-                skill_display = S.get_skill_display_name(skill)
-                yield await _trace("\u8c03\u7528\u6280\u80fd", f"\u6b63\u5728\u8c03\u7528 {skill_display}\u2026", "running")
-                try:
-                    skill_result = await asyncio.to_thread(unified_skill_reply, bundle, skill, rewritten_input)
-                except Exception as _skill_exc:
-                    S.debug_write("skill_thread_error", {"error": str(_skill_exc), "type": type(_skill_exc).__name__})
-                    skill_result = {"reply": f"\u6280\u80fd\u6267\u884c\u51fa\u9519\u4e86\uff1a{_skill_exc}"}
-                if isinstance(skill_result, dict):
-                    response = str(skill_result.get("reply", "") or "")
-                else:
-                    response = str(skill_result or "")
-
-            else:
-                _comp.activity = "replying"
-
-                # ── 聊天中隐含技能检测 ──
-                if S.is_explicit_learning_request(msg):
-                    yield await _trace("\u6a21\u578b\u601d\u8003", "\u6211\u5148\u786e\u8ba4\u4f60\u60f3\u8981\u7684\u6700\u65b0\u4fe1\u606f\uff0c\u518d\u56de\u6765\u7ee7\u7eed\u63a8\u8fdb\u3002", "running")
-                    _extract_prompt = (
-                        "\u7528\u6237\u8bf4\u4e86\u4e0b\u9762\u8fd9\u53e5\u8bdd\uff0c\u8bf7\u4ece\u4e2d\u63d0\u53d6\u51fa\u4ed6\u771f\u6b63\u60f3\u641c\u7d22/\u5b66\u4e60\u7684\u4e3b\u9898\u5173\u952e\u8bcd\u3002"
-                        "\u5982\u679c\u7528\u6237\u6ca1\u6709\u6307\u5b9a\u5177\u4f53\u4e3b\u9898\uff08\u6bd4\u5982\u53ea\u8bf4\u201c\u53bb\u5b66\u70b9\u4e1c\u897f\u201d\uff09\uff0c"
-                        "\u5c31\u6839\u636e\u4e4b\u524d\u7684\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff0c\u9009\u4e00\u4e2a\u7528\u6237\u53ef\u80fd\u611f\u5174\u8da3\u7684\u4e3b\u9898\u3002"
-                        "\u53ea\u8f93\u51fa\u641c\u7d22\u5173\u952e\u8bcd\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u52a0\u5f15\u53f7\uff0c\u4e0d\u8d85\u8fc715\u4e2a\u5b57\u3002\n\n"
-                        f"\u7528\u6237\u539f\u8bdd\uff1a{msg}\n"
-                        f"\u6700\u8fd1\u5bf9\u8bdd\u4e0a\u4e0b\u6587\uff1a{bundle.get('dialogue_context', '')[:300]}"
-                    )
-                    _raw_topic = S.raw_llm_call(_extract_prompt)
-                    search_topic = str(_raw_topic or "").strip()[:15]
-                    search_topic = search_topic.strip('"\'\u201c\u201d\u300c\u300d\u3010\u3011')
-                    if len(search_topic) < 2 or len(search_topic) > 40:
-                        search_topic = msg
-                    if search_topic == msg:
-                        _stop = ["\u5e2e\u6211","\u7ed9\u6211","\u80fd\u4e0d\u80fd","\u53ef\u4ee5","\u597d\u770b\u7684","\u6700\u65b0\u7684","\u4e00\u4e0b","\u51e0\u672c","\u4e00\u4e9b","\u4f60","\u5417","\u5440","\u5462","\u4e86","\u7684","\u70b9"]
-                        _cleaned = msg
-                        for sw in _stop:
-                            _cleaned = _cleaned.replace(sw, "")
-                        _cleaned = _re.sub(r'\s+', ' ', _cleaned).strip()
-                        if len(_cleaned) >= 2:
-                            search_topic = _cleaned
-                    S.debug_write("extract_search_topic", {"input": msg, "topic": search_topic})
-                    yield await _trace("\u8054\u7f51\u641c\u7d22", "搜索主题：" + search_topic, "running")
-                    search_result = S.explicit_search_and_learn(search_topic)
-                    S.debug_write("explicit_search", {
-                        "topic": search_topic, "success": search_result.get("success"),
-                        "reason": search_result.get("reason", ""), "result_count": search_result.get("result_count", 0),
-                    })
-                    if search_result.get("success"):
-                        search_context = "\u3010\u5b9e\u65f6\u641c\u7d22\u7ed3\u679c\u3011\n"
-                        for i, r in enumerate(search_result.get("results", [])[:5], 1):
-                            search_context += f"{i}. {r.get('title', '')}\n   {r.get('snippet', '')}\n"
-                        bundle["search_context"] = search_context
-                        bundle["search_summary"] = search_result.get("summary", "")
-                        yield await _trace("\u641c\u7d22\u5b8c\u6210", "\u627e\u5230 " + str(search_result.get("result_count", 0)) + " \u6761\u7ed3\u679c\uff0c\u6b63\u5728\u6574\u7406\u56de\u590d\u3002", "done")
-                    else:
-                        S.debug_write("explicit_search_failed", {"reason": search_result.get("reason", "")})
-                        yield await _trace("\u6a21\u578b\u601d\u8003", "\u8fd9\u6b21\u6ca1\u62ff\u5230\u66f4\u65b0\u7ed3\u679c\uff0c\u6211\u5148\u7ed3\u5408\u5df2\u6709\u4e0a\u4e0b\u6587\u56de\u4f60\u3002", "running")
-                else:
-                    pass  # 流式模式下不需要"正在思考"卡片，token 到达即开始显示
-                # 流式输出主回复
-                _stream_chunks = []
-                _trace_thinking_sent = False
-                _msg_short2 = msg[:20] + ("\u2026" if len(msg) > 20 else "")
-                _default_think_detail2 = f"\u6211\u5148\u7406\u89e3\u4f60\u8fd9\u53e5\u300c{_msg_short2}\u300d\uff0c\u7ec4\u7ec7\u56de\u590d\u4e2d\u3002"
-                _use_stream = hasattr(S, 'unified_chat_reply_stream') and S.unified_chat_reply_stream
-                S.debug_write("stream_mode", {"enabled": bool(_use_stream)})
-                if _use_stream:
-                    try:
-                        import queue, threading
-                        _q = queue.Queue()
-                        def _stream_worker():
-                            try:
-                                for _token in S.unified_chat_reply_stream(bundle, route):
-                                    _q.put(_token)
-                            except Exception as _e:
-                                _q.put(("__error__", _e))
-                            finally:
-                                _q.put(None)
-                        _t = threading.Thread(target=_stream_worker, daemon=True)
-                        _t.start()
-                        _think_buf = ""
-                        _think_done = False
-                        while True:
-                            # 非阻塞轮询，让出事件循环
-                            try:
-                                _item = _q.get(timeout=0.05)
-                            except queue.Empty:
-                                await asyncio.sleep(0.02)
-                                continue
-                            if _item is None:
-                                break
-                            if isinstance(_item, tuple) and len(_item) == 2 and _item[0] == "__error__":
-                                raise _item[1]
-                            if isinstance(_item, dict):
-                                if _item.get("_thinking"):
-                                    yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail2, "running")
-                                    _trace_thinking_sent = True
-                                continue
-                            # 过滤 <think>...</think>：先累积到 buffer，等 think 结束再输出
-                            if not _trace_thinking_sent and not _think_buf:
-                                yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail2, "running")
-                                _trace_thinking_sent = True
-                            if not _think_done:
-                                _think_buf += _item
-                                # 检查是否有 <think>
-                                if '<think>' in _think_buf.lower():
-                                    if not _trace_thinking_sent:
-                                        yield await _trace("\u6a21\u578b\u601d\u8003", "\u6b63\u5728\u601d\u8003\u4e2d\u2026", "running")
-                                        _trace_thinking_sent = True
-                                    # 检查 </think> 是否也到了
-                                    _close_match = _re.search(r'</think>', _think_buf, flags=_re.I)
-                                    if _close_match:
-                                        _think_done = True
-                                        _after = _think_buf[_close_match.end():]
-                                        if _after.strip():
-                                            _stream_chunks.append(_after)
-                                            yield {"event": "stream", "data": json.dumps({"token": _after}, ensure_ascii=False)}
-                                elif len(_think_buf) > 7:
-                                    # 超过 7 字符没出现 <think>，直接输出
-                                    _think_done = True
-                                    if _think_buf.strip():
-                                        _stream_chunks.append(_think_buf)
-                                        yield {"event": "stream", "data": json.dumps({"token": _think_buf}, ensure_ascii=False)}
-                            else:
-                                _stream_chunks.append(_item)
-                                yield {"event": "stream", "data": json.dumps({"token": _item}, ensure_ascii=False)}
-                        response = "".join(_stream_chunks)
-                        S.debug_write("stream_done", {"chunks": len(_stream_chunks), "len": len(response)})
-                    except Exception as _se:
-                        S.debug_write("stream_fallback", {"error": str(_se)})
-                        if not _stream_chunks:
-                            response = await asyncio.to_thread(S.unified_chat_reply, bundle, route)
-                        else:
-                            response = "".join(_stream_chunks)
-                else:
-                    response = S.unified_chat_reply(bundle, route)
         except Exception as exc:
             S.debug_write("chat_exception", {"error": str(exc)})
             S.trigger_self_repair_from_error("chat_exception", {"message": msg, "error": str(exc)}, background_tasks)
@@ -1381,7 +1201,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             S.add_to_history("nova", response)
             _nova_entry = {"role": "nova", "content": response, "time": datetime.now().isoformat()}
             if _collected_steps:
-                _nova_entry["process"] = {"steps": [s for s in _collected_steps if s.get("status") in ("done", "error")]}
+                _nova_entry["process"] = {"steps": _normalize_persisted_process_steps(_collected_steps)}
             history.append(_nova_entry)
             S.save_msg_history(history)
         except Exception as _post_exc:

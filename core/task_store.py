@@ -260,6 +260,62 @@ def get_latest_active_task_by_kind(kind: str):
     return non_terminal[-1]
 
 
+def _extract_task_fs_target(task: dict | None) -> dict | None:
+    task = _normalize_task(task) if isinstance(task, dict) else {}
+    if not task:
+        return None
+
+    context = task.get("context") if isinstance(task.get("context"), dict) else {}
+    memory = task.get("memory") if isinstance(task.get("memory"), dict) else {}
+    candidates = [
+        context.get("fs_target") if isinstance(context.get("fs_target"), dict) else {},
+        memory.get("last_fs_target") if isinstance(memory.get("last_fs_target"), dict) else {},
+    ]
+    for candidate in candidates:
+        path = str(candidate.get("path") or "").strip()
+        if not path:
+            continue
+        normalized = dict(candidate)
+        normalized["path"] = path
+        normalized["option"] = str(normalized.get("option") or "inspect").strip() or "inspect"
+        return normalized
+    return None
+
+
+def _is_file_workflow_like_task(task: dict | None) -> bool:
+    task = _normalize_task(task) if isinstance(task, dict) else {}
+    if not task:
+        return False
+    if str(task.get("kind") or "").strip() == "file_workflow":
+        return True
+    domain = task.get("domain") if isinstance(task.get("domain"), dict) else {}
+    intake = domain.get("intake") if isinstance(domain.get("intake"), dict) else {}
+    detected_kind = str(intake.get("detected_kind") or "").strip()
+    return detected_kind == "file_workflow"
+
+
+def get_latest_structured_fs_target() -> dict | None:
+    tasks = [_normalize_task(x) for x in load_tasks() if isinstance(x, dict)]
+    if not tasks:
+        return None
+
+    def _pick(bucket: list[dict]) -> dict | None:
+        if not bucket:
+            return None
+        non_terminal = [t for t in bucket if t.get("status") not in {"completed", "failed", "cancelled", "archived"}]
+        search_pool = non_terminal or bucket
+        search_pool.sort(key=lambda x: str(x.get("updated_at") or x.get("created_at") or ""))
+        for task in reversed(search_pool):
+            target = _extract_task_fs_target(task)
+            if target:
+                return target
+        return None
+
+    preferred = [task for task in tasks if _is_file_workflow_like_task(task) and _extract_task_fs_target(task)]
+    fallback = [task for task in tasks if _extract_task_fs_target(task)]
+    return _pick(preferred) or _pick(fallback)
+
+
 def resolve_task_for_goal(kind: str, user_input: str):
     raw = str(user_input or "").strip()
     active = get_latest_active_task_by_kind(kind)

@@ -90,6 +90,200 @@ def _resolve_user_file_target(file_path: str):
     return target.resolve()
 
 
+_PROTOCOL_CONTEXT_SKILLS = {
+    "folder_explore",
+    "open_target",
+    "save_export",
+    "file_copy",
+    "file_move",
+    "file_delete",
+    "app_target",
+    "ui_interaction",
+    "write_file",
+}
+_PROTOCOL_DEFAULT_OPTIONS = {
+    "folder_explore": "inspect",
+    "open_target": "open",
+    "save_export": "save",
+    "file_copy": "copy",
+    "file_move": "move",
+    "file_delete": "delete",
+    "write_file": "write_file",
+    "app_target": "launch",
+    "ui_interaction": "ui_interact",
+}
+_PROTOCOL_CONTEXT_MANIFESTS = {
+    "folder_explore": {"context_need": ["Desktop_Files"]},
+    "open_target": {"context_need": ["Desktop_Files"]},
+}
+
+
+def _merge_context_dict(base: dict | None, extra: dict | None) -> dict:
+    merged = dict(base) if isinstance(base, dict) else {}
+    extra = extra if isinstance(extra, dict) else {}
+    for key, value in extra.items():
+        if key not in merged or not merged.get(key):
+            merged[key] = value
+            continue
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            nested = dict(value)
+            nested.update(existing)
+            merged[key] = nested
+    return merged
+
+
+def _normalize_protocol_fs_target(target: dict | None, *, default_option: str = "inspect") -> dict | None:
+    target = target if isinstance(target, dict) else {}
+    path = str(target.get("path") or "").strip()
+    if not path:
+        return None
+    normalized = dict(target)
+    normalized["path"] = path
+    normalized["option"] = str(normalized.get("option") or default_option).strip() or default_option
+    return normalized
+
+
+def _extract_recent_context_paths(context: dict | None) -> list[str]:
+    context = context if isinstance(context, dict) else {}
+    recent_history = context.get("recent_history") if isinstance(context.get("recent_history"), list) else []
+    patterns = (
+        _re.compile(r'[A-Za-z]:[\\/][^\s`<>"\]]+\.(?:md|html|txt|json|py|js|css)', _re.I),
+        _re.compile(r'[A-Za-z]:[\\/][^\s`<>"\]]+', _re.I),
+    )
+    paths = []
+    seen = set()
+    for item in reversed(recent_history):
+        if not isinstance(item, dict):
+            continue
+        content = str(item.get("content") or "")
+        for pattern in patterns:
+            for match in pattern.findall(content):
+                value = str(match).strip().strip(".,;:()[]{}<>\"'")
+                if not value:
+                    continue
+                lowered = value.replace("/", "\\").lower()
+                if lowered in seen:
+                    continue
+                seen.add(lowered)
+                paths.append(value)
+                if len(paths) >= 8:
+                    return paths
+    return paths
+
+
+def _infer_recent_directory_from_context(context: dict | None) -> str:
+    scores: dict[str, int] = {}
+    for raw in _extract_recent_context_paths(context):
+        try:
+            path_obj = _Path(str(raw).replace("\\", "/"))
+        except Exception:
+            continue
+        base = path_obj if not path_obj.suffix else path_obj.parent
+        weight = 4
+        current = base
+        for _ in range(3):
+            current_str = str(current).strip()
+            if not current_str or current_str in {".", "/"}:
+                break
+            scores[current_str] = scores.get(current_str, 0) + weight
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+            weight = max(1, weight - 1)
+    if not scores:
+        return ""
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], -len(item[0])))
+    return ranked[0][0]
+
+
+def _apply_protocol_context(name: str, ctx: dict, user_input: str) -> dict:
+    if name not in _PROTOCOL_CONTEXT_SKILLS:
+        return ctx
+
+    default_option = _PROTOCOL_DEFAULT_OPTIONS.get(name, "inspect")
+    context_data = ctx.get("context_data") if isinstance(ctx.get("context_data"), dict) else {}
+    fs_target = _normalize_protocol_fs_target(ctx.get("fs_target"), default_option=default_option)
+    if not fs_target:
+        fs_target = _normalize_protocol_fs_target(context_data.get("fs_target"), default_option=default_option)
+
+    candidate_path = ""
+    if name == "write_file":
+        candidate_path = str(ctx.get("file_path") or ctx.get("path") or ctx.get("target") or "").strip()
+    elif name in {"file_copy", "file_move", "file_delete", "save_export", "folder_explore", "open_target"}:
+        candidate_path = str(ctx.get("path") or ctx.get("source") or ctx.get("file_path") or ctx.get("target") or "").strip()
+    elif name == "app_target":
+        candidate_path = str(ctx.get("path") or ctx.get("target") or ctx.get("app") or "").strip()
+    elif name == "ui_interaction":
+        candidate_path = str(ctx.get("target") or ctx.get("window_title") or "").strip()
+
+    if candidate_path and not fs_target and not candidate_path.startswith(("http://", "https://")):
+        fs_target = {"path": candidate_path, "option": default_option, "source": "tool_args"}
+
+    if not fs_target:
+        try:
+            from core.context_pull import pull_context_data
+
+            pulled = pull_context_data(user_input or candidate_path, _PROTOCOL_CONTEXT_MANIFESTS.get(name, {}))
+        except Exception:
+            pulled = {}
+        if isinstance(pulled, dict):
+            context_data = _merge_context_dict(context_data, pulled)
+            fs_target = _normalize_protocol_fs_target(context_data.get("fs_target"), default_option=default_option)
+
+    if not fs_target:
+        inferred_dir = _infer_recent_directory_from_context(ctx)
+        if inferred_dir:
+            fs_target = {"path": inferred_dir, "option": default_option, "source": "recent_history"}
+
+    if not fs_target:
+        try:
+            from core.task_store import get_latest_structured_fs_target
+
+            latest_fs_target = get_latest_structured_fs_target()
+        except Exception:
+            latest_fs_target = None
+        fs_target = _normalize_protocol_fs_target(latest_fs_target, default_option=default_option)
+
+    if fs_target:
+        ctx["fs_target"] = fs_target
+        ctx["path"] = str(ctx.get("path") or fs_target.get("path") or "").strip()
+        context_data = _merge_context_dict(context_data, {"fs_target": fs_target})
+
+    if context_data:
+        ctx["context_data"] = context_data
+    if user_input and "last_user_input" not in ctx:
+        ctx["last_user_input"] = user_input
+    return ctx
+
+
+def _remember_protocol_target(name: str, ctx: dict, result: dict) -> None:
+    if name not in _PROTOCOL_CONTEXT_SKILLS:
+        return
+    if not isinstance(ctx, dict) or not isinstance(result, dict) or not result.get("success"):
+        return
+
+    default_option = _PROTOCOL_DEFAULT_OPTIONS.get(name, "inspect")
+    current_target = ctx.get("fs_target") if isinstance(ctx.get("fs_target"), dict) else {}
+    path = str(
+        current_target.get("path")
+        or ctx.get("path")
+        or ctx.get("file_path")
+        or ctx.get("source")
+        or ctx.get("target")
+        or ""
+    ).strip()
+    if not path or path.startswith(("http://", "https://")):
+        return
+
+    fs_target = {"path": path, "option": default_option, "source": "tool_runtime"}
+    ctx["fs_target"] = fs_target
+    ctx["path"] = path
+    context_data = ctx.get("context_data") if isinstance(ctx.get("context_data"), dict) else {}
+    ctx["context_data"] = _merge_context_dict(context_data, {"fs_target": fs_target})
+
+
 def _is_allowed_user_target(target) -> bool:
     if not target:
         return False
@@ -428,12 +622,14 @@ def execute_tool_call(name: str, arguments: dict, context: dict = None) -> dict:
     user_input = str(arguments.get("user_input") or "").strip()
     skill_route = {"skill": name}
     # 把 LLM 传的额外参数（如 city、topic）合并到 context
-    ctx = dict(context or {})
+    ctx = context if isinstance(context, dict) else {}
     for k, v in arguments.items():
         if k != "user_input" and v:
             ctx[k] = v
+    ctx = _apply_protocol_context(name, ctx, user_input)
     _debug_write("tool_call_execute", {"name": name, "user_input": user_input[:100], "extra_args": {k: v for k, v in arguments.items() if k != "user_input"}})
     result = _execute(skill_route, user_input, ctx)
+    _remember_protocol_target(name, ctx, result)
     _debug_write("tool_call_result", {
         "name": name, "success": result.get("success"),
         "response_len": len(result.get("response", "")),

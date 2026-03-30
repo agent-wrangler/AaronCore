@@ -488,7 +488,6 @@ from routes.data import router as _data_router
 from routes.skills import router as _skills_router
 from routes.settings import router as _settings_router
 from routes.chat import router as _chat_router
-from routes.chat import unified_skill_reply  # re-export for test compatibility
 from routes.lab import router as _lab_router
 
 _companion_init(engine_dir=ENGINE_DIR)

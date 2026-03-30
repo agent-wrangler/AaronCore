@@ -169,9 +169,58 @@ def _extract_recent_file_paths(bundle: dict) -> list[str]:
     return paths
 
 
+def _infer_recent_directory_target(bundle: dict) -> str:
+    scores: dict[str, int] = {}
+    recent_paths = _extract_recent_file_paths(bundle)
+    for raw in recent_paths:
+        try:
+            path_obj = _Path(str(raw).replace("\\", "/"))
+        except Exception:
+            continue
+        base = path_obj if not path_obj.suffix else path_obj.parent
+        weight = 4
+        current = base
+        for _ in range(3):
+            current_str = str(current).strip()
+            if not current_str or current_str in {".", "/"}:
+                break
+            scores[current_str] = scores.get(current_str, 0) + weight
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+            weight = max(1, weight - 1)
+    if not scores:
+        return ""
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], -len(item[0])))
+    return ranked[0][0]
+
+
+def _load_latest_structured_fs_target() -> str:
+    try:
+        from core.task_store import get_latest_structured_fs_target
+
+        target = get_latest_structured_fs_target()
+    except Exception:
+        target = None
+    if not isinstance(target, dict):
+        return ""
+    return str(target.get("path") or "").strip()
+
+
 def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict) -> dict:
     args = dict(tool_args or {})
     user_input = str(bundle.get("user_input") or "")
+    if tool_name == "folder_explore":
+        target = str(args.get("path") or args.get("target") or "").strip()
+        if not target:
+            target = _infer_recent_directory_target(bundle) or _load_latest_structured_fs_target()
+            if target:
+                args["path"] = target
+        if user_input and "user_input" not in args:
+            args["user_input"] = user_input
+        return args
+
     if tool_name != "write_file":
         if user_input and "user_input" not in args:
             args["user_input"] = user_input
@@ -193,6 +242,34 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
     if user_input and "user_input" not in args:
         args["user_input"] = user_input
     return args
+
+
+def _build_tool_exec_context(bundle: dict) -> dict:
+    skill_context = {}
+    l4 = bundle.get("l4") or {}
+    if isinstance(l4, dict):
+        up = l4.get("user_profile") or {}
+        if isinstance(up, dict):
+            user_city = str(up.get("city") or "").strip()
+            if user_city:
+                skill_context["user_city"] = user_city
+            user_identity = str(up.get("identity") or "").strip()
+            if user_identity:
+                skill_context["user_identity"] = user_identity
+    l1 = bundle.get("l1") or []
+    if l1:
+        skill_context["recent_history"] = [
+            {"role": item.get("role", ""), "content": str(item.get("content") or "")[:300]}
+            for item in l1[-8:]
+            if isinstance(item, dict)
+        ]
+    context_data = bundle.get("context_data") if isinstance(bundle.get("context_data"), dict) else {}
+    if context_data:
+        skill_context["context_data"] = dict(context_data)
+    task_plan = _resolve_active_task_plan(bundle)
+    if task_plan:
+        skill_context["task_plan"] = task_plan
+    return skill_context
 
 
 def _missing_required_tool_fields(tool_name: str, tool_args: dict) -> list[str]:
@@ -1673,12 +1750,7 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
     _debug_write("tool_call_invoke", {"name": tool_name, "args": tool_args})
 
     # 构建技能上下文
-    skill_context = {}
-    l4 = bundle.get("l4") or {}
-    if isinstance(l4, dict):
-        up = l4.get("user_profile") or {}
-        if isinstance(up, dict):
-            skill_context["user_city"] = str(up.get("city") or "").strip()
+    skill_context = _build_tool_exec_context(bundle)
 
     exec_result = tool_executor(tool_name, tool_args, skill_context)
     tool_response = exec_result.get("response", "") if exec_result.get("success") else f"\u6267\u884c\u5931\u8d25: {exec_result.get('error', '')}"
@@ -2180,12 +2252,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
 
     yield {"_tool_call": {"name": tool_name, "executing": True, "preview": _tool_preview(tool_name, tool_args)}}
 
-    skill_context = {}
-    l4 = bundle.get("l4") or {}
-    if isinstance(l4, dict):
-        up = l4.get("user_profile") or {}
-        if isinstance(up, dict):
-            skill_context["user_city"] = str(up.get("city") or "").strip()
+    skill_context = _build_tool_exec_context(bundle)
 
     exec_result = tool_executor(tool_name, tool_args, skill_context)
     success = exec_result.get("success", False)

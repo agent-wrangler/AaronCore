@@ -87,23 +87,34 @@ def _summarize_folder(path: Path, dirs, files, key_files, previews):
 def execute(query, context=None):
     context = context if isinstance(context, dict) else {}
     fs_target = context.get('fs_target') if isinstance(context.get('fs_target'), dict) else {}
-    folder_path = str(fs_target.get('path') or '').strip() or _extract_path(query)
+    folder_path = (
+        str(fs_target.get('path') or '').strip()
+        or str(context.get('path') or '').strip()
+        or str(context.get('target') or '').strip()
+        or _extract_path(query)
+    )
     if not folder_path:
         context_data = context.get('context_data') if isinstance(context.get('context_data'), dict) else {}
         fs_target = context_data.get('fs_target') if isinstance(context_data.get('fs_target'), dict) else {}
         folder_path = str(fs_target.get('path') or '').strip()
     if not folder_path:
         return build_operation_result(
-            '你给我一个明确的文件夹路径，我就能先帮你看结构，再读几个关键文件。最好直接带上完整路径。',
+            '这次没有收到要查看的文件夹目标，所以还没法开始浏览目录。'
+            '如果上游已经知道目标目录，应该把它作为 `fs_target.path` 或 `path` 传进来；'
+            '如果是用户直接指定，也可以给完整路径。',
             expected_state='directory_listed',
             observed_state='path_missing',
             drift_reason='missing_target',
-            repair_hint='provide_explicit_folder_path',
+            repair_hint='provide_or_pass_folder_target',
             repair_attempted=False,
             repair_succeeded=False,
         )
 
     path = Path(folder_path)
+    if not path.exists() and path.suffix and path.parent.exists() and path.parent.is_dir():
+        path = path.parent
+    if path.exists() and path.is_file():
+        path = path.parent
     if not path.exists():
         return build_operation_result(
             f'这个路径不存在：`{folder_path}`',
