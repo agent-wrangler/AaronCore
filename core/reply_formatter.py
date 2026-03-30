@@ -9,7 +9,15 @@ from pathlib import Path as _Path
 
 from core.context_builder import format_l8_context, render_dialogue_context
 from core.feedback_classifier import format_l7_context
-from core.fs_protocol import summarize_action_meta
+from core.fs_protocol import (
+    build_protocol_arg_failure_feedback as _protocol_arg_failure_feedback,
+    build_protocol_arg_failure_system_note as _protocol_arg_failure_system_note,
+    build_protocol_retry_note as _protocol_retry_note,
+    has_same_protocol_arg_failure_recently as _protocol_has_same_arg_failure_recently,
+    missing_required_protocol_fields as _protocol_missing_required_fields,
+    protocol_arg_failure_signature as _protocol_arg_failure_signature,
+    summarize_action_meta,
+)
 from core.route_resolver import looks_like_news_request
 
 # ── 配置文件化：从 configs/ 读取 prompt 配置 ──
@@ -136,19 +144,28 @@ def _sanitize_tool_call_payload(tc: dict, tool_args: dict) -> dict:
 def _extract_recent_file_paths(bundle: dict) -> list[str]:
     paths = []
     seen = set()
-    pattern = _re.compile(r'[A-Za-z]:[\\/][^\s`<>"\]]+\.(?:md|html|txt|json|py|js|css)', _re.I)
+    patterns = (
+        _re.compile(r'[A-Za-z]:[\\/][^\s`<>"\]]+\.(?:md|html|txt|json|py|js|css)', _re.I),
+        _re.compile(r'(?:\.{0,2}[\\/])?(?:[\w.-]+[\\/])+[\w.-]+\.(?:md|html|txt|json|py|js|css)', _re.I),
+    )
     for item in reversed(list(bundle.get("l1") or [])):
         if not isinstance(item, dict):
             continue
         content = str(item.get("content") or "")
-        for match in pattern.findall(content):
-            norm = match.replace("/", "\\")
-            if norm.lower() in seen:
-                continue
-            seen.add(norm.lower())
-            paths.append(norm)
-            if len(paths) >= 6:
-                return paths
+        for pattern in patterns:
+            for match in pattern.findall(content):
+                value = str(match).strip().strip(".,;:()[]{}<>\"'")
+                if not value:
+                    continue
+                norm = value.replace("/", "\\")
+                if norm.lower().startswith("http\\") or norm.lower().startswith("https\\"):
+                    continue
+                if norm.lower() in seen:
+                    continue
+                seen.add(norm.lower())
+                paths.append(value)
+                if len(paths) >= 6:
+                    return paths
     return paths
 
 
@@ -176,6 +193,92 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
     if user_input and "user_input" not in args:
         args["user_input"] = user_input
     return args
+
+
+def _missing_required_tool_fields(tool_name: str, tool_args: dict) -> list[str]:
+    return _protocol_missing_required_fields(tool_name, tool_args)
+
+
+def _tool_arg_failure_signature(tool_name: str, tool_args: dict, missing_fields: list[str]) -> dict:
+    return _protocol_arg_failure_signature(tool_name, tool_args, missing_fields)
+
+
+def _has_same_arg_failure_recently(recent_attempts: list[dict], signature: dict) -> bool:
+    return _protocol_has_same_arg_failure_recently(recent_attempts, signature)
+
+
+def _build_tool_arg_failure_feedback(tool_name: str, tool_args: dict, missing_fields: list[str]) -> str:
+    return _protocol_arg_failure_feedback(tool_name, tool_args, missing_fields)
+    signature = _tool_arg_failure_signature(tool_name, tool_args, missing_fields)
+    target = signature.get("target") or "未提供目标"
+    if tool_name == "write_file" and "content" in missing_fields:
+        return (
+            "执行失败: 缺少 content。"
+            f"write_file 必须同时提供 file_path 和完整文件内容；当前目标是 {target}。"
+            "不要重复只带 file_path 的调用。"
+            "如果要继续，请重新调用 write_file，并把该文件的完整 content 一次性传入。"
+        )
+    return f"执行失败: 缺少必要参数 {', '.join(missing_fields)}。请补全参数后再继续。"
+
+
+def _build_tool_arg_failure_system_note(tool_name: str, tool_args: dict, missing_fields: list[str]) -> str:
+    return _protocol_arg_failure_system_note(tool_name, tool_args, missing_fields)
+    signature = _tool_arg_failure_signature(tool_name, tool_args, missing_fields)
+    target = signature.get("target") or "unknown target"
+    missing = ", ".join(signature.get("missing_fields") or ())
+    if tool_name == "write_file":
+        return (
+            f"The previous write_file call for {target} failed because required arguments were missing: {missing}. "
+            "Do not repeat the same incomplete write_file call. "
+            "If you want to continue writing this file, call write_file again with the same file_path and the COMPLETE file content string. "
+            "If you still need context from the project, inspect with list_files or read_file first. "
+            "If you are not ready to provide full content, stop calling tools and explain the blocker."
+        )
+    return (
+        f"The previous tool call failed because required arguments were missing: {missing}. "
+        "Do not repeat the same incomplete call. Either provide the missing arguments or stop and explain the blocker."
+    )
+
+
+def _build_failed_tool_retry_note(tool_name: str, tool_args: dict, exec_result: dict) -> str:
+    return _protocol_retry_note(tool_name, tool_args, exec_result)
+    if not isinstance(exec_result, dict) or exec_result.get("success", False):
+        return ""
+
+    missing_fields = _missing_required_tool_fields(tool_name, tool_args)
+    if missing_fields:
+        return _build_tool_arg_failure_system_note(tool_name, tool_args, missing_fields)
+
+    file_tools = {"write_file", "read_file", "list_files"}
+    environment_tools = {"open_target", "app_target", "ui_interaction", "folder_explore", "sense_environment", "screen_capture"}
+
+    if tool_name in file_tools:
+        return (
+            "The previous file/code action failed. Do not repeat the exact same call blindly. "
+            "If the current project structure or nearby files may matter, inspect with list_files or read_file first, then choose the next action."
+        )
+
+    if tool_name in environment_tools:
+        return (
+            "The previous environment action failed. Do not repeat the exact same desktop action blindly. "
+            "Inspect the current state with sense_environment or screen_capture first, then choose the next step."
+        )
+
+    return (
+        "The previous tool call failed. Do not repeat the same failing call without changing arguments, checking state, or choosing a more informative tool first."
+    )
+
+
+def _append_runtime_guidance(messages: list[dict], content: str) -> None:
+    text = str(content or "").strip()
+    if not text:
+        return
+    # Some providers reject non-leading system messages in tool loops.
+    # Keep the first system prompt at the top, and inject later guidance as an internal user note.
+    messages.append({
+        "role": "user",
+        "content": f"[INTERNAL RUNTIME GUIDANCE - NOT FROM THE USER]\n{text}",
+    })
 
 
 def _build_current_time_context() -> str:
@@ -511,8 +614,10 @@ def _build_l1_messages(bundle: dict, limit: int = 10) -> list[dict]:
             api_role = "assistant"
         else:
             continue
-        if api_role == "assistant" and _contains_legacy_tool_markup(content):
-            continue
+        if api_role == "assistant":
+            content = _clean_visible_reply_text(content)
+            if not content:
+                continue
         # \u622a\u65ad\u8d85\u957f\u56de\u590d\uff08\u4fdd\u7559\u524d 800 \u5b57\uff09
         if len(content) > 800:
             content = content[:800] + "\u2026"
@@ -1287,6 +1392,9 @@ def _build_cod_system_prompt(bundle: dict) -> str:
     tool_text += (
         "\n- For any real-world action in the environment, execute the tool first and only claim success from the tool result."
         "\n- Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction."
+        "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
+        "\n- For file or code tasks, if the next step depends on project structure or existing files, inspect with list_files or read_file before writing."
+        "\n- For uncertain desktop or app state, inspect with sense_environment or screen_capture before repeating the same action."
     )
     time_context = _build_current_time_context()
 
@@ -1380,7 +1488,10 @@ def _build_tool_call_system_prompt(bundle: dict) -> str:
         "- \u5de5\u5177\u8fd4\u56de\u7684\u5185\u5bb9\u662f\u7d20\u6750\uff0c\u4e0d\u662f\u6700\u7ec8\u53e3\u543b\u3002\u6700\u7ec8\u56de\u590d\u5fc5\u987b\u4fdd\u6301 Nova \u7684\u4eba\u683c\u611f\u3001\u966a\u4f34\u611f\u548c\u81ea\u7136\u804a\u5929\u611f\u3002\n"
         "- \u8c03\u7528 story \u5de5\u5177\u540e\uff1a\u7528\u4f60\u7684\u4eba\u683c\u98ce\u683c\u52a0\u4e00\u53e5\u5f00\u573a\u767d\uff0c\u7136\u540e\u5b8c\u6574\u8f93\u51fa\u6545\u4e8b\u5185\u5bb9\uff0c\u4e0d\u8981\u538b\u7f29\u3002\n"
         "- \u8c03\u7528 news \u5de5\u5177\u540e\uff1a\u6309\u8bdd\u9898\u5206\u677f\u5757\u6574\u7406\u65b0\u95fb\uff0c\u52a0\u4f60\u98ce\u683c\u7684\u5f00\u573a\u767d\u548c\u7b80\u77ed\u70b9\u8bc4\uff0c\u65b0\u95fb\u672c\u8eab\u4e0d\u8981\u6539\u52a8\u6216\u538b\u7f29\u3002\n"
-        "- \u8c03\u7528 weather \u5de5\u5177\u540e\uff1a\u4fdd\u7559\u5de5\u5177\u8fd4\u56de\u7684\u5b8c\u6574\u5929\u6c14\u7a97\u53e3\uff0c\u7528\u81ea\u7136\u53e3\u8bed\u6574\u7406\u7ed9\u7528\u6237\uff0c\u4e0d\u8981\u538b\u7f29\u6210\u5355\u5929\u3002"
+        "- \u8c03\u7528 weather \u5de5\u5177\u540e\uff1a\u4fdd\u7559\u5de5\u5177\u8fd4\u56de\u7684\u5b8c\u6574\u5929\u6c14\u7a97\u53e3\uff0c\u7528\u81ea\u7136\u53e3\u8bed\u6574\u7406\u7ed9\u7528\u6237\uff0c\u4e0d\u8981\u538b\u7f29\u6210\u5355\u5929\u3002\n"
+        "- \u5982\u679c\u5de5\u5177\u5931\u8d25\u662f\u56e0\u4e3a\u7f3a\u5c11\u5fc5\u8981\u53c2\u6570\uff0c\u4e0d\u8981\u91cd\u590d\u540c\u4e00\u4e2a\u4e0d\u5b8c\u6574\u8c03\u7528\uff1b\u5148\u8865\u5168\u53c2\u6570\uff0c\u6216\u76f4\u63a5\u8bf4\u660e\u963b\u585e\u70b9\u3002\n"
+        "- \u6587\u4ef6/\u4ee3\u7801\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u4f60\u8fd8\u4e0d\u6e05\u695a\u5f53\u524d\u9879\u76ee\u7ed3\u6784\u6216\u5df2\u6709\u6587\u4ef6\u5185\u5bb9\uff0c\u4f18\u5148\u8c03\u7528 list_files / read_file\uff0c\u518d\u51b3\u5b9a\u662f\u5426 write_file\u3002\n"
+        "- \u684c\u9762/\u73af\u5883\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u5f53\u524d\u72b6\u6001\u4e0d\u660e\u786e\uff0c\u4f18\u5148\u8c03\u7528 sense_environment \u6216 screen_capture\uff0c\u518d\u51b3\u5b9a\u4e0b\u4e00\u6b65\u3002"
     ).strip()
 
     # 闪回 hint（如果有）
@@ -1533,6 +1644,11 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
 
     exec_result = tool_executor(tool_name, tool_args, skill_context)
     tool_response = exec_result.get("response", "") if exec_result.get("success") else f"\u6267\u884c\u5931\u8d25: {exec_result.get('error', '')}"
+    missing_fields = _missing_required_tool_fields(tool_name, tool_args)
+    arg_failure = None
+    if missing_fields and not exec_result.get("success", False):
+        arg_failure = _tool_arg_failure_signature(tool_name, tool_args, missing_fields)
+        tool_response = _build_tool_arg_failure_feedback(tool_name, tool_args, missing_fields)
     action_summary = _tool_action_summary(exec_result)
     unresolved_drift = _tool_has_unresolved_drift(exec_result)
     requires_user_takeover = _tool_requires_user_takeover(exec_result)
@@ -1540,6 +1656,7 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
         "tool": tool_name,
         "success": exec_result.get("success", False),
         "summary": action_summary or _summarize_tool_response_text(tool_response),
+        "arg_failure": arg_failure,
     }]
     if unresolved_drift:
         tool_response = _append_drift_note(tool_response, exec_result)
@@ -1555,11 +1672,16 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
         "tool_call_id": tc.get("id", ""),
         "content": tool_response,
     })
+    retry_note = _build_failed_tool_retry_note(tool_name, tool_args, exec_result)
+    if retry_note and not arg_failure:
+        _append_runtime_guidance(messages, retry_note)
+    if arg_failure:
+        _append_runtime_guidance(messages, _build_tool_arg_failure_system_note(tool_name, tool_args, missing_fields))
     if requires_user_takeover:
-        messages.append({
-            "role": "system",
-            "content": "The task is blocked by login, verification, captcha, or another user-only step. Do not call more tools. Explain clearly that the user needs to complete that step first, then you can continue.",
-        })
+        _append_runtime_guidance(
+            messages,
+            "The task is blocked by login, verification, captcha, or another user-only step. Do not call more tools. Explain clearly that the user needs to complete that step first, then you can continue.",
+        )
 
     # 第二次调用：不带 tools，让 LLM 用工具结果生成最终回复
     result2 = _llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
@@ -1605,11 +1727,34 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
             tool_args_next = json.loads(fn_next.get("arguments", "{}"))
         except (json.JSONDecodeError, TypeError):
             tool_args_next = {"user_input": bundle["user_input"]}
+        tool_args_next = _repair_tool_args_from_context(tool_name_next, tool_args_next, bundle)
+        tc_next = _sanitize_tool_call_payload(tc_next, tool_args_next)
+
+        missing_fields_next = _missing_required_tool_fields(tool_name_next, tool_args_next)
+        arg_failure_next = (
+            _tool_arg_failure_signature(tool_name_next, tool_args_next, missing_fields_next)
+            if missing_fields_next
+            else None
+        )
+        if arg_failure_next and _has_same_arg_failure_recently(recent_attempts, arg_failure_next):
+            _debug_write("tool_call_repeated_invalid_args", {
+                "mode": "non_stream",
+                "tool": tool_name_next,
+                "target": arg_failure_next.get("target", ""),
+                "missing_fields": list(arg_failure_next.get("missing_fields") or ()),
+                "round": round_idx + 1,
+            })
+            current_tool_name = tool_name_next or current_tool_name
+            current_tool_response = _build_tool_arg_failure_feedback(tool_name_next, tool_args_next, missing_fields_next)
+            current_action_summary = _summarize_tool_response_text(current_tool_response) or current_action_summary
+            break
 
         _debug_write("tool_call_invoke", {"name": tool_name_next, "args": tool_args_next, "followup": True, "round": round_idx + 1})
         exec_result_next = tool_executor(tool_name_next, tool_args_next, skill_context)
         tool_response_next = exec_result_next.get("response", "") if exec_result_next.get("success") else f"执行失败: {exec_result_next.get('error', '')}"
         action_summary_next = _tool_action_summary(exec_result_next)
+        if arg_failure_next and not exec_result_next.get("success", False):
+            tool_response_next = _build_tool_arg_failure_feedback(tool_name_next, tool_args_next, missing_fields_next)
         if _tool_has_unresolved_drift(exec_result_next):
             tool_response_next = _append_drift_note(tool_response_next, exec_result_next)
 
@@ -1623,6 +1768,14 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
             "tool_call_id": tc_next.get("id", ""),
             "content": tool_response_next,
         })
+        retry_note_next = _build_failed_tool_retry_note(tool_name_next, tool_args_next, exec_result_next)
+        if retry_note_next and not arg_failure_next:
+            _append_runtime_guidance(messages, retry_note_next)
+        if arg_failure_next:
+            _append_runtime_guidance(
+                messages,
+                _build_tool_arg_failure_system_note(tool_name_next, tool_args_next, missing_fields_next),
+            )
 
         current_result = _llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
         usage_next = current_result.get("usage", {})
@@ -1633,10 +1786,28 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
         current_action_summary = action_summary_next or current_action_summary
         current_run_meta = exec_result_next.get("meta") if isinstance(exec_result_next.get("meta"), dict) else current_run_meta
         current_tool_response = tool_response_next or current_tool_response
+        recent_attempts.append({
+            "tool": tool_name_next,
+            "success": exec_result_next.get("success", False),
+            "summary": action_summary_next or _summarize_tool_response_text(tool_response_next),
+            "arg_failure": arg_failure_next,
+        })
 
-    reply = current_result.get("content", "")
+    current_tool_success = bool(recent_attempts[-1].get("success", False)) if recent_attempts else bool(exec_result.get("success", False))
+    reply = _finalize_tool_reply(
+        current_result.get("content", ""),
+        success=current_tool_success,
+        action_summary=current_action_summary,
+        tool_response=current_tool_response,
+        run_meta=current_run_meta,
+    )
     if not str(reply or "").strip():
-        reply = _fallback_tool_reply(current_tool_response)
+        reply = _build_tool_closeout_reply(
+            success=current_tool_success,
+            action_summary=current_action_summary,
+            tool_response=current_tool_response,
+            run_meta=current_run_meta,
+        )
         _debug_write("tool_call_final_reply_fallback", {"tool": current_tool_name, "fallback_len": len(reply)})
     _debug_write("tool_call_final_reply", {"tool": current_tool_name, "reply_len": len(reply)})
     return {
@@ -1646,6 +1817,170 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
         "action_summary": current_action_summary,
         "run_meta": current_run_meta,
     }
+
+
+def _strip_think_markup(text: str) -> str:
+    return _re.sub(r'<think>.*?</think>\s*', '', str(text or ""), flags=_re.S | _re.I).strip()
+
+
+def _strip_legacy_tool_markup(text: str) -> str:
+    cleaned = str(text or "")
+    if not cleaned:
+        return ""
+    cleaned = _LEGACY_TOOL_BLOCK_RE.sub("", cleaned)
+    cleaned = _LEGACY_MINIMAX_TOOL_RE.sub("", cleaned)
+    cleaned = _LEGACY_JSON_TOOL_RE.sub("", cleaned)
+    cleaned = _re.sub(r"<\s*function_calls\s*>.*?<\s*/\s*function_calls\s*>", "", cleaned, flags=_re.I | _re.S)
+    cleaned = _re.sub(r"<\s*invoke\b[^>]*>.*?<\s*/\s*invoke\s*>", "", cleaned, flags=_re.I | _re.S)
+    cleaned = cleaned.replace("DSML", "")
+    return cleaned
+
+
+def _clean_visible_reply_text(text: str) -> str:
+    cleaned = _strip_think_markup(text)
+    cleaned = _strip_legacy_tool_markup(cleaned)
+    cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _build_tool_closeout_reply(
+    *,
+    success: bool,
+    action_summary: str = "",
+    tool_response: str = "",
+    run_meta: dict | None = None,
+) -> str:
+    if not success:
+        return _fallback_tool_reply(tool_response)
+
+    summary = str(action_summary or "").strip()
+    if not summary and isinstance(run_meta, dict):
+        action = run_meta.get("action") if isinstance(run_meta.get("action"), dict) else {}
+        summary = summarize_action_meta(action)
+    if not summary:
+        summary = _summarize_tool_response_text(tool_response)
+
+    verification_detail = ""
+    if isinstance(run_meta, dict):
+        action = run_meta.get("action") if isinstance(run_meta.get("action"), dict) else {}
+        verification_detail = str(action.get("verification_detail") or "").strip()
+
+    if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
+        return f"这一步已经完成：\n\n{summary}\n\n核验：{verification_detail}"
+    if summary:
+        return f"这一步已经完成：\n\n{summary}"
+    return ""
+
+
+def _finalize_tool_reply(
+    raw_reply: str,
+    *,
+    success: bool,
+    action_summary: str = "",
+    tool_response: str = "",
+    run_meta: dict | None = None,
+) -> str:
+    cleaned = _clean_visible_reply_text(raw_reply)
+    if cleaned and not _looks_like_tool_preamble(cleaned):
+        return cleaned
+    return _build_tool_closeout_reply(
+        success=success,
+        action_summary=action_summary,
+        tool_response=tool_response,
+        run_meta=run_meta,
+    )
+
+
+def _looks_like_tool_preamble(text: str) -> bool:
+    visible = _clean_visible_reply_text(text)
+    if not visible:
+        return False
+    if "```" in visible:
+        return False
+
+    lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
+    if len(lines) > 4:
+        return False
+    if any(_re.match(r"^\d+\.", line) for line in lines):
+        return False
+    if any(line.startswith("|") and line.endswith("|") for line in lines):
+        return False
+
+    sentence_count = len([part for part in _re.split(r"[。！？!?]\s*|\n+", visible) if part.strip()])
+    if sentence_count > 4:
+        return False
+
+    answer_like_patterns = (
+        r"\b\d+\s*(?:度|%|小时|分钟|个|条|项|次)\b",
+        r"https?://",
+        r"[A-Za-z]:\\",
+        r"(?:SQLite|Flask|Electron|LocalStorage)\s+\+",
+        r"\b(?:A|B|C)\b\s*\|",
+    )
+    if any(_re.search(pattern, visible, flags=_re.I) for pattern in answer_like_patterns):
+        return False
+
+    # 这类短文本更像“先接住任务 + 说明下一步”，不应该打掉后面的 tool_call。
+    if len(visible) <= 160:
+        return True
+
+    preamble_prefixes = (
+        "我来",
+        "我先",
+        "我帮你",
+        "让我",
+        "我看看",
+        "我查",
+        "我去",
+        "先帮你",
+        "先看",
+        "先查",
+        "稍等",
+        "等我",
+        "好嘞",
+        "好，我",
+        "行，我",
+        "那我",
+        "好！我来",
+        "好，我来",
+        "好嘞！",
+        "好的，我来",
+    )
+    preamble_actions = (
+        "看一下",
+        "看下",
+        "查一下",
+        "查下",
+        "梳理一下",
+        "梳理下",
+        "定位一下",
+        "定位下",
+        "检索一下",
+        "检索下",
+        "分析一下",
+        "分析下",
+        "处理一下",
+        "处理下",
+        "确认一下",
+        "确认下",
+        "整理一下",
+        "整理下",
+        "过一遍",
+        "试一下",
+        "试试",
+        "回忆一下",
+        "看看记忆",
+        "看看",
+        "帮你全部搞定",
+        "直接上代码",
+        "先创建",
+        "然后我",
+        "我逐个文件",
+    )
+
+    return any(visible.startswith(prefix) for prefix in preamble_prefixes) or any(
+        action in visible for action in preamble_actions
+    )
 
 
 def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_executor):
@@ -1723,15 +2058,22 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             yield chunk
 
     if tool_calls_signal and streamed_text:
-        # 检查文本是否只是 <think> 思考内容（不算真正的回复文本）
+        # 允许短引导句 + tool_call 并存，避免模型先说一句就把工具调用丢掉。
         joined = "".join(collected_tokens).strip()
-        _only_think = bool(_re.fullmatch(r'<think>.*?</think>\s*', joined, flags=_re.S | _re.I))
-        if not _only_think:
+        visible_joined = _strip_think_markup(joined)
+        if visible_joined and not _looks_like_tool_preamble(visible_joined):
             _debug_write("tool_call_stream_mixed_output", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
-                "text_len": len(joined),
+                "text_len": len(visible_joined),
+                "text_preview": visible_joined[:80],
             })
             tool_calls_signal = None
+        elif visible_joined:
+            _debug_write("tool_call_stream_preamble_kept", {
+                "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
+                "text_len": len(visible_joined),
+                "text_preview": visible_joined[:80],
+            })
 
     if not tool_calls_signal and not streamed_text:
         legacy_tc = _parse_legacy_tool_call_text("".join(collected_tokens), bundle.get("user_input", ""))
@@ -1795,6 +2137,8 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         tool_args = json.loads(fn.get("arguments", "{}"))
     except (json.JSONDecodeError, TypeError):
         tool_args = {"user_input": bundle["user_input"]}
+    tool_args = _repair_tool_args_from_context(tool_name, tool_args, bundle)
+    tc = _sanitize_tool_call_payload(tc, tool_args)
 
     yield {"_tool_call": {"name": tool_name, "executing": True, "preview": _tool_preview(tool_name, tool_args)}}
 
@@ -1808,6 +2152,11 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     exec_result = tool_executor(tool_name, tool_args, skill_context)
     success = exec_result.get("success", False)
     tool_response = exec_result.get("response", "") if success else f"\u6267\u884c\u5931\u8d25: {exec_result.get('error', '')}"
+    missing_fields = _missing_required_tool_fields(tool_name, tool_args)
+    arg_failure = None
+    if missing_fields and not success:
+        arg_failure = _tool_arg_failure_signature(tool_name, tool_args, missing_fields)
+        tool_response = _build_tool_arg_failure_feedback(tool_name, tool_args, missing_fields)
     action_summary = _tool_action_summary(exec_result)
     unresolved_drift = _tool_has_unresolved_drift(exec_result)
     requires_user_takeover = _tool_requires_user_takeover(exec_result)
@@ -1815,12 +2164,15 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         "tool": tool_name,
         "success": success,
         "summary": action_summary or _summarize_tool_response_text(tool_response),
+        "arg_failure": arg_failure,
     }]
     if unresolved_drift:
         tool_response = _append_drift_note(tool_response, exec_result)
     _tool_used = tool_name
     _current_run_meta = exec_result.get("meta") if isinstance(exec_result.get("meta"), dict) else {}
     _current_tool_success = bool(success)
+    _current_action_summary = action_summary
+    _current_tool_response = tool_response
 
     yield {
         "_tool_call": {
@@ -1855,14 +2207,20 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         "tool_call_id": tc.get("id", ""),
         "content": tool_response,
     })
+    retry_note = _build_failed_tool_retry_note(tool_name, tool_args, exec_result)
+    if retry_note and not arg_failure:
+        _append_runtime_guidance(messages, retry_note)
+    if arg_failure:
+        _append_runtime_guidance(messages, _build_tool_arg_failure_system_note(tool_name, tool_args, missing_fields))
 
     # ── 多轮 tool_call 循环（LLM 自主决定何时停止）──
     MAX_TOOL_ROUNDS = 20  # 安全上限，正常情况 LLM 自己决定停
     if requires_user_takeover:
-        final_messages = messages + [{
-            "role": "system",
-            "content": "The task is blocked by login, verification, captcha, or another user-only step. Do not call more tools. Explain clearly that the user needs to complete that step first, then you can continue.",
-        }]
+        final_messages = list(messages)
+        _append_runtime_guidance(
+            final_messages,
+            "The task is blocked by login, verification, captcha, or another user-only step. Do not call more tools. Explain clearly that the user needs to complete that step first, then you can continue.",
+        )
         usage_blocked = {}
         emitted = False
         for chunk in _llm_call_stream(cfg, final_messages, temperature=0.7, max_tokens=800, timeout=25):
@@ -1931,25 +2289,37 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         if not tool_calls_n:
             # LLM 不再调工具，输出文本完成
             text_n = "".join(collected_n)
-            # 过滤 <think> 标签后再判断
-            _clean_text_n = _re.sub(r'<think>.*?</think>\s*', '', text_n, flags=_re.S | _re.I).strip()
-            if _clean_text_n:
-                # 流式输出过滤后的文本
-                yield _clean_text_n
-                break
-            _last_tool_response = ""
-            for _m in reversed(messages):
-                if _m.get("role") == "tool" and _m.get("content"):
-                    _last_tool_response = _m["content"]
-                    break
-            _fallback = _fallback_tool_reply(_last_tool_response)
+            final_reply = _finalize_tool_reply(
+                text_n,
+                success=_current_tool_success,
+                action_summary=_current_action_summary,
+                tool_response=_current_tool_response,
+                run_meta=_current_run_meta,
+            )
+            if final_reply:
+                yield final_reply
+                yield {
+                    "_done": True,
+                    "usage": usage,
+                    "tool_used": _tool_used or tool_name,
+                    "action_summary": _current_action_summary,
+                    "run_meta": _current_run_meta,
+                    "success": _current_tool_success,
+                }
+                return
+            _fallback = _build_tool_closeout_reply(
+                success=_current_tool_success,
+                action_summary=_current_action_summary,
+                tool_response=_current_tool_response,
+                run_meta=_current_run_meta,
+            )
             if _fallback:
                 yield _fallback
                 yield {
                     "_done": True,
                     "usage": usage,
                     "tool_used": _tool_used or tool_name,
-                    "action_summary": "",
+                    "action_summary": _current_action_summary,
                     "run_meta": _current_run_meta,
                     "success": _current_tool_success,
                 }
@@ -1967,11 +2337,34 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         )
         tc_n = _sanitize_tool_call_payload(tc_n, tool_args_n)
 
+        missing_fields_n = _missing_required_tool_fields(tool_name_n, tool_args_n)
+        arg_failure_n = (
+            _tool_arg_failure_signature(tool_name_n, tool_args_n, missing_fields_n)
+            if missing_fields_n
+            else None
+        )
+        if arg_failure_n and _has_same_arg_failure_recently(recent_attempts, arg_failure_n):
+            _debug_write("tool_call_repeated_invalid_args", {
+                "mode": "stream",
+                "tool": tool_name_n,
+                "target": arg_failure_n.get("target", ""),
+                "missing_fields": list(arg_failure_n.get("missing_fields") or ()),
+                "round": _round,
+            })
+            _tool_used = tool_name_n
+            _current_run_meta = {}
+            _current_tool_success = False
+            _current_tool_response = _build_tool_arg_failure_feedback(tool_name_n, tool_args_n, missing_fields_n)
+            _current_action_summary = _summarize_tool_response_text(_current_tool_response) or _current_action_summary
+            break
+
         yield {"_tool_call": {"name": tool_name_n, "executing": True, "preview": _tool_preview(tool_name_n, tool_args_n)}}
 
         exec_result_n = tool_executor(tool_name_n, tool_args_n, skill_context)
         success_n = exec_result_n.get("success", False)
         tool_response_n = exec_result_n.get("response", "") if success_n else f"\u6267\u884c\u5931\u8d25: {exec_result_n.get('error', '')}"
+        if arg_failure_n and not success_n:
+            tool_response_n = _build_tool_arg_failure_feedback(tool_name_n, tool_args_n, missing_fields_n)
         action_summary_n = _tool_action_summary(exec_result_n)
         unresolved_drift_n = _tool_has_unresolved_drift(exec_result_n)
         if unresolved_drift_n:
@@ -2001,10 +2394,13 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         _tool_used = tool_name_n
         _current_run_meta = exec_result_n.get("meta") if isinstance(exec_result_n.get("meta"), dict) else {}
         _current_tool_success = bool(success_n)
+        _current_action_summary = action_summary_n or _current_action_summary
+        _current_tool_response = tool_response_n
         recent_attempts.append({
             "tool": tool_name_n,
             "success": success_n,
             "summary": action_summary_n or _summarize_tool_response_text(tool_response_n),
+            "arg_failure": arg_failure_n,
         })
 
         messages.append({
@@ -2017,6 +2413,14 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             "tool_call_id": tc_n.get("id", ""),
             "content": tool_response_n,
         })
+        retry_note_n = _build_failed_tool_retry_note(tool_name_n, tool_args_n, exec_result_n)
+        if retry_note_n and not arg_failure_n:
+            _append_runtime_guidance(messages, retry_note_n)
+        if arg_failure_n:
+            _append_runtime_guidance(
+                messages,
+                _build_tool_arg_failure_system_note(tool_name_n, tool_args_n, missing_fields_n),
+            )
 
         _round += 1
 
@@ -2024,35 +2428,46 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     # 如果是因为达到上限退出的，LLM 还没看到最后一次工具的结果
     if _round >= MAX_TOOL_ROUNDS:
         usage_final = {}
+        collected_final = []
         for chunk in _llm_call_stream(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25):
             if isinstance(chunk, dict):
                 if chunk.get("_usage"):
                     usage_final = chunk["_usage"]
             else:
-                yield chunk
+                collected_final.append(chunk)
         for k in ("prompt_tokens", "completion_tokens", "prompt_cache_hit_tokens", "prompt_cache_miss_tokens"):
             usage[k] = usage.get(k, 0) + usage_final.get(k, 0)
+        final_reply = _finalize_tool_reply(
+            "".join(collected_final),
+            success=_current_tool_success,
+            action_summary=_current_action_summary,
+            tool_response=_current_tool_response,
+            run_meta=_current_run_meta,
+        )
+        if final_reply:
+            yield final_reply
 
     _debug_write("tool_call_multi_round", {"rounds": _round})
 
     # ── 兜底：如果多步执行完但 LLM 没生成文字回复，用最后一个工具结果作为回复 ──
     # 这发生在 LLM 调完工具后直接结束、没有输出总结文字的情况
     _all_collected = collected_tokens + (collected_n if 'collected_n' in dir() else [])
-    if not any(c.strip() for c in _all_collected if isinstance(c, str)):
+    if _has_only_preamble_text(_all_collected, current_tool_success=False):
         # 从 messages 中找最后一个 tool 角色的 content
-        _last_tool_response = ""
-        for _m in reversed(messages):
-            if _m.get("role") == "tool" and _m.get("content"):
-                _last_tool_response = _m["content"]
-                break
-        if _last_tool_response:
-            _fallback = format_skill_fallback(_last_tool_response)
+        _fallback = _build_tool_closeout_reply(
+            success=_current_tool_success,
+            action_summary=_current_action_summary,
+            tool_response=_current_tool_response,
+            run_meta=_current_run_meta,
+        )
+        if _fallback:
             yield _fallback
 
     yield {
         "_done": True,
         "usage": usage,
         "tool_used": _tool_used or tool_name,
+        "action_summary": _current_action_summary,
         "run_meta": _current_run_meta,
         "success": _current_tool_success,
     }
@@ -2083,6 +2498,19 @@ def _fallback_tool_reply(tool_response: str) -> str:
     if not text:
         return ""
     return format_skill_fallback(text)
+
+
+def _has_only_preamble_text(chunks: list, *, current_tool_success: bool) -> bool:
+    visible = []
+    for chunk in chunks or []:
+        if not isinstance(chunk, str):
+            continue
+        cleaned = _clean_visible_reply_text(chunk)
+        if cleaned:
+            visible.append(cleaned)
+    if not visible:
+        return True
+    return all(_looks_like_tool_preamble(text) for text in visible)
 
 
 def format_skill_fallback(skill_response: str) -> str:  # override legacy fallback wording

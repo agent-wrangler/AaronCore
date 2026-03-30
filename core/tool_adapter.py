@@ -8,7 +8,11 @@ import re as _re
 from pathlib import Path as _Path
 
 from core.executor import execute as _execute
-from core.fs_protocol import load_export_state as _load_export_state, normalize_user_special_path as _normalize_user_special_path
+from core.fs_protocol import (
+    execute_write_file_action as _execute_write_file_protocol,
+    load_export_state as _load_export_state,
+    normalize_user_special_path as _normalize_user_special_path,
+)
 
 # ── ask_user 共享状态 ──
 _ask_user_lock = threading.Lock()
@@ -226,7 +230,7 @@ def build_tools_list() -> list[dict]:
 
 # ── 记忆工具（CoD）——从 configs/tools.json 加载 ──
 
-_MEMORY_TOOLS = {"recall_memory", "query_knowledge", "web_search", "self_fix", "read_file", "list_files", "discover_tools", "sense_environment", "write_file"}
+_MEMORY_TOOLS = {"recall_memory", "query_knowledge", "web_search", "self_fix", "read_file", "list_files", "discover_tools", "sense_environment"}
 
 _tools_error_count = 0  # 连续报错计数
 
@@ -1001,6 +1005,7 @@ def _execute_sense_environment(arguments: dict) -> dict:
 
 
 def _execute_write_file(arguments: dict) -> dict:
+    return _execute_write_file_protocol(arguments)
     """写入文件到工作区或用户常用目录。"""
     file_path = str(
         arguments.get("file_path", "")
@@ -1048,6 +1053,7 @@ def _execute_write_file(arguments: dict) -> dict:
 
 
 def _execute_write_file_v2(arguments: dict) -> dict:
+    return _execute_write_file_protocol(arguments)
     """Write files broadly, but keep Windows system dirs and Nova core files protected."""
     file_path = str(
         arguments.get("file_path", "")
@@ -1138,8 +1144,6 @@ def _execute_memory_tool(name: str, arguments: dict) -> dict:
         return _execute_discover_tools(arguments)
     elif name == "sense_environment":
         return _execute_sense_environment(arguments)
-    elif name == "write_file":
-        return _execute_write_file_v2(arguments)
     return {"success": False, "error": f"\u672a\u77e5\u8bb0\u5fc6\u5de5\u5177: {name}"}
 
 

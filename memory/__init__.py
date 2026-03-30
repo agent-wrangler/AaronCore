@@ -102,6 +102,7 @@ def _maybe_promote_success_path(skill_name: str, run_event: dict, now: str):
     outcome = str(run_event.get("outcome") or "").strip()
     observed_state = str(run_event.get("observed_state") or "").strip()
     verification_mode = str(run_event.get("verification_mode") or "").strip()
+    verification_detail = str(run_event.get("verification_detail") or "").strip()
     summary = str(run_event.get("summary") or "").strip()
 
     if not action_kind and not outcome and not observed_state:
@@ -144,6 +145,7 @@ def _maybe_promote_success_path(skill_name: str, run_event: dict, now: str):
             "outcome": outcome,
             "observed_state": observed_state,
             "verification_mode": verification_mode,
+            "verification_detail": verification_detail,
             "summary": summary,
             "应用示例": summary,
             "success_count": 1,
@@ -160,6 +162,8 @@ def _maybe_promote_success_path(skill_name: str, run_event: dict, now: str):
             existing["应用示例"] = summary
         if verification_mode:
             existing["verification_mode"] = verification_mode
+        if verification_detail:
+            existing["verification_detail"] = verification_detail
         if observed_state:
             existing["observed_state"] = observed_state
         if outcome:
@@ -221,6 +225,7 @@ def evolve(user_input: str, skill_used: str, run_event: dict | None = None):
             "target": str(run_event.get("target") or "").strip(),
             "outcome": str(run_event.get("outcome") or "").strip(),
             "verification_mode": str(run_event.get("verification_mode") or "").strip(),
+            "verification_detail": str(run_event.get("verification_detail") or "").strip(),
         })
         evo["skill_runs"] = runs[-240:]
         _maybe_promote_success_path(skill_name, run_event, now)

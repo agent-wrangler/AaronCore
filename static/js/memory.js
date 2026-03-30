@@ -528,6 +528,8 @@ function buildExecutionTraceContent(meta, rawContent) {
   var summary = safeMultiline(meta.summary);
   var observed = safeMultiline(meta.observed_state);
   var driftReason = safeMultiline(meta.drift_reason);
+  var verificationMode = safeText(meta.verification_mode);
+  var verificationDetail = safeMultiline(meta.verification_detail);
   var verified = meta.verified;
   var lines = [];
 
@@ -539,6 +541,8 @@ function buildExecutionTraceContent(meta, rawContent) {
   else if (driftReason) lines.push("状态：发生偏移");
   else lines.push("状态：已记录");
 
+  if (verificationMode) lines.push("核验方式：" + verificationMode);
+  if (verificationDetail) lines.push("核验细节：" + verificationDetail);
   if (driftReason) lines.push("偏移：" + driftReason);
   if (observed) lines.push("观测：" + observed);
 

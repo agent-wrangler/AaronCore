@@ -5,8 +5,12 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 EXPORT_STATE_PATH = Path(__file__).resolve().parent.parent / 'memory_db' / 'file_export_state.json'
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 DANGEROUS_SUFFIXES = {'.exe', '.bat', '.cmd', '.ps1', '.lnk'}
 INVALID_CHARS = r'[\\/:*?"<>|]'
+PROTOCOL_REQUIRED_FIELDS = {
+    'write_file': ('file_path', 'content'),
+}
 
 
 def normalize_user_special_path(raw_path: str) -> str:
@@ -200,6 +204,263 @@ def build_operation_result(reply: str, *, expected_state: str = '', observed_sta
     return result
 
 
+def build_protocol_exec_result(
+    success: bool,
+    reply: str,
+    *,
+    error: str = '',
+    expected_state: str = '',
+    observed_state: str = '',
+    drift_reason: str = '',
+    repair_hint: str = '',
+    repair_attempted: bool = False,
+    repair_succeeded: bool = False,
+    image_url: str = '',
+    action_kind: str = '',
+    target_kind: str = '',
+    target: str = '',
+    outcome: str = '',
+    display_hint: str = '',
+    verification_mode: str = '',
+    verification_detail: str = '',
+    post_condition: dict | None = None,
+    verified: bool | None = None,
+) -> dict:
+    operation = build_operation_result(
+        reply,
+        expected_state=expected_state,
+        observed_state=observed_state,
+        drift_reason=drift_reason,
+        repair_hint=repair_hint,
+        repair_attempted=repair_attempted,
+        repair_succeeded=repair_succeeded,
+        image_url=image_url,
+        action_kind=action_kind,
+        target_kind=target_kind,
+        target=target,
+        outcome=outcome,
+        display_hint=display_hint,
+        verification_mode=verification_mode,
+        verification_detail=verification_detail,
+    )
+    meta = {
+        'state': operation.get('state') if isinstance(operation.get('state'), dict) else {},
+        'drift': operation.get('drift') if isinstance(operation.get('drift'), dict) else {},
+        'action': operation.get('action') if isinstance(operation.get('action'), dict) else {},
+        'repair_attempted': bool(operation.get('repair_attempted', False)),
+        'repair_succeeded': bool(operation.get('repair_succeeded', False)),
+    }
+    if image_url:
+        meta['image_url'] = str(image_url).strip()
+    if isinstance(post_condition, dict) and post_condition:
+        meta['post_condition'] = dict(post_condition)
+    verification = {}
+    if verified is not None:
+        verification['verified'] = bool(verified)
+    verification_observed = str(
+        observed_state
+        or ((post_condition or {}).get('observed') if isinstance(post_condition, dict) else '')
+        or ''
+    ).strip()
+    if verification_observed:
+        verification['observed_state'] = verification_observed
+    if verification:
+        meta['verification'] = verification
+    return {
+        'success': bool(success),
+        'response': str(reply or '').strip(),
+        'error': None if success else str(error or reply or '').strip(),
+        'meta': meta,
+    }
+
+
+def resolve_user_file_target(file_path: str, *, workspace_root: Path | None = None) -> Path | None:
+    raw = normalize_user_special_path(str(file_path or '').replace('\\', '/').strip())
+    if not raw:
+        return None
+    root = (workspace_root or WORKSPACE_ROOT).resolve()
+    target = Path(raw)
+    if not target.is_absolute():
+        target = (root / raw.lstrip('./')).resolve()
+
+        if '/' not in raw and '\\' not in raw:
+            state = load_export_state()
+            last_dir = normalize_user_special_path(str(state.get('last_export_dir') or '').strip())
+            last_path = normalize_user_special_path(str(state.get('last_export_path') or '').strip())
+            if last_dir:
+                last_dir_path = Path(last_dir)
+                candidate = (last_dir_path / raw).resolve()
+
+                def _norm_stem(p: str) -> str:
+                    stem = Path(str(p or '')).stem
+                    stem = re.sub(r'^\d{4}-\d{2}-\d{2}_\d{6}_', '', stem)
+                    return stem.strip().lower()
+
+                raw_stem = _norm_stem(raw)
+                last_stem = _norm_stem(last_path)
+                same_topic = bool(raw_stem and last_stem and (raw_stem == last_stem or raw_stem in last_stem or last_stem in raw_stem))
+                if candidate.exists() or same_topic:
+                    return candidate
+        return target
+    return target.resolve()
+
+
+def is_system_protected_target(target: str | Path | None) -> bool:
+    if not target:
+        return True
+    target_str = str(target).replace('\\', '/')
+    protected_prefixes = (
+        'C:/Windows',
+        'C:/Program Files',
+        'C:/Program Files (x86)',
+        'C:/ProgramData',
+    )
+    return any(target_str.startswith(prefix) for prefix in protected_prefixes)
+
+
+def is_novacore_protected_write_target(target: str | Path | None) -> bool:
+    if not target:
+        return True
+    try:
+        root = WORKSPACE_ROOT.resolve()
+        target_path = Path(target).resolve()
+    except Exception:
+        return True
+
+    try:
+        rel = target_path.relative_to(root)
+    except Exception:
+        return False
+
+    protected_roots = {
+        Path('brain'),
+        Path('core'),
+        Path('routes'),
+        Path('shell'),
+        Path('static/js'),
+        Path('static/css'),
+        Path('configs'),
+    }
+    protected_files = {
+        Path('agent_final.py'),
+        Path('output.html'),
+        Path('start_nova.bat'),
+        Path('AGENTS.md'),
+        Path('CLAUDE.md'),
+    }
+    if rel in protected_files:
+        return True
+    return any(rel == p or p in rel.parents for p in protected_roots)
+
+
+def is_allowed_write_target(target: str | Path | None) -> bool:
+    if not target:
+        return False
+    return not is_system_protected_target(target) and not is_novacore_protected_write_target(target)
+
+
+def missing_required_protocol_fields(tool_name: str, tool_args: dict | None) -> list[str]:
+    args = dict(tool_args or {})
+    missing = []
+    for field in PROTOCOL_REQUIRED_FIELDS.get(str(tool_name or '').strip(), ()):
+        value = args.get(field)
+        if isinstance(value, str):
+            if not value.strip():
+                missing.append(field)
+        elif value in (None, [], {}):
+            missing.append(field)
+    return missing
+
+
+def protocol_arg_failure_signature(tool_name: str, tool_args: dict | None, missing_fields: list[str]) -> dict:
+    args = dict(tool_args or {})
+    target = str(
+        args.get('file_path')
+        or args.get('path')
+        or args.get('target')
+        or args.get('filename')
+        or ''
+    ).strip().lower()
+    return {
+        'tool': str(tool_name or '').strip(),
+        'target': target,
+        'missing_fields': tuple(sorted(str(field).strip() for field in missing_fields if str(field).strip())),
+    }
+
+
+def has_same_protocol_arg_failure_recently(recent_attempts: list[dict], signature: dict) -> bool:
+    for item in reversed(recent_attempts[-4:]):
+        if not isinstance(item, dict):
+            continue
+        if item.get('success') is not False:
+            continue
+        previous = item.get('arg_failure')
+        if isinstance(previous, dict) and previous == signature:
+            return True
+    return False
+
+
+def build_protocol_arg_failure_feedback(tool_name: str, tool_args: dict | None, missing_fields: list[str]) -> str:
+    signature = protocol_arg_failure_signature(tool_name, tool_args, missing_fields)
+    target = signature.get('target') or '未提供目标'
+    if tool_name == 'write_file' and 'content' in missing_fields:
+        return (
+            '执行失败: 缺少 content。\n'
+            f'write_file 必须同时提供 file_path 和完整文件内容；当前目标是 {target}。\n'
+            '不要重复只带 file_path 的调用。\n'
+            '如果你已经知道这个文件要写什么，就直接重新调用 write_file，并把该文件的完整 content 一次性传入。\n'
+            '如果还缺项目结构或相邻文件信息，先调用 list_files / read_file 再决定写入。\n'
+            '只有在文件内容真的依赖用户选择，或你确实缺少必要上下文时，才停止工具调用并向用户解释阻塞。'
+        )
+    return f"执行失败: 缺少必要参数 {', '.join(missing_fields)}。请补全参数后再继续。"
+
+
+def build_protocol_arg_failure_system_note(tool_name: str, tool_args: dict | None, missing_fields: list[str]) -> str:
+    signature = protocol_arg_failure_signature(tool_name, tool_args, missing_fields)
+    target = signature.get('target') or 'unknown target'
+    missing = ', '.join(signature.get('missing_fields') or ())
+    if tool_name == 'write_file':
+        return (
+            f'The previous write_file call for {target} failed because required arguments were missing: {missing}. '
+            'Do not repeat the same incomplete write_file call. '
+            'If you already know what the file should contain, immediately call write_file again with the same file_path and the COMPLETE file content string. '
+            'If you still need project structure or neighboring file context, inspect with list_files or read_file first, then rebuild the full content. '
+            'Only stop calling tools and explain the blocker if the file content genuinely depends on a missing user choice or missing context you cannot infer.'
+        )
+    return (
+        f'The previous tool call failed because required arguments were missing: {missing}. '
+        'Do not repeat the same incomplete call. Either provide the missing arguments or stop and explain the blocker.'
+    )
+
+
+def build_protocol_retry_note(tool_name: str, tool_args: dict | None, exec_result: dict | None) -> str:
+    if not isinstance(exec_result, dict) or exec_result.get('success', False):
+        return ''
+
+    missing_fields = missing_required_protocol_fields(tool_name, tool_args)
+    if missing_fields:
+        return build_protocol_arg_failure_system_note(tool_name, tool_args, missing_fields)
+
+    file_tools = {'write_file', 'read_file', 'list_files'}
+    environment_tools = {'open_target', 'app_target', 'ui_interaction', 'folder_explore', 'sense_environment', 'screen_capture'}
+
+    if tool_name in file_tools:
+        return (
+            'The previous file/code action failed. Do not repeat the exact same call blindly. '
+            'If the current project structure or nearby files may matter, inspect with list_files or read_file first, then choose the next action.'
+        )
+
+    if tool_name in environment_tools:
+        return (
+            'The previous environment action failed. Do not repeat the exact same desktop action blindly. '
+            'Inspect the current state with sense_environment or screen_capture first, then choose the next step.'
+        )
+
+    return (
+        'The previous tool call failed. Do not repeat the same failing call without changing arguments, checking state, or choosing a more informative tool first.'
+    )
+
+
 def verify_post_condition(action: str, target_value: str = '', **kwargs) -> dict:
     try:
         import pygetwindow as _gw
@@ -246,6 +507,17 @@ def verify_post_condition(action: str, target_value: str = '', **kwargs) -> dict
         p = Path(str(target_value or '').strip())
         exists = p.exists()
         return {'ok': exists, 'expected': 'artifact_saved', 'observed': 'artifact_present' if exists else 'artifact_missing', 'drift': '' if exists else 'artifact_not_persisted', 'hint': '' if exists else 'fallback_to_desktop'}
+
+    if action in {'write', 'write_file'}:
+        p = Path(str(target_value or '').strip())
+        exists = p.exists()
+        return {
+            'ok': exists,
+            'expected': 'file_written',
+            'observed': 'file_written' if exists else 'file_missing_after_write',
+            'drift': '' if exists else 'write_not_persisted',
+            'hint': '' if exists else 'retry_or_check_write_target',
+        }
 
     if action in {'launch_app', 'focus_window'}:
         if not _has_gw:
@@ -458,6 +730,130 @@ def record_saved_artifact(path: str, fmt: str):
         'last_export_format': str(fmt or '').strip(),
         'updated_at': datetime.now().isoformat(),
     })
+
+
+def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -> dict:
+    args = dict(arguments or {})
+    file_path = str(
+        args.get('file_path', '')
+        or args.get('path', '')
+        or args.get('target', '')
+        or args.get('filename', '')
+        or ''
+    ).strip()
+    content = str(args.get('content', '') or '')
+    description = str(args.get('description', '') or '').strip()
+
+    missing = missing_required_protocol_fields('write_file', {'file_path': file_path, 'content': content})
+    target_hint = file_path.strip()
+    if missing:
+        feedback = build_protocol_arg_failure_feedback('write_file', {'file_path': file_path, 'content': content}, missing)
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='write_ready',
+            observed_state='missing_required_args',
+            drift_reason='missing_required_args',
+            repair_hint='provide_complete_file_content',
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='write_file',
+            target_kind='file',
+            target=target_hint,
+            outcome='blocked',
+            display_hint=f"写入文件缺少必要参数：{Path(target_hint).name if target_hint else '未提供目标'}",
+            verification_mode='argument_check',
+            verification_detail=f"missing_fields={','.join(missing)}",
+            verified=False,
+        )
+
+    target = resolve_user_file_target(file_path)
+    if not target:
+        feedback = '执行失败: 缺少 file_path。'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='write_ready',
+            observed_state='path_unresolved',
+            drift_reason='missing_write_target',
+            repair_hint='provide_valid_file_path',
+            action_kind='write_file',
+            target_kind='file',
+            target='',
+            outcome='unresolved',
+            display_hint='写入文件时没有解析出目标路径',
+            verification_mode='path_resolution',
+            verification_detail='target_unresolved',
+            verified=False,
+        )
+
+    if not is_allowed_write_target(target):
+        feedback = f"执行失败: 目标路径不可写入：`{target}`"
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='write_allowed',
+            observed_state='write_blocked',
+            drift_reason='write_target_protected',
+            repair_hint='choose_safe_workspace_path',
+            action_kind='write_file',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f"写入被保护策略拦下：{target.name}",
+            verification_mode='write_guard',
+            verification_detail='protected_target',
+            verified=False,
+        )
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding='utf-8')
+    except Exception as exc:
+        feedback = f"写入失败: {exc}"
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='file_written',
+            observed_state='write_exception',
+            drift_reason='write_exception',
+            repair_hint='check_path_permissions_or_content',
+            action_kind='write_file',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f"写入文件失败：{target.name}",
+            verification_mode='write_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    post = verify_post_condition('write_file', str(target))
+    summary = description or f"已写入文件：{target}"
+    return build_protocol_exec_result(
+        bool(post.get('ok', False)),
+        f"{summary}\n路径：{target}",
+        error='' if post.get('ok', False) else '写入后未检测到目标文件',
+        expected_state=str(post.get('expected') or 'file_written'),
+        observed_state=str(post.get('observed') or 'file_written'),
+        drift_reason=str(post.get('drift') or ''),
+        repair_hint=str(post.get('hint') or ''),
+        repair_attempted=False,
+        repair_succeeded=bool(post.get('ok', False)),
+        action_kind='write_file',
+        target_kind='file',
+        target=str(target),
+        outcome='written' if post.get('ok', False) else 'write_unconfirmed',
+        display_hint=f"已写入文件：{target.name}" if post.get('ok', False) else f"写入后未确认文件：{target.name}",
+        verification_mode='path_exists',
+        verification_detail=str(target),
+        post_condition=post,
+        verified=bool(post.get('ok', False)),
+    )
 
 
 def attempt_fs_repair(skill_name: str, context: dict | None = None, meta: dict | None = None) -> dict:

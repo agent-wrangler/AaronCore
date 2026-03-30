@@ -1,10 +1,28 @@
 # Executor - 技能执行层
 # 负责：统一调用技能、处理结果、封装异常、注入用户上下文
 
-from core.fs_protocol import attempt_fs_repair, verify_post_condition
+from core.fs_protocol import attempt_fs_repair, execute_write_file_action, verify_post_condition
 from core.skills import get_skill
 
-_PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction'}
+_PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction', 'write_file'}
+_DIRECT_PROTOCOL_EXECUTORS = {
+    'write_file': execute_write_file_action,
+}
+
+
+def _result_dict_success(result: dict, meta: dict) -> bool:
+    if not isinstance(result, dict):
+        return True
+    if 'success' in result:
+        return bool(result.get('success'))
+    meta = meta if isinstance(meta, dict) else {}
+    drift = meta.get('drift') if isinstance(meta.get('drift'), dict) else {}
+    if str(drift.get('reason') or '').strip():
+        return False
+    post = meta.get('post_condition') if isinstance(meta.get('post_condition'), dict) else {}
+    if post and post.get('ok') is False:
+        return False
+    return True
 
 
 def _derive_protocol_post_check(skill_name: str, user_input: str, context: dict) -> tuple[str, str, dict] | None:
@@ -43,6 +61,11 @@ def _derive_protocol_post_check(skill_name: str, user_input: str, context: dict)
         target_value = str(context.get('path') or context.get('file_path') or context.get('save_path') or '').strip()
         if target_value:
             return 'save', target_value, {}
+
+    if skill_name == 'write_file':
+        target_value = str(context.get('file_path') or context.get('path') or context.get('target') or context.get('filename') or '').strip()
+        if target_value:
+            return 'write_file', target_value, {}
 
     if skill_name == 'app_target':
         target_value = str(context.get('target') or context.get('app') or context.get('path') or '').strip()
@@ -135,6 +158,27 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
             'error': '未提供技能名'
         }
 
+    direct_protocol_executor = _DIRECT_PROTOCOL_EXECUTORS.get(skill_name)
+    if callable(direct_protocol_executor):
+        try:
+            result = direct_protocol_executor(context or {}, user_input=user_input)
+            if isinstance(result, dict) and 'success' in result:
+                result.setdefault('skill', skill_name)
+                return result
+            return {
+                'success': False,
+                'skill': skill_name,
+                'response': '',
+                'error': f'协议技能 {skill_name} 返回结果无效',
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'skill': skill_name,
+                'response': f'执行失败: {str(e)}',
+                'error': f'执行失败: {str(e)}'
+            }
+
     skill = get_skill(skill_name)
     if not skill:
         return {
@@ -211,17 +255,18 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
                         }
                         repaired_meta = _merge_protocol_post_into_meta(repaired_meta, post)
                         return {
-                            'success': True,
+                            'success': _result_dict_success(repaired_result, repaired_meta),
                             'skill': skill_name,
                             'response': str(repaired_result.get('reply', '') or ''),
-                            'error': None,
+                            'error': None if _result_dict_success(repaired_result, repaired_meta) else str(repaired_result.get('reply', '') or ''),
                             'meta': repaired_meta,
                         }
+            success = _result_dict_success(result, meta)
             return {
-                'success': True,
+                'success': success,
                 'skill': skill_name,
                 'response': str(result.get('reply', '') or ''),
-                'error': None,
+                'error': None if success else str(result.get('reply', '') or ''),
                 'meta': meta,
             }
         drift_match = None

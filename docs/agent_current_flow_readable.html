@@ -990,11 +990,15 @@
           <span class="pill live">动作结果协议</span>
           <h4>6 层底座内部新增统一动作语义</h4>
         </div>
-        <p>这轮没有新增第 7 层，而是在现有 6 层协议底座内部补强了“动作结果协议 / 执行闭环协议”。网页、应用这些动作开始统一返回结构化结果，而不是只靠技能自己吐一句话。</p>
+        <p>这轮没有新增第 7 层，而是在现有 6 层协议底座内部补强了“动作结果协议 / 执行闭环协议”。网页、应用、写文件这类通用动作开始统一返回结构化结果，而不是只靠技能自己吐一句话。</p>
         <ul>
           <li><code>action_kind / target_kind / outcome / display_hint</code></li>
           <li>步骤层开始优先读取协议层动作摘要</li>
           <li>核心文件：<code>core/fs_protocol.py</code>、<code>core/executor.py</code></li>
+          <li><code>verification_mode / verification_detail</code> 也开始纳入统一动作结果</li>
+          <li><code>verification_detail</code> 现在已经顺着 <code>run_event -&gt; L6 -&gt; 前端记忆页</code> 往下透传</li>
+          <li><code>write_file</code> 现在更应该被理解成“底座协议动作的对外接口”，不是零散业务技能</li>
+          <li>凡是通用型能力，都应该尽量下沉到底座，变成所有技能可复用的共用能力</li>
         </ul>
       </div>
       <div class="risk-card">
@@ -1007,6 +1011,19 @@
           <li>关键修正点：<code>brain/__init__.py</code></li>
           <li>错误形态：<code>tool result's tool id not found (2013)</code></li>
           <li>经验：先查协议链，再考虑兜底</li>
+        </ul>
+      </div>
+      <div class="risk-card">
+        <div class="status-head">
+          <span class="pill live">收尾修正</span>
+          <h4>动作已完成时，最后一跳必须稳定收尾</h4>
+        </div>
+        <p>最近又暴露出另一类问题：工具其实已经成功，但模型最后只剩一句“我来处理 / 马上就好”这类前导话，或者把旧式 <code>&lt;minimax:tool_call&gt;</code> / <code>&lt;invoke ...&gt;</code> 标记混进最终回复，前端体感就会像卡住没回话。</p>
+        <ul>
+          <li>收口位置：<code>core/reply_formatter.py</code></li>
+          <li>原则：不改 <code>routes/chat.py</code> 主顺序，只修成功后的收尾桥接</li>
+          <li>策略：先清掉旧式内部 tool 标记，再判断是否需要用 <code>action_summary / verification_detail / tool_response</code> 自动补收尾</li>
+          <li>目标：动作做完时，用户一定能看到一条干净、可见、可交付的结果回复</li>
         </ul>
       </div>
       <div class="risk-card">

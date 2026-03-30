@@ -290,6 +290,8 @@ async def get_memory():
                     observed = str(item.get("observed_state") or "").strip()
                     drift_reason = str(item.get("drift_reason") or "").strip()
                     summary = str(item.get("summary") or "").strip()
+                    verification_mode = str(item.get("verification_mode") or "").strip()
+                    verification_detail = str(item.get("verification_detail") or "").strip()
                     parts = [skill_name]
                     if summary:
                         parts.append(summary)
@@ -310,6 +312,8 @@ async def get_memory():
                             "verified": verified,
                             "observed_state": observed,
                             "drift_reason": drift_reason,
+                            "verification_mode": verification_mode,
+                            "verification_detail": verification_detail,
                         },
                     })
                     counts["L6"] += 1

@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import core.l8_learn as l8_learn_module
 import core.reply_formatter as reply_formatter_module
+import core.tool_adapter as tool_adapter_module
+import core.executor as executor_module
 import memory as memory_module
 import routes.chat as chat_module
 from agent_final import normalize_route_result, resolve_route, unified_chat_reply, unified_skill_reply
@@ -76,6 +78,7 @@ class SkillFallbackTests(unittest.TestCase):
                     "outcome": "opened",
                     "display_hint": "已打开项目目录",
                     "verification_mode": "window_detected",
+                    "verification_detail": "Explorer window matched target path",
                 },
                 "post_condition": {"ok": True, "expected": "folder_opened", "observed": "folder_opened"},
                 "repair_succeeded": True,
@@ -95,6 +98,7 @@ class SkillFallbackTests(unittest.TestCase):
         self.assertEqual(run_event.get("action_kind"), "open_folder")
         self.assertEqual(run_event.get("observed_state"), "folder_opened")
         self.assertEqual(run_event.get("verification_mode"), "window_detected")
+        self.assertEqual(run_event.get("verification_detail"), "Explorer window matched target path")
 
 
 class DialogueContextTests(unittest.TestCase):
@@ -131,6 +135,55 @@ class DialogueContextTests(unittest.TestCase):
 
 
 class RunEventMappingTests(unittest.TestCase):
+    def test_tool_preamble_detector_distinguishes_lead_in_from_answer_payload(self):
+        self.assertTrue(reply_formatter_module._looks_like_tool_preamble("我先梳理一下技术方案 👇"))
+        self.assertTrue(reply_formatter_module._looks_like_tool_preamble("好嘞！这个需求很明确～\n我先梳理一下技术方案 👇"))
+        self.assertTrue(reply_formatter_module._looks_like_tool_preamble("让我看看记忆库～"))
+        self.assertTrue(
+            reply_formatter_module._looks_like_tool_preamble(
+                "好！我来帮你全部搞定，直接上代码 👇\n\n先创建项目结构，然后我逐个文件写好～"
+            )
+        )
+        self.assertFalse(reply_formatter_module._looks_like_tool_preamble("明天常州 18 到 26 度，阴转小雨。"))
+        self.assertFalse(
+            reply_formatter_module._looks_like_tool_preamble(
+                "| 方案 | 技术栈 | 优点 |\n|------|--------|------|\n| A | HTML + LocalStorage | 零部署 |"
+            )
+        )
+
+    def test_failed_tool_retry_note_guides_environment_or_file_inspection(self):
+        write_note = reply_formatter_module._build_failed_tool_retry_note(
+            "write_file",
+            {"file_path": "notes_app/templates/index.html"},
+            {"success": False, "error": "缺少 content"},
+        )
+        env_note = reply_formatter_module._build_failed_tool_retry_note(
+            "folder_explore",
+            {"path": "C:/Users/36459/NovaCore"},
+            {"success": False, "error": "窗口未出现"},
+        )
+
+        self.assertIn("COMPLETE file content", write_note)
+        self.assertIn("list_files", write_note)
+        self.assertIn("sense_environment", env_note)
+
+    def test_tool_call_system_prompt_contains_retry_policy(self):
+        prompt = reply_formatter_module._build_tool_call_system_prompt(
+            {
+                "l3": [],
+                "l4": {},
+                "l5": {},
+                "l7": [],
+                "l8": [],
+                "l2_memories": [],
+                "current_model": "test-model",
+            }
+        )
+
+        self.assertIn("list_files / read_file", prompt)
+        self.assertIn("sense_environment", prompt)
+        self.assertIn("缺少必要参数", prompt)
+
     def test_build_run_event_prefers_meta_facts(self):
         run_event = chat_module._build_run_event(
             success=True,
@@ -144,6 +197,7 @@ class RunEventMappingTests(unittest.TestCase):
                     "outcome": "opened",
                     "display_hint": "已打开记事本",
                     "verification_mode": "window_detected",
+                    "verification_detail": "Window title matched notepad",
                 },
                 "post_condition": {"ok": True, "expected": "window_visible", "observed": "window_visible"},
                 "repair_succeeded": True,
@@ -158,6 +212,7 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(run_event.get("target_kind"), "app")
         self.assertEqual(run_event.get("target"), "notepad.exe")
         self.assertEqual(run_event.get("observed_state"), "window_visible")
+        self.assertEqual(run_event.get("verification_detail"), "Window title matched notepad")
 
     def test_unified_reply_with_tools_stream_fallback_exposes_run_meta(self):
         fallback_result = {
@@ -182,6 +237,446 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("run_meta", {}).get("action", {}).get("action_kind"), "open_folder")
         self.assertEqual(done.get("success"), True)
 
+    def test_unified_reply_with_tools_stream_keeps_short_preamble_before_tool_call(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield "<think>先想想怎么做</think>"
+                yield "我先梳理一下技术方案 👇"
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_dev_1",
+                            "type": "function",
+                            "function": {
+                                "name": "development_flow",
+                                "arguments": json.dumps({"query": "做个本地记事本"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "这个开发任务我先接住了。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 11}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "这个开发任务我先接住了。\n\n下一步我会先定位文件。",
+                "meta": {
+                    "action": {
+                        "action_kind": "plan_task",
+                        "target_kind": "development_task",
+                        "display_hint": "已生成开发任务计划",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "做个本地记事本",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "development_flow")
+        self.assertEqual(executed[0][1].get("query"), "做个本地记事本")
+        self.assertTrue(any(isinstance(chunk, str) and "我先梳理一下技术方案" in chunk for chunk in chunks))
+        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "development_flow")
+        self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_stops_repeating_incomplete_write_file(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "notes_app/templates/index.html"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield {
+                "_tool_calls": [
+                    {
+                        "id": "call_write_2",
+                        "type": "function",
+                        "function": {
+                            "name": "write_file",
+                            "arguments": json.dumps(
+                                {"file_path": "notes_app/templates/index.html"},
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ]
+            }
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {"success": False, "error": "缺少 content"}
+
+        bundle = {
+            "user_input": "好的 继续",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(len(executed), 1)
+        self.assertEqual(executed[0][0], "write_file")
+        self.assertEqual(executed[0][1].get("file_path"), "notes_app/templates/index.html")
+        self.assertEqual(executed[0][1].get("user_input"), "好的 继续")
+        self.assertTrue(any(isinstance(chunk, str) and "缺少 content" in chunk for chunk in chunks))
+        self.assertTrue(any(isinstance(chunk, str) and "完整文件内容" in chunk for chunk in chunks))
+        self.assertTrue(any(isinstance(chunk, str) and "如果你已经知道这个文件要写什么" in chunk for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "write_file")
+        self.assertEqual(done.get("success"), False)
+
+    def test_write_file_arg_failure_system_note_prefers_self_repair_before_stopping(self):
+        note = reply_formatter_module._build_tool_arg_failure_system_note(
+            "write_file",
+            {"file_path": "notes_app/templates/index.html"},
+            ["content"],
+        )
+
+        self.assertIn("immediately call write_file again", note)
+        self.assertIn("inspect with list_files or read_file first", note)
+        self.assertIn("Only stop calling tools", note)
+
+    def test_stream_runtime_guidance_avoids_mid_conversation_system_role(self):
+        seen_roles = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            seen_roles.append([m.get("role") for m in messages])
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "notes_app/templates/index.html"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "我先把阻塞点接住。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(_name, _args, _context):
+            return {"success": False, "error": "缺少 content"}
+
+        bundle = {
+            "user_input": "继续",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertGreaterEqual(len(seen_roles), 2)
+        self.assertEqual(seen_roles[0][0], "system")
+        self.assertNotIn("system", seen_roles[1][1:])
+        self.assertIn("user", seen_roles[1][1:])
+
+    def test_repair_tool_args_recovers_relative_write_target_from_recent_dialogue(self):
+        repaired = reply_formatter_module._repair_tool_args_from_context(
+            "write_file",
+            {},
+            {
+                "user_input": "再来 你可以的",
+                "l1": [
+                    {"role": "assistant", "content": "已写入 notes_app/app.py"},
+                    {"role": "assistant", "content": "执行失败: 缺少 content。当前目标是 notes_app/templates/index.html。"},
+                ],
+            },
+        )
+
+        self.assertEqual(str(repaired.get("file_path") or "").replace("\\", "/"), "notes_app/templates/index.html")
+        self.assertEqual(repaired.get("user_input"), "再来 你可以的")
+
+    def test_protocol_style_folder_explore_missing_path_is_not_marked_success(self):
+        result = executor_module.execute({"skill": "folder_explore"}, "看看目录", {})
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("skill"), "folder_explore")
+        self.assertIn("明确的文件夹路径", result.get("response", ""))
+
+    def test_stream_uses_tool_fallback_when_failed_round_only_emits_preamble(self):
+        seen_messages = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            seen_messages.append(messages)
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "notes_app/templates/index.html"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "好！这次我直接一步到位。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(_name, _args, _context):
+            return {"success": False, "error": "缺少 content"}
+
+        bundle = {
+            "user_input": "继续",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertTrue(any(isinstance(chunk, str) and "缺少 content" in chunk for chunk in chunks))
+        self.assertFalse(any(isinstance(chunk, str) and "一步到位" in chunk for chunk in chunks))
+        self.assertEqual(chunks[-1].get("success"), False)
+
+    """
+    def test_stream_success_preamble_is_replaced_with_closeout_reply(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_success",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {
+                                        "file_path": "notes_app/app.py",
+                                        "content": "print('ok')\n",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "濂界殑涓讳汉锛佹垜杩欏氨鏀朵釜灏俱€?
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(_name, _args, _context):
+            return {
+                "success": True,
+                "response": "宸插啓鍏ユ枃浠讹細app.py",
+                "meta": {
+                    "action": {
+                        "action_kind": "write_file",
+                        "target_kind": "file",
+                        "target": "notes_app/app.py",
+                        "outcome": "written",
+                        "display_hint": "宸插啓鍏?app.py",
+                        "verification_mode": "file_write",
+                        "verification_detail": "notes_app/app.py written successfully",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "缁х画瀹炵幇",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertTrue(any(isinstance(chunk, str) and "杩欎竴姝ュ凡缁忓畬鎴? in chunk for chunk in chunks))
+        self.assertFalse(any(isinstance(chunk, str) and "鎴戣繖灏辨敹涓熬" in chunk for chunk in chunks))
+        self.assertEqual(chunks[-1].get("success"), True)
+
+    def test_clean_visible_reply_text_removes_legacy_tool_markup_but_keeps_visible_text(self):
+        raw = (
+            "宸茬粡澶勭悊濂戒簡锛乶\n"
+            "<minimax:tool_call>\n"
+            "<invoke name=\"run_code\">\n"
+            "<parameter name=\"user_input\">echo hi</parameter>\n"
+            "</invoke>\n"
+            "</minimax:tool_call>"
+        )
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(raw)
+
+        self.assertEqual(cleaned, "宸茬粡澶勭悊濂戒簡锛?)
+
+    """
+
+    def test_stream_success_preamble_is_replaced_with_closeout_reply_v2(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_success",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {
+                                        "file_path": "notes_app/app.py",
+                                        "content": "print('ok')\n",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "I am wrapping this up now."
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(_name, _args, _context):
+            return {
+                "success": True,
+                "response": "File written: app.py",
+                "meta": {
+                    "action": {
+                        "action_kind": "write_file",
+                        "target_kind": "file",
+                        "target": "notes_app/app.py",
+                        "outcome": "written",
+                        "display_hint": "File written: app.py",
+                        "verification_mode": "file_write",
+                        "verification_detail": "notes_app/app.py written successfully",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "continue building",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertTrue(any(isinstance(chunk, str) and "\u8fd9\u4e00\u6b65\u5df2\u7ecf\u5b8c\u6210" in chunk for chunk in chunks))
+        self.assertFalse(any(isinstance(chunk, str) and "I am wrapping this up now." in chunk for chunk in chunks))
+        self.assertEqual(chunks[-1].get("success"), True)
+
+    def test_clean_visible_reply_text_removes_legacy_tool_markup_but_keeps_visible_text_v2(self):
+        raw = (
+            "Done already.\n"
+            "<minimax:tool_call>\n"
+            "<invoke name=\"run_code\">\n"
+            "<parameter name=\"user_input\">echo hi</parameter>\n"
+            "</invoke>\n"
+            "</minimax:tool_call>"
+        )
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(raw)
+
+        self.assertEqual(cleaned, "Done already.")
+
+    def test_execute_tool_call_routes_write_file_into_protocol_base(self):
+        result = tool_adapter_module.execute_tool_call(
+            "write_file",
+            {"file_path": "notes_app/templates/index.html"},
+            {},
+        )
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("skill"), "write_file")
+        meta = result.get("meta") or {}
+        action = meta.get("action") or {}
+        self.assertEqual(action.get("action_kind"), "write_file")
+        self.assertEqual(action.get("target_kind"), "file")
+        self.assertEqual(action.get("verification_mode"), "argument_check")
+        self.assertIn("missing_fields=content", action.get("verification_detail", ""))
+
 
 class MemoryEvolutionTests(unittest.TestCase):
     def test_evolve_skips_unknown_skill_usage_but_keeps_preferences(self):
@@ -202,6 +697,38 @@ class MemoryEvolutionTests(unittest.TestCase):
                 result = memory_module.evolve("帮我做个不存在的事", "nonexistent_skill_xyz")
 
         self.assertEqual(result["skills_used"], {})
+
+    def test_evolve_records_verification_detail_in_skill_runs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            evolution_path = tmp / "evolution.json"
+            knowledge_path = tmp / "knowledge.json"
+            evolution_path.write_text(
+                json.dumps({"skills_used": {}, "user_preferences": {}, "learning": [], "skill_runs": []}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            knowledge_path.write_text("[]", encoding="utf-8")
+
+            with patch.object(memory_module, "evolution_file", evolution_path), patch.object(
+                memory_module, "knowledge_file", knowledge_path
+            ):
+                result = memory_module.evolve(
+                    "打开记事本",
+                    "app_target",
+                    run_event={
+                        "success": True,
+                        "verified": True,
+                        "summary": "已打开记事本",
+                        "action_kind": "open_app",
+                        "target_kind": "app",
+                        "target": "notepad.exe",
+                        "outcome": "opened",
+                        "verification_mode": "window_detected",
+                        "verification_detail": "Window title matched notepad",
+                    },
+                )
+
+        self.assertEqual(result["skill_runs"][-1]["verification_detail"], "Window title matched notepad")
 
     def test_find_relevant_knowledge_skips_invalid_tool_skill_entry(self):
         with tempfile.TemporaryDirectory() as tmpdir:

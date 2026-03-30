@@ -73,6 +73,11 @@ def _build_run_event(*, success: bool, meta: dict | None = None, fallback_text: 
         "target": str(action.get("target") or "").strip(),
         "outcome": str(action.get("outcome") or "").strip(),
         "verification_mode": str(action.get("verification_mode") or "").strip(),
+        "verification_detail": str(
+            action.get("verification_detail")
+            or verification.get("detail")
+            or ""
+        ).strip(),
     }
     return {k: v for k, v in run_event.items() if v not in ("", None)}
 

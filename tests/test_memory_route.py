@@ -173,6 +173,8 @@ class MemoryRouteTests(unittest.TestCase):
                         "verified": True,
                         "observed_state": "folder_opened",
                         "drift_reason": "",
+                        "verification_mode": "window_detected",
+                        "verification_detail": "Explorer window matched target path",
                     }
                 ],
                 "skills_used": {},
@@ -190,6 +192,8 @@ class MemoryRouteTests(unittest.TestCase):
         self.assertEqual(trace_event["meta"]["skill"], "open_target")
         self.assertEqual(trace_event["meta"]["verified"], True)
         self.assertEqual(trace_event["meta"]["observed_state"], "folder_opened")
+        self.assertEqual(trace_event["meta"]["verification_mode"], "window_detected")
+        self.assertEqual(trace_event["meta"]["verification_detail"], "Explorer window matched target path")
 
     def test_memory_route_falls_back_to_execution_count_when_skill_runs_missing(self):
         result = self._load_memory(
