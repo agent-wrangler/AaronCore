@@ -318,7 +318,7 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
             args["user_input"] = user_input
         return args
 
-    if tool_name not in {"write_file", "edit_file", "search_replace"}:
+    if tool_name not in {"write_file", "edit_file", "search_replace", "apply_unified_diff"}:
         if user_input and "user_input" not in args:
             args["user_input"] = user_input
         return args
@@ -362,6 +362,16 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
                 if alias in args:
                     args["new_text"] = args.get(alias)
                     break
+
+    if tool_name == "apply_unified_diff":
+        patch_text = str(
+            args.get("patch")
+            or args.get("diff")
+            or args.get("unified_diff")
+            or ""
+        )
+        if patch_text and "patch" not in args:
+            args["patch"] = patch_text
 
     if user_input and "user_input" not in args:
         args["user_input"] = user_input
@@ -528,9 +538,10 @@ def _build_strict_write_file_retry_note(tool_args: dict | None, signature: dict 
         "Do not send natural-language promises in the next turn. "
         "Your next assistant turn must do exactly one of these: "
         "(1) call write_file with the SAME file_path and the COMPLETE final content string; "
-        "(2) if you know the exact old_text and new_text for a local change, call search_replace with the SAME file_path; "
-        "(3) if the file already exists and you need to modify it from instructions, call edit_file with the SAME file_path and a precise change_request; "
-        "(4) if you still need surrounding project context, call list_files or read_file first. "
+        "(2) if you already have a unified diff patch, call apply_unified_diff with the SAME file_path; "
+        "(3) if you know the exact old_text and new_text for a local change, call search_replace with the SAME file_path; "
+        "(4) if the file already exists and you need to modify it from instructions, call edit_file with the SAME file_path and a precise change_request; "
+        "(5) if you still need surrounding project context, call list_files or read_file first. "
         "Do not repeat write_file without content."
     )
 
@@ -561,6 +572,7 @@ def _tool_preview(name: str, arguments: dict) -> str:
         "open_target": ("path", "url", "target"),
         "read_file": ("file_path", "path"),
         "list_files": ("path", "file_path"),
+        "apply_unified_diff": ("file_path", "path", "target", "filename"),
         "search_replace": ("file_path", "path", "target", "filename"),
         "edit_file": ("file_path", "path", "target", "filename"),
         "write_file": ("file_path", "path", "target", "filename"),
@@ -1682,6 +1694,7 @@ def _build_cod_system_prompt(bundle: dict) -> str:
         "\n- Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction."
         "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
         "\n- For file or code tasks, if the next step depends on project structure or existing files, inspect with list_files or read_file before writing."
+        "\n- Use apply_unified_diff when you already have a precise unified diff patch for an existing file."
         "\n- Use search_replace when you know the exact old_text and new_text inside an existing file."
         "\n- Use edit_file when an existing file must be modified from instructions but you do not have an exact search/replace block yet."
         "\n- Use write_file only when the complete final file content is already determined."
@@ -2133,10 +2146,33 @@ def _build_tool_closeout_reply(
     if not summary:
         summary = _summarize_tool_response_text(tool_response)
 
+    verification = run_meta.get("verification") if isinstance(run_meta, dict) and isinstance(run_meta.get("verification"), dict) else {}
     verification_detail = ""
-    if isinstance(run_meta, dict):
+    verification_state = "__missing__"
+    if verification:
+        verification_state = verification.get("verified", "__missing__")
+        verification_detail = str(
+            verification.get("verification_detail")
+            or verification.get("detail")
+            or ""
+        ).strip()
+    if not verification_detail and isinstance(run_meta, dict):
         action = run_meta.get("action") if isinstance(run_meta.get("action"), dict) else {}
         verification_detail = str(action.get("verification_detail") or "").strip()
+
+    if verification_state is True:
+        if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
+            return f"这一步已经完成，并已通过核验：\n\n{summary}\n\n核验：{verification_detail}"
+        if summary:
+            return f"这一步已经完成，并已通过核验：\n\n{summary}"
+        return ""
+
+    if verification_state is None:
+        if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
+            return f"这一步已经完成，但当前还没有可靠核验：\n\n{summary}\n\n说明：{verification_detail}"
+        if summary:
+            return f"这一步已经完成，但当前还没有可靠核验：\n\n{summary}"
+        return ""
 
     if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
         return f"这一步已经完成：\n\n{summary}\n\n核验：{verification_detail}"

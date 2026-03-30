@@ -483,6 +483,7 @@ class RunEventMappingTests(unittest.TestCase):
         )
 
         self.assertIn("immediately call write_file again", note)
+        self.assertIn("call apply_unified_diff instead", note)
         self.assertIn("call search_replace instead", note)
         self.assertIn("call edit_file", note)
         self.assertIn("inspect with list_files or read_file first", note)
@@ -496,6 +497,7 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertIn("Do not send natural-language promises", note)
         self.assertIn("call write_file with the SAME file_path", note)
+        self.assertIn("call apply_unified_diff", note)
         self.assertIn("call search_replace", note)
         self.assertIn("call edit_file", note)
         self.assertIn("Do not repeat write_file without content", note)
@@ -577,6 +579,304 @@ class RunEventMappingTests(unittest.TestCase):
 
             self.assertTrue(result.get("success"))
             self.assertEqual(target.read_text(encoding="utf-8"), "alpha")
+
+    def test_execute_apply_unified_diff_action_updates_existing_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "index.html"
+            target.write_text("<html>\n<body>old</body>\n</html>\n", encoding="utf-8")
+            patch_text = (
+                "--- a/index.html\n"
+                "+++ b/index.html\n"
+                "@@ -1,3 +1,3 @@\n"
+                " <html>\n"
+                "-<body>old</body>\n"
+                "+<body>new</body>\n"
+                " </html>\n"
+            )
+
+            result = fs_protocol_module.execute_apply_unified_diff_action(
+                {
+                    "file_path": str(target),
+                    "patch": patch_text,
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            self.assertEqual(target.read_text(encoding="utf-8"), "<html>\n<body>new</body>\n</html>\n")
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("action_kind"), "apply_unified_diff")
+            self.assertEqual(action.get("outcome"), "edited")
+
+    def test_execute_apply_unified_diff_action_blocks_mismatched_patch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "index.html"
+            target.write_text("<html>\n<body>old</body>\n</html>\n", encoding="utf-8")
+            patch_text = (
+                "--- a/index.html\n"
+                "+++ b/index.html\n"
+                "@@ -1,3 +1,3 @@\n"
+                " <html>\n"
+                "-<body>missing</body>\n"
+                "+<body>new</body>\n"
+                " </html>\n"
+            )
+
+            result = fs_protocol_module.execute_apply_unified_diff_action(
+                {
+                    "file_path": str(target),
+                    "patch": patch_text,
+                }
+            )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            drift = meta.get("drift") or {}
+            self.assertEqual(drift.get("reason"), "patch_apply_failed")
+
+    def test_execute_write_file_action_verifies_python_success(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "app.py"
+
+            result = fs_protocol_module.execute_write_file_action(
+                {
+                    "file_path": str(target),
+                    "content": "print('ok')\n",
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            meta = result.get("meta") or {}
+            verification = meta.get("verification") or {}
+            action = meta.get("action") or {}
+            self.assertIs(verification.get("verified"), True)
+            self.assertEqual(verification.get("verification_mode"), "python_compile")
+            self.assertEqual(action.get("verification_mode"), "python_compile")
+
+    def test_execute_write_file_action_fails_on_invalid_python(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "app.py"
+
+            result = fs_protocol_module.execute_write_file_action(
+                {
+                    "file_path": str(target),
+                    "content": "print(\n",
+                }
+            )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("verification_mode"), "python_compile")
+            self.assertIn("SyntaxError", action.get("verification_detail", ""))
+
+    def test_execute_search_replace_action_verifies_json_success(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "data.json"
+            target.write_text('{"count": 1}\n', encoding="utf-8")
+
+            result = fs_protocol_module.execute_search_replace_action(
+                {
+                    "file_path": str(target),
+                    "old_text": "1",
+                    "new_text": "2",
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            meta = result.get("meta") or {}
+            verification = meta.get("verification") or {}
+            self.assertIs(verification.get("verified"), True)
+            self.assertEqual(verification.get("verification_mode"), "json_parse")
+
+    def test_execute_search_replace_action_fails_on_invalid_json(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "data.json"
+            target.write_text('{"count": 1}\n', encoding="utf-8")
+
+            result = fs_protocol_module.execute_search_replace_action(
+                {
+                    "file_path": str(target),
+                    "old_text": "1",
+                    "new_text": "",
+                }
+            )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("verification_mode"), "json_parse")
+            self.assertIn("JSONDecodeError", action.get("verification_detail", ""))
+
+    def test_execute_edit_file_action_fails_on_invalid_jinja(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "template.jinja"
+            target.write_text("Hello {{ name }}\n", encoding="utf-8")
+
+            def fake_stream(_cfg, _messages, **_kwargs):
+                yield "{% if user %}\nHello {{ name }} and welcome to NovaCore.\n"
+
+            with patch("brain.llm_call_stream", side_effect=fake_stream):
+                result = fs_protocol_module.execute_edit_file_action(
+                    {
+                        "file_path": str(target),
+                        "change_request": "改成带条件判断的模板",
+                    }
+                )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("verification_mode"), "jinja_parse")
+            self.assertIn("TemplateSyntaxError", action.get("verification_detail", ""))
+
+    def test_execute_apply_unified_diff_action_verifies_javascript_success(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "app.js"
+            target.write_text("const value = 1;\nconsole.log(value);\n", encoding="utf-8")
+            patch_text = (
+                "--- a/app.js\n"
+                "+++ b/app.js\n"
+                "@@ -1,2 +1,2 @@\n"
+                "-const value = 1;\n"
+                "+const value = 2;\n"
+                " console.log(value);\n"
+            )
+
+            result = fs_protocol_module.execute_apply_unified_diff_action(
+                {
+                    "file_path": str(target),
+                    "patch": patch_text,
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            meta = result.get("meta") or {}
+            verification = meta.get("verification") or {}
+            self.assertIs(verification.get("verified"), True)
+            self.assertEqual(verification.get("verification_mode"), "node_check")
+
+    def test_execute_apply_unified_diff_action_fails_on_invalid_javascript(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "app.js"
+            target.write_text("const value = 1;\nconsole.log(value);\n", encoding="utf-8")
+            patch_text = (
+                "--- a/app.js\n"
+                "+++ b/app.js\n"
+                "@@ -1,2 +1,2 @@\n"
+                "-const value = 1;\n"
+                "+const value = ;\n"
+                " console.log(value);\n"
+            )
+
+            result = fs_protocol_module.execute_apply_unified_diff_action(
+                {
+                    "file_path": str(target),
+                    "patch": patch_text,
+                }
+            )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("verification_mode"), "node_check")
+            self.assertIn("SyntaxError", action.get("verification_detail", ""))
+
+    def test_execute_write_file_action_marks_css_as_unverified(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "main.css"
+
+            result = fs_protocol_module.execute_write_file_action(
+                {
+                    "file_path": str(target),
+                    "content": "body { color: red; }\n",
+                }
+            )
+
+            self.assertTrue(result.get("success"))
+            meta = result.get("meta") or {}
+            verification = meta.get("verification") or {}
+            self.assertIn("verified", verification)
+            self.assertIsNone(verification.get("verified"))
+            self.assertEqual(verification.get("verification_mode"), "unverified_no_parser")
+
+    def test_execute_write_file_action_fails_on_invalid_markdown_front_matter(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "README.md"
+
+            result = fs_protocol_module.execute_write_file_action(
+                {
+                    "file_path": str(target),
+                    "content": "---\ntitle: [oops\n---\nbody\n",
+                }
+            )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("verification_mode"), "markdown_front_matter")
+            self.assertIn("ParserError", action.get("verification_detail", ""))
+
+    def test_execute_write_file_action_does_not_run_semantic_verifier_when_persistence_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "app.py"
+
+            with patch.object(
+                fs_protocol_module,
+                "verify_post_condition",
+                return_value={
+                    "ok": False,
+                    "expected": "file_written",
+                    "observed": "file_missing_after_write",
+                    "drift": "write_not_persisted",
+                    "hint": "retry_or_check_write_target",
+                },
+            ), patch.object(fs_protocol_module, "verify_file_change", side_effect=AssertionError("semantic verifier should not run")):
+                result = fs_protocol_module.execute_write_file_action(
+                    {
+                        "file_path": str(target),
+                        "content": "print('ok')\n",
+                    }
+                )
+
+            self.assertFalse(result.get("success"))
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("verification_mode"), "path_exists")
+
+    def test_build_tool_closeout_reply_distinguishes_verified_success(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=True,
+            action_summary="已写入文件：app.py",
+            tool_response="",
+            run_meta={
+                "verification": {
+                    "verified": True,
+                    "verification_mode": "python_compile",
+                    "verification_detail": "Python source compiled successfully.",
+                }
+            },
+        )
+
+        self.assertIn("已通过核验", reply)
+        self.assertIn("Python source compiled successfully.", reply)
+
+    def test_build_tool_closeout_reply_distinguishes_unverified_success(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=True,
+            action_summary="已写入文件：main.css",
+            tool_response="",
+            run_meta={
+                "verification": {
+                    "verified": None,
+                    "verification_mode": "unverified_no_parser",
+                    "verification_detail": "CSS was written successfully, but no reliable local CSS parser is configured.",
+                }
+            },
+        )
+
+        self.assertIn("还没有可靠核验", reply)
+        self.assertIn("CSS was written successfully", reply)
 
     def test_unified_reply_with_tools_stream_allows_one_more_write_file_repair_attempt(self):
         executed = []
@@ -1080,6 +1380,21 @@ class RunEventMappingTests(unittest.TestCase):
         meta = result.get("meta") or {}
         action = meta.get("action") or {}
         self.assertEqual(action.get("action_kind"), "search_replace")
+        self.assertEqual(action.get("target_kind"), "file")
+        self.assertEqual(action.get("verification_mode"), "path_exists")
+
+    def test_execute_tool_call_routes_apply_unified_diff_into_protocol_base(self):
+        result = tool_adapter_module.execute_tool_call(
+            "apply_unified_diff",
+            {"file_path": "notes_app/templates/__missing_patch__.html", "patch": "@@ -1 +1 @@\n-old\n+new\n"},
+            {},
+        )
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("skill"), "apply_unified_diff")
+        meta = result.get("meta") or {}
+        action = meta.get("action") or {}
+        self.assertEqual(action.get("action_kind"), "apply_unified_diff")
         self.assertEqual(action.get("target_kind"), "file")
         self.assertEqual(action.get("verification_mode"), "path_exists")
 

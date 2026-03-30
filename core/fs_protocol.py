@@ -1,6 +1,10 @@
 import json
 import re
+import shutil
+import subprocess
+import tomllib
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -12,6 +16,7 @@ PROTOCOL_REQUIRED_FIELDS = {
     'write_file': ('file_path', 'content'),
     'edit_file': ('file_path', 'change_request'),
     'search_replace': ('file_path', 'old_text', 'new_text'),
+    'apply_unified_diff': ('file_path', 'patch'),
 }
 
 
@@ -227,6 +232,7 @@ def build_protocol_exec_result(
     verification_detail: str = '',
     post_condition: dict | None = None,
     verified: bool | None = None,
+    verification_explicit: bool = False,
 ) -> dict:
     operation = build_operation_result(
         reply,
@@ -257,8 +263,8 @@ def build_protocol_exec_result(
     if isinstance(post_condition, dict) and post_condition:
         meta['post_condition'] = dict(post_condition)
     verification = {}
-    if verified is not None:
-        verification['verified'] = bool(verified)
+    if verified is not None or verification_explicit:
+        verification['verified'] = verified if verified is None else bool(verified)
     verification_observed = str(
         observed_state
         or ((post_condition or {}).get('observed') if isinstance(post_condition, dict) else '')
@@ -266,6 +272,10 @@ def build_protocol_exec_result(
     ).strip()
     if verification_observed:
         verification['observed_state'] = verification_observed
+    if verification_mode:
+        verification['verification_mode'] = str(verification_mode).strip()
+    if verification_detail:
+        verification['verification_detail'] = str(verification_detail).strip()
     if verification:
         meta['verification'] = verification
     return {
@@ -368,6 +378,11 @@ def missing_required_protocol_fields(tool_name: str, tool_args: dict | None) -> 
     for field in PROTOCOL_REQUIRED_FIELDS.get(normalized_tool, ()):
         if normalized_tool == 'search_replace' and field == 'new_text':
             aliases = ('new_text', 'replacement', 'replace_text', 'after')
+            if not any(alias in args for alias in aliases):
+                missing.append(field)
+            continue
+        if normalized_tool == 'apply_unified_diff' and field == 'patch':
+            aliases = ('patch', 'diff', 'unified_diff')
             if not any(alias in args for alias in aliases):
                 missing.append(field)
             continue
@@ -524,7 +539,7 @@ def verify_post_condition(action: str, target_value: str = '', **kwargs) -> dict
         exists = p.exists()
         return {'ok': exists, 'expected': 'artifact_saved', 'observed': 'artifact_present' if exists else 'artifact_missing', 'drift': '' if exists else 'artifact_not_persisted', 'hint': '' if exists else 'fallback_to_desktop'}
 
-    if action in {'write', 'write_file', 'edit_file', 'search_replace'}:
+    if action in {'write', 'write_file', 'edit_file', 'search_replace', 'apply_unified_diff'}:
         p = Path(str(target_value or '').strip())
         exists = p.exists()
         return {
@@ -598,6 +613,269 @@ def verify_post_condition(action: str, target_value: str = '', **kwargs) -> dict
         return {'ok': gone, 'expected': 'target_deleted', 'observed': 'target_gone' if gone else 'target_still_exists', 'drift': '' if gone else 'delete_incomplete', 'hint': '' if gone else 'retry_delete_or_check_permissions'}
 
     return {'ok': True, 'expected': 'unknown_action', 'observed': 'assumed_ok', 'drift': '', 'hint': ''}
+
+
+class _BestEffortHTMLVerifier(HTMLParser):
+    pass
+
+
+def _verification_success(mode: str, detail: str, *, observed_state: str = 'file_verified') -> dict:
+    return {
+        'verified': True,
+        'verification_mode': str(mode or '').strip(),
+        'verification_detail': str(detail or '').strip(),
+        'observed_state': str(observed_state or 'file_verified').strip(),
+        'drift_reason': '',
+        'repair_hint': '',
+    }
+
+
+def _verification_failure(
+    mode: str,
+    detail: str,
+    *,
+    observed_state: str = 'file_invalid_syntax',
+    drift_reason: str = 'file_verification_failed',
+    repair_hint: str = 'fix_file_syntax',
+) -> dict:
+    return {
+        'verified': False,
+        'verification_mode': str(mode or '').strip(),
+        'verification_detail': str(detail or '').strip(),
+        'observed_state': str(observed_state or 'file_invalid_syntax').strip(),
+        'drift_reason': str(drift_reason or 'file_verification_failed').strip(),
+        'repair_hint': str(repair_hint or 'fix_file_syntax').strip(),
+    }
+
+
+def _verification_unverified(mode: str, detail: str, *, observed_state: str = 'file_unverified') -> dict:
+    return {
+        'verified': None,
+        'verification_mode': str(mode or '').strip(),
+        'verification_detail': str(detail or '').strip(),
+        'observed_state': str(observed_state or 'file_unverified').strip(),
+        'drift_reason': '',
+        'repair_hint': '',
+    }
+
+
+def _format_verification_exception(exc: Exception) -> str:
+    exc_type = type(exc).__name__.strip()
+    message = str(exc or '').strip()
+    return f'{exc_type}: {message}'.strip(': ')
+
+
+def _looks_like_jinja_template(target: Path, content: str = '', verifier_hint: str = '') -> bool:
+    suffix = str(target.suffix or '').lower()
+    if suffix in {'.j2', '.jinja', '.jinja2'}:
+        return True
+
+    hint = str(verifier_hint or '').strip().lower()
+    if hint in {'jinja', 'jinja2', 'template', 'jinja_template'}:
+        return True
+
+    text = str(content or '')
+    if any(marker in text for marker in ('{{', '{%', '{#')):
+        if 'templates' in {str(part).lower() for part in target.parts}:
+            return True
+        if suffix in {'.html', '.htm', '.txt', '.xml', '.svg'}:
+            return True
+    return False
+
+
+def _extract_markdown_front_matter(content: str) -> dict:
+    text = str(content or '')
+    if not text.startswith('---'):
+        return {'present': False, 'content': '', 'error': ''}
+
+    match = re.match(r'\A---[ \t]*\r?\n(.*?)(?:\r?\n)(---|\.\.\.)[ \t]*(?:\r?\n|$)', text, flags=re.S)
+    if not match:
+        return {
+            'present': True,
+            'content': '',
+            'error': 'unterminated_front_matter',
+        }
+    return {
+        'present': True,
+        'content': str(match.group(1) or ''),
+        'error': '',
+    }
+
+
+def verify_file_change(target, *, content: str | None = None, verifier_hint: str | None = None, context: dict | None = None) -> dict:
+    _ = context if isinstance(context, dict) else {}
+    path = Path(target)
+    text = content
+    if text is None:
+        try:
+            text = path.read_text(encoding='utf-8')
+        except Exception as exc:
+            return _verification_failure(
+                'file_read',
+                _format_verification_exception(exc),
+                observed_state='file_read_failed',
+                drift_reason='file_read_failed',
+                repair_hint='check_file_encoding_or_permissions',
+            )
+
+    text = str(text)
+    suffix = str(path.suffix or '').lower()
+
+    if _looks_like_jinja_template(path, text, str(verifier_hint or '')):
+        try:
+            from jinja2 import Environment
+
+            Environment().parse(text)
+            return _verification_success('jinja_parse', 'Jinja template parsed successfully.')
+        except Exception as exc:
+            return _verification_failure(
+                'jinja_parse',
+                _format_verification_exception(exc),
+                drift_reason='jinja_parse_failed',
+                repair_hint='fix_jinja_syntax',
+            )
+
+    if suffix == '.py':
+        try:
+            compile(text, str(path), 'exec')
+            return _verification_success('python_compile', 'Python source compiled successfully.')
+        except Exception as exc:
+            return _verification_failure(
+                'python_compile',
+                _format_verification_exception(exc),
+                drift_reason='python_compile_failed',
+                repair_hint='fix_python_syntax',
+            )
+
+    if suffix == '.json':
+        try:
+            json.loads(text)
+            return _verification_success('json_parse', 'JSON parsed successfully.')
+        except Exception as exc:
+            return _verification_failure(
+                'json_parse',
+                _format_verification_exception(exc),
+                drift_reason='json_parse_failed',
+                repair_hint='fix_json_syntax',
+            )
+
+    if suffix == '.toml':
+        try:
+            tomllib.loads(text)
+            return _verification_success('toml_parse', 'TOML parsed successfully.')
+        except Exception as exc:
+            return _verification_failure(
+                'toml_parse',
+                _format_verification_exception(exc),
+                drift_reason='toml_parse_failed',
+                repair_hint='fix_toml_syntax',
+            )
+
+    if suffix in {'.yaml', '.yml'}:
+        try:
+            import yaml
+
+            yaml.safe_load(text)
+            return _verification_success('yaml_parse', 'YAML parsed successfully.')
+        except ImportError:
+            return _verification_unverified('unverified_no_parser', 'YAML parser is not available in the local runtime.')
+        except Exception as exc:
+            return _verification_failure(
+                'yaml_parse',
+                _format_verification_exception(exc),
+                drift_reason='yaml_parse_failed',
+                repair_hint='fix_yaml_syntax',
+            )
+
+    if suffix in {'.js', '.mjs', '.cjs'}:
+        node_bin = shutil.which('node')
+        if not node_bin:
+            return _verification_unverified('unverified_no_parser', 'Node.js is not available, so JavaScript syntax was not verified.')
+        try:
+            completed = subprocess.run(
+                [node_bin, '--check', str(path)],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            return _verification_unverified('node_check_unverified', 'Node.js syntax check timed out before returning a result.')
+        except Exception as exc:
+            return _verification_unverified('node_check_unverified', _format_verification_exception(exc))
+        if completed.returncode == 0:
+            return _verification_success('node_check', 'JavaScript syntax check passed.')
+        detail = '\n'.join(part for part in [completed.stdout, completed.stderr] if str(part or '').strip()).strip()
+        return _verification_failure(
+            'node_check',
+            detail or 'node --check returned a non-zero exit code.',
+            drift_reason='javascript_check_failed',
+            repair_hint='fix_javascript_syntax',
+        )
+
+    if suffix in {'.html', '.htm'}:
+        try:
+            parser = _BestEffortHTMLVerifier()
+            parser.feed(text)
+            parser.close()
+            return _verification_unverified(
+                'html_best_effort',
+                'HTML received a best-effort structure check only; no strict verifier is configured.',
+            )
+        except Exception as exc:
+            return _verification_unverified(
+                'html_best_effort',
+                f'HTML best-effort parser could not finish cleanly: {_format_verification_exception(exc)}',
+            )
+
+    if suffix == '.css':
+        return _verification_unverified(
+            'unverified_no_parser',
+            'CSS was written successfully, but no reliable local CSS parser is configured.',
+        )
+
+    if suffix == '.md':
+        front_matter = _extract_markdown_front_matter(text)
+        if front_matter.get('present'):
+            if front_matter.get('error'):
+                return _verification_failure(
+                    'markdown_front_matter',
+                    str(front_matter.get('error') or 'invalid_front_matter'),
+                    observed_state='file_invalid_front_matter',
+                    drift_reason='markdown_front_matter_invalid',
+                    repair_hint='fix_markdown_front_matter',
+                )
+            try:
+                import yaml
+
+                yaml.safe_load(str(front_matter.get('content') or ''))
+            except ImportError:
+                return _verification_unverified(
+                    'unverified_no_parser',
+                    'Markdown front matter exists, but no YAML parser is available for verification.',
+                )
+            except Exception as exc:
+                return _verification_failure(
+                    'markdown_front_matter',
+                    _format_verification_exception(exc),
+                    observed_state='file_invalid_front_matter',
+                    drift_reason='markdown_front_matter_invalid',
+                    repair_hint='fix_markdown_front_matter',
+                )
+            return _verification_unverified(
+                'markdown_front_matter_only',
+                'Markdown front matter parsed successfully, but the Markdown body itself was not strictly verified.',
+            )
+        return _verification_unverified(
+            'unverified_no_parser',
+            'Markdown was written successfully, but no reliable Markdown syntax verifier is configured.',
+        )
+
+    return _verification_unverified(
+        'unverified_no_parser',
+        f'No file-level verifier is configured for {suffix or "this file type"}.',
+    )
 
 
 def load_export_state() -> dict:
@@ -757,6 +1035,7 @@ def build_protocol_arg_failure_feedback(tool_name: str, tool_args: dict | None, 
             f'write_file 必须同时提供 file_path 和完整文件内容；当前目标是 {target}。\n'
             '不要重复只带 file_path 的调用。\n'
             '如果你已经知道这个文件要写什么，就直接重新调用 write_file，并把该文件的完整 content 一次性传入。\n'
+            '如果你已经有准确的 unified diff 补丁，直接调用 apply_unified_diff。\n'
             '如果你已经知道文件里哪段 old_text 要替换成 new_text，直接调用 search_replace。\n'
             '如果是在已有文件上按需求修改，直接调用 edit_file，传 file_path + change_request。\n'
             '如果还缺项目结构或相邻文件信息，先调用 list_files / read_file 再决定写入。\n'
@@ -781,6 +1060,12 @@ def build_protocol_arg_failure_feedback(tool_name: str, tool_args: dict | None, 
                 f'search_replace 需要明确知道替换成什么；当前目标是 {target}。\n'
                 '请提供 new_text；如果是删除旧文本，也要显式传空字符串而不是省略字段。'
             )
+    if tool_name == 'apply_unified_diff' and 'patch' in missing_fields:
+        return (
+            '执行失败: 缺少 patch。\n'
+            f'apply_unified_diff 需要明确的 unified diff 补丁；当前目标是 {target}。\n'
+            '请传 patch；如果你还没有精确 diff，先用 search_replace 或 edit_file。'
+        )
     return f"执行失败: 缺少必要参数 {', '.join(missing_fields)}。请补全参数后再继续。"
 
 
@@ -793,6 +1078,7 @@ def build_protocol_arg_failure_system_note(tool_name: str, tool_args: dict | Non
             f'The previous write_file call for {target} failed because required arguments were missing: {missing}. '
             'Do not repeat the same incomplete write_file call. '
             'If you already know what the file should contain, immediately call write_file again with the same file_path and the COMPLETE file content string. '
+            'If you already have a precise unified diff patch for this file, call apply_unified_diff instead. '
             'If you already know the exact old_text and new_text for a local change, call search_replace instead. '
             'If the target file already exists and you need to modify it from instructions, call edit_file with the same file_path and a precise change_request instead. '
             'If you still need project structure or neighboring file context, inspect with list_files or read_file first, then rebuild the full content. '
@@ -813,6 +1099,13 @@ def build_protocol_arg_failure_system_note(tool_name: str, tool_args: dict | Non
             'Call search_replace again with the same file_path, the exact existing old_text, and an explicit new_text field. '
             'If you are not certain what text currently exists in the file, inspect with read_file first.'
         )
+    if tool_name == 'apply_unified_diff':
+        return (
+            f'The previous apply_unified_diff call for {target} failed because required arguments were missing: {missing}. '
+            'Do not repeat the same incomplete patch call. '
+            'Call apply_unified_diff again with the same file_path and a valid unified diff patch string. '
+            'If you do not already have a precise diff, prefer search_replace or edit_file.'
+        )
     return (
         f'The previous tool call failed because required arguments were missing: {missing}. '
         'Do not repeat the same incomplete call. Either provide the missing arguments or stop and explain the blocker.'
@@ -827,7 +1120,7 @@ def build_protocol_retry_note(tool_name: str, tool_args: dict | None, exec_resul
     if missing_fields:
         return build_protocol_arg_failure_system_note(tool_name, tool_args, missing_fields)
 
-    file_tools = {'write_file', 'edit_file', 'search_replace', 'read_file', 'list_files'}
+    file_tools = {'write_file', 'edit_file', 'search_replace', 'apply_unified_diff', 'read_file', 'list_files'}
     environment_tools = {'open_target', 'app_target', 'ui_interaction', 'folder_explore', 'sense_environment', 'screen_capture'}
     command_tools = {'run_command'}
 
@@ -865,6 +1158,93 @@ def _strip_llm_code_fence(text: str) -> str:
     if lines and lines[-1].strip() == '```':
         lines = lines[:-1]
     return '\n'.join(lines).strip()
+
+
+def _parse_unified_diff_hunks(patch_text: str) -> tuple[list[dict], str]:
+    text = _strip_llm_code_fence(patch_text)
+    lines = text.splitlines()
+    hunks: list[dict] = []
+    current: dict | None = None
+    header_re = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+
+    for raw_line in lines:
+        line = str(raw_line)
+        if line.startswith(('diff --git ', 'index ', '--- ', '+++ ')):
+            continue
+        if line.startswith('@@ '):
+            match = header_re.match(line)
+            if not match:
+                return [], f'malformed_hunk_header:{line[:120]}'
+            current = {
+                'old_start': int(match.group(1) or '0'),
+                'old_count': int(match.group(2) or '1'),
+                'new_start': int(match.group(3) or '0'),
+                'new_count': int(match.group(4) or '1'),
+                'lines': [],
+                'no_newline': False,
+            }
+            hunks.append(current)
+            continue
+        if line == r'\ No newline at end of file':
+            if current is not None:
+                current['no_newline'] = True
+            continue
+        if current is None:
+            if not line.strip():
+                continue
+            return [], f'no_hunk_header_before_line:{line[:120]}'
+        if not line:
+            return [], 'malformed_hunk_line:empty'
+        prefix = line[0]
+        if prefix not in {' ', '+', '-'}:
+            return [], f'malformed_hunk_line:{line[:120]}'
+        current['lines'].append((prefix, line[1:]))
+
+    if not hunks:
+        return [], 'no_hunks_found'
+    return hunks, ''
+
+
+def _apply_unified_diff_to_text(original_content: str, patch_text: str) -> tuple[str, dict]:
+    hunks, parse_error = _parse_unified_diff_hunks(patch_text)
+    if parse_error:
+        raise ValueError(parse_error)
+
+    original_lines = original_content.splitlines()
+    had_trailing_newline = original_content.endswith('\n')
+    result_lines: list[str] = []
+    original_index = 0
+    added_lines = 0
+    removed_lines = 0
+
+    for hunk in hunks:
+        old_start = max(0, int(hunk.get('old_start') or 0) - 1)
+        if old_start < original_index or old_start > len(original_lines):
+            raise ValueError(f'hunk_target_out_of_range:{old_start + 1}')
+        result_lines.extend(original_lines[original_index:old_start])
+        idx = old_start
+        for prefix, text in hunk.get('lines') or []:
+            if prefix == ' ':
+                if idx >= len(original_lines) or original_lines[idx] != text:
+                    raise ValueError(f'context_mismatch:{text[:120]}')
+                result_lines.append(original_lines[idx])
+                idx += 1
+            elif prefix == '-':
+                if idx >= len(original_lines) or original_lines[idx] != text:
+                    raise ValueError(f'remove_mismatch:{text[:120]}')
+                idx += 1
+                removed_lines += 1
+            elif prefix == '+':
+                result_lines.append(text)
+                added_lines += 1
+        original_index = idx
+
+    result_lines.extend(original_lines[original_index:])
+    updated_content = '\n'.join(result_lines)
+    trailing_newline = had_trailing_newline and not bool((hunks[-1] or {}).get('no_newline'))
+    if result_lines and trailing_newline:
+        updated_content += '\n'
+    return updated_content, {'hunk_count': len(hunks), 'added_lines': added_lines, 'removed_lines': removed_lines}
 
 
 def _generate_edited_file_content(target: Path, original_content: str, change_request: str) -> str:
@@ -1004,25 +1384,76 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
 
     post = verify_post_condition('write_file', str(target))
     summary = description or f"已写入文件：{target}"
+    if not bool(post.get('ok', False)):
+        return build_protocol_exec_result(
+            False,
+            f"{summary}\n路径：{target}",
+            error='写入后未检测到目标文件',
+            expected_state=str(post.get('expected') or 'file_written'),
+            observed_state=str(post.get('observed') or 'file_written'),
+            drift_reason=str(post.get('drift') or ''),
+            repair_hint=str(post.get('hint') or ''),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='write_file',
+            target_kind='file',
+            target=str(target),
+            outcome='write_unconfirmed',
+            display_hint=f"写入后未确认文件：{target.name}",
+            verification_mode='path_exists',
+            verification_detail=str(target),
+            post_condition=post,
+            verified=False,
+        )
+
+    verification = verify_file_change(target, content=content, context={'user_input': user_input})
+    verification_mode = str(verification.get('verification_mode') or 'path_exists')
+    verification_detail = str(verification.get('verification_detail') or str(target))
+    verification_state = verification.get('verified')
+    if verification_state is False:
+        return build_protocol_exec_result(
+            False,
+            f"{summary}\n路径：{target}\n文件已写入，但语义核验失败：{verification_detail}",
+            error=f'文件已写入，但语义核验失败：{verification_detail}',
+            expected_state='file_verified',
+            observed_state=str(verification.get('observed_state') or 'file_invalid_syntax'),
+            drift_reason=str(verification.get('drift_reason') or 'file_verification_failed'),
+            repair_hint=str(verification.get('repair_hint') or 'fix_file_syntax'),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='write_file',
+            target_kind='file',
+            target=str(target),
+            outcome='written_but_invalid',
+            display_hint=f"文件已写入但核验失败：{target.name}",
+            verification_mode=verification_mode,
+            verification_detail=verification_detail,
+            post_condition=post,
+            verified=False,
+            verification_explicit=True,
+        )
+
+    unverified = verification_state is None
     return build_protocol_exec_result(
-        bool(post.get('ok', False)),
+        True,
         f"{summary}\n路径：{target}",
-        error='' if post.get('ok', False) else '写入后未检测到目标文件',
-        expected_state=str(post.get('expected') or 'file_written'),
-        observed_state=str(post.get('observed') or 'file_written'),
-        drift_reason=str(post.get('drift') or ''),
-        repair_hint=str(post.get('hint') or ''),
+        error='',
+        expected_state='file_written' if unverified else 'file_verified',
+        observed_state=str(verification.get('observed_state') or ('file_unverified' if unverified else 'file_verified')),
+        drift_reason='',
+        repair_hint='',
         repair_attempted=False,
-        repair_succeeded=bool(post.get('ok', False)),
+        repair_succeeded=True,
         action_kind='write_file',
         target_kind='file',
         target=str(target),
-        outcome='written' if post.get('ok', False) else 'write_unconfirmed',
-        display_hint=f"已写入文件：{target.name}" if post.get('ok', False) else f"写入后未确认文件：{target.name}",
-        verification_mode='path_exists',
-        verification_detail=str(target),
+        outcome='written',
+        display_hint=f"已写入文件（未核验）：{target.name}" if unverified else f"已写入文件：{target.name}",
+        verification_mode=verification_mode,
+        verification_detail=verification_detail,
         post_condition=post,
-        verified=bool(post.get('ok', False)),
+        verified=verification_state,
+        verification_explicit=True,
     )
 
 
@@ -1209,25 +1640,76 @@ def execute_edit_file_action(arguments: dict | None, *, user_input: str = '') ->
         'hint': '' if verified else 'retry_or_check_write_target',
     }
     summary = f'已修改文件：{target}'
+    if not verified:
+        return build_protocol_exec_result(
+            False,
+            f"{summary}\n变更：{change_request}",
+            error='修改后未能确认文件内容已持久化',
+            expected_state='file_edited',
+            observed_state=str(post.get('observed') or ''),
+            drift_reason=str(post.get('drift') or ''),
+            repair_hint=str(post.get('hint') or ''),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='edit_unconfirmed',
+            display_hint=f'修改后未确认文件：{target.name}',
+            verification_mode='content_roundtrip',
+            verification_detail=str(target),
+            post_condition=post,
+            verified=False,
+        )
+
+    verification = verify_file_change(target, content=observed_content, context={'change_request': change_request, 'user_input': user_input})
+    verification_mode = str(verification.get('verification_mode') or 'content_roundtrip')
+    verification_detail = str(verification.get('verification_detail') or str(target))
+    verification_state = verification.get('verified')
+    if verification_state is False:
+        return build_protocol_exec_result(
+            False,
+            f"{summary}\n变更：{change_request}\n文件已修改，但语义核验失败：{verification_detail}",
+            error=f'文件已修改，但语义核验失败：{verification_detail}',
+            expected_state='file_verified',
+            observed_state=str(verification.get('observed_state') or 'file_invalid_syntax'),
+            drift_reason=str(verification.get('drift_reason') or 'file_verification_failed'),
+            repair_hint=str(verification.get('repair_hint') or 'fix_file_syntax'),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='edit_file',
+            target_kind='file',
+            target=str(target),
+            outcome='edited_but_invalid',
+            display_hint=f'文件已修改但核验失败：{target.name}',
+            verification_mode=verification_mode,
+            verification_detail=verification_detail,
+            post_condition=post,
+            verified=False,
+            verification_explicit=True,
+        )
+
+    unverified = verification_state is None
     return build_protocol_exec_result(
-        verified,
+        True,
         f"{summary}\n变更：{change_request}",
-        error='' if verified else '修改后未能确认文件内容已持久化',
-        expected_state='file_edited',
-        observed_state=str(post.get('observed') or ''),
-        drift_reason=str(post.get('drift') or ''),
-        repair_hint=str(post.get('hint') or ''),
+        error='',
+        expected_state='file_edited' if unverified else 'file_verified',
+        observed_state=str(verification.get('observed_state') or ('file_unverified' if unverified else 'file_verified')),
+        drift_reason='',
+        repair_hint='',
         repair_attempted=False,
-        repair_succeeded=verified,
+        repair_succeeded=True,
         action_kind='edit_file',
         target_kind='file',
         target=str(target),
-        outcome='edited' if verified else 'edit_unconfirmed',
-        display_hint=f'已修改文件：{target.name}' if verified else f'修改后未确认文件：{target.name}',
-        verification_mode='content_roundtrip',
-        verification_detail=str(target),
+        outcome='edited',
+        display_hint=f'已修改文件（未核验）：{target.name}' if unverified else f'已修改文件：{target.name}',
+        verification_mode=verification_mode,
+        verification_detail=verification_detail,
         post_condition=post,
-        verified=verified,
+        verified=verification_state,
+        verification_explicit=True,
     )
 
 
@@ -1482,25 +1964,363 @@ def execute_search_replace_action(arguments: dict | None, *, user_input: str = '
     }
     summary = f'已替换文件内容：{target}'
     detail = f'匹配 {occurrences} 处，实际替换 {replaced_count} 处'
+    if not verified:
+        return build_protocol_exec_result(
+            False,
+            f"{summary}\n{detail}",
+            error='替换后未能确认文件内容已持久化',
+            expected_state='file_edited',
+            observed_state=str(post.get('observed') or ''),
+            drift_reason=str(post.get('drift') or ''),
+            repair_hint=str(post.get('hint') or ''),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='edit_unconfirmed',
+            display_hint=f'替换后未确认文件：{target.name}',
+            verification_mode='content_roundtrip',
+            verification_detail=f'{target} | match_count={occurrences} | replaced_count={replaced_count}',
+            post_condition=post,
+            verified=False,
+        )
+
+    verification = verify_file_change(target, content=observed_content, context={'user_input': user_input})
+    verification_mode = str(verification.get('verification_mode') or 'content_roundtrip')
+    verification_detail = str(
+        verification.get('verification_detail')
+        or f'{target} | match_count={occurrences} | replaced_count={replaced_count}'
+    )
+    verification_state = verification.get('verified')
+    if verification_state is False:
+        return build_protocol_exec_result(
+            False,
+            f"{summary}\n{detail}\n文件已替换，但语义核验失败：{verification_detail}",
+            error=f'文件已替换，但语义核验失败：{verification_detail}',
+            expected_state='file_verified',
+            observed_state=str(verification.get('observed_state') or 'file_invalid_syntax'),
+            drift_reason=str(verification.get('drift_reason') or 'file_verification_failed'),
+            repair_hint=str(verification.get('repair_hint') or 'fix_file_syntax'),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='search_replace',
+            target_kind='file',
+            target=str(target),
+            outcome='edited_but_invalid',
+            display_hint=f'文件已替换但核验失败：{target.name}',
+            verification_mode=verification_mode,
+            verification_detail=verification_detail,
+            post_condition=post,
+            verified=False,
+            verification_explicit=True,
+        )
+
+    unverified = verification_state is None
     return build_protocol_exec_result(
-        verified,
+        True,
         f"{summary}\n{detail}",
-        error='' if verified else '替换后未能确认文件内容已持久化',
-        expected_state='file_edited',
-        observed_state=str(post.get('observed') or ''),
-        drift_reason=str(post.get('drift') or ''),
-        repair_hint=str(post.get('hint') or ''),
+        error='',
+        expected_state='file_edited' if unverified else 'file_verified',
+        observed_state=str(verification.get('observed_state') or ('file_unverified' if unverified else 'file_verified')),
+        drift_reason='',
+        repair_hint='',
         repair_attempted=False,
-        repair_succeeded=verified,
+        repair_succeeded=True,
         action_kind='search_replace',
         target_kind='file',
         target=str(target),
-        outcome='edited' if verified else 'edit_unconfirmed',
-        display_hint=f'已替换文件内容：{target.name}' if verified else f'替换后未确认文件：{target.name}',
-        verification_mode='content_roundtrip',
-        verification_detail=f'{target} | match_count={occurrences} | replaced_count={replaced_count}',
+        outcome='edited',
+        display_hint=f'已替换文件内容（未核验）：{target.name}' if unverified else f'已替换文件内容：{target.name}',
+        verification_mode=verification_mode,
+        verification_detail=verification_detail,
         post_condition=post,
-        verified=verified,
+        verified=verification_state,
+        verification_explicit=True,
+    )
+
+
+def execute_apply_unified_diff_action(arguments: dict | None, *, user_input: str = '') -> dict:
+    args = dict(arguments or {})
+    file_path = str(
+        args.get('file_path', '')
+        or args.get('path', '')
+        or args.get('target', '')
+        or args.get('filename', '')
+        or ''
+    ).strip()
+    patch_text = str(
+        args.get('patch', '')
+        or args.get('diff', '')
+        or args.get('unified_diff', '')
+        or ''
+    )
+
+    missing = missing_required_protocol_fields(
+        'apply_unified_diff',
+        {'file_path': file_path, 'patch': patch_text, **args},
+    )
+    target_hint = file_path.strip()
+    if missing:
+        feedback = build_protocol_arg_failure_feedback(
+            'apply_unified_diff',
+            {'file_path': file_path, 'patch': patch_text, **args},
+            missing,
+        )
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='patch_ready',
+            observed_state='missing_required_args',
+            drift_reason='missing_required_args',
+            repair_hint='provide_unified_diff_patch',
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=target_hint,
+            outcome='blocked',
+            display_hint=f"补丁应用缺少必要参数：{Path(target_hint).name if target_hint else '未提供目标'}",
+            verification_mode='argument_check',
+            verification_detail=f"missing_fields={','.join(missing)}",
+            verified=False,
+        )
+
+    target = resolve_user_file_target(file_path)
+    if not target:
+        feedback = '执行失败: 缺少 file_path。'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='patch_ready',
+            observed_state='path_unresolved',
+            drift_reason='missing_patch_target',
+            repair_hint='provide_valid_file_path',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target='',
+            outcome='unresolved',
+            display_hint='应用补丁时没有解析出目标路径',
+            verification_mode='path_resolution',
+            verification_detail='target_unresolved',
+            verified=False,
+        )
+
+    if not target.exists() or not target.is_file():
+        feedback = f'执行失败: 目标文件不存在：{target}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='patch_target_present',
+            observed_state='file_missing',
+            drift_reason='patch_target_missing',
+            repair_hint='read_or_create_target_first',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'目标文件不存在：{target.name}',
+            verification_mode='path_exists',
+            verification_detail=str(target),
+            verified=False,
+        )
+
+    if not is_allowed_write_target(target):
+        feedback = f'执行失败: 目标路径不可修改：`{target}`'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='patch_allowed',
+            observed_state='patch_blocked',
+            drift_reason='write_target_protected',
+            repair_hint='choose_safe_workspace_path',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'补丁被保护策略拦下：{target.name}',
+            verification_mode='write_guard',
+            verification_detail='protected_target',
+            verified=False,
+        )
+
+    try:
+        original_content = target.read_text(encoding='utf-8')
+    except Exception as exc:
+        feedback = f'读取失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='file_readable',
+            observed_state='read_exception',
+            drift_reason='read_exception',
+            repair_hint='check_path_permissions_or_encoding',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'读取目标文件失败：{target.name}',
+            verification_mode='read_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    try:
+        updated_content, patch_stats = _apply_unified_diff_to_text(original_content, patch_text)
+    except Exception as exc:
+        feedback = f'补丁应用失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='patch_applied',
+            observed_state='patch_rejected',
+            drift_reason='patch_apply_failed',
+            repair_hint='fix_patch_or_read_file_first',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'补丁未能应用：{target.name}',
+            verification_mode='patch_apply',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    if updated_content == original_content:
+        feedback = (
+            f'执行失败: 这个 unified diff 没有产生实际变更：{target}\n'
+            '请检查 patch 是否真的对应当前文件内容。'
+        )
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='effective_patch_ready',
+            observed_state='no_effective_change',
+            drift_reason='patch_noop',
+            repair_hint='provide_effective_patch',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='blocked',
+            display_hint=f'补丁没有产生变化：{target.name}',
+            verification_mode='patch_apply',
+            verification_detail='patch_no_effective_change',
+            verified=False,
+        )
+
+    try:
+        target.write_text(updated_content, encoding='utf-8')
+        observed_content = target.read_text(encoding='utf-8')
+    except Exception as exc:
+        feedback = f'写入失败: {exc}'
+        return build_protocol_exec_result(
+            False,
+            feedback,
+            error=feedback,
+            expected_state='patch_persisted',
+            observed_state='write_exception',
+            drift_reason='write_exception',
+            repair_hint='check_path_permissions_or_patch_content',
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='failed',
+            display_hint=f'补丁写入失败：{target.name}',
+            verification_mode='write_exception',
+            verification_detail=str(exc),
+            verified=False,
+        )
+
+    verified = observed_content == updated_content
+    post = {
+        'ok': verified,
+        'expected': 'file_edited',
+        'observed': 'file_edited' if verified else 'file_edit_unconfirmed',
+        'drift': '' if verified else 'patch_not_persisted',
+        'hint': '' if verified else 'retry_or_check_write_target',
+    }
+    detail = (
+        f"hunks={patch_stats.get('hunk_count', 0)} | "
+        f"added_lines={patch_stats.get('added_lines', 0)} | "
+        f"removed_lines={patch_stats.get('removed_lines', 0)}"
+    )
+    if not verified:
+        return build_protocol_exec_result(
+            False,
+            f"已应用 unified diff：{target}\n{detail}",
+            error='补丁写入后未能确认文件内容已持久化',
+            expected_state='file_edited',
+            observed_state=str(post.get('observed') or ''),
+            drift_reason=str(post.get('drift') or ''),
+            repair_hint=str(post.get('hint') or ''),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='edit_unconfirmed',
+            display_hint=f'补丁后未确认文件：{target.name}',
+            verification_mode='content_roundtrip',
+            verification_detail=f'{target} | {detail}',
+            post_condition=post,
+            verified=False,
+        )
+
+    verification = verify_file_change(target, content=observed_content, context={'user_input': user_input})
+    verification_mode = str(verification.get('verification_mode') or 'content_roundtrip')
+    verification_detail = str(verification.get('verification_detail') or f'{target} | {detail}')
+    verification_state = verification.get('verified')
+    if verification_state is False:
+        return build_protocol_exec_result(
+            False,
+            f"已应用 unified diff：{target}\n{detail}\n补丁已写入，但语义核验失败：{verification_detail}",
+            error=f'补丁已写入，但语义核验失败：{verification_detail}',
+            expected_state='file_verified',
+            observed_state=str(verification.get('observed_state') or 'file_invalid_syntax'),
+            drift_reason=str(verification.get('drift_reason') or 'file_verification_failed'),
+            repair_hint=str(verification.get('repair_hint') or 'fix_file_syntax'),
+            repair_attempted=False,
+            repair_succeeded=False,
+            action_kind='apply_unified_diff',
+            target_kind='file',
+            target=str(target),
+            outcome='edited_but_invalid',
+            display_hint=f'补丁已写入但核验失败：{target.name}',
+            verification_mode=verification_mode,
+            verification_detail=verification_detail,
+            post_condition=post,
+            verified=False,
+            verification_explicit=True,
+        )
+
+    unverified = verification_state is None
+    return build_protocol_exec_result(
+        True,
+        f"已应用 unified diff：{target}\n{detail}",
+        error='',
+        expected_state='file_edited' if unverified else 'file_verified',
+        observed_state=str(verification.get('observed_state') or ('file_unverified' if unverified else 'file_verified')),
+        drift_reason='',
+        repair_hint='',
+        repair_attempted=False,
+        repair_succeeded=True,
+        action_kind='apply_unified_diff',
+        target_kind='file',
+        target=str(target),
+        outcome='edited',
+        display_hint=f'已应用补丁（未核验）：{target.name}' if unverified else f'已应用补丁：{target.name}',
+        verification_mode=verification_mode,
+        verification_detail=verification_detail,
+        post_condition=post,
+        verified=verification_state,
+        verification_explicit=True,
     )
 
 

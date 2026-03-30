@@ -100,6 +100,7 @@ _PROTOCOL_CONTEXT_SKILLS = {
     "file_delete",
     "app_target",
     "ui_interaction",
+    "apply_unified_diff",
     "edit_file",
     "search_replace",
     "write_file",
@@ -111,6 +112,7 @@ _PROTOCOL_DEFAULT_OPTIONS = {
     "file_copy": "copy",
     "file_move": "move",
     "file_delete": "delete",
+    "apply_unified_diff": "apply_unified_diff",
     "edit_file": "edit_file",
     "search_replace": "search_replace",
     "write_file": "write_file",
@@ -205,7 +207,7 @@ def _infer_recent_directory_from_context(context: dict | None) -> str:
 
 def _extract_protocol_candidate_path(name: str, values: dict | None) -> str:
     values = values if isinstance(values, dict) else {}
-    if name in {"write_file", "edit_file", "search_replace"}:
+    if name in {"write_file", "edit_file", "search_replace", "apply_unified_diff"}:
         return str(values.get("file_path") or values.get("path") or values.get("target") or "").strip()
     if name in {"file_copy", "file_move", "file_delete", "save_export", "folder_explore", "open_target"}:
         return str(values.get("path") or values.get("source") or values.get("file_path") or values.get("target") or "").strip()
@@ -536,6 +538,22 @@ def build_tools_list() -> list[dict]:
     tools.append({
         "type": "function",
         "function": {
+            "name": "apply_unified_diff",
+            "description": "Apply a unified diff patch to an existing file. Use when you already have a precise hunk-based diff patch and want to patch the file directly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
+                    "patch": {"type": "string", "description": "Unified diff patch text for this file."},
+                    "description": {"type": "string", "description": "Short summary of the intended patch."}
+                },
+                "required": ["file_path", "patch"],
+            },
+        },
+    })
+    tools.append({
+        "type": "function",
+        "function": {
             "name": "search_replace",
             "description": "Replace an exact text block inside an existing file. Use when you know the current old_text and the intended new_text and want a targeted edit instead of rewriting the whole file.",
             "parameters": {
@@ -740,6 +758,23 @@ def build_tools_list_cod() -> list[dict]:
     })
 
     # ⑤ 文件变更协议
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "apply_unified_diff",
+            "description": "Apply a unified diff patch to an existing file. Use when you already have a precise hunk-based diff patch and want to patch the file directly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
+                    "patch": {"type": "string", "description": "Unified diff patch text for this file."},
+                    "description": {"type": "string", "description": "Short summary of the intended patch."}
+                },
+                "required": ["file_path", "patch"],
+            },
+        },
+    })
+
     tools.append({
         "type": "function",
         "function": {

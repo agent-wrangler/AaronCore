@@ -82,6 +82,24 @@
     "最近使用时间": "2026-03-30T17:46:31.410457"
   },
   {
+    "source": "l6_success_path",
+    "experience_key": "open_target|open_folder|folder|opened|target_visible",
+    "name": "open_target / open_folder / folder",
+    "核心技能": "open_target",
+    "action_kind": "open_folder",
+    "target_kind": "folder",
+    "outcome": "opened",
+    "observed_state": "target_visible",
+    "verification_mode": "",
+    "verification_detail": "",
+    "summary": "已打开文件夹：E:\\文字红包",
+    "应用示例": "已打开文件夹：E:\\文字红包",
+    "success_count": 2,
+    "使用次数": 2,
+    "learned_at": "2026-03-30T17:55:32.920680",
+    "最近使用时间": "2026-03-30T20:35:53.332140"
+  },
+  {
     "一级场景": "内容创作",
     "二级场景": "AI画图",
     "核心技能": "draw",
@@ -96,24 +114,6 @@
     "应用示例": "用 AI 生成图片或海报",
     "使用次数": 1,
     "最近使用时间": "2026-03-09 02:38"
-  },
-  {
-    "source": "l6_success_path",
-    "experience_key": "open_target|open_folder|folder|opened|target_visible",
-    "name": "open_target / open_folder / folder",
-    "核心技能": "open_target",
-    "action_kind": "open_folder",
-    "target_kind": "folder",
-    "outcome": "opened",
-    "observed_state": "target_visible",
-    "verification_mode": "",
-    "verification_detail": "",
-    "summary": "已打开文件夹：C:\\Users\\36459\\Desktop\\Nova截图",
-    "应用示例": "已打开文件夹：C:\\Users\\36459\\Desktop\\Nova截图",
-    "success_count": 1,
-    "使用次数": 1,
-    "learned_at": "2026-03-30T17:55:32.920680",
-    "最近使用时间": "2026-03-30T17:55:32.920680"
   },
   {
     "source": "l6_success_path",

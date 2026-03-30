@@ -2314,7 +2314,7 @@
     "stage": "1",
     "priority": "normal",
     "created_at": "2026-03-30T12:05:18.388586",
-    "updated_at": "2026-03-30T18:36:25.741724",
+    "updated_at": "2026-03-30T20:19:07.575389",
     "started_at": "2026-03-30T12:05:18.386592",
     "completed_at": null,
     "intent": {
@@ -2328,7 +2328,7 @@
       "fs_target": {
         "path": "C:\\Users\\36459\\NovaNotes",
         "option": "inspect",
-        "source": "task_repair"
+        "source": "tool_runtime"
       }
     },
     "plan": {
@@ -2374,7 +2374,7 @@
       "last_fs_target": {
         "path": "C:\\Users\\36459\\NovaNotes",
         "option": "inspect",
-        "source": "task_repair"
+        "source": "tool_runtime"
       }
     },
     "domain": {
@@ -2459,6 +2459,165 @@
       "task_plan_item": {
         "item_id": "2",
         "kind": "测试"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260330_048",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-03-30T20:19:38.495759",
+    "updated_at": "2026-03-30T20:34:25.419534",
+    "started_at": "2026-03-30T20:19:38.494761",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局"
+    },
+    "input": {
+      "query": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局"
+    },
+    "context": {
+      "fs_target": {
+        "path": "C:\\Users\\36459\\NovaNotes",
+        "option": "open",
+        "source": "tool_runtime"
+      }
+    },
+    "plan": {
+      "snapshot": {
+        "goal": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+        "items": [
+          {
+            "id": "1",
+            "title": "重写 templates/index.html - 新UI布局（搜索栏+动态列表+左列表右编辑）",
+            "status": "running",
+            "kind": "code",
+            "detail": ""
+          },
+          {
+            "id": "2",
+            "title": "测试 Flask 服务是否正常",
+            "status": "pending",
+            "kind": "verify",
+            "detail": ""
+          }
+        ],
+        "current_item_id": "1",
+        "updated_at": "2026-03-30T20:19:38.481290"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局"
+    },
+    "memory": {
+      "last_user_reference": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-03-30T20:19:38.494761",
+      "last_fs_target": {
+        "path": "C:\\Users\\36459\\NovaNotes",
+        "option": "open",
+        "source": "tool_runtime"
+      }
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "改进 novanotes 前端 搜索栏 动态列表 左列表右阅读布局"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-03-30T20:19:38.515565",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-03-30T20:19:38.532340",
+        "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+        "phase": "1",
+        "current_item_id": "1"
+      }
+    ]
+  },
+  {
+    "id": "task_20260330_049",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260330_048",
+    "kind": "plan_step",
+    "title": "重写 templates/index.html - 新UI布局（搜索栏+动态列表+左列表右编辑）",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-03-30T20:19:38.561147",
+    "updated_at": "2026-03-30T20:19:38.561147",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "code"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260330_050",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260330_048",
+    "kind": "plan_step",
+    "title": "测试 Flask 服务是否正常",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-30T20:19:38.583430",
+    "updated_at": "2026-03-30T20:19:38.583430",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "verify"
       }
     },
     "events": []

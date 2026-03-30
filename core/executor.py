@@ -2,6 +2,7 @@
 # 负责：统一调用技能、处理结果、封装异常、注入用户上下文
 
 from core.fs_protocol import (
+    execute_apply_unified_diff_action,
     attempt_fs_repair,
     execute_edit_file_action,
     execute_search_replace_action,
@@ -10,11 +11,12 @@ from core.fs_protocol import (
 )
 from core.skills import get_skill
 
-_PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction', 'write_file', 'edit_file', 'search_replace'}
+_PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction', 'write_file', 'edit_file', 'search_replace', 'apply_unified_diff'}
 _DIRECT_PROTOCOL_EXECUTORS = {
     'write_file': execute_write_file_action,
     'edit_file': execute_edit_file_action,
     'search_replace': execute_search_replace_action,
+    'apply_unified_diff': execute_apply_unified_diff_action,
 }
 
 
@@ -82,6 +84,11 @@ def _derive_protocol_post_check(skill_name: str, user_input: str, context: dict)
         target_value = str(context.get('file_path') or context.get('path') or context.get('target') or context.get('filename') or '').strip()
         if target_value:
             return 'edit_file', target_value, {}
+
+    if skill_name == 'apply_unified_diff':
+        target_value = str(context.get('file_path') or context.get('path') or context.get('target') or context.get('filename') or '').strip()
+        if target_value:
+            return 'apply_unified_diff', target_value, {}
 
     if skill_name == 'app_target':
         target_value = str(context.get('target') or context.get('app') or context.get('path') or '').strip()
