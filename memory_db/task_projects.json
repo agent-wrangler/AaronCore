@@ -440,5 +440,30 @@
         "file_workflow"
       ]
     }
+  },
+  {
+    "id": "proj_20260330_023",
+    "kind": "generic",
+    "title": "Default task planning pipeline",
+    "status": "active",
+    "description": "",
+    "owner": "nova",
+    "created_at": "2026-03-30T12:05:18.383604",
+    "updated_at": "2026-03-30T18:36:25.755082",
+    "current_task_id": "task_20260330_045",
+    "goal": {
+      "summary": "持续推进多步任务计划"
+    },
+    "settings": {},
+    "memory": {
+      "tags": [
+        "task_plan"
+      ],
+      "last_fs_target": {
+        "path": "C:\\Users\\36459\\NovaNotes",
+        "option": "inspect",
+        "source": "task_repair"
+      }
+    }
   }
 ]

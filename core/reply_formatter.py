@@ -208,13 +208,110 @@ def _load_latest_structured_fs_target() -> str:
     return str(target.get("path") or "").strip()
 
 
+def _load_task_plan_fs_target(bundle: dict) -> str:
+    task_plan = _resolve_active_task_plan(bundle)
+    if not task_plan:
+        return ""
+    try:
+        from core.task_store import get_structured_fs_target_for_task_plan
+
+        target = get_structured_fs_target_for_task_plan(task_plan)
+    except Exception:
+        target = None
+    if not isinstance(target, dict):
+        return ""
+    return str(target.get("path") or "").strip()
+
+
+def _load_context_fs_target(bundle: dict) -> str:
+    context_data = bundle.get("context_data") if isinstance(bundle.get("context_data"), dict) else {}
+    fs_target = context_data.get("fs_target") if isinstance(context_data.get("fs_target"), dict) else {}
+    return str(fs_target.get("path") or "").strip()
+
+
+def _looks_like_directory_resolution_request(user_input: str, *, has_structured_target: bool) -> bool:
+    raw = str(user_input or "").strip()
+    if not raw or not has_structured_target:
+        return False
+
+    lowered = raw.lower()
+    if _re.search(r"[A-Za-z]:[\\/]", raw):
+        return False
+
+    explicit_location_patterns = (
+        r"(在哪|在哪里|在哪儿)\s*[？?]?$",
+        r"(文件夹|目录|路径|位置).{0,8}(在哪|在哪里|在哪儿|发我|给我|告诉我)",
+        r"(存到哪|放到哪|放哪|保存到哪|保存在哪)",
+        r"(where is|which folder|which directory|what path|saved where|located where)",
+    )
+    if any(_re.search(pattern, raw, _re.I) for pattern in explicit_location_patterns):
+        return True
+
+    has_referential_followup = any(token in raw for token in ("它", "这个", "那个", "之前那个", "刚才那个", "上次那个"))
+    asks_where = ("哪" in raw or "where" in lowered)
+    asks_location_noun = any(token in raw for token in ("文件夹", "目录", "路径", "位置"))
+    return has_referential_followup and (asks_where or asks_location_noun)
+
+
+def _reply_already_contains_location(reply_text: str) -> bool:
+    text = _clean_visible_reply_text(reply_text)
+    if not text:
+        return False
+    patterns = (
+        r"[A-Za-z]:[\\/][^\s`<>\"]+",
+        r"(桌面|文档|下载)[/\\][^\s`<>\"]+",
+        r"(Desktop|Documents|Downloads)[/\\][^\s`<>\"]+",
+    )
+    return any(_re.search(pattern, text, _re.I) for pattern in patterns)
+
+
+def _pick_directory_resolution_target(bundle: dict, *, allow_global_fallback: bool = True) -> str:
+    candidates = [
+        _load_task_plan_fs_target(bundle),
+        _load_context_fs_target(bundle),
+        _infer_recent_directory_target(bundle),
+    ]
+    if allow_global_fallback:
+        candidates.append(_load_latest_structured_fs_target())
+    for candidate in candidates:
+        path = str(candidate or "").strip()
+        if path:
+            return path
+    return ""
+
+
+def _infer_directory_resolution_tool_call(bundle: dict, reply_text: str = "") -> dict | None:
+    raw_input = str(bundle.get("user_input") or "").strip()
+    target = _pick_directory_resolution_target(bundle, allow_global_fallback=False)
+    if not target or _reply_already_contains_location(reply_text):
+        return None
+
+    if not _looks_like_directory_resolution_request(raw_input, has_structured_target=True):
+        return None
+
+    return {
+        "id": "inferred_directory_resolution_tool_call",
+        "type": "function",
+        "function": {
+            "name": "folder_explore",
+            "arguments": json.dumps(
+                {
+                    "path": target,
+                    "user_input": raw_input,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    }
+
+
 def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict) -> dict:
     args = dict(tool_args or {})
     user_input = str(bundle.get("user_input") or "")
     if tool_name == "folder_explore":
         target = str(args.get("path") or args.get("target") or "").strip()
         if not target:
-            target = _infer_recent_directory_target(bundle) or _load_latest_structured_fs_target()
+            target = _load_task_plan_fs_target(bundle) or _infer_recent_directory_target(bundle) or _load_latest_structured_fs_target()
             if target:
                 args["path"] = target
         if user_input and "user_input" not in args:
@@ -264,8 +361,25 @@ def _build_tool_exec_context(bundle: dict) -> dict:
             if isinstance(item, dict)
         ]
     context_data = bundle.get("context_data") if isinstance(bundle.get("context_data"), dict) else {}
-    if context_data:
-        skill_context["context_data"] = dict(context_data)
+    merged_context_data = dict(context_data) if context_data else {}
+    task_plan_fs_target = _load_task_plan_fs_target(bundle)
+    context_fs_target = _load_context_fs_target(bundle)
+    task_fs_target = task_plan_fs_target or context_fs_target
+    task_fs_source = "task_plan" if task_plan_fs_target else "context_data"
+    if task_fs_target:
+        skill_context["fs_target"] = {
+            "path": task_fs_target,
+            "option": "inspect",
+            "source": task_fs_source,
+        }
+        if "fs_target" not in merged_context_data:
+            merged_context_data["fs_target"] = {
+                "path": task_fs_target,
+                "option": "inspect",
+                "source": task_fs_source,
+            }
+    if merged_context_data:
+        skill_context["context_data"] = merged_context_data
     task_plan = _resolve_active_task_plan(bundle)
     if task_plan:
         skill_context["task_plan"] = task_plan
@@ -364,6 +478,32 @@ def _append_runtime_guidance(messages: list[dict], content: str) -> None:
         "role": "user",
         "content": f"[INTERNAL RUNTIME GUIDANCE - NOT FROM THE USER]\n{text}",
     })
+
+
+def _is_write_file_content_arg_failure(signature: dict | None) -> bool:
+    signature = signature if isinstance(signature, dict) else {}
+    if str(signature.get("tool") or "").strip() != "write_file":
+        return False
+    missing_fields = {str(x).strip() for x in (signature.get("missing_fields") or []) if str(x).strip()}
+    return "content" in missing_fields
+
+
+def _build_strict_write_file_retry_note(tool_args: dict | None, signature: dict | None = None) -> str:
+    tool_args = tool_args if isinstance(tool_args, dict) else {}
+    signature = signature if isinstance(signature, dict) else {}
+    target = (
+        str(tool_args.get("file_path") or tool_args.get("path") or "").strip()
+        or str(signature.get("target") or "").strip()
+        or "unknown target"
+    )
+    return (
+        f"The write_file target is {target}. "
+        "Do not send natural-language promises in the next turn. "
+        "Your next assistant turn must do exactly one of these: "
+        "(1) call write_file with the SAME file_path and the COMPLETE final content string; "
+        "(2) if you still need surrounding project context, call list_files or read_file first. "
+        "Do not repeat write_file without content."
+    )
 
 
 def _build_current_time_context() -> str:
@@ -676,14 +816,16 @@ def _tool_requires_user_takeover(exec_result: dict) -> bool:
     return reason in {"auth_required", "login_required", "verification_required", "captcha_required"} or hint in {"user_login_required", "user_verification_required"}
 
 
-def _build_l1_messages(bundle: dict, limit: int = 10) -> list[dict]:
+def _build_l1_messages(bundle: dict, limit: int | None = None) -> list[dict]:
     """\u4ece bundle['l1'] \u53d6\u6700\u8fd1 N \u8f6e\u5bf9\u8bdd\uff0c\u8f6c\u6210 user/assistant \u4ea4\u66ff\u7684 messages \u6570\u7ec4"""
     l1 = bundle.get("l1") or []
     if not l1:
         return []
-    # l1 \u662f [{"role": "user"/"nova"/"assistant", "content": "...", "time": "..."}]
-    # \u53d6\u6700\u8fd1 limit*2 \u6761\uff08\u6bcf\u8f6e = user + assistant\uff09
-    recent = l1[-(limit * 2):]
+    # l1 \u5df2\u7ecf\u5728\u4e0a\u6e38\u6309 budget \u88c1\u526a\uff0c\u8fd9\u91cc\u9ed8\u8ba4\u5168\u90e8\u4f7f\u7528
+    if limit is None:
+        recent = l1
+    else:
+        recent = l1[-(int(limit) * 2):]
     messages = []
     for item in recent:
         if not isinstance(item, dict):
@@ -722,14 +864,15 @@ def _build_l1_messages(bundle: dict, limit: int = 10) -> list[dict]:
     return messages
 
 
-def _build_recent_dialogue_text(bundle: dict, limit: int = 10) -> str:
+def _build_recent_dialogue_text(bundle: dict, limit: int | None = None) -> str:
     """把最近几轮 L1 对话压成简短文本，供普通聊天 prompt 使用。"""
     messages = _build_l1_messages(bundle, limit=limit)
     if not messages:
         return ""
 
     lines = []
-    for item in messages[-limit:]:
+    visible_messages = messages if limit is None else messages[-limit:]
+    for item in visible_messages:
         role = "用户" if item.get("role") == "user" else "Nova"
         content = str(item.get("content") or "").strip()
         if not content:
@@ -776,6 +919,9 @@ def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None 
         lines.append(f"Plan summary: {summary}")
     if current_item_id:
         lines.append(f"Current plan item: {current_item_id}")
+    task_fs_target = _load_task_plan_fs_target(bundle)
+    if task_fs_target:
+        lines.append(f"Current task directory/file target: {task_fs_target}")
     items = task_plan.get("items") if isinstance(task_plan.get("items"), list) else []
     if items:
         lines.append("Current plan checklist:")
@@ -1365,7 +1511,7 @@ def _build_light_chat_prompt(bundle: dict) -> str:
     recall_context = bundle.get("recall_context", "")
     flashback = bundle.get("flashback_hint")
 
-    l1_text = _build_recent_dialogue_text(bundle, limit=10) or "\u6682\u65e0"
+    l1_text = _build_recent_dialogue_text(bundle, limit=None) or "\u6682\u65e0"
     l2_text = _build_session_context_text(l2_session) or "\u6682\u65e0"
     l4_text = _condense_l4(l4) or "\u6682\u65e0"
     l7_text = format_l7_context(l7) or "\u6682\u65e0"
@@ -1663,6 +1809,11 @@ def _resolve_tool_calls_from_result(result: dict, bundle: dict, *, mode: str = "
         _debug_write("inferred_action_tool_call", {"mode": mode, "name": inferred_tc.get("function", {}).get("name", "")})
         return [inferred_tc]
 
+    directory_tc = _infer_directory_resolution_tool_call(bundle, content)
+    if directory_tc:
+        _debug_write("inferred_directory_resolution_tool_call", {"mode": mode})
+        return [directory_tc]
+
     return None
 
 
@@ -1707,29 +1858,7 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
     except Exception:
         pass
 
-    tool_calls = result.get("tool_calls")
-    if not tool_calls:
-        legacy_tc = _parse_legacy_tool_call_text(result.get("content", ""), bundle.get("user_input", ""))
-        if legacy_tc:
-            _debug_write("legacy_tool_call_compat", {"mode": "non_stream", "name": legacy_tc.get("function", {}).get("name", "")})
-            tool_calls = [legacy_tc]
-    if not tool_calls:
-        forced_app_tc = _force_app_tool_call_from_reply(
-            result.get("content", ""),
-            bundle.get("user_input", ""),
-        )
-        if forced_app_tc:
-            _debug_write("forced_app_tool_call", {"mode": "non_stream"})
-            tool_calls = [forced_app_tc]
-    if not tool_calls:
-        inferred_tc = _infer_action_tool_call_from_reply(
-            result.get("content", ""),
-            bundle.get("user_input", ""),
-            bundle.get("context_data"),
-        )
-        if inferred_tc:
-            _debug_write("inferred_action_tool_call", {"mode": "non_stream", "name": inferred_tc.get("function", {}).get("name", "")})
-            tool_calls = [inferred_tc]
+    tool_calls = _resolve_tool_calls_from_result(result, bundle, mode="non_stream_initial")
     if not tool_calls:
         # LLM 选择直接回复，不调工具
         reply = result.get("content", "")
@@ -2131,7 +2260,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     if dialogue_context:
         messages.append({"role": "system", "content": f"对话增量提示：\n{dialogue_context}"})
     # L1 历史消息：用原生 user/assistant 交替数组，而不是压缩文本
-    l1_messages = _build_l1_messages(bundle, limit=10)
+    l1_messages = _build_l1_messages(bundle, limit=None)
     if l1_messages:
         messages.extend(l1_messages)
     messages.append({"role": "user", "content": user_prompt})
@@ -2186,27 +2315,11 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             })
 
     if not tool_calls_signal and not streamed_text:
-        legacy_tc = _parse_legacy_tool_call_text("".join(collected_tokens), bundle.get("user_input", ""))
-        if legacy_tc:
-            _debug_write("legacy_tool_call_compat", {"mode": "stream", "name": legacy_tc.get("function", {}).get("name", "")})
-            tool_calls_signal = [legacy_tc]
-    if not tool_calls_signal and not streamed_text:
-        forced_app_tc = _force_app_tool_call_from_reply(
-            "".join(collected_tokens),
-            bundle.get("user_input", ""),
+        tool_calls_signal = _resolve_tool_calls_from_result(
+            {"content": "".join(collected_tokens)},
+            bundle,
+            mode="stream_initial",
         )
-        if forced_app_tc:
-            _debug_write("forced_app_tool_call", {"mode": "stream"})
-            tool_calls_signal = [forced_app_tc]
-    if not tool_calls_signal and not streamed_text:
-        inferred_tc = _infer_action_tool_call_from_reply(
-            "".join(collected_tokens),
-            bundle.get("user_input", ""),
-            bundle.get("context_data"),
-        )
-        if inferred_tc:
-            _debug_write("inferred_action_tool_call", {"mode": "stream", "name": inferred_tc.get("function", {}).get("name", "")})
-            tool_calls_signal = [inferred_tc]
 
     if not tool_calls_signal:
         # LLM 直接回复，没有调工具
@@ -2271,6 +2384,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         "summary": action_summary or _summarize_tool_response_text(tool_response),
         "arg_failure": arg_failure,
     }]
+    _write_file_arg_retry_budget = 1
     if unresolved_drift:
         tool_response = _append_drift_note(tool_response, exec_result)
     _tool_used = tool_name
@@ -2278,6 +2392,8 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     _current_tool_success = bool(success)
     _current_action_summary = action_summary
     _current_tool_response = tool_response
+    _current_arg_failure = arg_failure
+    _current_tool_args = dict(tool_args)
 
     yield {
         "_tool_call": {
@@ -2394,6 +2510,21 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         if not tool_calls_n:
             # LLM 不再调工具，输出文本完成
             text_n = "".join(collected_n)
+            visible_n = _strip_think_markup(text_n)
+            if (
+                _write_file_arg_retry_budget > 0
+                and _is_write_file_content_arg_failure(_current_arg_failure)
+                and visible_n
+                and _looks_like_tool_preamble(visible_n)
+            ):
+                messages.append({"role": "assistant", "content": text_n})
+                _append_runtime_guidance(
+                    messages,
+                    _build_strict_write_file_retry_note(_current_tool_args, _current_arg_failure),
+                )
+                _write_file_arg_retry_budget -= 1
+                _round += 1
+                continue
             final_reply = _finalize_tool_reply(
                 text_n,
                 success=_current_tool_success,
@@ -2449,6 +2580,28 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             else None
         )
         if arg_failure_n and _has_same_arg_failure_recently(recent_attempts, arg_failure_n):
+            if _write_file_arg_retry_budget > 0 and _is_write_file_content_arg_failure(arg_failure_n):
+                _debug_write("tool_call_repeated_invalid_args_retry", {
+                    "mode": "stream",
+                    "tool": tool_name_n,
+                    "target": arg_failure_n.get("target", ""),
+                    "missing_fields": list(arg_failure_n.get("missing_fields") or ()),
+                    "round": _round,
+                })
+                _tool_used = tool_name_n
+                _current_run_meta = {}
+                _current_tool_success = False
+                _current_tool_response = _build_tool_arg_failure_feedback(tool_name_n, tool_args_n, missing_fields_n)
+                _current_action_summary = _summarize_tool_response_text(_current_tool_response) or _current_action_summary
+                _current_arg_failure = arg_failure_n
+                _current_tool_args = dict(tool_args_n)
+                _append_runtime_guidance(
+                    messages,
+                    _build_strict_write_file_retry_note(tool_args_n, arg_failure_n),
+                )
+                _write_file_arg_retry_budget -= 1
+                _round += 1
+                continue
             _debug_write("tool_call_repeated_invalid_args", {
                 "mode": "stream",
                 "tool": tool_name_n,
@@ -2501,6 +2654,8 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         _current_tool_success = bool(success_n)
         _current_action_summary = action_summary_n or _current_action_summary
         _current_tool_response = tool_response_n
+        _current_arg_failure = arg_failure_n
+        _current_tool_args = dict(tool_args_n)
         recent_attempts.append({
             "tool": tool_name_n,
             "success": success_n,

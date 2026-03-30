@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import core.executor as executor_module
 import core.reply_formatter as reply_formatter_module
-import core.task_store as task_store_module
 import core.skills.task_plan as task_plan_module
+import core.task_store as task_store_module
 
 
 class _InMemoryTaskData:
@@ -133,6 +133,86 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIn("Current task goal in this turn: Plan a complex refactor", context)
         self.assertIn("Current plan checklist:", context)
         self.assertIn("[running] Map the current flow", context)
+
+    def test_task_plan_can_remember_and_retrieve_fs_target(self):
+        _task, snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+
+        remembered = task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "tool_runtime"},
+        )
+        loaded = task_store_module.get_structured_fs_target_for_task_plan(snapshot)
+
+        self.assertEqual(str(remembered.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+        self.assertEqual(str(loaded.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_task_plan_does_not_downgrade_project_target_to_desktop_root(self):
+        _task, snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes work",
+            {
+                "goal": "continue NovaNotes work",
+                "summary": "continue NovaNotes work",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+
+        task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "tool_runtime"},
+        )
+        remembered = task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/Desktop", "option": "open", "source": "tool_runtime"},
+        )
+        loaded = task_store_module.get_structured_fs_target_for_task_plan(snapshot)
+
+        self.assertEqual(str(remembered.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+        self.assertEqual(str(loaded.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_short_referential_followup_can_resume_latest_task_plan(self):
+        _task, _snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+
+        resumed = task_store_module.get_active_task_plan_snapshot("它在哪")
+
+        self.assertIsInstance(resumed, dict)
+        self.assertTrue(bool(resumed.get("task_id")))
+
+    def test_long_referential_followup_can_resume_latest_task_plan(self):
+        _task, _snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+
+        resumed = task_store_module.get_active_task_plan_snapshot("之前做的那个记录笔记的文件夹在哪啊")
+
+        self.assertIsInstance(resumed, dict)
+        self.assertTrue(bool(resumed.get("task_id")))
 
 
 class TaskPlanMetaTests(unittest.TestCase):

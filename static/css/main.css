@@ -1164,6 +1164,11 @@ body.light .thinking-bubble-text {
   background: rgba(96, 165, 250, 0.12);
   border-color: rgba(96, 165, 250, 0.28);
 }
+.plan-item.waiting-user {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.3);
+}
 
 .plan-item.error {
   color: #fecaca;
@@ -2811,6 +2816,18 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
   color: #6366f1;
   animation: taskPlanPulse 1.4s ease-in-out infinite;
 }
+.task-plan-item.waiting_user .task-plan-state {
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+}
+.task-plan-item.waiting_user .task-plan-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.task-plan-item.waiting_user .task-plan-index {
+  color: #d97706;
+}
 .task-plan-item.blocked .task-plan-state,
 .task-plan-item.error .task-plan-state,
 .task-plan-item.failed .task-plan-state {
@@ -2845,6 +2862,15 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
   flex-wrap: wrap;
   gap: 8px;
   transition: opacity 0.5s;
+}
+.ask-user-slot {
+  width: 94%;
+  max-width: 1680px;
+  box-sizing: border-box;
+  margin: 0 auto 8px;
+}
+.ask-user-slot .ask-user-card {
+  margin: 0;
 }
 .task-progress-item {
   display: inline-flex;

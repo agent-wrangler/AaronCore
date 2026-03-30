@@ -64,6 +64,24 @@
     "最近使用时间": "2026-03-14 05:48"
   },
   {
+    "source": "l6_success_path",
+    "experience_key": "folder_explore|directory_listed",
+    "name": "folder_explore",
+    "核心技能": "folder_explore",
+    "action_kind": "",
+    "target_kind": "",
+    "outcome": "",
+    "observed_state": "directory_listed",
+    "verification_mode": "",
+    "verification_detail": "",
+    "summary": "我看过这个文件夹了：C:\\Users\\36459\\Desktop / 里面有 13 个子目录，51 个文件。",
+    "应用示例": "我看过这个文件夹了：C:\\Users\\36459\\Desktop / 里面有 13 个子目录，51 个文件。",
+    "success_count": 3,
+    "使用次数": 3,
+    "learned_at": "2026-03-30T17:44:39.166549",
+    "最近使用时间": "2026-03-30T17:46:31.410457"
+  },
+  {
     "一级场景": "内容创作",
     "二级场景": "AI画图",
     "核心技能": "draw",
@@ -78,5 +96,41 @@
     "应用示例": "用 AI 生成图片或海报",
     "使用次数": 1,
     "最近使用时间": "2026-03-09 02:38"
+  },
+  {
+    "source": "l6_success_path",
+    "experience_key": "open_target|open_folder|folder|opened|target_visible",
+    "name": "open_target / open_folder / folder",
+    "核心技能": "open_target",
+    "action_kind": "open_folder",
+    "target_kind": "folder",
+    "outcome": "opened",
+    "observed_state": "target_visible",
+    "verification_mode": "",
+    "verification_detail": "",
+    "summary": "已打开文件夹：C:\\Users\\36459\\Desktop\\Nova截图",
+    "应用示例": "已打开文件夹：C:\\Users\\36459\\Desktop\\Nova截图",
+    "success_count": 1,
+    "使用次数": 1,
+    "learned_at": "2026-03-30T17:55:32.920680",
+    "最近使用时间": "2026-03-30T17:55:32.920680"
+  },
+  {
+    "source": "l6_success_path",
+    "experience_key": "open_target|open_url|url|opened_existing_browser|url_opened_unconfirmed",
+    "name": "open_target / open_url / url",
+    "核心技能": "open_target",
+    "action_kind": "open_url",
+    "target_kind": "url",
+    "outcome": "opened_existing_browser",
+    "observed_state": "url_opened_unconfirmed",
+    "verification_mode": "no_window_change",
+    "verification_detail": "窗口数未变化（28 -> 28），等待了约 8 秒",
+    "summary": "已在现有浏览器中触发打开：https://www.baidu.com",
+    "应用示例": "已在现有浏览器中触发打开：https://www.baidu.com",
+    "success_count": 1,
+    "使用次数": 1,
+    "learned_at": "2026-03-30T18:31:30.176220",
+    "最近使用时间": "2026-03-30T18:31:30.176220"
   }
 ]

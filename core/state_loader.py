@@ -1,6 +1,7 @@
 # state_loader - 状态加载、历史记录、文档索引、路径常量
 # 从 agent_final.py 提取，消除单文件过长问题
 
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -27,6 +28,8 @@ TASK_PROJECTS_FILE = PRIMARY_STATE_DIR / "task_projects.json"
 TASKS_FILE = PRIMARY_STATE_DIR / "tasks.json"
 TASK_RELATIONS_FILE = PRIMARY_STATE_DIR / "task_relations.json"
 DOCS_DIR = ENGINE_DIR / "docs"
+
+DEFAULT_L1_RECENT_TOKEN_BUDGET = 8000
 
 # ── 注入依赖（由 agent_final 调用 init() 设置） ──────────
 _debug_write = lambda stage, data: None
@@ -221,8 +224,57 @@ def save_msg_history(history):
     write_json(PRIMARY_HISTORY_FILE, history)
 
 
-def get_recent_messages(history, limit=6):
-    return history[-limit:]
+def _estimate_recent_message_tokens(item: dict) -> int:
+    if not isinstance(item, dict):
+        return 0
+    role = str(item.get("role") or "").strip()
+    content = str(item.get("content") or item.get("summary") or item.get("event") or "").strip()
+    text = f"{role} {content}".strip()
+    if not text:
+        return 0
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", text))
+    latin_count = sum(len(token) for token in re.findall(r"[A-Za-z0-9_]+", text))
+    other_count = max(len(text) - cjk_count - latin_count, 0)
+    return max(1, cjk_count + ((latin_count + 3) // 4) + ((other_count + 1) // 2))
+
+
+def get_recent_messages(history, limit=6, max_tokens=None):
+    rows = [item for item in (history or []) if isinstance(item, dict)]
+    if limit is None:
+        parsed_limit = None
+    else:
+        try:
+            parsed_limit = int(limit)
+        except Exception:
+            parsed_limit = 6
+        if parsed_limit <= 0:
+            return []
+
+    if max_tokens is None:
+        if parsed_limit is None:
+            return rows
+        return rows[-parsed_limit:]
+
+    try:
+        max_tokens = int(max_tokens)
+    except Exception:
+        max_tokens = 0
+    if max_tokens <= 0:
+        return rows[-limit:]
+
+    selected = []
+    used_tokens = 0
+    for item in reversed(rows):
+        estimated = _estimate_recent_message_tokens(item)
+        over_limit = parsed_limit is not None and len(selected) >= parsed_limit
+        over_budget = used_tokens + estimated > max_tokens
+        if selected and (over_limit or over_budget):
+            break
+        selected.append(item)
+        used_tokens += estimated
+        if parsed_limit is not None and len(selected) >= parsed_limit:
+            break
+    return list(reversed(selected))
 
 
 def load_content_projects():

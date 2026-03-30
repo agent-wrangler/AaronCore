@@ -15,6 +15,22 @@ from core.context_builder import build_dialogue_context, render_dialogue_context
 
 
 class SkillFallbackTests(unittest.TestCase):
+    def test_normalize_persisted_process_steps_keeps_running_steps_as_done(self):
+        steps = chat_module._normalize_persisted_process_steps(
+            [
+                {"label": "模型思考", "detail": "我先理解你的问题", "status": "running"},
+                {"label": "调用技能", "detail": "folder_explore", "status": "done"},
+            ]
+        )
+
+        self.assertEqual(
+            steps,
+            [
+                {"label": "模型思考", "detail": "我先理解你的问题", "status": "done"},
+                {"label": "调用技能", "detail": "folder_explore", "status": "done"},
+            ],
+        )
+
     def test_normalize_route_result_downgrades_unknown_skill_to_missing_skill_intent(self):
         # 使用一个确实不存在的技能名来测试降级逻辑
         result = normalize_route_result(
@@ -442,6 +458,118 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertIn("inspect with list_files or read_file first", note)
         self.assertIn("Only stop calling tools", note)
 
+    def test_strict_write_file_retry_note_forbids_empty_promises(self):
+        note = reply_formatter_module._build_strict_write_file_retry_note(
+            {"file_path": "notes_app/templates/index.html"},
+            {"tool": "write_file", "target": "notes_app/templates/index.html", "missing_fields": ["content"]},
+        )
+
+        self.assertIn("Do not send natural-language promises", note)
+        self.assertIn("call write_file with the SAME file_path", note)
+        self.assertIn("Do not repeat write_file without content", note)
+
+    def test_unified_reply_with_tools_stream_allows_one_more_write_file_repair_attempt(self):
+        executed = []
+        call_count = {"value": 0}
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            call_count["value"] += 1
+            idx = call_count["value"]
+            if idx == 1:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "notes_app/templates/index.html"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+            if idx == 2:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_2",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "notes_app/templates/index.html"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+                return
+            if idx == 3:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_write_3",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {
+                                        "file_path": "notes_app/templates/index.html",
+                                        "content": "<html><body>ok</body></html>",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 8, "completion_tokens": 4}}
+                return
+
+            yield "已经写好了。"
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 3}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, dict(args)))
+            if not str(args.get("content") or "").strip():
+                return {"success": False, "error": "缺少 content"}
+            return {
+                "success": True,
+                "response": "已写入 index.html",
+                "meta": {"action": {"display_hint": "已写入 index.html"}},
+            }
+
+        bundle = {
+            "user_input": "好的 继续",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(len(executed), 2)
+        self.assertEqual(executed[0][1].get("file_path"), "notes_app/templates/index.html")
+        self.assertFalse(bool(executed[0][1].get("content")))
+        self.assertEqual(executed[1][1].get("file_path"), "notes_app/templates/index.html")
+        self.assertEqual(executed[1][1].get("content"), "<html><body>ok</body></html>")
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "write_file")
+        self.assertEqual(done.get("success"), True)
+
     def test_stream_runtime_guidance_avoids_mid_conversation_system_role(self):
         seen_roles = []
 
@@ -525,6 +653,12 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertTrue(result.get("success"))
         self.assertEqual(result.get("skill"), "folder_explore")
         self.assertIn("NovaCore", result.get("response", ""))
+        meta = result.get("meta") or {}
+        action = meta.get("action") or {}
+        self.assertEqual(action.get("action_kind"), "resolve_directory")
+        self.assertEqual(action.get("target_kind"), "directory")
+        self.assertEqual(action.get("verification_mode"), "directory_listed")
+        self.assertIn("dirs=", action.get("verification_detail", ""))
 
     def test_protocol_style_folder_explore_accepts_file_target_by_using_parent_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -952,6 +1086,102 @@ class MemoryEvolutionTests(unittest.TestCase):
                 result = l8_learn_module.find_relevant_knowledge("帮我做个完全无关的事情吧", touch=True)
 
         self.assertEqual(result, [])
+
+
+class TaskPlanFsTargetBridgeTests(unittest.TestCase):
+    def test_repair_tool_args_prefers_task_plan_fs_target_for_folder_explore(self):
+        with patch(
+            "core.task_store.get_structured_fs_target_for_task_plan",
+            return_value={"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "task_plan"},
+        ):
+            repaired = reply_formatter_module._repair_tool_args_from_context(
+                "folder_explore",
+                {},
+                {
+                    "user_input": "看看之前那个开发者笔记项目",
+                    "task_plan": {"task_id": "task_demo", "project_id": "proj_demo"},
+                    "l1": [],
+                },
+            )
+
+        self.assertEqual(str(repaired.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_directory_resolution_followup_infers_folder_explore_from_task_target(self):
+        with patch(
+            "core.task_store.get_structured_fs_target_for_task_plan",
+            return_value={"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "task_plan"},
+        ):
+            tool_calls = reply_formatter_module._resolve_tool_calls_from_result(
+                {"content": "我先回忆一下路径。"},
+                {
+                    "user_input": "之前那个开发者笔记项目在哪个文件夹",
+                    "task_plan": {"task_id": "task_demo", "project_id": "proj_demo"},
+                    "l1": [],
+                    "context_data": {},
+                },
+                mode="test_directory_resolution",
+            )
+
+        self.assertIsInstance(tool_calls, list)
+        self.assertEqual(tool_calls[0]["function"]["name"], "folder_explore")
+        args = json.loads(tool_calls[0]["function"]["arguments"])
+        self.assertEqual(str(args.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_directory_resolution_followup_allows_generic_pronoun_when_target_is_structured(self):
+        with patch(
+            "core.task_store.get_structured_fs_target_for_task_plan",
+            return_value={"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "task_plan"},
+        ):
+            tool_calls = reply_formatter_module._resolve_tool_calls_from_result(
+                {"content": "我先想一下。"},
+                {
+                    "user_input": "它在哪",
+                    "task_plan": {"task_id": "task_demo", "project_id": "proj_demo"},
+                    "l1": [],
+                    "context_data": {},
+                },
+                mode="test_directory_resolution_generic",
+            )
+
+        self.assertIsInstance(tool_calls, list)
+        self.assertEqual(tool_calls[0]["function"]["name"], "folder_explore")
+
+    def test_directory_resolution_does_not_trigger_from_keywords_without_structured_target(self):
+        with patch.object(reply_formatter_module, "_resolve_active_task_plan", return_value=None), patch.object(
+            reply_formatter_module, "_load_task_plan_fs_target", return_value=""
+        ), patch.object(reply_formatter_module, "_load_context_fs_target", return_value=""), patch.object(
+            reply_formatter_module, "_load_latest_structured_fs_target", return_value=""
+        ):
+            tool_calls = reply_formatter_module._resolve_tool_calls_from_result(
+                {"content": "我先回忆一下路径。"},
+                {
+                    "user_input": "那个项目在哪个文件夹",
+                    "l1": [],
+                    "context_data": {},
+                },
+                mode="test_directory_resolution_without_target",
+            )
+
+        self.assertIsNone(tool_calls)
+
+    def test_active_task_context_exposes_current_task_directory(self):
+        with patch(
+            "core.task_store.get_structured_fs_target_for_task_plan",
+            return_value={"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "task_plan"},
+        ):
+            context_text = reply_formatter_module._build_active_task_context(
+                {
+                    "user_input": "那个项目在哪",
+                    "task_plan": {
+                        "task_id": "task_demo",
+                        "project_id": "proj_demo",
+                        "goal": "继续完善 NovaNotes",
+                        "items": [],
+                    },
+                }
+            )
+
+        self.assertIn("Current task directory/file target: C:/Users/36459/NovaNotes", context_text)
 
 
 if __name__ == "__main__":

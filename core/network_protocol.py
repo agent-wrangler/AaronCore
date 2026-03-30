@@ -8,12 +8,19 @@ import requests
 
 _PROXY_ENV_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
 _LOCAL_PROXY_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_DOMESTIC_DIRECT_HOST_SUFFIXES = (
+    "minimaxi.com",
+    "dashscope.aliyuncs.com",
+    "open.bigmodel.cn",
+    "api.volcengine.com",
+)
 _REACHABILITY_CACHE = {}
 
 
 def _debug_write(stage: str, data: dict):
     try:
         from core.shared import debug_write as _dw
+
         _dw(stage, data)
     except Exception:
         pass
@@ -49,7 +56,7 @@ def _parse_proxy_endpoint(proxy_url: str) -> tuple[str, int] | tuple[None, None]
         return None, None
     port = parsed.port
     if port is None:
-        if parsed.scheme in {"https"}:
+        if parsed.scheme == "https":
             port = 443
         elif parsed.scheme.startswith("socks"):
             port = 1080
@@ -82,6 +89,17 @@ def _can_resolve_host(host: str) -> bool | None:
         return False
 
 
+def _host_matches_suffixes(host: str, suffixes: tuple[str, ...]) -> bool:
+    lowered = str(host or "").strip().lower()
+    if not lowered:
+        return False
+    return any(lowered == suffix or lowered.endswith("." + suffix) for suffix in suffixes)
+
+
+def _is_domestic_direct_host(host: str) -> bool:
+    return _host_matches_suffixes(host, _DOMESTIC_DIRECT_HOST_SUFFIXES)
+
+
 def classify_remote_target(target: str) -> dict:
     normalized = _normalize_url(target)
     if not normalized:
@@ -90,6 +108,7 @@ def classify_remote_target(target: str) -> dict:
             "host": "",
             "url": "",
             "requires_external_network": False,
+            "domestic_direct_host": False,
         }
 
     parsed = urlparse(normalized)
@@ -108,6 +127,7 @@ def classify_remote_target(target: str) -> dict:
         "host": host,
         "url": normalized,
         "requires_external_network": bool(host),
+        "domestic_direct_host": _is_domestic_direct_host(host),
     }
 
 
@@ -134,7 +154,9 @@ def sense_network_environment(*, target_url: str = "", model_base_url: str = "")
     internet_reachable = any(known_dns) if known_dns else None
 
     preferred_route = "direct"
-    if proxy_env and not (local_proxy_values and local_proxy_alive is False):
+    if target.get("domestic_direct_host") or model_target.get("domestic_direct_host"):
+        preferred_route = "direct"
+    elif proxy_env and not (local_proxy_values and local_proxy_alive is False):
         preferred_route = "proxy"
 
     return {
@@ -163,6 +185,11 @@ def decide_network_route(target: dict, env_status: dict) -> dict:
     local_proxy_alive = env_status.get("local_proxy_alive")
     target_dns_ok = env_status.get("target_dns_ok")
 
+    if target.get("domestic_direct_host"):
+        if target_dns_ok is False:
+            return {"route": "fail_fast", "reason": "domestic_target_unresolved"}
+        return {"route": "direct", "reason": "domestic_direct_host"}
+
     if has_local_proxy and local_proxy_alive is False:
         if target_dns_ok is False:
             return {"route": "fail_fast", "reason": "dead_local_proxy_and_target_unresolved"}
@@ -178,21 +205,27 @@ def decide_network_route(target: dict, env_status: dict) -> dict:
 
 
 def format_network_failure(reason: str, target: dict, env_status: dict) -> dict:
+    _ = env_status if isinstance(env_status, dict) else {}
     target = target if isinstance(target, dict) else {}
-    env_status = env_status if isinstance(env_status, dict) else {}
     host = target.get("host") or target.get("url") or "目标地址"
 
     if reason == "dead_local_proxy_and_target_unresolved":
         return {
             "error_type": reason,
-            "message": f"当前环境里的本地代理不可用，且系统无法直接解析或访问 `{host}`。",
-            "user_safe_message": f"当前环境中的本地代理已失效，暂时也无法直接访问 `{host}`。",
+            "message": f"当前本地代理不可用，且系统无法直接解析或访问 `{host}`。",
+            "user_safe_message": f"当前本地代理已失效，暂时也无法直接访问 `{host}`。",
         }
     if reason == "target_host_unresolved":
         return {
             "error_type": reason,
             "message": f"当前环境无法解析或访问 `{host}`。",
-            "user_safe_message": f"当前环境暂时访问不了 `{host}`，可能是本地网络或外网条件限制。",
+            "user_safe_message": f"当前环境暂时访问不了 `{host}`，可能是本地网络或外网条件受限。",
+        }
+    if reason == "domestic_target_unresolved":
+        return {
+            "error_type": reason,
+            "message": f"国内直连目标 `{host}` 当前无法解析或访问。",
+            "user_safe_message": f"当前无法直连访问 `{host}`，可能是本地网络或 DNS 环境异常。",
         }
     if reason == "model_api_unreachable":
         return {
@@ -216,13 +249,52 @@ def _should_retry_without_proxy(exc: Exception, env_status: dict) -> bool:
         "actively refused",
         "cannot connect to proxy",
     )
-    return bool(env_status.get("has_local_proxy")) and env_status.get("local_proxy_alive") is False and any(sig in text for sig in retry_signals)
+    return bool(env_status.get("has_local_proxy")) and env_status.get("local_proxy_alive") is False and any(
+        sig in text for sig in retry_signals
+    )
 
 
 def _request_direct(method: str, url: str, **kwargs):
     session = requests.Session()
     session.trust_env = False
+    kwargs.pop("proxies", None)
     return session.request(method=str(method or "GET").upper(), url=url, **kwargs)
+
+
+def _extract_response_debug_meta(resp) -> dict:
+    headers = {}
+    try:
+        headers = dict(getattr(resp, "headers", {}) or {})
+    except Exception:
+        headers = {}
+    request_id = ""
+    for key in ("x-request-id", "request-id", "x-amzn-requestid", "apigw-requestid", "trace-id", "x-trace-id", "cf-ray"):
+        value = headers.get(key) or headers.get(key.title()) or headers.get(key.upper())
+        if value:
+            request_id = str(value)
+            break
+    return {
+        "status_code": int(getattr(resp, "status_code", 0) or 0),
+        "request_id": request_id,
+        "content_type": str(headers.get("content-type") or headers.get("Content-Type") or ""),
+    }
+
+
+def _attach_network_meta(resp, *, url: str, method_name: str, target: dict, decision: dict) -> dict:
+    meta = {
+        "url": url,
+        "method": method_name,
+        "route": str(decision.get("route", "") or ""),
+        "reason": str(decision.get("reason", "") or ""),
+        "target_type": str(target.get("target_type", "") or ""),
+        "host": str(target.get("host", "") or ""),
+    }
+    meta.update(_extract_response_debug_meta(resp))
+    try:
+        setattr(resp, "_novacore_network_meta", meta)
+    except Exception:
+        pass
+    return meta
 
 
 def request_with_network_strategy(method: str, url: str, **kwargs):
@@ -231,18 +303,21 @@ def request_with_network_strategy(method: str, url: str, **kwargs):
     decision = decide_network_route(target, env_status)
     method_name = str(method or "GET").upper()
 
-    _debug_write("network_route_decision", {
-        "url": url,
-        "method": method_name,
-        "target_type": target.get("target_type"),
-        "decision": decision,
-        "env": {
-            "has_proxy_env": env_status.get("has_proxy_env"),
-            "has_local_proxy": env_status.get("has_local_proxy"),
-            "local_proxy_alive": env_status.get("local_proxy_alive"),
-            "target_dns_ok": env_status.get("target_dns_ok"),
+    _debug_write(
+        "network_route_decision",
+        {
+            "url": url,
+            "method": method_name,
+            "target_type": target.get("target_type"),
+            "decision": decision,
+            "env": {
+                "has_proxy_env": env_status.get("has_proxy_env"),
+                "has_local_proxy": env_status.get("has_local_proxy"),
+                "local_proxy_alive": env_status.get("local_proxy_alive"),
+                "target_dns_ok": env_status.get("target_dns_ok"),
+            },
         },
-    })
+    )
 
     if decision["route"] == "fail_fast":
         failure = format_network_failure(decision["reason"], target, env_status)
@@ -257,6 +332,8 @@ def request_with_network_strategy(method: str, url: str, **kwargs):
 
     if decision["route"] == "direct":
         resp = _request_direct(method_name, url, **kwargs)
+        response_meta = _attach_network_meta(resp, url=url, method_name=method_name, target=target, decision=decision)
+        _debug_write("network_response_meta", response_meta)
         _REACHABILITY_CACHE[url] = {
             "ok": True,
             "checked_at": time.time(),
@@ -268,6 +345,8 @@ def request_with_network_strategy(method: str, url: str, **kwargs):
 
     try:
         resp = requests.request(method_name, url, **kwargs)
+        response_meta = _attach_network_meta(resp, url=url, method_name=method_name, target=target, decision=decision)
+        _debug_write("network_response_meta", response_meta)
         _REACHABILITY_CACHE[url] = {
             "ok": True,
             "checked_at": time.time(),
@@ -278,12 +357,23 @@ def request_with_network_strategy(method: str, url: str, **kwargs):
         return resp
     except Exception as exc:
         if _should_retry_without_proxy(exc, env_status):
-            _debug_write("network_retry_direct", {
-                "url": url,
-                "reason": str(exc),
-                "proxy_env": env_status.get("proxy_env", {}),
-            })
+            _debug_write(
+                "network_retry_direct",
+                {
+                    "url": url,
+                    "reason": str(exc),
+                    "proxy_env": env_status.get("proxy_env", {}),
+                },
+            )
             resp = _request_direct(method_name, url, **kwargs)
+            response_meta = _attach_network_meta(
+                resp,
+                url=url,
+                method_name=method_name,
+                target=target,
+                decision={"route": "direct", "reason": "retry_without_dead_local_proxy"},
+            )
+            _debug_write("network_response_meta", response_meta)
             _REACHABILITY_CACHE[url] = {
                 "ok": True,
                 "checked_at": time.time(),
@@ -292,7 +382,23 @@ def request_with_network_strategy(method: str, url: str, **kwargs):
                 "user_safe_message": "",
             }
             return resp
-        failure = format_network_failure("model_api_unreachable" if target.get("target_type") == "model_api" else "network_unavailable", target, env_status)
+        _debug_write(
+            "network_request_exception",
+            {
+                "url": url,
+                "method": method_name,
+                "route": decision.get("route", ""),
+                "reason": decision.get("reason", ""),
+                "error": str(exc),
+                "target_type": target.get("target_type", ""),
+                "host": target.get("host", ""),
+            },
+        )
+        failure = format_network_failure(
+            "model_api_unreachable" if target.get("target_type") == "model_api" else "network_unavailable",
+            target,
+            env_status,
+        )
         _REACHABILITY_CACHE[url] = {
             "ok": False,
             "checked_at": time.time(),

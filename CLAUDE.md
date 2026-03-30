@@ -8,6 +8,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 NovaCore is a desktop AI assistant ("Nova") with a FastAPI backend, **Electron shell**, modular frontend, and a multi-layer memory system (L1-L8). It uses a user-configurable LLM as its brain (via `/models/config` 管理), with **LLM native tool_call** as the primary routing mechanism — no rule-based routing layer, all decisions delegated to the LLM.
 
+## Hard Project Constraints
+
+These are repository-level architectural constraints and must be treated as binding:
+
+1. Do not insert any new layer before LLM decision.
+   No pre-routing, pre-planning, pre-decision continuity injection, or other new flow may be added ahead of the LLM's own decision point.
+
+2. Do not reorder the main sequence in `routes/chat.py`.
+   Localized fixes are acceptable only if they preserve the current order. Structural reordering requires explicit approval.
+
+3. Do not rebuild or duplicate an existing subsystem.
+   Before adding new planning, continuity, routing, or protocol logic, first verify whether the repository already has that subsystem and extend the existing design instead of creating a parallel one.
+
 ## Run / Test / Lint
 
 ```bash

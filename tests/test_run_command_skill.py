@@ -73,6 +73,25 @@ class RunCommandSkillTests(unittest.TestCase):
         self.assertEqual(result.get("drift", {}).get("reason"), "disallowed_command")
         self.assertFalse(result.get("verification", {}).get("verified"))
 
+    def test_execute_adapts_simple_file_copy_commands(self):
+        source = self.workspace / "a.txt"
+        dest = self.workspace / "b.txt"
+        source.write_text("hello", encoding="utf-8")
+
+        result = run_command_module.execute(
+            "",
+            {
+                "command": f'cp "{source}" "{dest}"',
+                "workdir": str(self.workspace),
+            },
+        )
+
+        self.assertEqual(result.get("drift", {}).get("reason"), "")
+        self.assertTrue(result.get("verification", {}).get("verified"))
+        self.assertTrue(dest.exists())
+        self.assertEqual(dest.read_text(encoding="utf-8"), "hello")
+        self.assertIn("delegated_from=run_command", result.get("verification", {}).get("detail", ""))
+
 
 class RunCodeGuardTests(unittest.TestCase):
     def test_run_code_rejects_packaging_requests(self):

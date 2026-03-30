@@ -259,6 +259,7 @@ function buildPendingAssistantMessage(){
 
 function finalizePendingAssistantMessage(pendingState, replyText){
  if(!pendingState || !pendingState.root) return;
+ if(typeof window._clearAskUserSlot==='function') window._clearAskUserSlot();
  if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
  if(pendingState.steps && pendingState.steps.length){
   _collapseSteps();
@@ -370,6 +371,7 @@ async function send(){
  AwarenessManager.stopPolling();
  if(typeof hideWelcome==='function') hideWelcome();
  if(typeof window._clearSessionTaskPlan==='function') window._clearSessionTaskPlan();
+ if(typeof window._clearAskUserSlot==='function') window._clearAskUserSlot();
  var inp=document.getElementById('inp');
  var text=inp.value.trim();
  var images=_pendingImages.slice();
@@ -428,7 +430,8 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   status=String(status||'pending');
   if(status==='done') return 'done';
   if(status==='running') return 'running';
-  if(status==='blocked' || status==='error' || status==='failed' || status==='waiting_user') return 'error';
+  if(status==='waiting_user') return 'waiting-user';
+  if(status==='blocked' || status==='error' || status==='failed') return 'error';
   return '';
  }
 
@@ -960,18 +963,21 @@ function _isTaskPlanTerminal(plan){
  if(phase==='done' || phase==='failed' || phase==='blocked' || phase==='cancelled') return true;
  var hasRunning=false;
  var hasPending=false;
+ var hasWaitingUser=false;
  for(var i=0;i<plan.items.length;i++){
   var status=String((plan.items[i]&&plan.items[i].status)||'pending');
   if(status==='running') hasRunning=true;
   if(status==='pending') hasPending=true;
+  if(status==='waiting_user') hasWaitingUser=true;
  }
- return !hasRunning && !hasPending;
+ return !hasRunning && !hasPending && !hasWaitingUser;
 }
 
 function _taskPlanStateLabel(status){
  status=String(status||'pending');
  if(status==='running') return '进行中';
  if(status==='done') return '已完成';
+ if(status==='waiting_user') return '待选择';
  if(status==='blocked' || status==='error' || status==='failed') return '卡住';
  return '待执行';
 }
@@ -994,9 +1000,6 @@ function _scheduleTaskPlanClear(delayMs){
 function _renderSessionTaskPlan(){
  var board=document.getElementById('taskPlanBoard');
  if(!board) return;
- board.style.display='none';
- board.innerHTML='';
- return;
  if(!_sessionTaskPlan || !_sessionTaskPlan.items || !_sessionTaskPlan.items.length){
   board.style.display='none';
   board.innerHTML='';
@@ -1080,6 +1083,37 @@ window._clearSessionTaskPlan=function(){
  _renderSessionTaskPlan();
 };
 
+function _getAskUserSlot(){
+ var slot=document.getElementById('askUserSlot');
+ if(slot) return slot;
+ var inputArea=document.querySelector('.input');
+ var planBoard=document.getElementById('taskPlanBoard');
+ if(!inputArea || !planBoard) return null;
+ slot=document.createElement('div');
+ slot.id='askUserSlot';
+ slot.className='ask-user-slot';
+ slot.style.display='none';
+ inputArea.insertBefore(slot, planBoard);
+ return slot;
+}
+
+function _clearAskUserSlot(){
+ var slot=document.getElementById('askUserSlot');
+ if(!slot) return;
+ slot.innerHTML='';
+ slot.style.display='none';
+}
+
+function _dismissAskUserCard(slot, card){
+ if(slot){
+  _clearAskUserSlot();
+  return;
+ }
+ if(card) card.style.display='none';
+}
+
+window._clearAskUserSlot=_clearAskUserSlot;
+
 // ── 任务进度条（输入框上方） ──
 function _addTaskProgress(label, value){
  var bar=document.getElementById('taskProgressBar');
@@ -1115,10 +1149,13 @@ function _renderAskUser(data, pendingState){
  var qid=data.id||'';
  var question=data.question||'';
  var options=data.options||[];
+ var slot=_getAskUserSlot();
+ if(!question || !options.length){
+  _clearAskUserSlot();
+  return;
+ }
 
  // 在输入框上方插入选项卡片
- var inputArea=document.querySelector('.input');
- var inputContainer=document.querySelector('.input-container');
  var card=document.createElement('div');
  card.className='ask-user-card';
  card.innerHTML='<div class="ask-user-question">'+escapeHtml(question)+'</div>';
@@ -1136,7 +1173,7 @@ function _renderAskUser(data, pendingState){
    // 在输入框上方挂进度条
    _addTaskProgress(question, opt);
    // 收起选项卡片
-   setTimeout(function(){ card.style.display='none'; },400);
+   setTimeout(function(){ _dismissAskUserCard(slot, card); },400);
    fetch('/chat/answer',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1154,7 +1191,7 @@ function _renderAskUser(data, pendingState){
   for(var i=0;i<btns.length;i++){btns[i].disabled=true;btns[i].classList.remove('selected');}
   noneBtn.classList.add('selected');
   _addTaskProgress(question, '都不满意，重新推荐');
-  setTimeout(function(){ card.style.display='none'; },400);
+  setTimeout(function(){ _dismissAskUserCard(slot, card); },400);
   fetch('/chat/answer',{
    method:'POST',
    headers:{'Content-Type':'application/json'},
@@ -1163,8 +1200,10 @@ function _renderAskUser(data, pendingState){
  };
  optionsDiv.appendChild(noneBtn);
  card.appendChild(optionsDiv);
- if(inputArea && inputContainer){
-  inputArea.insertBefore(card, inputContainer);
+ if(slot){
+  slot.innerHTML='';
+  slot.style.display='';
+  slot.appendChild(card);
  }else{
   // fallback：插到聊天区底部
   var chat=document.getElementById('chat');

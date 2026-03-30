@@ -1,5 +1,6 @@
 import os
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -57,6 +58,9 @@ _DANGEROUS_PATTERNS = (
     "git reset --hard",
     "git clean -fd",
 )
+_FILE_COPY_EXECUTABLES = {"cp", "copy"}
+_FILE_MOVE_EXECUTABLES = {"mv", "move"}
+_FILE_MANIPULATION_EXECUTABLES = _FILE_COPY_EXECUTABLES | _FILE_MOVE_EXECUTABLES
 
 
 def _allowed_roots() -> list[Path]:
@@ -239,6 +243,8 @@ def _validate_command(argv: list[str], workdir: Path) -> tuple[bool, str, list[s
         return False, "dangerous_command", [], []
 
     first = str(argv[0]).lower()
+    if first in _FILE_MANIPULATION_EXECUTABLES:
+        return False, "use_protocol_file_action", [], []
     if first not in _ALLOWED_EXECUTABLES:
         return False, "unsupported_executable", [], []
 
@@ -331,6 +337,159 @@ def _build_failure(reply: str, *, observed_state: str, drift_reason: str, repair
     return result
 
 
+def _extract_simple_file_operation(argv: list[str], workdir: Path) -> dict | None:
+    if not argv:
+        return None
+    first = str(argv[0]).lower()
+    if first not in _FILE_MANIPULATION_EXECUTABLES:
+        return None
+
+    operands = [str(token).strip() for token in argv[1:] if str(token).strip() and not str(token).startswith("-")]
+    if len(operands) < 2:
+        return {
+            "action": "copy" if first in _FILE_COPY_EXECUTABLES else "move",
+            "error": "missing_paths",
+        }
+
+    src = _resolve_path(operands[0], base=workdir)
+    dst = _resolve_path(operands[1], base=workdir)
+    return {
+        "action": "copy" if first in _FILE_COPY_EXECUTABLES else "move",
+        "src": src,
+        "dst": dst,
+    }
+
+
+def _execute_simple_file_operation(op: dict, command: str) -> dict:
+    action = str(op.get("action") or "").strip()
+    src = op.get("src")
+    dst = op.get("dst")
+    if op.get("error") == "missing_paths" or src is None or dst is None:
+        result = build_operation_result(
+            "本地命令里的文件操作参数不完整，至少要给出源路径和目标路径。",
+            expected_state="destination_exists",
+            observed_state="missing_required_args",
+            drift_reason="missing_required_args",
+            repair_hint="provide_source_and_destination",
+            action_kind=action,
+            target_kind="file",
+            target=str(dst or src or command)[:200],
+            outcome="failed",
+            display_hint="文件操作参数不完整",
+            verification_mode="artifact_exists",
+            verification_detail=f"delegated_from=run_command | command={command[:240]}",
+        )
+        result["verification"] = {
+            "verified": False,
+            "observed_state": "missing_required_args",
+            "detail": f"delegated_from=run_command | command={command[:240]}",
+        }
+        return result
+
+    if not _is_allowed_path(src) or not _is_allowed_path(dst):
+        result = build_operation_result(
+            "这条本地文件命令的路径超出了当前允许范围，暂时不执行。",
+            expected_state="destination_exists",
+            observed_state="unsafe_path",
+            drift_reason="unsafe_path",
+            repair_hint="use_workspace_desktop_documents_downloads",
+            action_kind=action,
+            target_kind="file",
+            target=str(dst)[:200],
+            outcome="failed",
+            display_hint="本地文件命令路径不安全",
+            verification_mode="artifact_exists",
+            verification_detail=f"delegated_from=run_command | source={src} | destination={dst}",
+        )
+        result["verification"] = {
+            "verified": False,
+            "observed_state": "unsafe_path",
+            "detail": f"delegated_from=run_command | source={src} | destination={dst}",
+        }
+        return result
+
+    if not src.exists():
+        result = build_operation_result(
+            f"源路径不存在：`{src}`",
+            expected_state="source_exists",
+            observed_state="source_missing",
+            drift_reason="source_missing",
+            repair_hint="check_or_correct_source_path",
+            action_kind=action,
+            target_kind="file",
+            target=str(src)[:200],
+            outcome="failed",
+            display_hint="源路径不存在",
+            verification_mode="artifact_exists",
+            verification_detail=f"delegated_from=run_command | source={src} | destination={dst}",
+        )
+        result["verification"] = {
+            "verified": False,
+            "observed_state": "source_missing",
+            "detail": f"delegated_from=run_command | source={src} | destination={dst}",
+        }
+        return result
+
+    try:
+        if action == "copy":
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+        elif action == "move":
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+        else:
+            raise ValueError(f"unsupported file action: {action}")
+    except Exception as exc:
+        detail = f"delegated_from=run_command | source={src} | destination={dst} | error={str(exc)[:200]}"
+        result = build_operation_result(
+            f"本地文件操作失败：{str(exc)[:120]}",
+            expected_state="destination_exists",
+            observed_state="file_operation_failed",
+            drift_reason="file_operation_failed",
+            repair_hint="inspect_source_destination_permissions",
+            action_kind=action,
+            target_kind="file",
+            target=str(dst)[:200],
+            outcome="failed",
+            display_hint="本地文件操作失败",
+            verification_mode="artifact_exists",
+            verification_detail=detail,
+        )
+        result["verification"] = {
+            "verified": False,
+            "observed_state": "file_operation_failed",
+            "detail": detail,
+        }
+        return result
+
+    exists = dst.exists()
+    detail = f"delegated_from=run_command | source={src} | destination={dst}"
+    display = "已通过本地命令完成文件复制" if action == "copy" else "已通过本地命令完成文件移动"
+    result = build_operation_result(
+        "本地文件操作已完成。" if exists else "本地文件操作执行结束，但未确认到目标产物。",
+        expected_state="destination_exists",
+        observed_state="destination_exists" if exists else "destination_missing",
+        drift_reason="" if exists else "destination_missing",
+        repair_hint="" if exists else "check_destination",
+        action_kind=action,
+        target_kind="folder" if dst.is_dir() else "file",
+        target=str(dst)[:200],
+        outcome="verified" if exists else "failed",
+        display_hint=display,
+        verification_mode="artifact_exists",
+        verification_detail=detail,
+    )
+    result["verification"] = {
+        "verified": exists,
+        "observed_state": "destination_exists" if exists else "destination_missing",
+        "detail": detail,
+    }
+    return result
+
+
 def execute(query, context=None):
     context = context if isinstance(context, dict) else {}
     command = str(context.get("command") or context.get("cmd") or query or "").strip()
@@ -358,8 +517,20 @@ def execute(query, context=None):
         )
 
     argv = _split_command(command)
+    file_op = _extract_simple_file_operation(argv, workdir)
+    if file_op:
+        return _execute_simple_file_operation(file_op, command)
     ok, reason, repaired_argv, repair_notes = _validate_command(argv, workdir)
     if not ok:
+        if reason == "use_protocol_file_action":
+            return _build_failure(
+                "这不是 run_command（本地命令执行）该接的动作。文件复制、移动、删除请改用 file_copy / file_move / file_delete 这类协议技能。",
+                observed_state="wrong_tool_selected",
+                drift_reason="wrong_tool_selected",
+                repair_hint="use_file_copy_or_file_move",
+                command=command,
+                verification_detail=f"file manipulation command should use protocol skill: {command[:240]}",
+            )
         detail = reason if not command else f"{reason}: {command[:240]}"
         return _build_failure(
             "这条命令超出当前安全范围，暂时不执行。",

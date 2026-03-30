@@ -210,7 +210,8 @@ _syncThemeIcon();
    status=String(status||'pending');
    if(status==='done') return 'done';
    if(status==='running') return 'running';
-   if(status==='blocked' || status==='error' || status==='failed' || status==='waiting_user') return 'error';
+   if(status==='waiting_user') return 'waiting-user';
+   if(status==='blocked' || status==='error' || status==='failed') return 'error';
    return '';
   }
 

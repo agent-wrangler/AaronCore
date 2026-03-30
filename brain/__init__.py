@@ -19,6 +19,15 @@ import re
 import os
 from core.network_protocol import post_with_network_strategy as _post_with_network_strategy
 
+
+def _extract_network_meta(resp) -> dict:
+    meta = getattr(resp, "_novacore_network_meta", None)
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def _post_llm_request(url: str, **kwargs):
+    return _post_with_network_strategy(url, **kwargs)
+
 try:
     from core.rule_runtime import has_rule
 except Exception:
@@ -428,7 +437,7 @@ def _llm_call_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                 body.update(extra_body)
             if tools:
                 body["tools"] = tools
-            return _post_with_proxy_fallback(
+            return _post_llm_request(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {req_cfg['api_key']}",
                          "Content-Type": "application/json"},
@@ -482,7 +491,7 @@ def _llm_call_anthropic(cfg: dict, messages: list, *, temperature: float = 0.7,
         body["tools"] = anthropic_tools
 
     try:
-        resp = _post_with_proxy_fallback(
+        resp = _post_llm_request(
             url,
             headers={"x-api-key": cfg["api_key"],
                      "Content-Type": "application/json",
@@ -541,6 +550,9 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
     try:
         messages = _normalize_openai_messages(messages)
         base_url = _build_openai_base_url(cfg.get("base_url", ""), cfg)
+        emitted_visible = False
+        emitted_tool_calls = False
+        response_meta = {}
         def _extract_reasoning_text(delta: dict) -> str:
             if not isinstance(delta, dict):
                 return ""
@@ -572,7 +584,7 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                 body.update(extra_body)
             if tools:
                 body["tools"] = tools
-            return _post_with_proxy_fallback(
+            return _post_llm_request(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {req_cfg['api_key']}",
                          "Content-Type": "application/json"},
@@ -583,11 +595,13 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
         # timeout=(connect, read): connect 10s, read 90s (思考模型可能长时间不出 token)
         req_cfg = cfg
         resp = _send(req_cfg)
+        response_meta = _extract_network_meta(resp)
         if resp.status_code != 200:
             retry_cfg = _with_minimax_fallback_cfg(cfg, getattr(resp, "text", ""), resp.status_code)
             if retry_cfg:
                 req_cfg = retry_cfg
                 resp = _send(req_cfg)
+                response_meta = _extract_network_meta(resp)
         if resp.status_code != 200:
             try:
                 from core.shared import debug_write
@@ -605,6 +619,7 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                         }
                         for m in messages[-3:]
                     ],
+                    "network_meta": response_meta,
                 })
             except Exception:
                 pass
@@ -631,6 +646,7 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                     yield {"_thinking_content": reasoning_text}
                 token = delta.get("content", "")
                 if token:
+                    emitted_visible = True
                     yield token
                 # 累积 tool_calls delta
                 tc_deltas = delta.get("tool_calls")
@@ -656,6 +672,7 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                 # finish_reason == "tool_calls" 表示 LLM 选择了工具调用
                 if finish_reason == "tool_calls" and _tc_accum:
                     tc_list = [_tc_accum[i] for i in sorted(_tc_accum.keys())]
+                    emitted_tool_calls = True
                     yield {"_tool_calls": tc_list}
                     _tc_accum = {}
             except (json.JSONDecodeError, IndexError, KeyError):
@@ -663,12 +680,55 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
         # 如果没有通过 finish_reason 触发但有累积的 tool_calls，也 yield 出来
         if _tc_accum:
             tc_list = [_tc_accum[i] for i in sorted(_tc_accum.keys())]
+            emitted_tool_calls = True
             yield {"_tool_calls": tc_list}
+        if not emitted_visible and not emitted_tool_calls:
+            try:
+                from core.shared import debug_write
+                debug_write("llm_stream_empty_completion", {
+                    "model": req_cfg.get("model", ""),
+                    "base_url": cfg.get("base_url", ""),
+                    "message_count": len(messages),
+                    "roles": [str(m.get("role", "")) for m in messages],
+                    "tail_preview": [
+                        {
+                            "role": str(m.get("role", "")),
+                            "content": str(m.get("content", ""))[:160],
+                        }
+                        for m in messages[-3:]
+                    ],
+                    "network_meta": response_meta,
+                })
+            except Exception:
+                pass
+            retry_result = _llm_call_openai(
+                req_cfg,
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                tools=tools,
+            )
+            retry_tool_calls = retry_result.get("tool_calls") if isinstance(retry_result.get("tool_calls"), list) else None
+            retry_content = str(retry_result.get("content", "") or "")
+            retry_usage = retry_result.get("usage", {}) if isinstance(retry_result.get("usage"), dict) else {}
+            if retry_tool_calls:
+                yield {"_tool_calls": retry_tool_calls}
+            if retry_content:
+                yield retry_content
+            yield {"_usage": retry_usage or usage}
+            return
         yield {"_usage": usage}
     except Exception as _e:
         try:
             from core.shared import debug_write
-            debug_write("llm_stream_exception", {"error": str(_e), "type": type(_e).__name__, "model": cfg.get("model", ""), "base_url": cfg.get("base_url", "")})
+            debug_write("llm_stream_exception", {
+                "error": str(_e),
+                "type": type(_e).__name__,
+                "model": cfg.get("model", ""),
+                "base_url": cfg.get("base_url", ""),
+                "network_meta": response_meta if isinstance(locals().get("response_meta"), dict) else {},
+            })
         except Exception:
             pass
         return
@@ -693,7 +753,7 @@ def _llm_stream_anthropic(cfg: dict, messages: list, *, temperature: float = 0.7
     if anthropic_tools:
         body["tools"] = anthropic_tools
     try:
-        resp = _post_with_proxy_fallback(
+        resp = _post_llm_request(
             url,
             headers={"x-api-key": cfg["api_key"],
                      "Content-Type": "application/json",

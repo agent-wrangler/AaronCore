@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path as _Path
 import re
 
 from core.state_loader import (
@@ -282,6 +283,125 @@ def _extract_task_fs_target(task: dict | None) -> dict | None:
     return None
 
 
+def _normalize_fs_target_for_store(target: dict | None) -> dict | None:
+    target = target if isinstance(target, dict) else {}
+    path = str(target.get("path") or "").strip()
+    if not path:
+        return None
+    normalized = dict(target)
+    normalized["path"] = path
+    normalized["option"] = str(normalized.get("option") or "inspect").strip() or "inspect"
+    normalized["source"] = str(normalized.get("source") or "task_store").strip() or "task_store"
+    return normalized
+
+
+def _fs_target_parts(path: str) -> list[str]:
+    raw = str(path or "").strip()
+    if not raw:
+        return []
+    try:
+        parts = list(_Path(raw.replace("/", "\\")).parts)
+    except Exception:
+        return []
+    cleaned = []
+    for part in parts:
+        token = str(part or "").strip()
+        if not token:
+            continue
+        lowered = token.rstrip("\\/").lower()
+        if lowered:
+            cleaned.append(lowered)
+    return cleaned
+
+
+def _is_generic_user_shell_dir(path: str) -> bool:
+    parts = _fs_target_parts(path)
+    if not parts:
+        return False
+    tail = parts[-1]
+    return tail in {"desktop", "documents", "downloads"}
+
+
+def _path_exists_for_target(path: str) -> bool:
+    raw = str(path or "").strip()
+    if not raw:
+        return False
+    try:
+        return _Path(raw).exists()
+    except Exception:
+        return False
+
+
+def _is_target_ancestor_path(parent_path: str, child_path: str) -> bool:
+    parent_parts = _fs_target_parts(parent_path)
+    child_parts = _fs_target_parts(child_path)
+    if not parent_parts or not child_parts:
+        return False
+    if len(parent_parts) >= len(child_parts):
+        return False
+    return child_parts[: len(parent_parts)] == parent_parts
+
+
+def _fs_target_specificity_score(target: dict | None) -> int:
+    normalized = _normalize_fs_target_for_store(target)
+    if not normalized:
+        return -10_000
+    path = str(normalized.get("path") or "").strip()
+    parts = _fs_target_parts(path)
+    score = len(parts) * 10
+    if _path_exists_for_target(path):
+        score += 20
+    if _is_generic_user_shell_dir(path):
+        score -= 80
+    if _Path(path).anchor and len(parts) <= 2:
+        score -= 40
+    if str(normalized.get("source") or "").strip() == "tool_runtime":
+        score -= 5
+    return score
+
+
+def _should_replace_fs_target(current_target: dict | None, new_target: dict | None) -> bool:
+    current = _normalize_fs_target_for_store(current_target)
+    new = _normalize_fs_target_for_store(new_target)
+    if not new:
+        return False
+    if not current:
+        return True
+
+    current_path = str(current.get("path") or "").strip()
+    new_path = str(new.get("path") or "").strip()
+    if not current_path:
+        return True
+    if current_path.lower() == new_path.lower():
+        return True
+
+    current_exists = _path_exists_for_target(current_path)
+    new_exists = _path_exists_for_target(new_path)
+    if current_exists and not new_exists:
+        return False
+
+    if _is_generic_user_shell_dir(new_path) and not _is_generic_user_shell_dir(current_path):
+        return False
+    if _is_target_ancestor_path(new_path, current_path):
+        return False
+
+    return _fs_target_specificity_score(new) >= _fs_target_specificity_score(current)
+
+
+def _merge_task_fs_target(task: dict, fs_target: dict) -> dict:
+    task = _normalize_task(task)
+    normalized_target = _normalize_fs_target_for_store(fs_target)
+    if not normalized_target:
+        return task
+    context = task.get("context") if isinstance(task.get("context"), dict) else {}
+    memory = task.get("memory") if isinstance(task.get("memory"), dict) else {}
+    context = dict(context)
+    memory = dict(memory)
+    context["fs_target"] = dict(normalized_target)
+    memory["last_fs_target"] = dict(normalized_target)
+    return {"context": context, "memory": memory}
+
+
 def _is_file_workflow_like_task(task: dict | None) -> bool:
     task = _normalize_task(task) if isinstance(task, dict) else {}
     if not task:
@@ -314,6 +434,73 @@ def get_latest_structured_fs_target() -> dict | None:
     preferred = [task for task in tasks if _is_file_workflow_like_task(task) and _extract_task_fs_target(task)]
     fallback = [task for task in tasks if _extract_task_fs_target(task)]
     return _pick(preferred) or _pick(fallback)
+
+
+def get_structured_fs_target_for_task_plan(task_plan: dict | None) -> dict | None:
+    task_plan = task_plan if isinstance(task_plan, dict) else {}
+    task_id = str(task_plan.get("task_id") or "").strip()
+    project_id = str(task_plan.get("project_id") or "").strip()
+
+    if task_id:
+        task = get_task(task_id)
+        target = _extract_task_fs_target(task)
+        if target:
+            return target
+
+    if project_id:
+        project = get_project(project_id)
+        if isinstance(project, dict):
+            project_memory = project.get("memory") if isinstance(project.get("memory"), dict) else {}
+            target = _normalize_fs_target_for_store(project_memory.get("last_fs_target"))
+            if target:
+                return target
+
+        active_task = get_active_task_for_project(project_id)
+        target = _extract_task_fs_target(active_task)
+        if target:
+            return target
+
+        project_tasks = get_project_tasks(project_id)
+        project_tasks.sort(key=lambda x: str(x.get("updated_at") or x.get("created_at") or ""))
+        for task in reversed(project_tasks):
+            target = _extract_task_fs_target(task)
+            if target:
+                return target
+    return None
+
+
+def remember_fs_target_for_task_plan(task_plan: dict | None, fs_target: dict | None) -> dict | None:
+    task_plan = task_plan if isinstance(task_plan, dict) else {}
+    normalized_target = _normalize_fs_target_for_store(fs_target)
+    if not normalized_target:
+        return None
+
+    task_id = str(task_plan.get("task_id") or "").strip()
+    project_id = str(task_plan.get("project_id") or "").strip()
+    remembered = None
+
+    if task_id:
+        task = get_task(task_id)
+        if task:
+            current_target = _extract_task_fs_target(task)
+            if _should_replace_fs_target(current_target, normalized_target):
+                patch = _merge_task_fs_target(task, normalized_target)
+                remembered = update_task(task_id, patch) or task
+            else:
+                remembered = task
+
+    if project_id:
+        project = get_project(project_id)
+        if project:
+            project_memory = project.get("memory") if isinstance(project.get("memory"), dict) else {}
+            current_project_target = _normalize_fs_target_for_store(project_memory.get("last_fs_target"))
+            if _should_replace_fs_target(current_project_target, normalized_target):
+                project_memory = dict(project_memory)
+                project_memory["last_fs_target"] = dict(normalized_target)
+                update_project(project_id, {"memory": project_memory})
+
+    remembered_target = _extract_task_fs_target(remembered) if isinstance(remembered, dict) else None
+    return remembered_target or normalized_target
 
 
 def resolve_task_for_goal(kind: str, user_input: str):
@@ -576,6 +763,74 @@ def _looks_like_task_plan_continuation(query: str) -> bool:
     return any(marker in raw for marker in markers)
 
 
+def _looks_like_short_referential_followup(query: str) -> bool:
+    raw = str(query or "").strip().lower()
+    if not raw or len(raw) > 24:
+        return False
+    referential_tokens = (
+        "它",
+        "这个",
+        "那个",
+        "之前那个",
+        "刚才那个",
+        "上次那个",
+        "that",
+        "it",
+        "previous",
+    )
+    if not any(token in raw for token in referential_tokens):
+        return False
+    followup_markers = (
+        "哪",
+        "哪里",
+        "在哪",
+        "在哪儿",
+        "怎么",
+        "咋",
+        "呢",
+        "?",
+        "？",
+        "where",
+        "how",
+        "what",
+    )
+    return any(marker in raw for marker in followup_markers)
+
+
+def _looks_like_long_referential_followup(query: str) -> bool:
+    raw = str(query or "").strip().lower()
+    if not raw:
+        return False
+    referential_tokens = (
+        "之前",
+        "刚才",
+        "上次",
+        "那个",
+        "这个",
+        "它",
+        "that",
+        "it",
+        "previous",
+    )
+    if not any(token in raw for token in referential_tokens):
+        return False
+    followup_markers = (
+        "在哪",
+        "哪里",
+        "文件夹",
+        "目录",
+        "路径",
+        "位置",
+        "项目",
+        "where",
+        "folder",
+        "directory",
+        "path",
+        "project",
+    )
+    return any(marker in raw for marker in followup_markers)
+
+
 def _goal_overlap(a: str, b: str) -> float:
     a_key = _plan_goal_key(a)
     b_key = _plan_goal_key(b)
@@ -621,6 +876,8 @@ def _find_matching_task_plan_task(user_input: str = ""):
     if not raw:
         return latest
     if _looks_like_task_plan_continuation(raw):
+        return latest
+    if _looks_like_short_referential_followup(raw) or _looks_like_long_referential_followup(raw):
         return latest
     last_ref = str((latest.get("memory") or {}).get("last_user_reference") or (latest.get("input") or {}).get("query") or latest.get("title") or "").strip()
     if last_ref and (last_ref in raw or raw in last_ref or _goal_overlap(raw, last_ref) >= 0.45):

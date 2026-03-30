@@ -2303,5 +2303,164 @@
       }
     },
     "events": []
+  },
+  {
+    "id": "task_20260330_045",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "完成 NovaNotes Web版改进：左列表+右阅读编辑布局，支持搜索和动态列表加载",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-03-30T12:05:18.388586",
+    "updated_at": "2026-03-30T18:36:25.741724",
+    "started_at": "2026-03-30T12:05:18.386592",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "完成 NovaNotes Web版改进：左列表+右阅读编辑布局，支持搜索和动态列表加载"
+    },
+    "input": {
+      "query": "完成 NovaNotes Web版改进：左列表+右阅读编辑布局，支持搜索和动态列表加载"
+    },
+    "context": {
+      "fs_target": {
+        "path": "C:\\Users\\36459\\NovaNotes",
+        "option": "inspect",
+        "source": "task_repair"
+      }
+    },
+    "plan": {
+      "snapshot": {
+        "goal": "完成 NovaNotes Web版改进：左列表+右阅读编辑布局，支持搜索和动态列表加载",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+        "items": [
+          {
+            "id": "1",
+            "title": "重写 templates/index.html - 新UI布局",
+            "status": "running",
+            "kind": "代码改进",
+            "detail": ""
+          },
+          {
+            "id": "2",
+            "title": "测试 Flask 服务是否正常",
+            "status": "pending",
+            "kind": "测试",
+            "detail": ""
+          }
+        ],
+        "current_item_id": "1",
+        "updated_at": "2026-03-30T12:05:18.383604"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局"
+    },
+    "memory": {
+      "last_user_reference": "完成 NovaNotes Web版改进：左列表+右阅读编辑布局，支持搜索和动态列表加载",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-03-30T12:05:18.386592",
+      "last_fs_target": {
+        "path": "C:\\Users\\36459\\NovaNotes",
+        "option": "inspect",
+        "source": "task_repair"
+      }
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "完成 novanotes web版改进 左列表 右阅读编辑布局 支持搜索和动态列表加载"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-03-30T12:05:18.407534",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-03-30T12:05:18.427063",
+        "summary": "改进 NovaNotes 前端：搜索栏 + 动态列表 + 左列表右阅读布局",
+        "phase": "1",
+        "current_item_id": "1"
+      }
+    ]
+  },
+  {
+    "id": "task_20260330_046",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260330_045",
+    "kind": "plan_step",
+    "title": "重写 templates/index.html - 新UI布局",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-03-30T12:05:18.460794",
+    "updated_at": "2026-03-30T12:05:18.460794",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "代码改进"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260330_047",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260330_045",
+    "kind": "plan_step",
+    "title": "测试 Flask 服务是否正常",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-30T12:05:18.480870",
+    "updated_at": "2026-03-30T12:05:18.480870",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "测试"
+      }
+    },
+    "events": []
   }
 ]

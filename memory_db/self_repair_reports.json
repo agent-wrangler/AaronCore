@@ -1,5 +1,90 @@
 [
   {
+    "id": "repair_20260330_181540_099855",
+    "created_at": "2026-03-30T18:15:40.099855",
+    "updated_at": "2026-03-30T18:16:26.698699",
+    "source": "feedback_rule",
+    "feedback_rule_id": "sys_20260330_181539_917242",
+    "scene": "chat_exception",
+    "problem": "chat_exception",
+    "fix": "investigate_and_fix_code",
+    "type": "system_error",
+    "label": "通用纠偏",
+    "issue_key": "general_refine",
+    "summary": "通用纠偏：围绕「人才啊人才...你都没去找」这类问法，先给出一轮受控修正提案。",
+    "diagnosis": "这次反馈比较泛，先从主回复层和上游路由层做最小排查，再决定要不要扩到技能内部。",
+    "user_feedback": "",
+    "last_question": "人才啊人才...你都没去找",
+    "last_answer_excerpt": "unhashable type: 'slice'",
+    "candidate_files": [
+      {
+        "path": "agent_final.py",
+        "reason": "普通聊天的统一回复包装和主链回路都在这里。"
+      },
+      {
+        "path": "brain/__init__.py",
+        "reason": "本地人格兜底和能力回答模板还在这里兜底。"
+      }
+    ],
+    "suggested_tests": [
+      {
+        "path": "tests/test_capability_routing.py",
+        "reason": "先确认能力提问和普通聊天还在对的链路上。"
+      },
+      {
+        "path": "tests/test_trace_payload.py",
+        "reason": "检查思路气泡 payload 没被带坏。"
+      }
+    ],
+    "proposed_actions": [
+      "先复现这次反馈对应的最短问法，确保问题能稳定复现。",
+      "优先检查候选文件里更上游的分流或包装层，避免只在最后一层回复上打补丁。",
+      "改完先跑建议测试，确认没有把已有链路带坏，再决定要不要继续扩改。"
+    ],
+    "apply_mode": "confirm",
+    "requires_confirmation": true,
+    "risk_level": "high",
+    "auto_apply_ready": false,
+    "status": "needs_attention",
+    "validation": {
+      "ran": true,
+      "all_passed": true,
+      "test_runs": [
+        {
+          "pattern": "test_capability_routing.py",
+          "command": "C:\\Program Files\\Python311\\python.exe -m unittest discover -s tests -p test_capability_routing.py -v",
+          "ok": true,
+          "exit_code": 0,
+          "duration_ms": 111,
+          "summary": "---------------------------------------------------------------------- | Ran 0 tests in 0.000s | OK"
+        },
+        {
+          "pattern": "test_trace_payload.py",
+          "command": "C:\\Program Files\\Python311\\python.exe -m unittest discover -s tests -p test_trace_payload.py -v",
+          "ok": true,
+          "exit_code": 0,
+          "duration_ms": 2271,
+          "summary": "test_plain_chat_feedback_hides_repair_progress_payload (test_trace_payload.RepairPayloadTests.test_plain_chat_feedback_hides_repair_progress_payload) ... ok | ---------------------------------------------------------------------- | Ran 3 tests in 0.002s | OK"
+        }
+      ],
+      "duration_ms": 2382
+    },
+    "patch_prompt": "反馈问题：通用纠偏\n问题摘要：通用纠偏：围绕「人才啊人才...你都没去找」这类问法，先给出一轮受控修正提案。\n诊断：这次反馈比较泛，先从主回复层和上游路由层做最小排查，再决定要不要扩到技能内部。\n优先候选文件：agent_final.py, brain/__init__.py\n最小验证：tests/test_capability_routing.py, tests/test_trace_payload.py\n修正原则：先改更上游的分流或包装层，再改技能内部；先通过最小回归，再决定是否继续扩改。",
+    "patch_preview": {
+      "previewed_at": "2026-03-30T18:16:26.698699",
+      "status": "preview_failed",
+      "summary": "检查 brain/__init__.py 中的 think/think_stream 函数在通用聊天模式下的回复包装逻辑，必要时在 agent_final.py 的统一回复层补充缺失字段的兜底处理。",
+      "error": "empty_patch_plan",
+      "edits": [],
+      "risk_level": "high",
+      "auto_apply_ready": false,
+      "confirmation_required": true,
+      "decision_reason": "empty_patch_plan",
+      "edit_count": 0,
+      "file_count": 0
+    }
+  },
+  {
     "id": "repair_20260329_113527_684242",
     "created_at": "2026-03-29T11:35:27.684242",
     "updated_at": "2026-03-29T11:36:12.265490",

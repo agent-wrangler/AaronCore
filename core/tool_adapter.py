@@ -233,6 +233,17 @@ def _apply_protocol_context(name: str, ctx: dict, user_input: str) -> dict:
             fs_target = _normalize_protocol_fs_target(context_data.get("fs_target"), default_option=default_option)
 
     if not fs_target:
+        task_plan = ctx.get("task_plan") if isinstance(ctx.get("task_plan"), dict) else {}
+        if task_plan:
+            try:
+                from core.task_store import get_structured_fs_target_for_task_plan
+
+                task_target = get_structured_fs_target_for_task_plan(task_plan)
+            except Exception:
+                task_target = None
+            fs_target = _normalize_protocol_fs_target(task_target, default_option=default_option)
+
+    if not fs_target:
         inferred_dir = _infer_recent_directory_from_context(ctx)
         if inferred_dir:
             fs_target = {"path": inferred_dir, "option": default_option, "source": "recent_history"}
@@ -282,6 +293,14 @@ def _remember_protocol_target(name: str, ctx: dict, result: dict) -> None:
     ctx["path"] = path
     context_data = ctx.get("context_data") if isinstance(ctx.get("context_data"), dict) else {}
     ctx["context_data"] = _merge_context_dict(context_data, {"fs_target": fs_target})
+    task_plan = ctx.get("task_plan") if isinstance(ctx.get("task_plan"), dict) else {}
+    if task_plan:
+        try:
+            from core.task_store import remember_fs_target_for_task_plan
+
+            remember_fs_target_for_task_plan(task_plan, fs_target)
+        except Exception:
+            pass
 
 
 def _is_allowed_user_target(target) -> bool:

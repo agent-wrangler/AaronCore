@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 import re as _re
 from core import shared as S
+from core.state_loader import (
+    DEFAULT_L1_RECENT_TOKEN_BUDGET as _L1_RECENT_TOKEN_BUDGET,
+)
 from routes import companion as _comp
 
 
@@ -99,7 +102,9 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
         label = str(item.get("label") or "").strip()
         detail = str(item.get("detail") or "").strip()
         status = str(item.get("status") or "").strip().lower()
-        if status not in {"done", "error"}:
+        if status not in {"done", "error", "running"}:
+            continue
+        if status == "running" and label != "模型思考":
             continue
         if not label and not detail:
             continue
@@ -566,7 +571,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         _use_cod = _use_tool_call and _get_cod_enabled()
 
         # Step 1: 记忆加载
-        l1 = S.get_recent_messages(_history_for_context, 10)
+        l1 = S.get_recent_messages(_history_for_context, max_tokens=_L1_RECENT_TOKEN_BUDGET)
         l2 = S.extract_session_context(_history_for_context, msg)
         _use_light_chat_bundle = not _use_tool_call
         l2_memories = [] if (_use_cod or _use_light_chat_bundle) else S.l2_search_relevant(msg)

@@ -138,5 +138,27 @@
     "meta": {
       "index": 3
     }
+  },
+  {
+    "id": "rel_20260330_015",
+    "from_id": "task_20260330_045",
+    "to_id": "task_20260330_046",
+    "type": "parent_of",
+    "created_at": "2026-03-30T12:05:18.465777",
+    "meta": {
+      "index": 1,
+      "plan_item_id": "1"
+    }
+  },
+  {
+    "id": "rel_20260330_016",
+    "from_id": "task_20260330_045",
+    "to_id": "task_20260330_047",
+    "type": "parent_of",
+    "created_at": "2026-03-30T12:05:18.496816",
+    "meta": {
+      "index": 2,
+      "plan_item_id": "2"
+    }
   }
 ]
