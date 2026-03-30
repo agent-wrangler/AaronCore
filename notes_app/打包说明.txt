@@ -1,0 +1,21 @@
+Nova笔记 - 打包指南
+====================
+
+方法一：双击直接运行（推荐）
+---------------------------
+1. 确认你已安装Python（3.7+）
+2. 双击运行 notes_gui.py 即可
+
+方法二：打包成exe（无需Python环境）
+-----------------------------------
+1. 打开命令提示符（CMD），进入本文件夹
+2. 安装打包工具：
+   pip install pyinstaller
+
+3. 运行打包命令：
+   pyinstaller --onefile --windowed notes_gui.py
+
+4. 等待完成后，在 dist 文件夹里找到 notes_gui.exe
+5. 把 dist\notes_gui.exe 复制回本文件夹，以后双击它就能用了！
+
+提示：打包后的exe可以在没有Python的电脑上运行哦 ✨

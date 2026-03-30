@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova 开发者笔记</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+        .container { display: flex; height: 100vh; }
+        .sidebar { width: 250px; background: #161b22; padding: 20px; border-right: 1px solid #30363d; overflow-y: auto; }
+        .sidebar h1 { font-size: 18px; color: #58a6ff; margin-bottom: 20px; }
+        .sidebar button { width: 100%; padding: 10px; margin-bottom: 8px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; cursor: pointer; text-align: left; font-family: inherit; font-size: 13px; }
+        .sidebar button:hover { background: #30363d; }
+        .sidebar button.active { background: #1f6feb; border-color: #1f6feb; }
+        .main { flex: 1; display: flex; flex-direction: column; }
+        .toolbar { padding: 15px 20px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; gap: 10px; }
+        .toolbar button { padding: 8px 16px; background: #238636; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-family: inherit; }
+        .toolbar button:hover { background: #2ea043; }
+        .toolbar input { flex: 1; padding: 8px 12px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; font-family: inherit; }
+        .editor { flex: 1; padding: 20px; overflow-y: auto; }
+        .editor textarea { width: 100%; height: 100%; background: transparent; color: #c9d1d9; border: none; resize: none; font-family: inherit; font-size: 14px; line-height: 1.6; outline: none; }
+        .preview { flex: 1; padding: 20px; overflow-y: auto; display: none; }
+        .preview pre { background: #161b22; padding: 20px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+        .status { padding: 10px 20px; background: #161b22; border-top: 1px solid #30363d; font-size: 12px; color: #8b949e; }
+        .tag { display: inline-block; padding: 2px 8px; background: #1f6feb; color: #fff; border-radius: 12px; font-size: 11px; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1>📝 开发者笔记</h1>
+            <button onclick="loadNote(this)" data-id="new" class="active">+ 新建笔记</button>
+            <button onclick="loadNote(this)" data-id="1">📄 Python 装饰器笔记</button>
+            <button onclick="loadNote(this)" data-id="2">📄 FastAPI 项目结构</button>
+            <button onclick="loadNote(this)" data-id="3">📄 Vue3 响应式原理</button>
+            <button onclick="loadNote(this)" data-id="4">📄 Git 常用命令速查</button>
+            <button onclick="loadNote(this)" data-id="5">📄 Docker 部署流程</button>
+        </div>
+        <div class="main">
+            <div class="toolbar">
+                <input type="text" id="noteTitle" placeholder="笔记标题..." value="未命名笔记">
+                <button onclick="saveNote()">💾 保存</button>
+                <button onclick="togglePreview()">👁️ 预览</button>
+                <button onclick="exportNote()">📤 导出</button>
+            </div>
+            <div class="editor" id="editorPane">
+                <textarea id="noteContent" placeholder="在这里开始写笔记... 支持 Markdown 语法！"></textarea>
+            </div>
+            <div class="preview" id="previewPane"><pre id="previewContent"></pre></div>
+            <div class="status">📍 已自动保存 · 字数: <span id="wordCount">0</span> · 最后修改: <span id="lastSaved">--</span></div>
+        </div>
+    </div>
+    <script>
+        let currentNoteId = 'new';
+        let notes = {};
+
+        function loadNote(btn) {
+            document.querySelectorAll('.sidebar button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentNoteId = btn.dataset.id;
+            document.getElementById('noteTitle').value = btn.textContent.replace(/^[📄+]/, '').trim();
+            document.getElementById('noteContent').value = notes[currentNoteId] || '';
+            updateWordCount();
+        }
+
+        function saveNote() {
+            notes[currentNoteId] = document.getElementById('noteContent').value;
+            document.getElementById('lastSaved').textContent = new Date().toLocaleTimeString();
+            alert('💾 笔记已保存！');
+        }
+
+        function togglePreview() {
+            const editor = document.getElementById('editorPane');
+            const preview = document.getElementById('previewPane');
+            if (preview.style.display === 'none') {
+                preview.style.display = 'block';
+                editor.style.display = 'none';
+                document.getElementById('previewContent').textContent = document.getElementById('noteContent').value;
+            } else {
+                preview.style.display = 'none';
+                editor.style.display = 'block';
+            }
+        }
+
+        function exportNote() {
+            const content = document.getElementById('noteContent').value;
+            const blob = new Blob([content], { type: 'text/markdown' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = document.getElementById('noteTitle').value + '.md';
+            a.click();
+        }
+
+        function updateWordCount() {
+            const count = document.getElementById('noteContent').value.length;
+            document.getElementById('wordCount').textContent = count;
+        }
+
+        document.getElementById('noteContent').addEventListener('input', updateWordCount);
+        setInterval(() => { if (notes[currentNoteId]) saveNote(); }, 30000);
+    </script>
+</body>
+</html>
