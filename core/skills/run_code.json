@@ -1,19 +1,21 @@
 {
-    "name": "编程游戏",
-    "keywords": ["做个游戏", "写个游戏", "小游戏", "贪吃蛇", "俄罗斯方块", "像素游戏", "打砖块", "弹球", "扫雷", "五子棋", "井字棋", "搞个游戏", "来个游戏", "玩游戏", "玩个"],
-    "anti_keywords": ["游戏行业", "游戏设计", "游戏市场", "游戏公司", "游戏玩法", "游戏策划", "游戏体验", "游戏好不好玩", "游戏好玩吗", "或者玩游戏"],
-    "description": "生成Python小游戏并运行",
-    "priority": 9,
-    "category": "开发工具",
-    "icon": "💻",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "user_input": {
-          "type": "string",
-          "description": "用户的原始输入文本"
-        }
-      },
-      "required": ["user_input"]
-    }
+  "name": "Python game runner",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Generate and launch a small local Python game. Only use this when the user actually wants a game to play. Never use it for packaging, installers, build commands, tests, dependency installation, or codebase repair tasks.",
+  "priority": 6,
+  "category": "Creative",
+  "icon": "Game",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "Original game request."
+      }
+    },
+    "required": [
+      "user_input"
+    ]
+  }
 }

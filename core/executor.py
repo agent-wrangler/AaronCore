@@ -16,6 +16,9 @@ def _result_dict_success(result: dict, meta: dict) -> bool:
     if 'success' in result:
         return bool(result.get('success'))
     meta = meta if isinstance(meta, dict) else {}
+    verification = meta.get('verification') if isinstance(meta.get('verification'), dict) else {}
+    if verification and verification.get('verified') is False:
+        return False
     drift = meta.get('drift') if isinstance(meta.get('drift'), dict) else {}
     if str(drift.get('reason') or '').strip():
         return False
@@ -211,6 +214,9 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
                 'state': result.get('state') if isinstance(result.get('state'), dict) else {},
                 'drift': result.get('drift') if isinstance(result.get('drift'), dict) else {},
                 'action': result.get('action') if isinstance(result.get('action'), dict) else {},
+                'verification': result.get('verification') if isinstance(result.get('verification'), dict) else {},
+                'post_condition': result.get('post_condition') if isinstance(result.get('post_condition'), dict) else {},
+                'task_plan': result.get('task_plan') if isinstance(result.get('task_plan'), dict) else {},
                 'repair_attempted': bool(result.get('repair_attempted', False)),
                 'repair_succeeded': bool(result.get('repair_succeeded', False)),
             }
@@ -249,6 +255,8 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
                             'state': repaired_result.get('state') if isinstance(repaired_result.get('state'), dict) else {},
                             'drift': repaired_result.get('drift') if isinstance(repaired_result.get('drift'), dict) else {},
                             'action': repaired_result.get('action') if isinstance(repaired_result.get('action'), dict) else {},
+                            'verification': repaired_result.get('verification') if isinstance(repaired_result.get('verification'), dict) else {},
+                            'task_plan': repaired_result.get('task_plan') if isinstance(repaired_result.get('task_plan'), dict) else {},
                             'repair_attempted': True,
                             'repair_succeeded': post.get('ok', False) and not bool((repaired_result.get('drift') or {}).get('reason')),
                             'post_condition': post,

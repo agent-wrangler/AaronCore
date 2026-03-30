@@ -443,6 +443,7 @@ def build_protocol_retry_note(tool_name: str, tool_args: dict | None, exec_resul
 
     file_tools = {'write_file', 'read_file', 'list_files'}
     environment_tools = {'open_target', 'app_target', 'ui_interaction', 'folder_explore', 'sense_environment', 'screen_capture'}
+    command_tools = {'run_command'}
 
     if tool_name in file_tools:
         return (
@@ -454,6 +455,13 @@ def build_protocol_retry_note(tool_name: str, tool_args: dict | None, exec_resul
         return (
             'The previous environment action failed. Do not repeat the exact same desktop action blindly. '
             'Inspect the current state with sense_environment or screen_capture first, then choose the next step.'
+        )
+
+    if tool_name in command_tools:
+        return (
+            'The previous local build, package, install, or test command failed. '
+            'Do not blindly repeat the same command. Inspect the output, workdir, and expected_artifacts first, '
+            'then adjust the command or fix the relevant files.'
         )
 
     return (

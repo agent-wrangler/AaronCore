@@ -1,0 +1,44 @@
+{
+  "name": "Local command runner",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Run a safe local workspace command for build, package, install, or test tasks. Capture stdout and stderr, repair common PyInstaller flag mistakes, and verify expected artifacts when possible. Use this for pyinstaller, pytest, pip install, npm build, and similar commands. Do not use run_code for those tasks.",
+  "priority": 9,
+  "category": "Development",
+  "icon": "Terminal",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "Exact local command to run. Prefer direct commands plus workdir instead of shell chaining."
+      },
+      "workdir": {
+        "type": "string",
+        "description": "Working directory for the command. Use a workspace path or Desktop/Documents/Downloads path."
+      },
+      "expected_artifacts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Files or folders that must exist after the command succeeds."
+      },
+      "timeout_sec": {
+        "type": "integer",
+        "description": "Optional timeout in seconds."
+      },
+      "description": {
+        "type": "string",
+        "description": "Short human summary of what the command should accomplish."
+      },
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      }
+    },
+    "required": [
+      "command"
+    ]
+  }
+}

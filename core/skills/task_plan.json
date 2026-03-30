@@ -1,0 +1,71 @@
+{
+  "name": "任务规划",
+  "description": "Create, update, resume, or complete a short multi-step task plan for complex work so the task keeps continuity across turns.",
+  "priority": 35,
+  "category": "任务",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "The current user request."
+      },
+      "action": {
+        "type": "string",
+        "description": "Plan action: create_or_update, get_current, advance, mark_blocked, mark_done, resume, or cancel."
+      },
+      "goal": {
+        "type": "string",
+        "description": "Overall task goal for this plan."
+      },
+      "phase": {
+        "type": "string",
+        "description": "Optional current phase label."
+      },
+      "summary": {
+        "type": "string",
+        "description": "Optional short plan summary."
+      },
+      "current_item_id": {
+        "type": "string",
+        "description": "Optional id of the current plan item."
+      },
+      "completed_item_id": {
+        "type": "string",
+        "description": "Optional id of the item that just finished."
+      },
+      "next_item_id": {
+        "type": "string",
+        "description": "Optional id of the next item to run."
+      },
+      "blocked_reason": {
+        "type": "string",
+        "description": "Optional blocker description when the task is blocked."
+      },
+      "items": {
+        "type": "array",
+        "description": "Optional compact plan items. Provide 3-6 high-signal items for complex tasks.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

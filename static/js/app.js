@@ -186,7 +186,7 @@ _syncThemeIcon();
  window._historyLoading=false;
 
  window._renderHistoryItems=function(items){
-  function _renderProcessTimeline(process){
+ function _renderProcessTimeline(process){
    var steps=(process&&process.steps)||[];
    if(!steps.length) return '';
    var html='<div class="step-tracker">';
@@ -206,11 +206,40 @@ _syncThemeIcon();
    return html;
   }
 
+  function _planCssStatus(status){
+   status=String(status||'pending');
+   if(status==='done') return 'done';
+   if(status==='running') return 'running';
+   if(status==='blocked' || status==='error' || status==='failed' || status==='waiting_user') return 'error';
+   return '';
+  }
+
+  function _renderPlanStrip(plan){
+   var items=(plan&&plan.items)||[];
+   if(!items.length) return '';
+   var html='<div class="plan-strip">';
+   html+='<div class="plan-goal">'+escapeHtml(String((plan&&plan.goal)||''))+'</div>';
+   var summary=String((plan&&plan.summary)||'').trim();
+   if(summary){
+    html+='<div class="plan-summary">'+escapeHtml(summary)+'</div>';
+   }
+   html+='<div class="plan-items">';
+   items.forEach(function(item){
+    var status=_planCssStatus(item&&item.status);
+    var cls='plan-item'+(status?' '+status:'');
+    html+='<div class="'+cls+'">'+escapeHtml(String((item&&item.title)||''))+'</div>';
+   });
+   html+='</div>';
+   html+='</div>';
+   return html;
+  }
+
   var html='';
   items.forEach(function(item){
    var role=item.role||'user';
    var text=item.content||'';
    var process=item.process||null;
+   var plan=(process&&process.plan)||null;
    var time=item.time||'';
    if(!text.trim()) return;
    var cls=role==='user'?'user':'assistant';
@@ -221,8 +250,11 @@ _syncThemeIcon();
    html+='<div class="avatar" style="background:'+avBg+'">'+avTxt+'</div>';
    if(role==='user'){
     html+='<div class="msg-content">';
-   }else if(process&&process.steps&&process.steps.length){
+   }else if((plan&&plan.items&&plan.items.length)||(process&&process.steps&&process.steps.length)){
     html+='<div class="msg-content-wrap">';
+    if(plan&&plan.items&&plan.items.length){
+     html+=_renderPlanStrip(plan);
+    }
     html+=_renderProcessTimeline(process);
     html+='<div class="msg-content">';
    }else{
@@ -233,7 +265,7 @@ _syncThemeIcon();
    html+='</div>';
    html+='<div class="bubble">'+formatBubbleText(text)+'</div>';
    html+='</div>';
-   if(role!=='user'&&process&&process.steps&&process.steps.length){
+   if(role!=='user'&&((plan&&plan.items&&plan.items.length)||(process&&process.steps&&process.steps.length))){
     html+='</div>';
    }
    html+='</div>';

@@ -410,7 +410,7 @@ async function send(){
   if(icon) icon.className='step-icon '+newStatus;
  }
 
- function _applyStepDetail(stepObj, detail, fullDetail){
+function _applyStepDetail(stepObj, detail, fullDetail){
   if(!stepObj || !stepObj.detailEl) return;
   stepObj.summaryDetail=String(detail||'');
   stepObj.fullDetail=String(fullDetail||'').trim();
@@ -424,6 +424,14 @@ async function send(){
   stepObj.el.removeAttribute('title');
  }
 
+ function _planCssStatus(status){
+  status=String(status||'pending');
+  if(status==='done') return 'done';
+  if(status==='running') return 'running';
+  if(status==='blocked' || status==='error' || status==='failed' || status==='waiting_user') return 'error';
+  return '';
+ }
+
  function _renderPendingPlan(plan){
   pendingState.plan=null;
   var host=pendingState.planStrip;
@@ -431,8 +439,40 @@ async function send(){
    host.style.display='none';
    host.innerHTML='';
   }
-  if(typeof window._clearSessionTaskPlan==='function'){
-   window._clearSessionTaskPlan();
+  if(!plan || !plan.items || !plan.items.length){
+   if(typeof window._clearSessionTaskPlan==='function'){
+    window._clearSessionTaskPlan();
+   }
+   return;
+  }
+  pendingState.plan=plan;
+  if(host){
+   host.style.display='';
+   var goal=document.createElement('div');
+   goal.className='plan-goal';
+   goal.textContent=String(plan.goal||'当前任务');
+   host.appendChild(goal);
+   var summaryText=String(plan.summary||'').trim();
+   if(summaryText){
+    var summary=document.createElement('div');
+    summary.className='plan-summary';
+    summary.textContent=summaryText;
+    host.appendChild(summary);
+   }
+   var items=document.createElement('div');
+   items.className='plan-items';
+   (plan.items||[]).forEach(function(item){
+    var chip=document.createElement('div');
+    chip.className='plan-item';
+    var cssStatus=_planCssStatus(item&&item.status);
+    if(cssStatus) chip.classList.add(cssStatus);
+    chip.textContent=String((item&&item.title)||'');
+    items.appendChild(chip);
+   });
+   host.appendChild(items);
+  }
+  if(typeof window._setSessionTaskPlan==='function'){
+   window._setSessionTaskPlan(plan);
   }
  }
 

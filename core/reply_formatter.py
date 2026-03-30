@@ -251,6 +251,7 @@ def _build_failed_tool_retry_note(tool_name: str, tool_args: dict, exec_result: 
 
     file_tools = {"write_file", "read_file", "list_files"}
     environment_tools = {"open_target", "app_target", "ui_interaction", "folder_explore", "sense_environment", "screen_capture"}
+    command_tools = {"run_command"}
 
     if tool_name in file_tools:
         return (
@@ -262,6 +263,13 @@ def _build_failed_tool_retry_note(tool_name: str, tool_args: dict, exec_result: 
         return (
             "The previous environment action failed. Do not repeat the exact same desktop action blindly. "
             "Inspect the current state with sense_environment or screen_capture first, then choose the next step."
+        )
+
+    if tool_name in command_tools:
+        return (
+            "The previous local build, package, install, or test command failed. "
+            "Do not blindly repeat the same command. Inspect the output, workdir, and expected_artifacts first, "
+            "then adjust the command or fix the relevant files."
         )
 
     return (
@@ -655,8 +663,24 @@ def _build_recent_dialogue_text(bundle: dict, limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None = None) -> str:
+def _resolve_active_task_plan(bundle: dict) -> dict:
     task_plan = bundle.get("task_plan") if isinstance(bundle.get("task_plan"), dict) else {}
+    if task_plan:
+        return task_plan
+    try:
+        from core.task_store import get_active_task_plan_snapshot
+
+        inferred = get_active_task_plan_snapshot(str(bundle.get("user_input") or ""))
+        if isinstance(inferred, dict) and inferred:
+            bundle["task_plan"] = inferred
+            return inferred
+    except Exception:
+        pass
+    return {}
+
+
+def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None = None) -> str:
+    task_plan = _resolve_active_task_plan(bundle)
     if not task_plan:
         return ""
 
@@ -675,6 +699,16 @@ def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None 
         lines.append(f"Plan summary: {summary}")
     if current_item_id:
         lines.append(f"Current plan item: {current_item_id}")
+    items = task_plan.get("items") if isinstance(task_plan.get("items"), list) else []
+    if items:
+        lines.append("Current plan checklist:")
+        for item in items[:6]:
+            if not isinstance(item, dict):
+                continue
+            item_title = str(item.get("title") or "").strip()
+            item_status = str(item.get("status") or "pending").strip()
+            if item_title:
+                lines.append(f"- [{item_status}] {item_title}")
 
     success_paths = bundle.get("l5_success_paths") if isinstance(bundle.get("l5_success_paths"), list) else []
     if success_paths:
@@ -889,7 +923,7 @@ def list_primary_capabilities() -> list[str]:
     if not _nova_core_ready:
         return ["陪你聊天"]
 
-    preferred = ["weather", "story", "stock", "draw", "run_code"]
+    preferred = ["weather", "story", "stock", "draw", "task_plan", "run_command", "run_code"]
     skills = _get_all_skills()
     labels = []
     for name in preferred:
@@ -1395,6 +1429,8 @@ def _build_cod_system_prompt(bundle: dict) -> str:
         "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
         "\n- For file or code tasks, if the next step depends on project structure or existing files, inspect with list_files or read_file before writing."
         "\n- For uncertain desktop or app state, inspect with sense_environment or screen_capture before repeating the same action."
+        "\n- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes."
+        "\n- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
     )
     time_context = _build_current_time_context()
 
@@ -1491,7 +1527,9 @@ def _build_tool_call_system_prompt(bundle: dict) -> str:
         "- \u8c03\u7528 weather \u5de5\u5177\u540e\uff1a\u4fdd\u7559\u5de5\u5177\u8fd4\u56de\u7684\u5b8c\u6574\u5929\u6c14\u7a97\u53e3\uff0c\u7528\u81ea\u7136\u53e3\u8bed\u6574\u7406\u7ed9\u7528\u6237\uff0c\u4e0d\u8981\u538b\u7f29\u6210\u5355\u5929\u3002\n"
         "- \u5982\u679c\u5de5\u5177\u5931\u8d25\u662f\u56e0\u4e3a\u7f3a\u5c11\u5fc5\u8981\u53c2\u6570\uff0c\u4e0d\u8981\u91cd\u590d\u540c\u4e00\u4e2a\u4e0d\u5b8c\u6574\u8c03\u7528\uff1b\u5148\u8865\u5168\u53c2\u6570\uff0c\u6216\u76f4\u63a5\u8bf4\u660e\u963b\u585e\u70b9\u3002\n"
         "- \u6587\u4ef6/\u4ee3\u7801\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u4f60\u8fd8\u4e0d\u6e05\u695a\u5f53\u524d\u9879\u76ee\u7ed3\u6784\u6216\u5df2\u6709\u6587\u4ef6\u5185\u5bb9\uff0c\u4f18\u5148\u8c03\u7528 list_files / read_file\uff0c\u518d\u51b3\u5b9a\u662f\u5426 write_file\u3002\n"
-        "- \u684c\u9762/\u73af\u5883\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u5f53\u524d\u72b6\u6001\u4e0d\u660e\u786e\uff0c\u4f18\u5148\u8c03\u7528 sense_environment \u6216 screen_capture\uff0c\u518d\u51b3\u5b9a\u4e0b\u4e00\u6b65\u3002"
+        "- \u684c\u9762/\u73af\u5883\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u5f53\u524d\u72b6\u6001\u4e0d\u660e\u786e\uff0c\u4f18\u5148\u8c03\u7528 sense_environment \u6216 screen_capture\uff0c\u518d\u51b3\u5b9a\u4e0b\u4e00\u6b65\u3002\n"
+        "- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes.\n"
+        "- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
     ).strip()
 
     # 闪回 hint（如果有）

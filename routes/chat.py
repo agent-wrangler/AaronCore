@@ -82,6 +82,15 @@ def _build_run_event(*, success: bool, meta: dict | None = None, fallback_text: 
     return {k: v for k, v in run_event.items() if v not in ("", None)}
 
 
+def _extract_task_plan_from_meta(meta: dict | None) -> dict | None:
+    meta = meta if isinstance(meta, dict) else {}
+    task_plan = meta.get("task_plan") if isinstance(meta.get("task_plan"), dict) else {}
+    items = task_plan.get("items") if isinstance(task_plan.get("items"), list) else []
+    if not task_plan or not items:
+        return None
+    return task_plan
+
+
 def _get_tool_call_enabled() -> bool:
     """tool_call 总开关，由配置控制。"""
     try:
@@ -815,6 +824,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _tool_used = None
                 _tool_success = None
                 _tool_run_meta = {}
+                _task_plan = None
                 _tool_action_summary = ""
                 _trace_thinking_sent = False
                 _think_buf = ""
@@ -891,6 +901,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     _tool_used = tc_name
                                     _tool_success = bool(tc_info.get("success"))
                                     _tool_run_meta = tc_info.get("run_meta") if isinstance(tc_info.get("run_meta"), dict) else {}
+                                    _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
+                                    if _plan_update:
+                                        _task_plan = _plan_update
+                                        yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                                     _tool_action_summary = str(tc_info.get("action_summary") or "").strip()
                                     _comp.activity = "replying"
                                     _MEMORY_TOOL_NAMES2 = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
@@ -930,6 +944,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                 _tool_used = _item.get("tool_used")
                                 if "run_meta" in _item and isinstance(_item.get("run_meta"), dict):
                                     _tool_run_meta = _item.get("run_meta") or {}
+                                    _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
+                                    if _plan_update:
+                                        _task_plan = _plan_update
+                                        yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                                 if "success" in _item:
                                     _tool_success = bool(_item.get("success"))
                                 _tool_action_summary = str(_item.get("action_summary") or _tool_action_summary or "").strip()
@@ -978,6 +996,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         response = tc_result.get("reply", "")
                         _tool_used = tc_result.get("tool_used")
                         _tool_run_meta = tc_result.get("run_meta") if isinstance(tc_result.get("run_meta"), dict) else {}
+                        _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
+                        if _plan_update:
+                            _task_plan = _plan_update
+                            yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                         _tool_success = True if _tool_used else None
                         _action_summary = str(tc_result.get("action_summary") or "").strip()
                         _tool_action_summary = _action_summary or _tool_action_summary
@@ -1100,12 +1122,16 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         S.debug_write("l1_hygiene", {"removed": _toxic})
                     S.add_to_history("nova", response)
                     _nova_entry = {"role": "nova", "content": response, "time": datetime.now().isoformat()}
-                    if _collected_steps:
+                    if _collected_steps or _task_plan:
                         # 去重：同 label 只保留最后一条（最终状态），running 视为 done
+                        _process = {}
+                        if _task_plan:
+                            _process["plan"] = _task_plan
                         _final_steps = {}
                         for s in _collected_steps:
                             _final_steps[s["label"]] = {"label": s["label"], "detail": s["detail"], "status": "error" if s.get("status") == "error" else "done"}
-                        _nova_entry["process"] = {"steps": list(_final_steps.values())}
+                        _process["steps"] = list(_final_steps.values())
+                        _nova_entry["process"] = _process
                     history.append(_nova_entry)
                     S.save_msg_history(history)
                 except Exception:
