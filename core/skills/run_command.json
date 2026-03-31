@@ -28,6 +28,14 @@
         "type": "integer",
         "description": "Optional timeout in seconds."
       },
+      "background": {
+        "type": "boolean",
+        "description": "Set true for long-running local services or app launches that should keep running in the background."
+      },
+      "startup_wait_sec": {
+        "type": "integer",
+        "description": "Optional startup wait in seconds for background launches."
+      },
       "description": {
         "type": "string",
         "description": "Short human summary of what the command should accomplish."

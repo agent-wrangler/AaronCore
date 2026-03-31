@@ -449,7 +449,7 @@
     "description": "",
     "owner": "nova",
     "created_at": "2026-03-30T12:05:18.383604",
-    "updated_at": "2026-03-30T20:34:25.434109",
+    "updated_at": "2026-03-31T11:27:04.386847",
     "current_task_id": "task_20260330_048",
     "goal": {
       "summary": "持续推进多步任务计划"
@@ -460,8 +460,8 @@
         "task_plan"
       ],
       "last_fs_target": {
-        "path": "C:\\Users\\36459\\NovaNotes",
-        "option": "open",
+        "path": "C:\\Users\\36459\\NovaNotes\\templates\\index.html",
+        "option": "write_file",
         "source": "tool_runtime"
       }
     }

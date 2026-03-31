@@ -388,6 +388,56 @@ def _should_replace_fs_target(current_target: dict | None, new_target: dict | No
     return _fs_target_specificity_score(new) >= _fs_target_specificity_score(current)
 
 
+def _normalize_query_path(path: str) -> str:
+    raw = str(path or "").strip().strip("`\"'[]{}()<>")
+    raw = raw.rstrip("\\/")
+    return raw
+
+
+def _extract_explicit_query_paths(query: str) -> list[str]:
+    raw = str(query or "").strip()
+    if not raw:
+        return []
+
+    patterns = (
+        re.compile(r'"([A-Za-z]:\\[^"]+|[A-Za-z]:/[^"]+)"'),
+        re.compile(r'([A-Za-z]:[\\/][^\s`<>"\]]+)'),
+    )
+    paths = []
+    seen = set()
+    for pattern in patterns:
+        for match in pattern.findall(raw):
+            candidate = _normalize_query_path(match)
+            if not candidate:
+                continue
+            lowered = candidate.replace("/", "\\").lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            paths.append(candidate)
+            if len(paths) >= 6:
+                return paths
+    return paths
+
+
+def _paths_overlap_for_resume(left_path: str, right_path: str) -> bool:
+    left = _normalize_query_path(left_path)
+    right = _normalize_query_path(right_path)
+    if not left or not right:
+        return False
+    if left.replace("/", "\\").lower() == right.replace("/", "\\").lower():
+        return True
+    return _is_target_ancestor_path(left, right) or _is_target_ancestor_path(right, left)
+
+
+def _task_matches_query_paths(task: dict | None, query_paths: list[str]) -> bool:
+    task_target = _extract_task_fs_target(task)
+    target_path = str((task_target or {}).get("path") or "").strip()
+    if not target_path:
+        return False
+    return any(_paths_overlap_for_resume(target_path, query_path) for query_path in (query_paths or []))
+
+
 def _merge_task_fs_target(task: dict, fs_target: dict) -> dict:
     task = _normalize_task(task)
     normalized_target = _normalize_fs_target_for_store(fs_target)
@@ -875,6 +925,11 @@ def _find_matching_task_plan_task(user_input: str = ""):
     raw = str(user_input or "").strip()
     if not raw:
         return latest
+    query_paths = _extract_explicit_query_paths(raw)
+    if query_paths:
+        for task in reversed(non_terminal):
+            if _task_matches_query_paths(task, query_paths):
+                return task
     if _looks_like_task_plan_continuation(raw):
         return latest
     if _looks_like_short_referential_followup(raw) or _looks_like_long_referential_followup(raw):

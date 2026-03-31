@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html class="theme-light">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>NovaCore 运行图谱</title>
+ <link rel="stylesheet" href="/static/css/main.css?v=20260331-graph9">
+</head>
+<body class="light runtime-graph-standalone-body">
+ <div class="runtime-graph-standalone-shell">
+  <div class="runtime-graph-standalone-bar">
+   <div class="runtime-graph-standalone-copy">
+    <div class="runtime-graph-standalone-title">后端运行图谱</div>
+    <div class="runtime-graph-standalone-note">单独开这个页面看后端路径，再和主聊天里的思考步骤对照。</div>
+   </div>
+   <div class="runtime-graph-standalone-actions">
+    <a class="runtime-graph-standalone-link" href="/" target="_blank" rel="noopener">打开主聊天</a>
+    <a class="runtime-graph-standalone-link" href="/runtime_graph?limit=12" target="_blank" rel="noopener">打开原始 JSON</a>
+   </div>
+  </div>
+  <div id="runtimeGraphStandaloneRoot"></div>
+ </div>
+ <script>
+ (function(){
+  var savedTheme = localStorage.getItem('nova_theme') || 'light';
+  document.body.classList.remove('light','dark');
+  document.body.classList.add(savedTheme === 'dark' ? 'dark' : 'light');
+  document.documentElement.classList.remove('theme-light','theme-dark');
+  document.documentElement.classList.add(savedTheme === 'dark' ? 'theme-dark' : 'theme-light');
+ })();
+ </script>
+ <script src="/static/js/runtime_graph.js?v=20260331-graph9"></script>
+</body>
+</html>

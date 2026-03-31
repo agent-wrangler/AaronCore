@@ -1,7 +1,9 @@
 """数据查询路由：memory, docs, history, stats, nova_name"""
+import ast
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from fastapi import APIRouter
 from core import shared as S
 from core.l2_memory import classify_retention_bucket
@@ -9,6 +11,778 @@ from core.l8_learn import classify_l8_entry_kind, should_show_l8_timeline_entry
 from core.state_loader import get_model_price, MODEL_PRICES
 
 router = APIRouter()
+
+RUNTIME_GRAPH_EXTENSIONS = {".py", ".js", ".html", ".css"}
+RUNTIME_GRAPH_EXCLUDED_DIRS = {
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    "node_modules",
+    ".venv",
+    "venv",
+    "memory_db",
+    "logs",
+    "archive",
+    "brain",
+    "home",
+    "desktop_runtime",
+    "desktop_runtime_35",
+}
+RUNTIME_GRAPH_CLUSTER_META = {
+    "runtime": {"label": "运行节点", "rank": 0, "color": "#0f766e"},
+    "root": {"label": "主入口", "rank": 10, "color": "#334155"},
+    "pages": {"label": "页面壳子", "rank": 20, "color": "#7c3aed"},
+    "static_js": {"label": "前端脚本", "rank": 30, "color": "#2563eb"},
+    "static_css": {"label": "页面样式", "rank": 40, "color": "#0f766e"},
+    "routes": {"label": "路由层", "rank": 50, "color": "#ea580c"},
+    "core": {"label": "核心执行", "rank": 60, "color": "#dc2626"},
+    "tools": {"label": "辅助工具", "rank": 70, "color": "#0891b2"},
+    "tests": {"label": "测试验证", "rank": 80, "color": "#475569"},
+    "misc": {"label": "其他模块", "rank": 90, "color": "#64748b"},
+    "external": {"label": "当前任务目标", "rank": 100, "color": "#ca8a04"},
+}
+RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
+    "agent_final.py": "后端主入口",
+    "output.html": "主聊天页面",
+    "runtime_graph_view.html": "独立图谱页面",
+    "companion.html": "陪伴页面",
+    "AI_Agent研究进展.html": "研究进展页面",
+    "routes/__init__.py": "路由层初始化",
+    "routes/chat.py": "聊天主路由",
+    "routes/chat_recovered.py": "恢复聊天路由",
+    "routes/companion.py": "陪伴路由",
+    "routes/data.py": "数据路由",
+    "routes/health.py": "健康检查路由",
+    "routes/lab.py": "实验路由",
+    "routes/models.py": "模型路由",
+    "routes/settings.py": "设置路由",
+    "routes/skills.py": "技能路由",
+    "core/config.py": "核心配置",
+    "core/context_builder.py": "上下文构建器",
+    "core/context_pull.py": "上下文拉取器",
+    "core/events.py": "事件定义",
+    "core/executor.py": "执行器",
+    "core/feedback_classifier.py": "反馈分类器",
+    "core/feedback_loop.py": "反馈闭环",
+    "core/flashback.py": "闪回回溯",
+    "core/fs_protocol.py": "文件系统协议",
+    "core/history_recall.py": "历史召回",
+    "core/json_store.py": "JSON存储",
+    "core/l2_memory.py": "L2记忆模块",
+    "core/l8_learn.py": "L8学习模块",
+    "core/lab.py": "实验核心",
+    "core/logger.py": "日志模块",
+    "core/mcp_client.py": "MCP客户端",
+    "core/mcp_registry.py": "MCP注册表",
+    "core/memory_consolidator.py": "记忆凝结器",
+    "core/nerve.py": "神经中枢",
+    "core/network_protocol.py": "网络协议",
+    "core/nova_brain.py": "Nova大脑",
+    "core/reply_formatter.py": "回复格式整理",
+    "core/router.py": "内部路由器",
+    "core/route_resolver.py": "路由解析器",
+    "core/rule_runtime.py": "规则运行时",
+    "core/self_repair.py": "自修复模块",
+    "core/session_context.py": "会话上下文",
+    "core/shared.py": "共享状态",
+    "core/skills_loader.py": "技能加载器",
+    "core/state_loader.py": "状态加载器",
+    "core/target_protocol.py": "目标协议",
+    "core/task_store.py": "任务存储",
+    "core/test_search.py": "测试搜索",
+    "core/tool_adapter.py": "工具适配器",
+    "core/vision.py": "视觉模块",
+    "static/js/app.js": "主页面控制脚本",
+    "static/js/awareness.js": "感知面板脚本",
+    "static/js/chat.js": "聊天脚本",
+    "static/js/companion.js": "陪伴页脚本",
+    "static/js/docs.js": "文档页脚本",
+    "static/js/entity.js": "实体页脚本",
+    "static/js/i18n.js": "国际化脚本",
+    "static/js/lab.js": "实验页脚本",
+    "static/js/memory.js": "记忆页脚本",
+    "static/js/runtime_graph.js": "运行图谱脚本",
+    "static/js/settings.js": "设置页脚本",
+    "static/js/stats.js": "统计页脚本",
+    "static/js/utils.js": "前端工具集",
+    "static/css/main.css": "主页面样式",
+    "static/css/companion.css": "陪伴页样式",
+    "tests/test_runtime_graph_route.py": "图谱路由测试",
+}
+RUNTIME_GRAPH_TOKEN_ZH = {
+    "agent": "代理",
+    "ai": "AI",
+    "app": "应用",
+    "awareness": "感知",
+    "brain": "大脑",
+    "builder": "构建",
+    "chat": "聊天",
+    "classifier": "分类",
+    "companion": "陪伴",
+    "config": "配置",
+    "context": "上下文",
+    "core": "核心",
+    "css": "样式",
+    "data": "数据",
+    "decision": "决策",
+    "docs": "文档",
+    "entity": "实体",
+    "event": "事件",
+    "events": "事件",
+    "executor": "执行",
+    "feedback": "反馈",
+    "fetch": "请求",
+    "file": "文件",
+    "final": "最终",
+    "flashback": "闪回",
+    "formatter": "格式整理",
+    "fs": "文件系统",
+    "graph": "图谱",
+    "health": "健康",
+    "history": "历史",
+    "i18n": "国际化",
+    "import": "导入",
+    "init": "初始化",
+    "json": "JSON",
+    "js": "脚本",
+    "knowledge": "知识",
+    "lab": "实验",
+    "learn": "学习",
+    "loader": "加载",
+    "logger": "日志",
+    "main": "主界面",
+    "mcp": "MCP",
+    "memory": "记忆",
+    "model": "模型",
+    "models": "模型",
+    "network": "网络",
+    "nova": "Nova",
+    "output": "输出",
+    "page": "页面",
+    "path": "路径",
+    "plan": "计划",
+    "planning": "规划",
+    "preference": "偏好",
+    "protocol": "协议",
+    "pull": "拉取",
+    "query": "查询",
+    "recall": "召回",
+    "recover": "恢复",
+    "recovered": "恢复",
+    "registry": "注册表",
+    "repair": "修复",
+    "reply": "回复",
+    "resolver": "解析",
+    "route": "路由",
+    "router": "路由器",
+    "rule": "规则",
+    "runtime": "运行时",
+    "search": "搜索",
+    "self": "自我",
+    "session": "会话",
+    "settings": "设置",
+    "shared": "共享",
+    "skill": "技能",
+    "skills": "技能",
+    "stage": "阶段",
+    "state": "状态",
+    "stats": "统计",
+    "store": "存储",
+    "target": "目标",
+    "task": "任务",
+    "test": "测试",
+    "tests": "测试",
+    "tool": "工具",
+    "utils": "工具集",
+    "view": "视图",
+    "vision": "视觉",
+}
+RUNTIME_GRAPH_ROUTE_PATTERN = re.compile(r'@router\.(?:get|post|put|delete|patch)\(\s*[\'"]([^\'"]+)[\'"]')
+RUNTIME_GRAPH_FETCH_PATTERN = re.compile(r'(?:fetch|EventSource)\(\s*[\'"]([^\'"]+)[\'"]')
+RUNTIME_GRAPH_JS_IMPORT_PATTERN = re.compile(r'import(?:[\s\w{},*]+from\s+)?[\'"]([^\'"]+)[\'"]')
+RUNTIME_GRAPH_HTML_REF_PATTERN = re.compile(r'(?:src|href)=["\']([^"\']+)["\']', re.IGNORECASE)
+RUNTIME_GRAPH_CSS_IMPORT_PATTERN = re.compile(r'@import\s+[\'"]([^\'"]+)[\'"]', re.IGNORECASE)
+RUNTIME_GRAPH_FILE_PATH_PATTERN = re.compile(
+    r'([A-Za-z]:[\\/][^\r\n"“”<>|]+?\.(?:py|js|html|css|json|md|txt))',
+    re.IGNORECASE,
+)
+RUNTIME_GRAPH_DIR_PATH_PATTERN = re.compile(
+    r'(?:目录|路径|目标|文件夹)[:：]\s*([A-Za-z]:[^\r\n]+)',
+    re.IGNORECASE,
+)
+
+
+def _runtime_graph_root() -> Path:
+    engine_dir = getattr(S, "ENGINE_DIR", None)
+    if engine_dir:
+        try:
+            path = Path(engine_dir)
+            if path.exists():
+                return path
+        except Exception:
+            pass
+    return Path(__file__).resolve().parents[1]
+
+
+def _runtime_graph_cluster_meta(cluster: str) -> dict:
+    return dict(RUNTIME_GRAPH_CLUSTER_META.get(cluster, RUNTIME_GRAPH_CLUSTER_META["misc"]))
+
+
+def _runtime_graph_cluster_for(rel_path: Path) -> str:
+    rel_posix = rel_path.as_posix()
+    if rel_posix.endswith(".html"):
+        return "pages"
+    if rel_posix.startswith("static/js/"):
+        return "static_js"
+    if rel_posix.startswith("static/css/"):
+        return "static_css"
+    if rel_posix.startswith("routes/"):
+        return "routes"
+    if rel_posix.startswith("core/"):
+        return "core"
+    if rel_posix.startswith("tests/"):
+        return "tests"
+    if rel_posix.startswith("tools/"):
+        return "tools"
+    if rel_path.parent == Path("."):
+        return "root"
+    return "misc"
+
+
+def _runtime_graph_kind_for(rel_path: Path, cluster: str) -> str:
+    suffix = rel_path.suffix.lower()
+    if cluster == "routes":
+        return "route"
+    if cluster == "core":
+        return "core"
+    if cluster == "tests":
+        return "test"
+    if suffix == ".html":
+        return "page"
+    if suffix == ".js":
+        return "script"
+    if suffix == ".css":
+        return "style"
+    return "file"
+
+
+def _runtime_graph_split_stem_tokens(stem: str) -> list[str]:
+    text = str(stem or "").strip()
+    if not text:
+        return []
+    if text == "__init__":
+        return ["init"]
+    text = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", text)
+    return [part for part in re.split(r"[_\-\s]+", text) if part]
+
+
+def _runtime_graph_translate_stem(stem: str) -> str:
+    parts: list[str] = []
+    for token in _runtime_graph_split_stem_tokens(stem):
+        lowered = token.lower()
+        if re.fullmatch(r"l\d+", lowered):
+            parts.append(lowered.upper())
+            continue
+        translated = RUNTIME_GRAPH_TOKEN_ZH.get(lowered)
+        if translated:
+            parts.append(translated)
+            continue
+        if re.search(r"[\u4e00-\u9fff]", token):
+            parts.append(token)
+            continue
+        parts.append(token.upper() if token.isupper() else token)
+    if not parts:
+        return ""
+    if any(re.search(r"[\u4e00-\u9fff]", part) for part in parts):
+        return "".join(parts)
+    return " ".join(parts)
+
+
+def _runtime_graph_file_subtitle(rel_path: Path, cluster: str) -> str:
+    rel_posix = rel_path.as_posix()
+    override = RUNTIME_GRAPH_FILE_ZH_OVERRIDES.get(rel_posix)
+    if override:
+        return override
+    if rel_path.name == "__init__.py":
+        return f"{_runtime_graph_cluster_meta(cluster)['label']}初始化"
+    base = _runtime_graph_translate_stem(rel_path.stem) or rel_path.stem
+    if cluster == "routes":
+        return f"{base}路由"
+    if cluster == "core":
+        return f"{base}核心模块"
+    if cluster == "static_js":
+        return f"{base}前端脚本"
+    if cluster == "static_css":
+        return f"{base}页面样式"
+    if cluster == "pages":
+        return f"{base}页面"
+    if cluster == "tests":
+        return f"{base}测试"
+    if cluster == "tools":
+        return f"{base}辅助工具"
+    if cluster == "root":
+        return f"{base}根目录文件"
+    return f"{base}模块"
+
+
+def _runtime_graph_should_include(rel_path: Path) -> bool:
+    if rel_path.suffix.lower() not in RUNTIME_GRAPH_EXTENSIONS:
+        return False
+    parts = rel_path.parts
+    for part in parts:
+        if part in RUNTIME_GRAPH_EXCLUDED_DIRS or part.startswith(".tmp_"):
+            return False
+        if part.startswith(".") and part not in {".", ".."}:
+            return False
+    return True
+
+
+def _runtime_graph_collect_file_nodes(root: Path) -> tuple[list[dict], set[str], dict[str, str]]:
+    nodes: list[dict] = []
+    node_ids: set[str] = set()
+    module_map: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            rel_path = path.relative_to(root)
+        except Exception:
+            continue
+        if not _runtime_graph_should_include(rel_path):
+            continue
+        node_id = rel_path.as_posix()
+        cluster = _runtime_graph_cluster_for(rel_path)
+        cluster_meta = _runtime_graph_cluster_meta(cluster)
+        node = {
+            "id": node_id,
+            "label": rel_path.name,
+            "subtitle": _runtime_graph_file_subtitle(rel_path, cluster),
+            "path": node_id,
+            "cluster": cluster,
+            "cluster_label": cluster_meta["label"],
+            "cluster_rank": cluster_meta["rank"],
+            "cluster_color": cluster_meta["color"],
+            "kind": _runtime_graph_kind_for(rel_path, cluster),
+        }
+        nodes.append(node)
+        node_ids.add(node_id)
+        if rel_path.suffix.lower() == ".py":
+            module_name = _runtime_graph_python_module_name(rel_path)
+            if module_name:
+                module_map[module_name] = node_id
+    return nodes, node_ids, module_map
+
+
+def _runtime_graph_python_module_name(rel_path: Path) -> str:
+    parts = list(rel_path.with_suffix("").parts)
+    if not parts:
+        return ""
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def _runtime_graph_python_package_parts(rel_path: Path) -> list[str]:
+    parts = list(rel_path.with_suffix("").parts)
+    if not parts:
+        return []
+    if parts[-1] == "__init__":
+        return parts[:-1]
+    return parts[:-1]
+
+
+def _runtime_graph_add_edge(edges: list[dict], seen: set[tuple[str, str, str]], source: str, target: str, kind: str):
+    if not source or not target or source == target:
+        return
+    edge_key = (source, target, kind)
+    if edge_key in seen:
+        return
+    seen.add(edge_key)
+    edges.append({"source": source, "target": target, "kind": kind})
+
+
+def _runtime_graph_collect_route_patterns(root: Path, node_ids: set[str]) -> list[tuple[str, str, str]]:
+    patterns: list[tuple[str, str, str]] = []
+    for node_id in sorted(node_ids):
+        if not node_id.startswith("routes/") or not node_id.endswith(".py"):
+            continue
+        try:
+            text = (root / node_id).read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for match in RUNTIME_GRAPH_ROUTE_PATTERN.finditer(text):
+            raw_path = str(match.group(1) or "").strip()
+            if not raw_path or not raw_path.startswith("/"):
+                continue
+            prefix = raw_path.split("{", 1)[0]
+            patterns.append((raw_path, prefix or raw_path, node_id))
+    patterns.sort(key=lambda item: len(item[1]), reverse=True)
+    return patterns
+
+
+def _runtime_graph_match_route(api_path: str, route_patterns: list[tuple[str, str, str]]) -> str | None:
+    path = str(api_path or "").strip()
+    if not path.startswith("/"):
+        return None
+    path = path.split("?", 1)[0]
+    for raw_path, prefix, node_id in route_patterns:
+        if path == raw_path:
+            return node_id
+        if prefix and path.startswith(prefix):
+            return node_id
+    return None
+
+
+def _runtime_graph_resolve_ref(source_id: str, raw_ref: str, node_ids: set[str]) -> str | None:
+    ref = str(raw_ref or "").strip()
+    if not ref or ref.startswith(("http://", "https://", "data:")):
+        return None
+    ref = ref.split("?", 1)[0].split("#", 1)[0].strip()
+    if not ref:
+        return None
+    if ref.startswith("/"):
+        target = Path(ref.lstrip("/"))
+    else:
+        target = Path(source_id).parent / ref
+    if not target.name and not target.suffix:
+        return None
+    candidates = [target]
+    if not target.suffix:
+        for suffix in (".js", ".css", ".html", ".py"):
+            candidates.append(target.with_suffix(suffix))
+        candidates.append(target / "index.js")
+    for candidate in candidates:
+        node_id = candidate.as_posix().lstrip("/")
+        if node_id in node_ids:
+            return node_id
+    return None
+
+
+def _runtime_graph_resolve_python_candidates(
+    rel_path: Path,
+    module_name: str | None,
+    alias_name: str | None,
+    level: int,
+) -> list[str]:
+    package_parts = _runtime_graph_python_package_parts(rel_path)
+    if level:
+        trim = max(0, level - 1)
+        base_parts = package_parts[: max(0, len(package_parts) - trim)]
+    else:
+        base_parts = []
+    if module_name:
+        module_parts = (base_parts + module_name.split(".")) if level else module_name.split(".")
+    else:
+        module_parts = list(base_parts)
+    candidates: list[str] = []
+    if alias_name and alias_name != "*":
+        candidates.append(".".join(module_parts + [alias_name]).strip("."))
+    candidates.append(".".join(module_parts).strip("."))
+    return [item for item in candidates if item]
+
+
+def _runtime_graph_collect_static_edges(
+    root: Path,
+    node_ids: set[str],
+    module_map: dict[str, str],
+) -> list[dict]:
+    edges: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    route_patterns = _runtime_graph_collect_route_patterns(root, node_ids)
+
+    for node_id in sorted(node_ids):
+        path = root / node_id
+        suffix = path.suffix.lower()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        if suffix == ".py":
+            try:
+                tree = ast.parse(text)
+            except Exception:
+                tree = None
+            if tree is not None:
+                rel_path = Path(node_id)
+                for ast_node in ast.walk(tree):
+                    if isinstance(ast_node, ast.Import):
+                        for alias in ast_node.names:
+                            target = module_map.get(str(alias.name or "").strip())
+                            if target:
+                                _runtime_graph_add_edge(edges, seen, node_id, target, "import")
+                    elif isinstance(ast_node, ast.ImportFrom):
+                        for alias in ast_node.names:
+                            for candidate in _runtime_graph_resolve_python_candidates(
+                                rel_path,
+                                ast_node.module,
+                                alias.name,
+                                ast_node.level,
+                            ):
+                                target = module_map.get(candidate)
+                                if target:
+                                    _runtime_graph_add_edge(edges, seen, node_id, target, "import")
+                                    break
+        elif suffix == ".js":
+            for match in RUNTIME_GRAPH_JS_IMPORT_PATTERN.finditer(text):
+                target = _runtime_graph_resolve_ref(node_id, match.group(1), node_ids)
+                if target:
+                    _runtime_graph_add_edge(edges, seen, node_id, target, "import")
+            for match in RUNTIME_GRAPH_FETCH_PATTERN.finditer(text):
+                target = _runtime_graph_match_route(match.group(1), route_patterns)
+                if target:
+                    _runtime_graph_add_edge(edges, seen, node_id, target, "api")
+        elif suffix == ".html":
+            for match in RUNTIME_GRAPH_HTML_REF_PATTERN.finditer(text):
+                target = _runtime_graph_resolve_ref(node_id, match.group(1), node_ids)
+                if target:
+                    _runtime_graph_add_edge(edges, seen, node_id, target, "asset")
+        elif suffix == ".css":
+            for match in RUNTIME_GRAPH_CSS_IMPORT_PATTERN.finditer(text):
+                target = _runtime_graph_resolve_ref(node_id, match.group(1), node_ids)
+                if target:
+                    _runtime_graph_add_edge(edges, seen, node_id, target, "asset")
+
+    return edges
+
+
+def _runtime_graph_fixed_nodes() -> list[dict]:
+    cluster_meta = _runtime_graph_cluster_meta("runtime")
+    base_nodes = [
+        ("runtime:user", "用户输入", "每轮任务的起点", "runtime"),
+        ("runtime:decision", "LLM判断", "模型决定先回答还是先走工具", "runtime"),
+        ("runtime:memory", "记忆命中", "recall_memory / query_knowledge", "runtime"),
+        ("runtime:planning", "任务规划", "task_plan 与执行拆解", "runtime"),
+        ("runtime:reply", "最终回复", "最后真正发给你的可见输出", "runtime"),
+    ]
+    return [
+        {
+            "id": node_id,
+            "label": label,
+            "subtitle": path_text,
+            "path": path_text,
+            "cluster": cluster,
+            "cluster_label": cluster_meta["label"],
+            "cluster_rank": cluster_meta["rank"],
+            "cluster_color": cluster_meta["color"],
+            "kind": "runtime",
+        }
+        for node_id, label, path_text, cluster in base_nodes
+    ]
+
+
+def _runtime_graph_tool_node(tool_name: str) -> dict:
+    cluster_meta = _runtime_graph_cluster_meta("runtime")
+    safe_id = re.sub(r"[^a-z0-9_]+", "_", str(tool_name or "").strip().lower()).strip("_") or "tool"
+    return {
+        "id": f"tool:{safe_id}",
+        "label": str(tool_name or "tool").strip(),
+        "subtitle": "本轮实际调用的技能",
+        "path": "本轮实际调用的技能",
+        "cluster": "runtime",
+        "cluster_label": cluster_meta["label"],
+        "cluster_rank": cluster_meta["rank"],
+        "cluster_color": cluster_meta["color"],
+        "kind": "tool",
+    }
+
+
+def _runtime_graph_trim_text(text: str, limit: int = 96) -> str:
+    text = re.sub(r"\s+", " ", str(text or "").strip())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _runtime_graph_extract_tool_name(detail: str) -> str:
+    detail = str(detail or "").strip()
+    if " · " not in detail:
+        return ""
+    tool_name = detail.split(" · ", 1)[0].strip()
+    if not tool_name:
+        return ""
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_ ]{1,64}", tool_name):
+        return tool_name
+    return ""
+
+
+def _runtime_graph_cleanup_path(path_text: str) -> str:
+    cleaned = str(path_text or "").strip().strip("'\"`")
+    for marker in [" · ", " / <think>", " / Traceback", " / ", "，", "。", "）", ")", "】", "]"]:
+        if marker in cleaned:
+            cleaned = cleaned.split(marker, 1)[0].strip()
+    cleaned = cleaned.rstrip("\\/ ")
+    return cleaned.replace("\\", "/")
+
+
+def _runtime_graph_extract_paths(detail: str) -> list[str]:
+    paths: list[str] = []
+    for match in RUNTIME_GRAPH_FILE_PATH_PATTERN.finditer(str(detail or "")):
+        cleaned = _runtime_graph_cleanup_path(match.group(1))
+        if cleaned:
+            paths.append(cleaned)
+    for match in RUNTIME_GRAPH_DIR_PATH_PATTERN.finditer(str(detail or "")):
+        cleaned = _runtime_graph_cleanup_path(match.group(1))
+        if cleaned:
+            paths.append(cleaned)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in paths:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _runtime_graph_repo_node_from_path(path_text: str, root: Path, node_ids: set[str]) -> str | None:
+    cleaned = _runtime_graph_cleanup_path(path_text)
+    root_text = root.as_posix().rstrip("/")
+    cleaned_lower = cleaned.lower()
+    root_lower = root_text.lower()
+    if cleaned_lower.startswith(root_lower + "/"):
+        rel_path = cleaned[len(root_text) + 1 :].lstrip("/")
+        if rel_path in node_ids:
+            return rel_path
+    return None
+
+
+def _runtime_graph_external_node(path_text: str) -> dict:
+    cleaned = _runtime_graph_cleanup_path(path_text)
+    cluster_meta = _runtime_graph_cluster_meta("external")
+    safe_id = re.sub(r"[^a-z0-9_]+", "_", cleaned.lower()).strip("_") or "target"
+    return {
+        "id": f"external:{safe_id}",
+        "label": Path(cleaned).name or cleaned,
+        "subtitle": "当前任务目标",
+        "path": cleaned,
+        "cluster": "external",
+        "cluster_label": cluster_meta["label"],
+        "cluster_rank": cluster_meta["rank"],
+        "cluster_color": cluster_meta["color"],
+        "kind": "external",
+    }
+
+
+def _runtime_graph_append_sequence(sequence: list[str], *node_ids: str):
+    for node_id in node_ids:
+        if not node_id:
+            continue
+        if sequence and sequence[-1] == node_id:
+            continue
+        sequence.append(node_id)
+
+
+def _runtime_graph_collect_runs(
+    history: list[dict],
+    root: Path,
+    node_ids: set[str],
+    limit: int,
+) -> tuple[list[dict], list[dict]]:
+    runs: list[dict] = []
+    tool_nodes: dict[str, dict] = {}
+
+    for item in reversed(history):
+        if len(runs) >= limit:
+            break
+        if str(item.get("role") or "") != "nova":
+            continue
+        process = item.get("process") or {}
+        steps = process.get("steps") or []
+        if not isinstance(steps, list) or not steps:
+            continue
+
+        raw_time = str(item.get("time") or "").strip()
+        sequence = ["runtime:user"]
+        active_nodes: list[str] = ["runtime:user"]
+        error_nodes: list[str] = []
+        external_nodes: dict[str, dict] = {}
+        step_rows: list[dict] = []
+        trigger = ""
+        stuck = ""
+
+        for step in steps:
+            label = str(step.get("label") or "").strip()
+            detail = str((step.get("full_detail") or step.get("detail") or "")).strip()
+            status = str(step.get("status") or "done").strip() or "done"
+            tool_name = _runtime_graph_extract_tool_name(detail)
+            tool_id = ""
+            step_targets: list[str] = []
+
+            if label == "模型思考":
+                step_targets.append("runtime:decision")
+            if label in {"记忆加载", "记忆就绪"} or tool_name in {"recall_memory", "query_knowledge"}:
+                step_targets.append("runtime:memory")
+            if label == "任务规划" or tool_name == "task_plan":
+                step_targets.append("runtime:planning")
+
+            if tool_name:
+                tool_node = _runtime_graph_tool_node(tool_name)
+                tool_nodes[tool_node["id"]] = tool_node
+                tool_id = tool_node["id"]
+                step_targets.append(tool_id)
+
+            for path_text in _runtime_graph_extract_paths(detail):
+                repo_node = _runtime_graph_repo_node_from_path(path_text, root, node_ids)
+                if repo_node:
+                    step_targets.append(repo_node)
+                else:
+                    external_node = _runtime_graph_external_node(path_text)
+                    external_nodes[external_node["id"]] = external_node
+                    step_targets.append(external_node["id"])
+
+            if not trigger:
+                if tool_name:
+                    trigger = f"{tool_name} · {_runtime_graph_trim_text(detail, 72)}"
+                elif label not in {"记忆加载", "模型思考"}:
+                    trigger = f"{label} · {_runtime_graph_trim_text(detail, 72)}"
+
+            if status == "error":
+                stuck = f"{label} · {_runtime_graph_trim_text(detail, 88)}"
+
+            _runtime_graph_append_sequence(sequence, *step_targets)
+            for node_id in step_targets:
+                if node_id not in active_nodes:
+                    active_nodes.append(node_id)
+                if status == "error" and node_id not in error_nodes:
+                    error_nodes.append(node_id)
+
+            step_rows.append(
+                {
+                    "label": label,
+                    "detail": detail,
+                    "status": status,
+                    "tool": tool_name,
+                    "targets": step_targets,
+                }
+            )
+
+        _runtime_graph_append_sequence(sequence, "runtime:reply")
+        if "runtime:reply" not in active_nodes:
+            active_nodes.append("runtime:reply")
+
+        runs.append(
+            {
+                "id": raw_time or f"run-{len(runs) + 1}",
+                "time": raw_time,
+                "preview": _runtime_graph_trim_text(item.get("content") or "", 96),
+                "status": "error" if error_nodes else "done",
+                "trigger": trigger or "本轮先从直接回复开始",
+                "stuck": stuck,
+                "node_ids": active_nodes,
+                "error_node_ids": error_nodes,
+                "path_edges": [
+                    {"source": sequence[idx], "target": sequence[idx + 1]}
+                    for idx in range(len(sequence) - 1)
+                    if sequence[idx] != sequence[idx + 1]
+                ],
+                "steps": step_rows,
+                "external_nodes": list(external_nodes.values()),
+            }
+        )
+
+    return runs, list(tool_nodes.values())
 
 
 def _is_live_skill_name(skill_name: str) -> bool:
@@ -401,6 +1175,31 @@ async def get_memory():
             pass
 
     return {"events": sorted(events, key=lambda item: item["time"], reverse=True), "counts": counts}
+
+
+@router.get("/runtime_graph")
+async def get_runtime_graph(limit: int = 12):
+    root = _runtime_graph_root()
+    file_nodes, node_ids, module_map = _runtime_graph_collect_file_nodes(root)
+    static_edges = _runtime_graph_collect_static_edges(root, node_ids, module_map)
+    history_loader = getattr(S, "load_msg_history", None)
+    history = history_loader() if callable(history_loader) else []
+    run_limit = max(1, min(int(limit or 12), 24))
+    runs, tool_nodes = _runtime_graph_collect_runs(history, root, node_ids, run_limit)
+    nodes = _runtime_graph_fixed_nodes() + tool_nodes + file_nodes
+    nodes.sort(key=lambda item: (item.get("cluster_rank", 999), item.get("path", ""), item.get("label", "")))
+    return {
+        "root": str(root),
+        "summary": {
+            "file_count": len(file_nodes),
+            "edge_count": len(static_edges),
+            "run_count": len(runs),
+            "tool_count": len(tool_nodes),
+        },
+        "nodes": nodes,
+        "edges": static_edges,
+        "runs": runs,
+    }
 
 
 @router.get("/docs/index")

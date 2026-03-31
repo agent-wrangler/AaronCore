@@ -56,18 +56,6 @@
         },
         "required": []
       }
-    },
-    {
-      "name": "self_fix",
-      "description": "Apply a targeted fix when the issue and affected file are already clear. Use for safe local repairs, not core-engine rewrites.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "file_path": {"type": "string", "description": "Target file path to update."},
-          "problem": {"type": "string", "description": "Expected fix or observed deviation."}
-        },
-        "required": ["file_path", "problem"]
-      }
     }
   ]
 }

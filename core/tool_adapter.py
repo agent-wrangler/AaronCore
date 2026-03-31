@@ -151,6 +151,59 @@ def _normalize_protocol_fs_target(target: dict | None, *, default_option: str = 
     return normalized
 
 
+def _normalize_protocol_remember_path(raw_path: str, *, prefer_file_resolution: bool = False) -> str:
+    path = str(raw_path or "").strip()
+    if not path or path.startswith(("http://", "https://")):
+        return ""
+    try:
+        resolved = _resolve_user_file_target(path) if prefer_file_resolution else _Path(path).resolve()
+    except Exception:
+        resolved = None
+    if resolved and _is_allowed_user_target(resolved):
+        return str(resolved)
+    return path
+
+
+def _extract_protocol_result_fs_target(name: str, ctx: dict, result: dict, *, default_option: str) -> dict | None:
+    ctx = ctx if isinstance(ctx, dict) else {}
+    result = result if isinstance(result, dict) else {}
+    meta = result.get("meta") if isinstance(result.get("meta"), dict) else {}
+    action = meta.get("action") if isinstance(meta.get("action"), dict) else {}
+    action_target = str(action.get("target") or "").strip()
+    action_target_kind = str(action.get("target_kind") or "").strip().lower()
+    file_like_tools = {"write_file", "edit_file", "search_replace", "apply_unified_diff"}
+    prefer_file_resolution = name in file_like_tools or action_target_kind == "file"
+
+    candidates = []
+    if action_target and action_target_kind in {"file", "folder", "directory"}:
+        candidates.append(action_target)
+    if prefer_file_resolution:
+        candidates.extend([
+            str(ctx.get("file_path") or "").strip(),
+            str(ctx.get("path") or "").strip(),
+            str(ctx.get("target") or "").strip(),
+            str(ctx.get("filename") or "").strip(),
+        ])
+    else:
+        current_target = ctx.get("fs_target") if isinstance(ctx.get("fs_target"), dict) else {}
+        candidates.extend([
+            str(current_target.get("path") or "").strip(),
+            str(ctx.get("path") or "").strip(),
+            str(ctx.get("source") or "").strip(),
+            str(ctx.get("target") or "").strip(),
+        ])
+
+    seen = set()
+    for candidate in candidates:
+        normalized = _normalize_protocol_remember_path(candidate, prefer_file_resolution=prefer_file_resolution)
+        lowered = normalized.replace("/", "\\").lower()
+        if not normalized or lowered in seen:
+            continue
+        seen.add(lowered)
+        return {"path": normalized, "option": default_option, "source": "tool_runtime"}
+    return None
+
+
 def _extract_recent_context_paths(context: dict | None) -> list[str]:
     context = context if isinstance(context, dict) else {}
     recent_history = context.get("recent_history") if isinstance(context.get("recent_history"), list) else []
@@ -370,25 +423,20 @@ def _apply_protocol_context(name: str, ctx: dict, user_input: str, tool_args: di
 def _remember_protocol_target(name: str, ctx: dict, result: dict) -> None:
     if name not in _PROTOCOL_CONTEXT_SKILLS:
         return
-    if not isinstance(ctx, dict) or not isinstance(result, dict) or not result.get("success"):
+    if not isinstance(ctx, dict) or not isinstance(result, dict):
         return
 
     default_option = _PROTOCOL_DEFAULT_OPTIONS.get(name, "inspect")
-    current_target = ctx.get("fs_target") if isinstance(ctx.get("fs_target"), dict) else {}
-    path = str(
-        current_target.get("path")
-        or ctx.get("path")
-        or ctx.get("file_path")
-        or ctx.get("source")
-        or ctx.get("target")
-        or ""
-    ).strip()
-    if not path or path.startswith(("http://", "https://")):
+    file_like_tools = {"write_file", "edit_file", "search_replace", "apply_unified_diff"}
+    if not result.get("success") and name not in file_like_tools:
         return
 
-    fs_target = {"path": path, "option": default_option, "source": "tool_runtime"}
+    fs_target = _extract_protocol_result_fs_target(name, ctx, result, default_option=default_option)
+    if not fs_target:
+        return
+
     ctx["fs_target"] = fs_target
-    ctx["path"] = path
+    ctx["path"] = str(fs_target.get("path") or "").strip()
     context_data = ctx.get("context_data") if isinstance(ctx.get("context_data"), dict) else {}
     ctx["context_data"] = _merge_context_dict(context_data, {"fs_target": fs_target})
     task_plan = ctx.get("task_plan") if isinstance(ctx.get("task_plan"), dict) else {}
@@ -497,6 +545,30 @@ def init(*, get_all_skills=None, debug_write=None,
         _find_relevant_knowledge = find_relevant_knowledge
 
 
+def _build_file_protocol_tool_defs() -> list[dict]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "write_file",
+                "description": "Unified file-writing entry for code and file changes. Use this for new files, full rewrites, or instruction-driven updates to an existing file by providing complete content or a precise change_request, instructions, problem, or description.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "Target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
+                        "content": {"type": "string", "description": "Complete file content to write when you already know the final file."},
+                        "change_request": {"type": "string", "description": "Precise request describing what this file should contain or how it should be rewritten if full content is not provided."},
+                        "instructions": {"type": "string", "description": "Alternate field for file instructions when change_request is not used."},
+                        "problem": {"type": "string", "description": "Observed issue or desired correction that should be resolved in the whole-file output."},
+                        "description": {"type": "string", "description": "Short summary of the intended file change; can also be used as a write request when full content is not provided."}
+                    },
+                    "required": ["file_path"],
+                },
+            },
+        },
+    ]
+
+
 def build_tools_list() -> list[dict]:
     """从 get_all_skills() 构建 OpenAI tools 定义列表"""
     tools = []
@@ -535,79 +607,14 @@ def build_tools_list() -> list[dict]:
             },
         })
     # 加入文件协议工具与 ask_user（agent 决策暂停点）
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "apply_unified_diff",
-            "description": "Apply a unified diff patch to an existing file. Use when you already have a precise hunk-based diff patch and want to patch the file directly.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "patch": {"type": "string", "description": "Unified diff patch text for this file."},
-                    "description": {"type": "string", "description": "Short summary of the intended patch."}
-                },
-                "required": ["file_path", "patch"],
-            },
-        },
-    })
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "search_replace",
-            "description": "Replace an exact text block inside an existing file. Use when you know the current old_text and the intended new_text and want a targeted edit instead of rewriting the whole file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "old_text": {"type": "string", "description": "Exact existing text to find in the file."},
-                    "new_text": {"type": "string", "description": "Replacement text. Pass an empty string to delete the old text."},
-                    "replace_all": {"type": "boolean", "description": "Replace all matches instead of only one precise match."},
-                    "description": {"type": "string", "description": "Short summary of the intended replacement."}
-                },
-                "required": ["file_path", "old_text", "new_text"],
-            },
-        },
-    })
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "edit_file",
-            "description": "Modify an existing file from instructions. Use when the target file already exists but the final full content is not yet explicitly written out.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "change_request": {"type": "string", "description": "Concrete description of what to change in the file."},
-                    "description": {"type": "string", "description": "Short summary of the intended modification."}
-                },
-                "required": ["file_path", "change_request"],
-            },
-        },
-    })
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Create or overwrite a workspace file with complete content. Use when the target path and final file content are already determined.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "content": {"type": "string", "description": "Complete file content to write."},
-                    "description": {"type": "string", "description": "Short summary of the intended file change."}
-                },
-                "required": ["file_path", "content"],
-            },
-        },
-    })
+    tools.extend(_build_file_protocol_tool_defs())
     tools.append(get_ask_user_tool_def())
     return tools
 
 
 # ── 记忆工具（CoD）——从 configs/tools.json 加载 ──
 
-_MEMORY_TOOLS = {"recall_memory", "query_knowledge", "web_search", "self_fix", "read_file", "list_files", "discover_tools", "sense_environment"}
+_MEMORY_TOOLS = {"recall_memory", "query_knowledge", "web_search", "read_file", "list_files", "sense_environment"}
 
 _tools_error_count = 0  # 连续报错计数
 
@@ -681,21 +688,6 @@ _COD_TOOL_DEFS_DEFAULT = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "self_fix",
-            "description": "Apply a targeted fix when the issue and affected file are already clear. Use for safe local repairs, not core-engine rewrites.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Target file path to update."},
-                    "problem": {"type": "string", "description": "Expected fix or observed deviation."}
-                },
-                "required": ["file_path", "problem"],
-            },
-        },
-    },
 ]
 
 # 兼容：其他模块 import _COD_TOOL_DEFS 时拿到动态加载版
@@ -737,6 +729,23 @@ def build_tools_list_cod() -> list[dict]:
 
     # ② CoD 工具（记忆 / 知识 / 搜索 / 自修复 / 文件读写）
     tools.extend(_load_cod_tool_defs())
+    tools.append(get_ask_user_tool_def())
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "sense_environment",
+            "description": "Inspect the current computer environment before desktop actions or when the current state is unclear.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "detail_level": {"type": "string", "description": "Environment detail level.", "enum": ["basic", "full"]}
+                },
+                "required": [],
+            },
+        },
+    })
+    tools.extend(_build_file_protocol_tool_defs())
+    return tools
 
     # ③ ask_user
     tools.append(get_ask_user_tool_def())
@@ -758,77 +767,12 @@ def build_tools_list_cod() -> list[dict]:
     })
 
     # ⑤ 文件变更协议
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "apply_unified_diff",
-            "description": "Apply a unified diff patch to an existing file. Use when you already have a precise hunk-based diff patch and want to patch the file directly.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "patch": {"type": "string", "description": "Unified diff patch text for this file."},
-                    "description": {"type": "string", "description": "Short summary of the intended patch."}
-                },
-                "required": ["file_path", "patch"],
-            },
-        },
-    })
+    tools.extend(_build_file_protocol_tool_defs())
 
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "search_replace",
-            "description": "Replace an exact text block inside an existing file. Use when you know the current old_text and the intended new_text and want a targeted edit instead of rewriting the whole file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "old_text": {"type": "string", "description": "Exact existing text to find in the file."},
-                    "new_text": {"type": "string", "description": "Replacement text. Pass an empty string to delete the old text."},
-                    "replace_all": {"type": "boolean", "description": "Replace all matches instead of only one precise match."},
-                    "description": {"type": "string", "description": "Short summary of the intended replacement."}
-                },
-                "required": ["file_path", "old_text", "new_text"],
-            },
-        },
-    })
 
     # ⑤ edit_file
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "edit_file",
-            "description": "Modify an existing file from instructions. Use when the target file already exists but the final full content is not yet explicitly written out.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Existing target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "change_request": {"type": "string", "description": "Concrete description of what to change in the file."},
-                    "description": {"type": "string", "description": "Short summary of the intended modification."}
-                },
-                "required": ["file_path", "change_request"],
-            },
-        },
-    })
 
     # ⑥ write_file
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Create or overwrite a workspace file with complete content. Use when the target path and final file content are already determined.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Target file path. Can be workspace-relative or a resolved Desktop/Documents/Downloads path."},
-                    "content": {"type": "string", "description": "Complete file content to write."},
-                    "description": {"type": "string", "description": "Short summary of the intended file change."}
-                },
-                "required": ["file_path", "content"],
-            },
-        },
-    })
 
     # ⑦ discover_tools 降级为兜底（技能注册表为空时仍可用）
     tools.append({

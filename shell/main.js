@@ -15,8 +15,64 @@ let win;
 const WINDOW_CONTROLS_MODE = 'custom-html';
 const ROOT_DIR = process.env.NOVACORE_ROOT || path.resolve(__dirname, '..');
 const BACKEND_ENTRY = process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
+const WINDOW_ICON = path.join(ROOT_DIR, 'static', 'icon', 'nova.ico');
 const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
 const BACKEND_PORT = 8090;
+const LOG_DIR = path.join(ROOT_DIR, 'logs');
+const SHELL_LOG_FILE = path.join(LOG_DIR, 'desktop_shell.log');
+const BACKEND_OUT_LOG_FILE = path.join(LOG_DIR, 'desktop_backend.out.log');
+const BACKEND_ERR_LOG_FILE = path.join(LOG_DIR, 'desktop_backend.err.log');
+
+function ensureLogDir() {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+  } catch (_err) {
+  }
+}
+
+function appendShellLog(level, args) {
+  ensureLogDir();
+  try {
+    const rendered = args
+      .map((item) => {
+        if (item instanceof Error) return item.stack || item.message;
+        if (typeof item === 'string') return item;
+        try {
+          return JSON.stringify(item);
+        } catch (_err) {
+          return String(item);
+        }
+      })
+      .join(' ');
+    fs.appendFileSync(
+      SHELL_LOG_FILE,
+      `[${new Date().toISOString()}] [${level}] ${rendered}\n`,
+      'utf8',
+    );
+  } catch (_err) {
+  }
+}
+
+const _consoleLog = console.log.bind(console);
+const _consoleWarn = console.warn.bind(console);
+const _consoleError = console.error.bind(console);
+console.log = (...args) => {
+  appendShellLog('INFO', args);
+  _consoleLog(...args);
+};
+console.warn = (...args) => {
+  appendShellLog('WARN', args);
+  _consoleWarn(...args);
+};
+console.error = (...args) => {
+  appendShellLog('ERROR', args);
+  _consoleError(...args);
+};
+
+function openBackendLogFd(logFile) {
+  ensureLogDir();
+  return fs.openSync(logFile, 'a');
+}
 
 function resolvePythonCommand() {
   if (process.env.NOVACORE_PYTHON) return process.env.NOVACORE_PYTHON;
@@ -123,6 +179,9 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.novacore.desktop');
+  }
   app.on('second-instance', () => {
     focusExistingWindow();
   });
@@ -135,16 +194,24 @@ async function ensureBackend() {
   await waitForBackendState(false, 20, 250);
 
   const pythonCommand = resolvePythonCommand();
+  const backendStdoutFd = openBackendLogFd(BACKEND_OUT_LOG_FILE);
+  const backendStderrFd = openBackendLogFd(BACKEND_ERR_LOG_FILE);
   const py = spawn(
     pythonCommand,
     [BACKEND_ENTRY],
-    { cwd: ROOT_DIR, detached: true, stdio: 'ignore' }
+    {
+      cwd: ROOT_DIR,
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', backendStdoutFd, backendStderrFd],
+    }
   );
   py.unref();
 
   const ready = await waitForBackendState(true, 30, 500);
   if (!ready) {
     console.warn('[shell] backend did not become ready on port', BACKEND_PORT);
+    console.warn('[shell] backend logs:', BACKEND_OUT_LOG_FILE, BACKEND_ERR_LOG_FILE);
   }
 }
 
@@ -183,6 +250,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: palette.backgroundColor,
+    icon: fs.existsSync(WINDOW_ICON) ? WINDOW_ICON : undefined,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

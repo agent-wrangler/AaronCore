@@ -211,24 +211,6 @@ def start_backend():
     os.chdir(r"C:\Users\36459\NovaCore")
     subprocess.Popen([r"C:\Program Files\Python311\python.exe", "agent_final.py"])
 
-def start_companion():
-    try:
-        import json
-        with open(os.path.join(r"C:\Users\36459\NovaCore", "memory_db", "companion_config.json"), "r", encoding="utf-8") as f:
-            if not json.load(f).get("enabled", True):
-                print("[desktop] Entity disabled"); return
-    except Exception: pass
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        s.connect(("127.0.0.1", 8091)); s.close()
-        print("[desktop] companion running"); return
-    except ConnectionRefusedError: pass
-    d = os.path.join(r"C:\Users\36459\NovaCore", "companion")
-    env = os.environ.copy(); env.pop("ELECTRON_RUN_AS_NODE", None)
-    subprocess.Popen([os.path.join(d, "node_modules", "electron", "dist", "electron.exe"), "."], cwd=d, env=env)
-
-
 start_backend()
 time.sleep(3)
 
@@ -282,7 +264,6 @@ def _on_shown():
     threading.Thread(target=_do, daemon=True).start()
 
 window.events.shown += _on_shown
-start_companion()
 
 print("NovaCore 启动中...")
 _c = os.path.join(os.environ.get("APPDATA",""), "NovaCore", "EBWebView", "Default", "Cache")

@@ -92,6 +92,93 @@ class RunCommandSkillTests(unittest.TestCase):
         self.assertEqual(dest.read_text(encoding="utf-8"), "hello")
         self.assertIn("delegated_from=run_command", result.get("verification", {}).get("detail", ""))
 
+    def test_execute_allows_user_home_project_outside_workspace(self):
+        with tempfile.TemporaryDirectory() as home_tmp:
+            home_dir = Path(home_tmp).resolve()
+            project_dir = home_dir / "NovaNotes"
+            project_dir.mkdir(parents=True, exist_ok=True)
+            (project_dir / "app.py").write_text("print('ok')\n", encoding="utf-8")
+
+            def fake_run(argv, **kwargs):
+                self.assertEqual(kwargs.get("cwd"), str(project_dir))
+                self.assertEqual(argv[1], str(project_dir / "app.py"))
+
+                class Result:
+                    returncode = 0
+                    stdout = "ok"
+                    stderr = ""
+
+                return Result()
+
+            with patch.object(run_command_module, "USER_HOME", home_dir), patch(
+                "core.skills.run_command.subprocess.run",
+                side_effect=fake_run,
+            ):
+                result = run_command_module.execute(
+                    "",
+                    {
+                        "command": "python app.py",
+                        "workdir": str(project_dir),
+                    },
+                )
+
+        self.assertTrue(result.get("verification", {}).get("verified"))
+        self.assertEqual(result.get("drift", {}).get("reason"), "")
+
+    def test_execute_background_launch_treats_running_process_as_success(self):
+        class FakeProcess:
+            pid = 4242
+
+            def poll(self):
+                return None
+
+        with patch("core.skills.run_command.subprocess.Popen", return_value=FakeProcess()), patch(
+            "core.skills.run_command.time.sleep",
+            lambda _seconds: None,
+        ):
+            result = run_command_module.execute(
+                "",
+                {
+                    "command": "python app.py",
+                    "workdir": str(self.notes_dir),
+                    "description": "启动 NovaNotes Flask 应用",
+                    "background": True,
+                },
+            )
+
+        self.assertTrue(result.get("verification", {}).get("verified"))
+        self.assertEqual(result.get("verification", {}).get("observed_state"), "process_running")
+        self.assertIn("pid=4242", result.get("verification", {}).get("detail", ""))
+
+    def test_execute_background_launch_reports_early_exit_output(self):
+        class FakeProcess:
+            pid = 4243
+            returncode = 1
+
+            def poll(self):
+                return 1
+
+            def communicate(self):
+                return ("", "ModuleNotFoundError: No module named 'flask'")
+
+        with patch("core.skills.run_command.subprocess.Popen", return_value=FakeProcess()), patch(
+            "core.skills.run_command.time.sleep",
+            lambda _seconds: None,
+        ):
+            result = run_command_module.execute(
+                "",
+                {
+                    "command": "python app.py",
+                    "workdir": str(self.notes_dir),
+                    "description": "启动 NovaNotes Flask 应用",
+                    "background": True,
+                },
+            )
+
+        self.assertFalse(result.get("verification", {}).get("verified"))
+        self.assertEqual(result.get("verification", {}).get("observed_state"), "process_exited_early")
+        self.assertIn("ModuleNotFoundError", result.get("verification", {}).get("detail", ""))
+
 
 class RunCodeGuardTests(unittest.TestCase):
     def test_run_code_rejects_packaging_requests(self):

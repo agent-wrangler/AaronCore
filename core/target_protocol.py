@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from core.fs_protocol import load_export_state
+from core.fs_protocol import load_export_state, normalize_user_special_path
 
 try:
     import pygetwindow as gw
@@ -45,6 +45,44 @@ def _pinyin_expand(text: str) -> list[str]:
 
 def _normalize(text: str) -> str:
     return ''.join(str(text or '').strip().lower().split())
+
+
+def _extract_explicit_local_path(text: str) -> str:
+    raw = str(text or '').strip()
+    if not raw:
+        return ''
+
+    patterns = (
+        re.compile(r'"([A-Za-z]:\\[^"]+|[A-Za-z]:/[^"]+)"'),
+        re.compile(r'([A-Za-z]:[\\/][^\s`<>"\]]+)'),
+        re.compile(r'((?:桌面|文档|下载|Desktop|Documents|Downloads)[\\/][^\s`<>"\]]+)', re.I),
+    )
+    for pattern in patterns:
+        match = pattern.search(raw)
+        if not match:
+            continue
+        candidate = str(match.group(1) or '').strip().strip(".,;:()[]{}<>\"'，。！？；：")
+        if not candidate:
+            continue
+        normalized = str(normalize_user_special_path(candidate.replace('\\', '/')) or candidate).strip()
+        if len(normalized) > 3 and normalized.endswith(('/', '\\')):
+            normalized = normalized.rstrip('/\\')
+        if normalized:
+            return normalized
+    return ''
+
+
+def _looks_like_app_path(path: str) -> bool:
+    raw = str(path or '').strip()
+    if not raw:
+        return False
+    try:
+        path_obj = Path(raw)
+    except Exception:
+        return False
+    if path_obj.is_dir():
+        return False
+    return path_obj.suffix.lower() in {'.exe', '.lnk', '.bat', '.cmd', '.ps1', '.msc'}
 
 
 def resolve_lnk_target(lnk_path: str) -> str:
@@ -351,7 +389,7 @@ def resolve_local_app_reference(raw: str, context: dict | None = None) -> dict:
     if target:
         if target.get('window'):
             return {'target_type': 'window', 'value': str(target.get('window')), 'resolution': 'resolved', 'source': 'fs_action'}
-        if target.get('path'):
+        if target.get('path') and _looks_like_app_path(str(target.get('path'))):
             return {
                 'target_type': 'app',
                 'value': str(target.get('path')),
@@ -370,9 +408,12 @@ def resolve_local_app_reference(raw: str, context: dict | None = None) -> dict:
                 'source': 'fs_action',
             }
 
-    if Path(text).exists():
+    explicit_path = _extract_explicit_local_path(text) or _extract_explicit_local_path(clean_text)
+    if explicit_path and not _looks_like_app_path(explicit_path):
+        return {'target_type': 'unknown', 'value': explicit_path, 'resolution': 'missing', 'source': 'explicit_path_non_app'}
+    if Path(text).exists() and _looks_like_app_path(text):
         return {'target_type': 'app', 'value': text, 'label': Path(text).stem, 'resolution': 'resolved', 'source': 'direct_path'}
-    if Path(clean_text).exists():
+    if Path(clean_text).exists() and _looks_like_app_path(clean_text):
         return {'target_type': 'app', 'value': clean_text, 'label': Path(clean_text).stem, 'resolution': 'resolved', 'source': 'direct_path'}
 
     norm_variants = [_normalize(v) for v in _pinyin_expand(clean_text)]
@@ -446,6 +487,16 @@ def resolve_target_reference(raw: str, context: dict | None = None) -> dict:
         return {'target_type': 'url', 'value': text, 'resolution': 'resolved', 'source': 'direct_url'}
     if re.match(r'^[\w.-]+\.[A-Za-z]{2,}(/.*)?$', text):
         return {'target_type': 'url', 'value': text, 'resolution': 'partial', 'source': 'url_without_scheme'}
+
+    explicit_path = _extract_explicit_local_path(text)
+    if explicit_path:
+        path_obj = Path(explicit_path)
+        return {
+            'target_type': 'path',
+            'value': explicit_path,
+            'resolution': 'resolved' if path_obj.exists() else 'partial',
+            'source': 'direct_path',
+        }
 
     # ── 2. 已有 path 上下文 ──
     path = str((context.get('fs_action') or {}).get('target', {}).get('path') or '').strip() if isinstance((context.get('fs_action') or {}).get('target'), dict) else ''

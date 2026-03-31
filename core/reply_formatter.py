@@ -15,7 +15,9 @@ from core.fs_protocol import (
     build_protocol_retry_note as _protocol_retry_note,
     has_same_protocol_arg_failure_recently as _protocol_has_same_arg_failure_recently,
     missing_required_protocol_fields as _protocol_missing_required_fields,
+    normalize_user_special_path as _normalize_user_special_path,
     protocol_arg_failure_signature as _protocol_arg_failure_signature,
+    resolve_user_file_target as _resolve_protocol_user_file_target,
     summarize_action_meta,
 )
 from core.route_resolver import looks_like_news_request
@@ -115,7 +117,7 @@ def _coerce_tool_args(raw_args, user_input: str = "") -> dict:
                     except Exception:
                         continue
             if not args:
-                for key in ("file_path", "path", "target", "filename", "content", "description", "query", "topic"):
+                for key in ("file_path", "path", "target", "filename", "content", "description", "change_request", "instructions", "problem", "query", "topic"):
                     value = _salvage_string_field(raw, key)
                     if value:
                         args[key] = value
@@ -167,6 +169,31 @@ def _extract_recent_file_paths(bundle: dict) -> list[str]:
                 if len(paths) >= 6:
                     return paths
     return paths
+
+
+def _extract_explicit_local_path(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+
+    patterns = (
+        _re.compile(r'"([A-Za-z]:\\[^"]+|[A-Za-z]:/[^"]+)"'),
+        _re.compile(r'([A-Za-z]:[\\/][^\s`<>"\]]+)'),
+        _re.compile(r'((?:桌面|文档|下载|Desktop|Documents|Downloads)[\\/][^\s`<>"\]]+)', _re.I),
+    )
+    for pattern in patterns:
+        match = pattern.search(raw)
+        if not match:
+            continue
+        candidate = str(match.group(1) or "").strip().strip(".,;:()[]{}<>\"'，。！？；：")
+        if not candidate:
+            continue
+        normalized = _normalize_user_special_path(candidate.replace("\\", "/"))
+        resolved = str(normalized or candidate).strip()
+        if len(resolved) > 3 and resolved.endswith(("/", "\\")):
+            resolved = resolved.rstrip("/\\")
+        return resolved
+    return ""
 
 
 def _infer_recent_directory_target(bundle: dict) -> str:
@@ -309,16 +336,24 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
     args = dict(tool_args or {})
     user_input = str(bundle.get("user_input") or "")
     if tool_name == "folder_explore":
+        explicit_user_target = _extract_explicit_local_path(user_input)
         target = str(args.get("path") or args.get("target") or "").strip()
-        if not target:
-            target = _load_task_plan_fs_target(bundle) or _infer_recent_directory_target(bundle) or _load_latest_structured_fs_target()
-            if target:
-                args["path"] = target
+        if explicit_user_target:
+            target = explicit_user_target
+        elif not target:
+            target = (
+                _load_task_plan_fs_target(bundle)
+                or _load_context_fs_target(bundle)
+                or _infer_recent_directory_target(bundle)
+                or _load_latest_structured_fs_target()
+            )
+        if target:
+            args["path"] = target
         if user_input and "user_input" not in args:
             args["user_input"] = user_input
         return args
 
-    if tool_name not in {"write_file", "edit_file", "search_replace", "apply_unified_diff"}:
+    if tool_name != "write_file":
         if user_input and "user_input" not in args:
             args["user_input"] = user_input
         return args
@@ -336,42 +371,15 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
                 candidate = candidate.with_suffix(".html")
             args["file_path"] = str(candidate)
 
-    if tool_name == "edit_file":
-        change_request = str(
-            args.get("change_request")
-            or args.get("instructions")
-            or args.get("problem")
-            or args.get("description")
-            or ""
-        ).strip()
-        if change_request and "change_request" not in args:
-            args["change_request"] = change_request
-
-    if tool_name == "search_replace":
-        old_text = str(
-            args.get("old_text")
-            or args.get("search_text")
-            or args.get("find_text")
-            or args.get("before")
-            or ""
-        )
-        if old_text and "old_text" not in args:
-            args["old_text"] = old_text
-        if "new_text" not in args:
-            for alias in ("replacement", "replace_text", "after"):
-                if alias in args:
-                    args["new_text"] = args.get(alias)
-                    break
-
-    if tool_name == "apply_unified_diff":
-        patch_text = str(
-            args.get("patch")
-            or args.get("diff")
-            or args.get("unified_diff")
-            or ""
-        )
-        if patch_text and "patch" not in args:
-            args["patch"] = patch_text
+    change_request = str(
+        args.get("change_request")
+        or args.get("instructions")
+        or args.get("problem")
+        or args.get("description")
+        or ""
+    ).strip()
+    if change_request and "change_request" not in args:
+        args["change_request"] = change_request
 
     if user_input and "user_input" not in args:
         args["user_input"] = user_input
@@ -533,17 +541,216 @@ def _build_strict_write_file_retry_note(tool_args: dict | None, signature: dict 
         or str(signature.get("target") or "").strip()
         or "unknown target"
     )
+    existing_target = _resolve_existing_file_target(tool_args)
+    if existing_target:
+        return (
+            f"The write_file target is {target}, and that file already exists at {existing_target}. "
+            "Do not send natural-language promises in the next turn. "
+            "Your next assistant turn must do exactly one of these: "
+            "(1) call write_file with the SAME file_path and either the COMPLETE final content string or a precise change_request/description; "
+            "(2) if you still need surrounding project context, call read_file or list_files first. "
+            "Do not repeat write_file with only file_path."
+        )
     return (
         f"The write_file target is {target}. "
         "Do not send natural-language promises in the next turn. "
         "Your next assistant turn must do exactly one of these: "
-        "(1) call write_file with the SAME file_path and the COMPLETE final content string; "
-        "(2) if you already have a unified diff patch, call apply_unified_diff with the SAME file_path; "
-        "(3) if you know the exact old_text and new_text for a local change, call search_replace with the SAME file_path; "
-        "(4) if the file already exists and you need to modify it from instructions, call edit_file with the SAME file_path and a precise change_request; "
-        "(5) if you still need surrounding project context, call list_files or read_file first. "
-        "Do not repeat write_file without content."
+        "(1) call write_file with the SAME file_path and either the COMPLETE final content string or a precise change_request/description; "
+        "(2) if you still need surrounding project context, call list_files or read_file first. "
+        "Do not repeat write_file with only file_path."
     )
+
+
+def _tool_definition_name(tool_def: dict | None) -> str:
+    tool_def = tool_def if isinstance(tool_def, dict) else {}
+    fn = tool_def.get("function") if isinstance(tool_def.get("function"), dict) else {}
+    return str(fn.get("name") or tool_def.get("name") or "").strip()
+
+
+def _resolve_existing_file_target(tool_args: dict | None) -> str:
+    tool_args = tool_args if isinstance(tool_args, dict) else {}
+    raw_target = (
+        str(tool_args.get("file_path") or tool_args.get("path") or "").strip()
+        or str(tool_args.get("target") or tool_args.get("filename") or "").strip()
+    )
+    if not raw_target:
+        return ""
+    try:
+        target = _resolve_protocol_user_file_target(raw_target)
+    except Exception:
+        target = None
+    if not target or not target.exists() or not target.is_file():
+        return ""
+    return str(target)
+
+
+def _resolve_known_fs_focus_target(bundle: dict | None = None, tool_args: dict | None = None) -> tuple[str, str]:
+    candidates = []
+    tool_args = tool_args if isinstance(tool_args, dict) else {}
+    bundle = bundle if isinstance(bundle, dict) else {}
+
+    raw_tool_target = (
+        str(tool_args.get("file_path") or tool_args.get("path") or "").strip()
+        or str(tool_args.get("target") or tool_args.get("filename") or "").strip()
+    )
+    if raw_tool_target:
+        candidates.append(raw_tool_target)
+
+    for candidate in (_load_context_fs_target(bundle), _load_task_plan_fs_target(bundle)):
+        candidate = str(candidate or "").strip()
+        if candidate:
+            candidates.append(candidate)
+
+    for candidate in _extract_recent_file_paths(bundle):
+        candidate = str(candidate or "").strip()
+        if candidate:
+            candidates.append(candidate)
+
+    seen = set()
+    for raw_target in candidates:
+        lowered = raw_target.replace("/", "\\").lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        try:
+            target = _resolve_protocol_user_file_target(raw_target)
+        except Exception:
+            target = None
+        if not target or not target.exists():
+            continue
+        if target.is_file():
+            return str(target), "file"
+        if target.is_dir():
+            return str(target), "directory"
+    return "", ""
+
+
+def _build_fs_focus_guidance(bundle: dict | None = None, tool_args: dict | None = None) -> str:
+    target, target_kind = _resolve_known_fs_focus_target(bundle, tool_args)
+    if target_kind == "file":
+        return "\n".join([
+            f"Known coding target: {target}",
+            "This already resolves to an existing file. Stay on this file first.",
+            "Primary coding lane: read_file -> write_file -> run_command verification when needed.",
+            "Prefer read_file for context, then use write_file for the actual change.",
+            "Use write_file for both instruction-driven updates and intentional whole-file rewrites.",
+            "These are priorities, not hard bans.",
+            "Do not jump to folder_explore or desktop/app inspection unless this file path is wrong or adjacent context is truly required.",
+        ])
+    if target_kind == "directory":
+        return "\n".join([
+            f"Known task directory: {target}",
+            "Stay inside this directory for the current coding task.",
+            "Primary coding lane: list_files -> read_file -> write_file.",
+            "Prefer list_files or read_file before broad folder_explore when the task directory is already known.",
+        ])
+    return ""
+
+
+def _reprioritize_tools_for_coding_focus(
+    tools: list[dict] | None,
+    *,
+    target_kind: str = "",
+    current_tool_name: str = "",
+) -> list[dict]:
+    tool_list = list(tools or [])
+    if target_kind not in {"file", "directory"}:
+        return tool_list
+
+    coding_anchor_tools = {
+        "read_file",
+        "list_files",
+        "write_file",
+        "run_command",
+        "task_plan",
+        "ask_user",
+    }
+    current_name = str(current_tool_name or "").strip()
+    if current_name and current_name not in coding_anchor_tools:
+        return tool_list
+
+    priority = {
+        "file": {
+            "read_file": 0,
+            "write_file": 1,
+            "run_command": 2,
+            "list_files": 3,
+            "task_plan": 4,
+            "ask_user": 5,
+        },
+        "directory": {
+            "list_files": 0,
+            "read_file": 1,
+            "write_file": 2,
+            "run_command": 3,
+            "task_plan": 4,
+            "ask_user": 5,
+        },
+    }.get(target_kind, {})
+
+    ranked = sorted(
+        enumerate(tool_list),
+        key=lambda item: (priority.get(_tool_definition_name(item[1]), 20), item[0]),
+    )
+    reprioritized = [item[1] for item in ranked]
+    if reprioritized != tool_list:
+        _debug_write("coding_focus_tools_reprioritized", {
+            "target_kind": target_kind,
+            "current_tool": current_name,
+            "front": [_tool_definition_name(tool) for tool in reprioritized[:8]],
+        })
+    return reprioritized
+
+
+def _build_followup_tools_after_arg_failure(
+    tools: list[dict] | None,
+    arg_failure: dict | None,
+    tool_args: dict | None,
+    bundle: dict | None = None,
+    current_tool_name: str = "",
+) -> list[dict]:
+    tool_list = list(tools or [])
+    focused_target, focused_kind = _resolve_known_fs_focus_target(bundle, tool_args)
+    if focused_kind in {"file", "directory"}:
+        blocked_tools = {
+            "folder_explore",
+            "sense_environment",
+            "screen_capture",
+            "open_target",
+            "app_target",
+            "ui_interaction",
+        }
+        filtered = []
+        removed = []
+        for tool in tool_list:
+            name = _tool_definition_name(tool)
+            if name in blocked_tools:
+                removed.append(name)
+                continue
+            filtered.append(tool)
+        if filtered and removed:
+            _debug_write("file_focus_followup_tools_filtered", {
+                "target": focused_target,
+                "removed": removed,
+                "remaining_tools": len(filtered),
+            })
+            tool_list = filtered
+        tool_list = _reprioritize_tools_for_coding_focus(
+            tool_list,
+            target_kind=focused_kind,
+            current_tool_name=current_tool_name or str((arg_failure or {}).get("tool") or ""),
+        )
+
+    if not _is_write_file_content_arg_failure(arg_failure):
+        return tool_list
+
+    existing_target = _resolve_existing_file_target(tool_args) or (focused_target if focused_kind == "file" else "")
+    if existing_target:
+        _debug_write("write_file_followup_tools_kept", {
+            "target": existing_target,
+            "available_tools": len(tool_list),
+        })
+    return tool_list
 
 
 def _build_current_time_context() -> str:
@@ -965,6 +1172,10 @@ def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None 
     task_fs_target = _load_task_plan_fs_target(bundle)
     if task_fs_target:
         lines.append(f"Current task directory/file target: {task_fs_target}")
+        focus_guidance = _build_fs_focus_guidance(bundle, {"file_path": task_fs_target})
+        if focus_guidance:
+            lines.append("Execution focus:")
+            lines.extend(f"- {line}" for line in focus_guidance.splitlines() if line.strip())
     items = task_plan.get("items") if isinstance(task_plan.get("items"), list) else []
     if items:
         lines.append("Current plan checklist:")
@@ -1693,16 +1904,18 @@ def _build_cod_system_prompt(bundle: dict) -> str:
         "\n- For any real-world action in the environment, execute the tool first and only claim success from the tool result."
         "\n- Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction."
         "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
-        "\n- For file or code tasks, if the next step depends on project structure or existing files, inspect with list_files or read_file before writing."
-        "\n- Use apply_unified_diff when you already have a precise unified diff patch for an existing file."
-        "\n- Use search_replace when you know the exact old_text and new_text inside an existing file."
-        "\n- Use edit_file when an existing file must be modified from instructions but you do not have an exact search/replace block yet."
-        "\n- Use write_file only when the complete final file content is already determined."
+        "\n- For file or code tasks, if the target file is already known and exists, stay on that file first and prefer read_file or write_file over folder_explore."
+        "\n- For routine coding, follow the primary lane read_file -> write_file -> run_command verification when needed. This is a priority guide, not a hard ban."
+        "\n- Inspect broader project structure only when the path is unresolved or adjacent context is genuinely required."
+        "\n- If the next step depends on project structure or existing files and no file target is locked yet, inspect with list_files or read_file before writing."
+        "\n- Use write_file for new files, full rewrites, and instruction-driven updates. It can take complete content directly, or a precise change_request/description so the runtime can synthesize the full file content."
+        "\n- self_fix and discover_tools are not available in the current tool list."
         "\n- For uncertain desktop or app state, inspect with sense_environment or screen_capture before repeating the same action."
         "\n- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes."
         "\n- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
     )
     time_context = _build_current_time_context()
+    focus_guidance = _build_fs_focus_guidance(bundle)
 
     prompt = (
         f"{time_context}\n\n"
@@ -1713,7 +1926,8 @@ def _build_cod_system_prompt(bundle: dict) -> str:
         f"L7\u7ecf\u9a8c\u6559\u8bad\uff1a\n{l7_text}\n\n"
         + (f"\u573a\u666f\uff1a{session_text}\n\n" if session_text else "")
         + f"\u56de\u590d\u8981\u6c42\uff1a\n{rules_text}\n\n"
-        f"\u5de5\u5177\u4f7f\u7528\u6307\u5f15\uff1a\n{tool_text}"
+        + f"\u5de5\u5177\u4f7f\u7528\u6307\u5f15\uff1a\n{tool_text}"
+        + (f"\n\nFocused task guidance:\n{focus_guidance}" if focus_guidance else "")
     ).strip()
 
     # 闪回 hint（如果有）
@@ -1766,6 +1980,7 @@ def _build_tool_call_system_prompt(bundle: dict) -> str:
     l7_text = l7_context or "\u6682\u65e0"
     l8_text = l8_context or "\u6682\u65e0\u547d\u4e2d\u7684\u5df2\u5b66\u77e5\u8bc6"
     time_context = _build_current_time_context()
+    focus_guidance = _build_fs_focus_guidance(bundle)
 
     return (
         f"{time_context}\n\n"
@@ -1798,8 +2013,13 @@ def _build_tool_call_system_prompt(bundle: dict) -> str:
         "- \u5982\u679c\u5de5\u5177\u5931\u8d25\u662f\u56e0\u4e3a\u7f3a\u5c11\u5fc5\u8981\u53c2\u6570\uff0c\u4e0d\u8981\u91cd\u590d\u540c\u4e00\u4e2a\u4e0d\u5b8c\u6574\u8c03\u7528\uff1b\u5148\u8865\u5168\u53c2\u6570\uff0c\u6216\u76f4\u63a5\u8bf4\u660e\u963b\u585e\u70b9\u3002\n"
         "- \u6587\u4ef6/\u4ee3\u7801\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u4f60\u8fd8\u4e0d\u6e05\u695a\u5f53\u524d\u9879\u76ee\u7ed3\u6784\u6216\u5df2\u6709\u6587\u4ef6\u5185\u5bb9\uff0c\u4f18\u5148\u8c03\u7528 list_files / read_file\uff0c\u518d\u51b3\u5b9a\u662f\u5426 write_file\u3002\n"
         "- \u684c\u9762/\u73af\u5883\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u5f53\u524d\u72b6\u6001\u4e0d\u660e\u786e\uff0c\u4f18\u5148\u8c03\u7528 sense_environment \u6216 screen_capture\uff0c\u518d\u51b3\u5b9a\u4e0b\u4e00\u6b65\u3002\n"
+        "- If the coding target file is already known and exists, stay on that file first and prefer read_file / write_file over folder_explore.\n"
+        "- For routine coding, follow the primary lane read_file -> write_file -> run_command verification when needed. This is a priority guide, not a hard ban.\n"
+        "- Only expand to broader project exploration when the path is unresolved or adjacent context is genuinely required.\n"
+        "- self_fix and discover_tools are not available in the current tool list.\n"
         "- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes.\n"
         "- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
+        + (f"\n\nFocused task guidance:\n{focus_guidance}" if focus_guidance else "")
     ).strip()
 
     # 闪回 hint（如果有）
@@ -1906,6 +2126,34 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
         pass
 
     tool_calls = _resolve_tool_calls_from_result(result, bundle, mode="non_stream_initial")
+    if not tool_calls:
+        reply = result.get("content", "")
+        visible_reply = _clean_visible_reply_text(reply)
+        if visible_reply and _looks_like_incomplete_tool_handoff(visible_reply):
+            _debug_write("tool_call_initial_handoff_retry", {
+                "mode": "non_stream",
+                "text_len": len(visible_reply),
+                "text_preview": visible_reply[:80],
+            })
+            messages.append({"role": "assistant", "content": reply})
+            _append_runtime_guidance(messages, _build_initial_tool_handoff_retry_note())
+            result = _llm_call(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30)
+            usage_retry = result.get("usage", {})
+            try:
+                from core.state_loader import record_stats
+                record_stats(
+                    input_tokens=usage_retry.get("prompt_tokens", 0),
+                    output_tokens=usage_retry.get("completion_tokens", 0),
+                    scene="tool_call",
+                    cache_write=usage_retry.get("prompt_cache_miss_tokens", 0),
+                    cache_read=usage_retry.get("prompt_cache_hit_tokens", 0),
+                    model=cfg.get("model", ""),
+                )
+            except Exception:
+                pass
+            for k in ("prompt_tokens", "completion_tokens", "prompt_cache_hit_tokens", "prompt_cache_miss_tokens"):
+                usage[k] = usage.get(k, 0) + usage_retry.get(k, 0)
+            tool_calls = _resolve_tool_calls_from_result(result, bundle, mode="non_stream_initial_handoff_retry")
     if not tool_calls:
         # LLM 选择直接回复，不调工具
         reply = result.get("content", "")
@@ -2233,6 +2481,14 @@ def _looks_like_tool_preamble(text: str) -> bool:
     if len(visible) <= 160:
         return True
 
+    return _contains_tool_handoff_phrase(visible)
+
+
+def _contains_tool_handoff_phrase(text: str) -> bool:
+    visible = _clean_visible_reply_text(text)
+    if not visible:
+        return False
+
     preamble_prefixes = (
         "我来",
         "我先",
@@ -2290,6 +2546,84 @@ def _looks_like_tool_preamble(text: str) -> bool:
     return any(visible.startswith(prefix) for prefix in preamble_prefixes) or any(
         action in visible for action in preamble_actions
     )
+
+
+def _looks_like_structured_tool_handoff(text: str) -> bool:
+    visible = _clean_visible_reply_text(text)
+    if not visible or "```" in visible:
+        return False
+
+    lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
+    if len(lines) < 3 or len(lines) > 5:
+        return False
+    if any(line.startswith("|") and line.endswith("|") for line in lines):
+        return False
+
+    numbered_lines = [line for line in lines if _re.match(r"^\d+\.\s+\S+", line)]
+    if not numbered_lines or len(numbered_lines) > 3:
+        return False
+
+    handoff_line = lines[-1]
+    if _re.match(r"^\d+\.", handoff_line):
+        return False
+    if len(visible) > 220:
+        return False
+
+    return _contains_tool_handoff_phrase(handoff_line)
+
+
+def _looks_like_incomplete_tool_handoff(text: str) -> bool:
+    visible = _clean_visible_reply_text(text)
+    if not visible:
+        return False
+    return _looks_like_tool_preamble(visible) or _looks_like_structured_tool_handoff(visible)
+
+
+def _build_initial_tool_handoff_retry_note() -> str:
+    return (
+        "The previous assistant turn only contained an action handoff/preamble. "
+        "No tool has executed yet and no verified result exists. Continue the SAME task now. "
+        "Either call the next tool(s) or provide a complete direct answer if no tool is actually needed. "
+        "Do not stop after saying you will do something."
+    )
+
+
+def _resolve_stream_tool_calls_signal(
+    tool_calls_signal: list[dict] | None,
+    collected_tokens: list,
+    bundle: dict,
+    *,
+    mode: str,
+) -> tuple[list[dict] | None, str, str]:
+    joined = "".join(str(token) for token in (collected_tokens or [])).strip()
+    visible_joined = _strip_think_markup(joined).strip()
+
+    if tool_calls_signal and visible_joined:
+        is_preamble = _looks_like_tool_preamble(visible_joined)
+        is_structured_handoff = _looks_like_structured_tool_handoff(visible_joined)
+        if not (is_preamble or is_structured_handoff):
+            _debug_write("tool_call_stream_mixed_output", {
+                "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
+                "text_len": len(visible_joined),
+                "text_preview": visible_joined[:80],
+            })
+            tool_calls_signal = None
+        else:
+            _debug_write("tool_call_stream_preamble_kept", {
+                "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
+                "structured_handoff": is_structured_handoff,
+                "text_len": len(visible_joined),
+                "text_preview": visible_joined[:80],
+            })
+
+    if not tool_calls_signal:
+        tool_calls_signal = _resolve_tool_calls_from_result(
+            {"content": joined},
+            bundle,
+            mode=mode,
+        )
+
+    return tool_calls_signal, joined, visible_joined
 
 
 def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_executor):
@@ -2370,7 +2704,9 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         # 允许短引导句 + tool_call 并存，避免模型先说一句就把工具调用丢掉。
         joined = "".join(collected_tokens).strip()
         visible_joined = _strip_think_markup(joined)
-        if visible_joined and not _looks_like_tool_preamble(visible_joined):
+        is_preamble = _looks_like_tool_preamble(visible_joined)
+        is_structured_handoff = _looks_like_structured_tool_handoff(visible_joined)
+        if visible_joined and not (is_preamble or is_structured_handoff):
             _debug_write("tool_call_stream_mixed_output", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
                 "text_len": len(visible_joined),
@@ -2380,6 +2716,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         elif visible_joined:
             _debug_write("tool_call_stream_preamble_kept", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
+                "structured_handoff": is_structured_handoff,
                 "text_len": len(visible_joined),
                 "text_preview": visible_joined[:80],
             })
@@ -2390,6 +2727,45 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             bundle,
             mode="stream_initial",
         )
+
+    tool_calls_signal, joined, visible_joined = _resolve_stream_tool_calls_signal(
+        tool_calls_signal,
+        collected_tokens,
+        bundle,
+        mode="stream_initial",
+    )
+    if not tool_calls_signal and visible_joined and _looks_like_incomplete_tool_handoff(visible_joined):
+        _debug_write("tool_call_initial_handoff_retry", {
+            "mode": "stream",
+            "text_len": len(visible_joined),
+            "text_preview": visible_joined[:80],
+        })
+        messages.append({"role": "assistant", "content": joined or visible_joined})
+        _append_runtime_guidance(messages, _build_initial_tool_handoff_retry_note())
+
+        retry_tokens = []
+        retry_usage = {}
+        retry_tool_calls_signal = None
+        for chunk in _llm_call_stream(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30):
+            if isinstance(chunk, dict):
+                if chunk.get("_tool_calls"):
+                    retry_tool_calls_signal = chunk["_tool_calls"]
+                elif chunk.get("_usage"):
+                    retry_usage = chunk["_usage"]
+            else:
+                retry_tokens.append(chunk)
+                yield chunk
+
+        for k in ("prompt_tokens", "completion_tokens", "prompt_cache_hit_tokens", "prompt_cache_miss_tokens"):
+            usage[k] = usage.get(k, 0) + retry_usage.get(k, 0)
+
+        tool_calls_signal, joined, visible_joined = _resolve_stream_tool_calls_signal(
+            retry_tool_calls_signal,
+            retry_tokens,
+            bundle,
+            mode="stream_initial_handoff_retry",
+        )
+        collected_tokens.extend(retry_tokens)
 
     if not tool_calls_signal:
         # LLM 直接回复，没有调工具
@@ -2464,6 +2840,13 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     _current_tool_response = tool_response
     _current_arg_failure = arg_failure
     _current_tool_args = dict(tool_args)
+    _followup_tools = _build_followup_tools_after_arg_failure(
+        tools,
+        _current_arg_failure,
+        _current_tool_args,
+        bundle,
+        current_tool_name=tool_name,
+    )
 
     yield {
         "_tool_call": {
@@ -2544,7 +2927,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         collected_n = []
         tool_calls_n = None
 
-        for chunk in _llm_call_stream(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30):
+        for chunk in _llm_call_stream(cfg, messages, tools=_followup_tools, temperature=0.7, max_tokens=2000, timeout=30):
             if isinstance(chunk, dict):
                 if chunk.get("_tool_calls"):
                     tool_calls_n = chunk["_tool_calls"]
@@ -2665,6 +3048,13 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
                 _current_action_summary = _summarize_tool_response_text(_current_tool_response) or _current_action_summary
                 _current_arg_failure = arg_failure_n
                 _current_tool_args = dict(tool_args_n)
+                _followup_tools = _build_followup_tools_after_arg_failure(
+                    tools,
+                    _current_arg_failure,
+                    _current_tool_args,
+                    bundle,
+                    current_tool_name=tool_name_n,
+                )
                 _append_runtime_guidance(
                     messages,
                     _build_strict_write_file_retry_note(tool_args_n, arg_failure_n),
@@ -2706,6 +3096,13 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             for st in _skill_tools:
                 if st.get("function", {}).get("name") not in _existing_names:
                     tools.append(st)
+            _followup_tools = _build_followup_tools_after_arg_failure(
+                tools,
+                _current_arg_failure,
+                _current_tool_args,
+                bundle,
+                current_tool_name=tool_name_n,
+            )
             _debug_write("discover_tools_expanded", {"total_tools": len(tools)})
 
         yield {
@@ -2726,6 +3123,13 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         _current_tool_response = tool_response_n
         _current_arg_failure = arg_failure_n
         _current_tool_args = dict(tool_args_n)
+        _followup_tools = _build_followup_tools_after_arg_failure(
+            tools,
+            _current_arg_failure,
+            _current_tool_args,
+            bundle,
+            current_tool_name=tool_name_n,
+        )
         recent_attempts.append({
             "tool": tool_name_n,
             "success": success_n,

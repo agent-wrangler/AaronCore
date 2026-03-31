@@ -214,6 +214,69 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIsInstance(resumed, dict)
         self.assertTrue(bool(resumed.get("task_id")))
 
+    def test_explicit_file_path_can_resume_task_plan_from_parent_directory_target(self):
+        _task, snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        resumed = task_store_module.get_active_task_plan_snapshot(
+            "write_file · 目标：c:/Users/36459/NovaNotes/templates/index.html 总是失败"
+        )
+
+        self.assertIsInstance(resumed, dict)
+        self.assertTrue(bool(resumed.get("task_id")))
+        self.assertEqual(resumed.get("goal"), "continue NovaNotes")
+
+    def test_explicit_file_path_prefers_matching_task_plan_over_newer_unrelated_task(self):
+        _older_task, older_snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            older_snapshot,
+            {"path": "C:/Users/36459/NovaNotes", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        _newer_task, newer_snapshot = task_store_module.save_task_plan_snapshot(
+            "OtherProject build pipeline",
+            {
+                "goal": "OtherProject build pipeline",
+                "summary": "OtherProject build pipeline",
+                "items": [{"id": "inspect", "title": "Inspect other project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            newer_snapshot,
+            {"path": "D:/Sandbox/OtherProject", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        resumed = task_store_module.get_active_task_plan_snapshot(
+            "还是 c:/Users/36459/NovaNotes/templates/index.html 这个文件"
+        )
+
+        self.assertIsInstance(resumed, dict)
+        self.assertEqual(resumed.get("goal"), "continue NovaNotes")
+        self.assertNotEqual(resumed.get("goal"), "OtherProject build pipeline")
+
 
 class TaskPlanMetaTests(unittest.TestCase):
     def test_executor_preserves_task_plan_meta(self):

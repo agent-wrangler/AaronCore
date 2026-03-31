@@ -404,7 +404,7 @@ fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(func
 
 function show(n){
  window._currentTab=n;
- for(var i=1;i<=7;i++){
+ for(var i=1;i<=6;i++){
   var menu=document.getElementById('m'+i);
   if(menu) menu.classList.remove('active');
  }
@@ -505,10 +505,6 @@ function show(n){
  }
 
  if(n==6){
-  loadEntityPage(isLight);
-  return;
- }
- if(n==7){
   loadLabPage(isLight);
   return;
  }

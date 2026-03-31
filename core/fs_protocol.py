@@ -376,6 +376,16 @@ def missing_required_protocol_fields(tool_name: str, tool_args: dict | None) -> 
     normalized_tool = str(tool_name or '').strip()
     missing = []
     for field in PROTOCOL_REQUIRED_FIELDS.get(normalized_tool, ()):
+        if normalized_tool == 'write_file' and field == 'content':
+            write_request = str(
+                args.get('change_request', '')
+                or args.get('instructions', '')
+                or args.get('problem', '')
+                or args.get('description', '')
+                or ''
+            ).strip()
+            if write_request:
+                continue
         if normalized_tool == 'search_replace' and field == 'new_text':
             aliases = ('new_text', 'replacement', 'replace_text', 'after')
             if not any(alias in args for alias in aliases):
@@ -447,6 +457,7 @@ def build_protocol_arg_failure_system_note(tool_name: str, tool_args: dict | Non
             f'The previous write_file call for {target} failed because required arguments were missing: {missing}. '
             'Do not repeat the same incomplete write_file call. '
             'If you already know what the file should contain, immediately call write_file again with the same file_path and the COMPLETE file content string. '
+            'If you know the intended result but not the full file yet, call write_file again with the same file_path and a precise change_request or description so the runtime can synthesize the complete content. '
             'If you still need project structure or neighboring file context, inspect with list_files or read_file first, then rebuild the full content. '
             'Only stop calling tools and explain the blocker if the file content genuinely depends on a missing user choice or missing context you cannot infer.'
         )
@@ -1032,9 +1043,10 @@ def build_protocol_arg_failure_feedback(tool_name: str, tool_args: dict | None, 
     if tool_name == 'write_file' and 'content' in missing_fields:
         return (
             '执行失败: 缺少 content。\n'
-            f'write_file 必须同时提供 file_path 和完整文件内容；当前目标是 {target}。\n'
+            f'write_file 至少需要 file_path，并且还要提供完整 content，或提供足够明确的 change_request / description 让系统生成完整文件内容；当前目标是 {target}。\n'
             '不要重复只带 file_path 的调用。\n'
             '如果你已经知道这个文件要写什么，就直接重新调用 write_file，并把该文件的完整 content 一次性传入。\n'
+            '如果你知道要实现什么但还没展开成完整文件，直接补 change_request / description / instructions。\n'
             '如果你已经有准确的 unified diff 补丁，直接调用 apply_unified_diff。\n'
             '如果你已经知道文件里哪段 old_text 要替换成 new_text，直接调用 search_replace。\n'
             '如果是在已有文件上按需求修改，直接调用 edit_file，传 file_path + change_request。\n'
@@ -1078,9 +1090,7 @@ def build_protocol_arg_failure_system_note(tool_name: str, tool_args: dict | Non
             f'The previous write_file call for {target} failed because required arguments were missing: {missing}. '
             'Do not repeat the same incomplete write_file call. '
             'If you already know what the file should contain, immediately call write_file again with the same file_path and the COMPLETE file content string. '
-            'If you already have a precise unified diff patch for this file, call apply_unified_diff instead. '
-            'If you already know the exact old_text and new_text for a local change, call search_replace instead. '
-            'If the target file already exists and you need to modify it from instructions, call edit_file with the same file_path and a precise change_request instead. '
+            'If you know the intended result but not the full file yet, call write_file again with the same file_path and a precise change_request or description so the runtime can synthesize the complete content. '
             'If you still need project structure or neighboring file context, inspect with list_files or read_file first, then rebuild the full content. '
             'Only stop calling tools and explain the blocker if the file content genuinely depends on a missing user choice or missing context you cannot infer.'
         )
@@ -1282,6 +1292,48 @@ def _generate_edited_file_content(target: Path, original_content: str, change_re
     return rewritten
 
 
+def _generate_new_file_content(target: Path, write_request: str) -> str:
+    from brain import LLM_CONFIG, llm_call_stream
+
+    prompt = (
+        'You are creating a new local file.\n'
+        'Return ONLY the final complete file content.\n'
+        'Do not explain changes.\n'
+        'Do not wrap the answer in markdown fences.\n\n'
+        f'File path: {target}\n'
+        f'Request: {write_request}\n\n'
+        'Generate a valid file for this exact path that fully satisfies the request.'
+    )
+
+    chunks = []
+    for token in llm_call_stream(
+        dict(LLM_CONFIG),
+        [{"role": "user", "content": prompt}],
+        temperature=0.1,
+        max_tokens=8192,
+        timeout=60,
+    ):
+        if isinstance(token, str):
+            chunks.append(token)
+
+    rewritten = _strip_llm_code_fence(''.join(chunks))
+    if not rewritten:
+        raise ValueError('model_returned_empty_content')
+    return rewritten
+
+
+def _derive_write_file_request(arguments: dict | None, user_input: str = '') -> str:
+    args = dict(arguments or {})
+    return str(
+        args.get('change_request', '')
+        or args.get('instructions', '')
+        or args.get('problem', '')
+        or args.get('description', '')
+        or user_input
+        or ''
+    ).strip()
+
+
 def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -> dict:
     args = dict(arguments or {})
     file_path = str(
@@ -1293,10 +1345,11 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
     ).strip()
     content = str(args.get('content', '') or '')
     description = str(args.get('description', '') or '').strip()
-
-    missing = missing_required_protocol_fields('write_file', {'file_path': file_path, 'content': content})
+    write_request = _derive_write_file_request(args, user_input)
     target_hint = file_path.strip()
-    if missing:
+
+    if not file_path:
+        missing = missing_required_protocol_fields('write_file', {'file_path': file_path, 'content': content})
         feedback = build_protocol_arg_failure_feedback('write_file', {'file_path': file_path, 'content': content}, missing)
         return build_protocol_exec_result(
             False,
@@ -1314,7 +1367,7 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
             outcome='blocked',
             display_hint=f"写入文件缺少必要参数：{Path(target_hint).name if target_hint else '未提供目标'}",
             verification_mode='argument_check',
-            verification_detail=f"missing_fields={','.join(missing)}",
+            verification_detail='missing_fields=file_path',
             verified=False,
         )
 
@@ -1359,6 +1412,61 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
             verified=False,
         )
 
+    if not content:
+        if not write_request:
+            missing = ['content']
+            feedback = build_protocol_arg_failure_feedback(
+                'write_file',
+                {'file_path': file_path, 'content': content},
+                missing,
+            )
+            return build_protocol_exec_result(
+                False,
+                feedback,
+                error=feedback,
+                expected_state='write_ready',
+                observed_state='missing_required_args',
+                drift_reason='missing_required_args',
+                repair_hint='provide_complete_file_content',
+                repair_attempted=False,
+                repair_succeeded=False,
+                action_kind='write_file',
+                target_kind='file',
+                target=str(target),
+                outcome='blocked',
+                display_hint=f"写入文件缺少必要参数：{target.name}",
+                verification_mode='argument_check',
+                verification_detail='missing_fields=content',
+                verified=False,
+            )
+        try:
+            if target.exists() and target.is_file():
+                original_content = target.read_text(encoding='utf-8')
+                content = _generate_edited_file_content(target, original_content, write_request)
+            else:
+                content = _generate_new_file_content(target, write_request)
+        except Exception as exc:
+            feedback = f'写入内容生成失败: {exc}'
+            return build_protocol_exec_result(
+                False,
+                feedback,
+                error=feedback,
+                expected_state='write_content_ready',
+                observed_state='generation_failed',
+                drift_reason='write_generation_failed',
+                repair_hint='refine_change_request_or_read_context',
+                repair_attempted=False,
+                repair_succeeded=False,
+                action_kind='write_file',
+                target_kind='file',
+                target=str(target),
+                outcome='failed',
+                display_hint=f'生成写入内容失败：{target.name}',
+                verification_mode='content_generation',
+                verification_detail=str(exc),
+                verified=False,
+            )
+
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding='utf-8')
@@ -1383,7 +1491,7 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
         )
 
     post = verify_post_condition('write_file', str(target))
-    summary = description or f"已写入文件：{target}"
+    summary = description or write_request or f"已写入文件：{target}"
     if not bool(post.get('ok', False)):
         return build_protocol_exec_result(
             False,
@@ -1406,7 +1514,11 @@ def execute_write_file_action(arguments: dict | None, *, user_input: str = '') -
             verified=False,
         )
 
-    verification = verify_file_change(target, content=content, context={'user_input': user_input})
+    verification = verify_file_change(
+        target,
+        content=content,
+        context={'user_input': user_input, 'change_request': write_request},
+    )
     verification_mode = str(verification.get('verification_mode') or 'path_exists')
     verification_detail = str(verification.get('verification_detail') or str(target))
     verification_state = verification.get('verified')

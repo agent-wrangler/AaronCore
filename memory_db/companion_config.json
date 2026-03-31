@@ -1,7 +1,0 @@
-{
-  "enabled": false,
-  "model": "Hiyori",
-  "tts_voice": "zh-CN-YunxiNeural",
-  "opacity_idle": 1,
-  "always_on_top": true
-}

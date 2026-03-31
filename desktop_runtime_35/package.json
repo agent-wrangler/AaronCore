@@ -18,6 +18,7 @@
   "build": {
     "appId": "com.novacore.desktop",
     "productName": "NovaCore",
+    "icon": "../static/icon/nova.ico",
     "asar": true,
     "npmRebuild": false,
     "files": [
@@ -32,10 +33,6 @@
       {
         "from": "../output.html",
         "to": "novacore/output.html"
-      },
-      {
-        "from": "../companion.html",
-        "to": "novacore/companion.html"
       },
       {
         "from": "../brain",
@@ -90,6 +87,7 @@
       "output": "dist"
     },
     "win": {
+      "icon": "../static/icon/nova.ico",
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,
       "target": [

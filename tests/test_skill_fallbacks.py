@@ -9,6 +9,7 @@ import core.reply_formatter as reply_formatter_module
 import core.tool_adapter as tool_adapter_module
 import core.executor as executor_module
 import core.fs_protocol as fs_protocol_module
+import core.target_protocol as target_protocol_module
 import memory as memory_module
 import routes.chat as chat_module
 from agent_final import normalize_route_result, resolve_route, unified_chat_reply
@@ -279,7 +280,32 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertIn("list_files / read_file", prompt)
         self.assertIn("sense_environment", prompt)
+        self.assertIn("self_fix and discover_tools are not available in the current tool list", prompt)
         self.assertIn("缺少必要参数", prompt)
+
+    def test_tool_call_system_prompt_focuses_existing_task_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            prompt = reply_formatter_module._build_tool_call_system_prompt(
+                {
+                    "l3": [],
+                    "l4": {},
+                    "l5": {},
+                    "l7": [],
+                    "l8": [],
+                    "l2_memories": [],
+                    "current_model": "test-model",
+                    "context_data": {"fs_target": {"path": str(target), "option": "inspect"}},
+                }
+            )
+
+        self.assertIn("Focused task guidance", prompt)
+        self.assertIn(str(target), prompt)
+        self.assertIn("prefer read_file / write_file over folder_explore", prompt)
+        self.assertIn("Primary coding lane", prompt)
 
     def test_build_run_event_prefers_meta_facts(self):
         run_event = chat_module._build_run_event(
@@ -475,7 +501,7 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("tool_used"), "write_file")
         self.assertEqual(done.get("success"), False)
 
-    def test_write_file_arg_failure_system_note_prefers_self_repair_before_stopping(self):
+    def test_write_file_arg_failure_system_note_keeps_retry_on_write_file_lane(self):
         note = reply_formatter_module._build_tool_arg_failure_system_note(
             "write_file",
             {"file_path": "notes_app/templates/index.html"},
@@ -483,9 +509,7 @@ class RunEventMappingTests(unittest.TestCase):
         )
 
         self.assertIn("immediately call write_file again", note)
-        self.assertIn("call apply_unified_diff instead", note)
-        self.assertIn("call search_replace instead", note)
-        self.assertIn("call edit_file", note)
+        self.assertIn("change_request or description", note)
         self.assertIn("inspect with list_files or read_file first", note)
         self.assertIn("Only stop calling tools", note)
 
@@ -497,10 +521,9 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertIn("Do not send natural-language promises", note)
         self.assertIn("call write_file with the SAME file_path", note)
-        self.assertIn("call apply_unified_diff", note)
-        self.assertIn("call search_replace", note)
-        self.assertIn("call edit_file", note)
-        self.assertIn("Do not repeat write_file without content", note)
+        self.assertIn("precise change_request/description", note)
+        self.assertIn("call list_files or read_file first", note)
+        self.assertIn("Do not repeat write_file with only file_path", note)
 
     def test_execute_edit_file_action_updates_existing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -652,6 +675,51 @@ class RunEventMappingTests(unittest.TestCase):
             self.assertIs(verification.get("verified"), True)
             self.assertEqual(verification.get("verification_mode"), "python_compile")
             self.assertEqual(action.get("verification_mode"), "python_compile")
+
+    def test_execute_write_file_action_generates_new_file_from_change_request(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "app.py"
+
+            def fake_stream(_cfg, _messages, **_kwargs):
+                yield "print('ok')\n"
+
+            with patch("brain.llm_call_stream", side_effect=fake_stream):
+                result = fs_protocol_module.execute_write_file_action(
+                    {
+                        "file_path": str(target),
+                        "change_request": "Create a tiny Python script that prints ok.",
+                    }
+                )
+
+            self.assertTrue(result.get("success"))
+            self.assertEqual(target.read_text(encoding="utf-8").strip(), "print('ok')")
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            verification = meta.get("verification") or {}
+            self.assertEqual(action.get("action_kind"), "write_file")
+            self.assertEqual(verification.get("verification_mode"), "python_compile")
+
+    def test_execute_write_file_action_rewrites_existing_file_from_change_request(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "index.html"
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            def fake_stream(_cfg, _messages, **_kwargs):
+                yield "<html><body>new</body></html>"
+
+            with patch("brain.llm_call_stream", side_effect=fake_stream):
+                result = fs_protocol_module.execute_write_file_action(
+                    {
+                        "file_path": str(target),
+                        "change_request": "Replace old with new.",
+                    }
+                )
+
+            self.assertTrue(result.get("success"))
+            self.assertEqual(target.read_text(encoding="utf-8"), "<html><body>new</body></html>")
+            meta = result.get("meta") or {}
+            action = meta.get("action") or {}
+            self.assertEqual(action.get("action_kind"), "write_file")
 
     def test_execute_write_file_action_fails_on_invalid_python(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -975,6 +1043,226 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertFalse(bool(executed[0][1].get("content")))
         self.assertEqual(executed[1][1].get("file_path"), "notes_app/templates/index.html")
         self.assertEqual(executed[1][1].get("content"), "<html><body>ok</body></html>")
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "write_file")
+        self.assertEqual(done.get("success"), True)
+
+    def test_followup_tools_keep_write_file_after_missing_content_for_existing_target(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "read_file"}},
+                {"type": "function", "function": {"name": "folder_explore"}},
+                {"type": "function", "function": {"name": "screen_capture"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                {"tool": "write_file", "missing_fields": ["content"], "target": str(target)},
+                {"file_path": str(target)},
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertIn("write_file", filtered_names)
+        self.assertIn("read_file", filtered_names)
+
+    def test_followup_tools_keep_write_file_for_new_target(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            tools = [
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "read_file"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                {"tool": "write_file", "missing_fields": ["content"], "target": str(target)},
+                {"file_path": str(target)},
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertIn("write_file", filtered_names)
+
+    def test_followup_tools_drop_environment_tools_for_existing_file_focus(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "read_file"}},
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "folder_explore"}},
+                {"type": "function", "function": {"name": "screen_capture"}},
+                {"type": "function", "function": {"name": "app_target"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                None,
+                {"file_path": str(target)},
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertIn("read_file", filtered_names)
+        self.assertIn("write_file", filtered_names)
+        self.assertNotIn("folder_explore", filtered_names)
+        self.assertNotIn("screen_capture", filtered_names)
+        self.assertNotIn("app_target", filtered_names)
+
+    def test_followup_tools_reprioritize_primary_coding_lane_without_hard_ban(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "task_plan"}},
+                {"type": "function", "function": {"name": "web_search"}},
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "run_command"}},
+                {"type": "function", "function": {"name": "read_file"}},
+                {"type": "function", "function": {"name": "folder_explore"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                None,
+                {"file_path": str(target)},
+                current_tool_name="read_file",
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertEqual(
+            filtered_names[:4],
+            ["read_file", "write_file", "run_command", "task_plan"],
+        )
+        self.assertIn("web_search", filtered_names)
+        self.assertNotIn("folder_explore", filtered_names)
+
+    def test_file_protocol_tool_defs_expose_open_instruction_aliases(self):
+        defs = tool_adapter_module._build_file_protocol_tool_defs()
+        names = [tool.get("function", {}).get("name") for tool in defs]
+
+        self.assertEqual(names, ["write_file"])
+
+        write_props = defs[0]["function"]["parameters"]["properties"]
+        self.assertIn("instructions", write_props)
+        self.assertIn("problem", write_props)
+
+    def test_build_tools_list_cod_hides_removed_protocol_and_runtime_tools(self):
+        with patch.object(
+            tool_adapter_module,
+            "_get_all_skills",
+            return_value={"development_flow": {"execute": (lambda *_a, **_k: None), "description": "dev", "parameters": {"type": "object", "properties": {"user_input": {"type": "string"}}, "required": ["user_input"]}}},
+        ):
+            tools = tool_adapter_module.build_tools_list_cod()
+
+        names = [tool.get("function", {}).get("name") for tool in tools]
+        self.assertIn("read_file", names)
+        self.assertIn("write_file", names)
+        self.assertNotIn("edit_file", names)
+        self.assertNotIn("search_replace", names)
+        self.assertNotIn("apply_unified_diff", names)
+        self.assertNotIn("self_fix", names)
+        self.assertIn("sense_environment", names)
+        self.assertNotIn("discover_tools", names)
+
+    def test_unified_reply_with_tools_stream_keeps_write_file_available_for_existing_file_retry(self):
+        executed = []
+        tool_sets = []
+        call_count = {"value": 0}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "read_file"}},
+            ]
+
+            def fake_stream(_cfg, messages, tools=None, **_kwargs):
+                call_count["value"] += 1
+                tool_sets.append([tool.get("function", {}).get("name") for tool in (tools or [])])
+                idx = call_count["value"]
+                if idx == 1:
+                    yield {
+                        "_tool_calls": [
+                            {
+                                "id": "call_write_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "write_file",
+                                    "arguments": json.dumps(
+                                        {"file_path": str(target)},
+                                        ensure_ascii=False,
+                                    ),
+                                },
+                            }
+                        ]
+                    }
+                    yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                    return
+                if idx == 2:
+                    self.assertIn("write_file", tool_sets[-1])
+                    self.assertNotIn("folder_explore", tool_sets[-1])
+                    self.assertNotIn("sense_environment", tool_sets[-1])
+                    yield {
+                        "_tool_calls": [
+                            {
+                                "id": "call_write_2",
+                                "type": "function",
+                                "function": {
+                                    "name": "write_file",
+                                    "arguments": json.dumps(
+                                        {
+                                            "file_path": str(target),
+                                            "change_request": "Add a class to the body tag.",
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                },
+                            }
+                        ]
+                    }
+                    yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+                    return
+
+                yield "已经改好了。"
+                yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 3}}
+
+            def fake_tool_executor(name, args, _context):
+                executed.append((name, dict(args)))
+                if name == "write_file" and not args.get("change_request"):
+                    return {"success": False, "error": "缺少 content"}
+                return {
+                    "success": True,
+                    "response": "已写入 index.html",
+                    "meta": {"action": {"display_hint": "已写入 index.html"}},
+                }
+
+            bundle = {
+                "user_input": "改好了吗",
+                "l1": [],
+                "l4": {},
+                "dialogue_context": "",
+            }
+
+            with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+                reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+            ), patch.object(
+                reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+            ):
+                chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, tools, fake_tool_executor))
+
+        self.assertEqual([name for name, _args in executed], ["write_file", "write_file"])
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
         self.assertEqual(done.get("tool_used"), "write_file")
@@ -1368,6 +1656,48 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(action.get("verification_mode"), "argument_check")
         self.assertIn("missing_fields=content", action.get("verification_detail", ""))
 
+    def test_execute_tool_call_remembers_failed_write_file_target_as_file(self):
+        remembered = {}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+            context = {
+                "fs_target": {"path": str(target.parent), "option": "inspect", "source": "memory"},
+                "context_data": {"fs_target": {"path": str(target.parent), "option": "inspect", "source": "memory"}},
+                "task_plan": {"task_id": "task_demo", "project_id": "proj_demo", "goal": "继续修改 index.html", "items": []},
+            }
+
+            fake_result = {
+                "success": False,
+                "error": "执行失败: 缺少 content。",
+                "meta": {
+                    "action": {
+                        "action_kind": "write_file",
+                        "target_kind": "file",
+                        "target": str(target),
+                        "outcome": "blocked",
+                        "verification_mode": "argument_check",
+                        "verification_detail": "missing_fields=content",
+                    }
+                },
+            }
+
+            with patch.object(tool_adapter_module, "_execute", return_value=fake_result), patch(
+                "core.task_store.remember_fs_target_for_task_plan",
+                side_effect=lambda task_plan, fs_target: remembered.setdefault("target", dict(fs_target)),
+            ):
+                result = tool_adapter_module.execute_tool_call(
+                    "write_file",
+                    {"file_path": str(target)},
+                    context,
+                )
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual((context.get("fs_target") or {}).get("path"), str(target))
+        self.assertEqual(((context.get("context_data") or {}).get("fs_target") or {}).get("path"), str(target))
+        self.assertEqual((remembered.get("target") or {}).get("path"), str(target))
+
     def test_execute_tool_call_routes_search_replace_into_protocol_base(self):
         result = tool_adapter_module.execute_tool_call(
             "search_replace",
@@ -1410,6 +1740,42 @@ class RunEventMappingTests(unittest.TestCase):
                 ],
             },
         )
+
+        self.assertEqual(str(repaired.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_repair_tool_args_prefers_explicit_user_input_path_over_stale_folder_target(self):
+        with patch.object(reply_formatter_module, "_load_task_plan_fs_target", return_value="C:/Users/36459/Desktop"), patch.object(
+            reply_formatter_module, "_load_context_fs_target", return_value="C:/Users/36459/Desktop"
+        ), patch.object(reply_formatter_module, "_infer_recent_directory_target", return_value="C:/Users/36459/Desktop"), patch.object(
+            reply_formatter_module, "_load_latest_structured_fs_target", return_value="C:/Users/36459/Desktop"
+        ):
+            repaired = reply_formatter_module._repair_tool_args_from_context(
+                "folder_explore",
+                {"path": "C:/Users/36459/Desktop"},
+                {
+                    "user_input": r"C:\Users\36459\NovaNotes\ 项目结构",
+                    "l1": [],
+                    "context_data": {"fs_target": {"path": "C:/Users/36459/Desktop", "option": "inspect"}},
+                },
+            )
+
+        self.assertEqual(str(repaired.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_repair_tool_args_prefers_context_fs_target_before_global_fallback(self):
+        with patch.object(reply_formatter_module, "_load_task_plan_fs_target", return_value=""), patch.object(
+            reply_formatter_module, "_load_context_fs_target", return_value="C:/Users/36459/NovaNotes"
+        ), patch.object(reply_formatter_module, "_infer_recent_directory_target", return_value=""), patch.object(
+            reply_formatter_module, "_load_latest_structured_fs_target", return_value="C:/Users/36459/Desktop"
+        ):
+            repaired = reply_formatter_module._repair_tool_args_from_context(
+                "folder_explore",
+                {},
+                {
+                    "user_input": "继续看看这个项目结构",
+                    "l1": [],
+                    "context_data": {"fs_target": {"path": "C:/Users/36459/NovaNotes", "option": "inspect"}},
+                },
+            )
 
         self.assertEqual(str(repaired.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
 
@@ -1706,6 +2072,292 @@ class TaskPlanFsTargetBridgeTests(unittest.TestCase):
             )
 
         self.assertIn("Current task directory/file target: C:/Users/36459/NovaNotes", context_text)
+
+    def test_active_task_context_focuses_existing_task_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            with patch(
+                "core.task_store.get_structured_fs_target_for_task_plan",
+                return_value={"path": str(target), "option": "inspect", "source": "task_plan"},
+            ):
+                context_text = reply_formatter_module._build_active_task_context(
+                    {
+                        "user_input": "继续改那个后台页面",
+                        "task_plan": {
+                            "task_id": "task_demo",
+                            "project_id": "proj_demo",
+                            "goal": "继续完善 NovaNotes 后台页面",
+                            "items": [],
+                        },
+                    }
+                )
+
+        self.assertIn("Execution focus:", context_text)
+        self.assertIn("Known coding target:", context_text)
+        self.assertIn("Stay on this file first.", context_text)
+
+
+class InitialToolHandoffRetryRegressionTests(unittest.TestCase):
+    def test_stream_retries_initial_text_only_handoff_before_marking_done(self):
+        executed = []
+        call_count = {"value": 0}
+        saw_retry_guidance = {"value": False}
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            call_count["value"] += 1
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            has_retry_guidance = any(
+                isinstance(m, dict)
+                and m.get("role") == "user"
+                and "No tool has executed yet" in str(m.get("content") or "")
+                for m in messages
+            )
+            if has_retry_guidance:
+                saw_retry_guidance["value"] = True
+
+            if has_tool_result:
+                yield "File updated."
+                yield {"_usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+                return
+
+            if has_retry_guidance:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_edit_retry_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {
+                                        "file_path": "C:/Users/36459/NovaNotes/templates/index.html",
+                                        "change_request": "Update the admin page copy",
+                                    }
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 2}}
+                return
+
+            yield "I will update the file directly now."
+            yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 4}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "Updated index.html",
+                "meta": {
+                    "action": {
+                        "action_kind": "write_file",
+                        "target_kind": "file",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "Fix the admin page",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(call_count["value"], 3)
+        self.assertTrue(saw_retry_guidance["value"])
+        self.assertEqual(len(executed), 1)
+        self.assertEqual(executed[0][0], "write_file")
+        self.assertEqual(executed[0][1].get("file_path"), "C:/Users/36459/NovaNotes/templates/index.html")
+        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "write_file")
+        self.assertEqual(done.get("success"), True)
+
+    def test_non_stream_retries_initial_text_only_handoff_before_marking_done(self):
+        executed = []
+        call_count = {"value": 0}
+        saw_retry_guidance = {"value": False}
+
+        def fake_llm_call(_cfg, messages, tools=None, **_kwargs):
+            call_count["value"] += 1
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            has_retry_guidance = any(
+                isinstance(m, dict)
+                and m.get("role") == "user"
+                and "No tool has executed yet" in str(m.get("content") or "")
+                for m in messages
+            )
+            if has_retry_guidance:
+                saw_retry_guidance["value"] = True
+
+            if has_tool_result:
+                return {
+                    "content": "File updated.",
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+                }
+
+            if has_retry_guidance:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_edit_retry_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps(
+                                    {
+                                        "file_path": "C:/Users/36459/NovaNotes/templates/index.html",
+                                        "change_request": "Update the admin page copy",
+                                    }
+                                ),
+                            },
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 6, "completion_tokens": 2},
+                }
+
+            return {
+                "content": "I will update the file directly now.",
+                "usage": {"prompt_tokens": 5, "completion_tokens": 4},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "Updated index.html",
+                "meta": {
+                    "action": {
+                        "action_kind": "write_file",
+                        "target_kind": "file",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "Fix the admin page",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertEqual(call_count["value"], 3)
+        self.assertTrue(saw_retry_guidance["value"])
+        self.assertEqual(len(executed), 1)
+        self.assertEqual(executed[0][0], "write_file")
+        self.assertEqual(result.get("tool_used"), "write_file")
+        self.assertNotIn("I will update the file directly now.", result.get("reply", ""))
+        self.assertTrue(str(result.get("reply") or "").strip())
+
+
+class StructuredToolHandoffRegressionTests(unittest.TestCase):
+    def test_structured_tool_handoff_detector_allows_numbered_issue_summary(self):
+        self.assertTrue(
+            reply_formatter_module._looks_like_structured_tool_handoff(
+                "明白！两个核心问题：\n1. 保存了也看不到\n2. 分类逻辑不对\n让我先完整看看项目结构和代码，搞清楚问题在哪："
+            )
+        )
+        self.assertFalse(
+            reply_formatter_module._looks_like_structured_tool_handoff(
+                "明白！两个核心问题：\n1. 保存了也看不到\n2. 分类逻辑不对\n结论就是要重做分类逻辑。"
+            )
+        )
+
+    def test_unified_reply_with_tools_stream_keeps_structured_handoff_before_tool_call(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield "明白！两个核心问题：\n1. 保存了也看不到\n2. 分类逻辑不对\n让我先完整看看项目结构和代码，搞清楚问题在哪："
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_folder_1",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "检查项目结构"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "我已经先把项目结构看完了。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 5}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "已查看项目结构。",
+                "meta": {
+                    "action": {
+                        "action_kind": "resolve_directory",
+                        "target_kind": "directory",
+                        "display_hint": "已查看项目结构",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "看下项目结构",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "folder_explore")
+        self.assertEqual(executed[0][1].get("query"), "检查项目结构")
+        self.assertTrue(any(isinstance(chunk, str) and "两个核心问题" in chunk for chunk in chunks))
+        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "folder_explore")
+        self.assertEqual(done.get("success"), True)
+
+
+class TargetProtocolPathResolutionTests(unittest.TestCase):
+    def test_resolve_target_reference_prefers_explicit_local_path_inside_sentence(self):
+        resolved = target_protocol_module.resolve_target_reference(r"C:\Users\36459\NovaNotes\ 项目结构", {})
+
+        self.assertEqual(resolved.get("target_type"), "path")
+        self.assertEqual(str(resolved.get("value") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+        self.assertEqual(resolved.get("source"), "direct_path")
+
+    def test_resolve_local_app_reference_does_not_treat_directory_path_as_app(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            resolved = target_protocol_module.resolve_local_app_reference(f"{temp_dir} 项目结构", {})
+
+        self.assertEqual(resolved.get("target_type"), "unknown")
+        self.assertEqual(resolved.get("source"), "explicit_path_non_app")
 
 
 if __name__ == "__main__":

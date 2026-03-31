@@ -43,3 +43,10 @@ Keep this file concise. Append new entries; do not rewrite history.
   Raw: 一天天的，改一个地方，把另外个好的地方丢了。
   Affected: protocol fixes, persistence logic, adjacent behavior invariants, regression control.
   Trigger: User pointed out that a later persistence refactor regressed an already-working `模型思考` history behavior.
+
+## 2026-03-31
+
+- Rule: After a repeated `write_file` missing-`content` failure, do not keep surfacing the same bad call path; force a different next file action or stop cleanly.
+  Raw: `write_file` 缺少 `content` 这个错昨天到今天反复出现，不能一直改提示词和补锅，最后还是把同一个失败原样抛回来。
+  Affected: `core/reply_formatter.py`, `core/fs_protocol.py`, tool-call runtime retry handling.
+  Trigger: User reported the same `write_file` missing-`content` failure recurring across many attempts without a durable runtime fix.

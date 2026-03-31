@@ -25,5 +25,5 @@
       "vision": false
     }
   },
-  "default": "minimax"
+  "default": "deepseek-chat"
 }

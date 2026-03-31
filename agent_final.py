@@ -471,6 +471,7 @@ except Exception:
 
 from fastapi.staticfiles import StaticFiles as _StaticFiles
 _static_dir = ENGINE_DIR / "static"
+_runtime_graph_view_file = ENGINE_DIR / "runtime_graph_view.html"
 if _static_dir.is_dir():
     app.mount("/static", _StaticFiles(directory=str(_static_dir)), name="static")
 
@@ -482,15 +483,12 @@ app.mount("/screenshots", _StaticFiles(directory=str(_screenshots_dir)), name="s
 
 from routes.health import router as _health_router
 from routes.models import router as _models_router
-from routes.companion import router as _companion_router
-from routes.companion import init as _companion_init
 from routes.data import router as _data_router
 from routes.skills import router as _skills_router
 from routes.settings import router as _settings_router
 from routes.chat import router as _chat_router
 from routes.lab import router as _lab_router
 
-_companion_init(engine_dir=ENGINE_DIR)
 
 # ── 视觉感知模块初始化 ──
 try:
@@ -504,7 +502,6 @@ except Exception as _ve:
 
 app.include_router(_health_router)
 app.include_router(_models_router)
-app.include_router(_companion_router)
 app.include_router(_data_router)
 app.include_router(_skills_router)
 app.include_router(_settings_router)
@@ -540,6 +537,21 @@ async def home():
         except Exception:
             pass
     return Response(content="<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>", media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/runtime_graph_view", response_class=HTMLResponse)
+async def runtime_graph_view():
+    if _runtime_graph_view_file.exists():
+        return Response(
+            content=_runtime_graph_view_file.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+    return Response(
+        content="<html><head><meta charset='UTF-8'><title>Runtime Graph</title></head><body><p>runtime_graph_view.html missing</p></body></html>",
+        media_type="text/html",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/__restored_output.js")
