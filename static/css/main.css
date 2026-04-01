@@ -1065,6 +1065,10 @@ body.light .msg.user .bubble {
   padding: 1px 0;
 }
 
+.process-msg.expandable {
+  cursor: pointer;
+}
+
 .process-msg .msg-content {
   padding-left: 0;
 }
@@ -1087,6 +1091,42 @@ body.light .msg.user .bubble {
   line-height: 1.6;
   text-align: center;
   color: var(--process-marker-color);
+}
+
+.process-marker.thinking-marker {
+  position: relative;
+  font-size: 0;
+}
+
+.process-line.running .process-marker.thinking-marker::before {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin: 1px auto 0;
+  border: 1.4px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: spin 0.9s linear infinite;
+}
+
+.process-line.done .process-marker.thinking-marker::before {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  margin: 4px auto 0;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.process-line.error .process-marker.thinking-marker::before {
+  content: '!';
+  display: block;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
 }
 
 .process-line.running .process-marker {
@@ -1118,6 +1158,11 @@ body.light .msg.user .bubble {
   font-size: 13px;
   line-height: 1.62;
   color: var(--process-detail-color);
+}
+
+.process-line.expandable:hover .process-label,
+.process-line.expandable:hover .process-detail {
+  color: var(--text-primary);
 }
 
 .thinking-final-bubble {
@@ -1178,6 +1223,13 @@ body.light .msg.user .bubble {
   margin-left: 1px;
   vertical-align: text-bottom;
   animation: blink 0.6s step-end infinite;
+}
+
+.stream-live-line {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 @keyframes blink {
   0%, 100% { opacity: 1; }
@@ -1374,6 +1426,18 @@ body.light .thinking-bubble-text {
   color: #8fb5d9;
 }
 
+.step-icon.thinking {
+  color: #8fb5d9;
+}
+
+.step-icon.thinking::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
 .step-icon.running::after {
   content: '';
   width: 10px;
@@ -1464,9 +1528,9 @@ body.light .thinking-bubble-text {
 
 .step-tracker-status {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 0;
   color: #9fb0c4;
   font-size: 12px;
@@ -1487,6 +1551,7 @@ body.light .thinking-bubble-text {
   align-items: center;
   gap: 8px;
   color: #bac6d6;
+  flex: 0 0 auto;
 }
 
 .step-tracker-title {
@@ -1498,8 +1563,10 @@ body.light .thinking-bubble-text {
 
 .step-tracker-summary {
   display: block;
-  margin-left: 20px;
-  max-width: min(78vw, 720px);
+  margin-left: 0;
+  flex: 1 1 280px;
+  min-width: 0;
+  max-width: none;
   color: #c7cfdb;
   font-size: 12.5px;
   line-height: 1.55;
@@ -1512,7 +1579,8 @@ body.light .thinking-bubble-text {
 
 .step-tracker-toggle-text {
   display: block;
-  margin-left: 20px;
+  margin-left: auto;
+  flex: 0 0 auto;
   color: #7c8aa0;
   font-size: 11px;
   line-height: 1.4;
@@ -1610,6 +1678,10 @@ body.light .step-icon.running {
   color: #8f6d3f;
 }
 
+body.light .step-icon.thinking {
+  color: #8f6d3f;
+}
+
 body.light .step-icon.done {
   color: #7f8e99;
 }
@@ -1672,7 +1744,14 @@ body.light .step-tracker-spinner.error {
     padding-left: 18px;
   }
 
-  .step-tracker-summary,
+  .step-tracker-status {
+    gap: 6px;
+  }
+
+  .step-tracker-summary {
+    flex-basis: 100%;
+  }
+
   .step-tracker-toggle-text {
     margin-left: 18px;
   }
@@ -6615,7 +6694,7 @@ body.light .stats-refresh-btn:hover { color: rgba(0,0,0,0.4); }
 }
 
 .chat{
-  padding:28px 26px 126px;
+  padding:28px 26px 8px;
   background:transparent;
 }
 
@@ -6628,12 +6707,12 @@ body.light .stats-refresh-btn:hover { color: rgba(0,0,0,0.4); }
 }
 
 .input{
-  padding:0 24px 22px;
-  margin-top:-24px;
+  padding:0 24px 8px;
+  margin-top:-26px;
 }
 
 .input::before{
-  height:76px;
+  display:none;
 }
 
 .input-container{
@@ -6753,8 +6832,8 @@ body.light .chat:has(.runtime-graph-page){
 
 body.light .input{
   background:#f7f5f1;
-  padding:0 24px 22px;
-  margin-top:-24px;
+  padding:0 24px 8px;
+  margin-top:-26px;
 }
 
 body.light .input::before{
@@ -7690,8 +7769,8 @@ body.dark .msg{
 
 body.light .input,
 body.dark .input{
-  padding:0 24px 22px;
-  margin-top:-24px;
+  padding:0 24px 8px;
+  margin-top:-26px;
 }
 
 body.light .input-container,

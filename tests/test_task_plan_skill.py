@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import core.executor as executor_module
 import core.reply_formatter as reply_formatter_module
+import core.session_context as session_context_module
 import core.skills.task_plan as task_plan_module
 import core.task_store as task_store_module
 
@@ -172,6 +173,102 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIn("Current task goal in this turn: Plan a complex refactor", context)
         self.assertIn("Current plan checklist:", context)
         self.assertIn("[running] Map the current flow", context)
+
+    def test_task_plan_working_state_tracks_progress_blocker_and_target(self):
+        _task, snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "Blocked while patching the admin page target",
+                "items": [
+                    {"id": "inspect", "title": "Inspect current flow", "status": "done"},
+                    {
+                        "id": "patch",
+                        "title": "Patch lower layers",
+                        "status": "blocked",
+                        "detail": "Need the final HTML target path",
+                    },
+                ],
+                "current_item_id": "patch",
+                "phase": "blocked",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/NovaNotes/templates/index.html", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        working_state = task_store_module.get_active_task_working_state("continue NovaNotes")
+
+        self.assertEqual(working_state.get("goal"), "continue NovaNotes")
+        self.assertEqual(working_state.get("current_step"), "Patch lower layers")
+        self.assertEqual(working_state.get("recent_progress"), "Inspect current flow")
+        self.assertEqual(working_state.get("blocker"), "Need the final HTML target path")
+        self.assertEqual(working_state.get("next_step"), "Patch lower layers")
+        self.assertEqual(
+            str(working_state.get("fs_target") or "").replace("\\", "/"),
+            "C:/Users/36459/NovaNotes/templates/index.html",
+        )
+
+    def test_extract_session_context_exposes_active_working_state(self):
+        task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "Working on the admin page patch",
+                "items": [
+                    {"id": "inspect", "title": "Inspect current flow", "status": "done"},
+                    {"id": "patch", "title": "Patch lower layers", "status": "running"},
+                ],
+                "current_item_id": "patch",
+                "phase": "patch",
+            },
+        )
+
+        session_context = session_context_module.extract_session_context([], "continue NovaNotes")
+
+        self.assertEqual(session_context.get("intent"), "task_continue")
+        self.assertIn("continue NovaNotes", session_context.get("topics") or [])
+        self.assertIn("working on Patch lower layers", session_context.get("user_state") or "")
+        self.assertEqual((session_context.get("working_state") or {}).get("current_step"), "Patch lower layers")
+
+    def test_build_active_task_context_uses_working_state_without_bundle_task_plan(self):
+        _task, snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "Blocked while patching the admin page target",
+                "items": [
+                    {"id": "inspect", "title": "Inspect current flow", "status": "done"},
+                    {
+                        "id": "patch",
+                        "title": "Patch lower layers",
+                        "status": "blocked",
+                        "detail": "Need the final HTML target path",
+                    },
+                ],
+                "current_item_id": "patch",
+                "phase": "blocked",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/NovaNotes/templates/index.html", "option": "inspect", "source": "tool_runtime"},
+        )
+        session_context = session_context_module.extract_session_context([], "continue NovaNotes")
+
+        context = reply_formatter_module._build_active_task_context(
+            {
+                "user_input": "continue NovaNotes",
+                "l2": session_context,
+                "l5_success_paths": [],
+            }
+        )
+
+        self.assertIn("Current step: Patch lower layers", context)
+        self.assertIn("Recent progress: Inspect current flow", context)
+        self.assertIn("Current blocker: Need the final HTML target path", context)
+        self.assertIn("Current task directory/file target: C:/Users/36459/NovaNotes/templates/index.html", context)
 
     def test_task_plan_can_remember_and_retrieve_fs_target(self):
         _task, snapshot = task_store_module.save_task_plan_snapshot(

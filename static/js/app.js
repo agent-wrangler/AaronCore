@@ -193,6 +193,212 @@ _syncThemeIcon();
  window._historyOffset=0;
  window._historyHasMore=false;
  window._historyLoading=false;
+ var _chatViewRestoring=false;
+ var _chatViewRestoreTimer=0;
+ var _chatScrollSnapshot=null;
+
+ function _countRenderedHistoryTurns(container){
+  var host=container||document.getElementById('chat');
+  if(!host) return 0;
+  return host.querySelectorAll('.msg.user, .msg.assistant:not(.process-msg):not(.reply-part-msg):not(.thinking-msg):not(.thinking-trace-msg)').length;
+ }
+
+ function _snapshotChatScroll(){
+  var chat=document.getElementById('chat');
+  if(!chat) return;
+  var maxTop=Math.max(chat.scrollHeight-chat.clientHeight,0);
+  var top=Math.max(0,Math.min(chat.scrollTop,maxTop));
+  var fromBottom=Math.max(0,maxTop-top);
+  _chatScrollSnapshot={
+   hasValue:true,
+   top:top,
+   fromBottom:fromBottom,
+   atBottom:fromBottom<=24
+  };
+ }
+
+ function _restoreChatScroll(){
+  var chat=document.getElementById('chat');
+  if(!chat||!_chatScrollSnapshot||!_chatScrollSnapshot.hasValue) return false;
+  var apply=function(){
+   var maxTop=Math.max(chat.scrollHeight-chat.clientHeight,0);
+   var targetTop=_chatScrollSnapshot.atBottom ? maxTop : Math.max(0,maxTop-_chatScrollSnapshot.fromBottom);
+   chat.style.scrollBehavior='auto';
+   chat.scrollTop=targetTop;
+  };
+  apply();
+  requestAnimationFrame(function(){
+   apply();
+   requestAnimationFrame(function(){
+    apply();
+    chat.style.scrollBehavior='';
+   });
+  });
+  setTimeout(function(){
+   apply();
+   chat.style.scrollBehavior='';
+  },48);
+  return true;
+ }
+
+ var _chatBottomLockRaf=0;
+ var _chatBottomLockUntil=0;
+ var _chatBottomLockStopTimer=0;
+ var _chatBottomResizeObserver=null;
+
+ function _pinChatToBottom(){
+  var chat=document.getElementById('chat');
+  if(!chat) return;
+  var settle=function(){
+   chat.style.scrollBehavior='auto';
+   chat.scrollTop=chat.scrollHeight;
+  };
+  settle();
+  requestAnimationFrame(function(){
+   settle();
+   requestAnimationFrame(function(){
+    settle();
+    chat.style.scrollBehavior='';
+   });
+  });
+  setTimeout(function(){
+   settle();
+   chat.style.scrollBehavior='';
+  }, 48);
+ }
+
+ function _beginChatViewRestore(durationMs){
+  _chatViewRestoring=true;
+  if(_chatViewRestoreTimer){
+   clearTimeout(_chatViewRestoreTimer);
+  }
+  _chatViewRestoreTimer=setTimeout(function(){
+   _chatViewRestoring=false;
+   _chatViewRestoreTimer=0;
+  }, durationMs||900);
+ }
+
+ function _stopChatBottomLock(){
+  if(_chatBottomLockRaf){
+   cancelAnimationFrame(_chatBottomLockRaf);
+   _chatBottomLockRaf=0;
+  }
+  if(_chatBottomLockStopTimer){
+   clearTimeout(_chatBottomLockStopTimer);
+   _chatBottomLockStopTimer=0;
+  }
+  if(_chatBottomResizeObserver){
+   try{ _chatBottomResizeObserver.disconnect(); }catch(e){}
+   _chatBottomResizeObserver=null;
+  }
+  _chatBottomLockUntil=0;
+ }
+
+ function _lockChatToBottom(durationMs){
+  _stopChatBottomLock();
+  _chatBottomLockUntil=Date.now()+(durationMs||900);
+  if(typeof ResizeObserver==='function'){
+   var chat=document.getElementById('chat');
+   var inputArea=document.querySelector('.input');
+   _chatBottomResizeObserver=new ResizeObserver(function(){
+    if(window._currentTab!==1) return;
+    _pinChatToBottom();
+   });
+   if(chat) _chatBottomResizeObserver.observe(chat);
+   if(inputArea) _chatBottomResizeObserver.observe(inputArea);
+   _chatBottomLockStopTimer=setTimeout(function(){
+    if(_chatBottomResizeObserver){
+     try{ _chatBottomResizeObserver.disconnect(); }catch(e){}
+     _chatBottomResizeObserver=null;
+    }
+    _chatBottomLockStopTimer=0;
+   }, durationMs||900);
+  }
+  var tick=function(){
+   var chat=document.getElementById('chat');
+   if(!chat || window._currentTab!==1){
+    _stopChatBottomLock();
+    return;
+   }
+   chat.style.scrollBehavior='auto';
+   chat.scrollTop=chat.scrollHeight;
+   if(Date.now()>=_chatBottomLockUntil){
+    chat.style.scrollBehavior='';
+    _chatBottomLockRaf=0;
+    return;
+   }
+   _chatBottomLockRaf=requestAnimationFrame(tick);
+  };
+  tick();
+ }
+
+ function _schedulePinChatToBottom(){
+  _pinChatToBottom();
+  _lockChatToBottom(900);
+ }
+
+ function _restoreTimelineSnapshot(){
+  var chat=document.getElementById('chat');
+  if(!chat) return false;
+  var snapshot='';
+  try{
+   snapshot=localStorage.getItem('nova_chat_history')||'';
+  }catch(e){
+   snapshot='';
+  }
+  if(!snapshot.trim()) return false;
+  chat.innerHTML=snapshot;
+  chatHistory=snapshot;
+  _schedulePinChatToBottom();
+  return true;
+ }
+
+ function _looksLikeChatSnapshot(html){
+  var text=String(html||'').trim();
+  if(!text) return false;
+  if(/class="skill-store"|class="stats-page"|id="memScroll"|class="runtime-graph-page"|class="settings-page"/.test(text)) return false;
+  return /class="msg\b|class="welcome\b|thinking-msg|process-msg|reply-part-msg/.test(text);
+ }
+
+ function _reloadChatFromServer(keepScroll){
+  var chat=document.getElementById('chat');
+  if(!chat) return;
+  fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(function(d){
+   if(window._currentTab!==1&&window._currentTab!==undefined) return;
+   var items=d.history||[];
+   window._historyHasMore=d.has_more||false;
+   window._historyOffset=items.length;
+   if(typeof window._clearSessionTaskPlan==='function'){
+    window._clearSessionTaskPlan();
+   }
+   if(items.length){
+    chat.innerHTML=window._renderHistoryItems(items);
+    chatHistory=chat.innerHTML;
+    if(typeof window._rebindStepToggles==='function'){
+     window._rebindStepToggles(chat);
+    }
+    if(!(keepScroll&&_restoreChatScroll())){
+     _schedulePinChatToBottom();
+    }
+    return;
+   }
+   chat.innerHTML='';
+   chatHistory='';
+  }).catch(function(e){
+   console.warn('[Nova] reload chat from server failed', e);
+  });
+ }
+
+ window._countRenderedHistoryTurns=_countRenderedHistoryTurns;
+ window._snapshotChatScroll=_snapshotChatScroll;
+ window._restoreChatScroll=_restoreChatScroll;
+ window._beginChatViewRestore=_beginChatViewRestore;
+ window._stopChatBottomLock=_stopChatBottomLock;
+ window._schedulePinChatToBottom=_schedulePinChatToBottom;
+ window._looksLikeChatSnapshot=_looksLikeChatSnapshot;
+ window._reloadChatFromServer=_reloadChatFromServer;
+
+ var _restoredTimelineSnapshot=_restoreTimelineSnapshot();
 
  window._renderHistoryItems=function(items){
  function _processMarkerText(label, status){
@@ -325,6 +531,7 @@ _syncThemeIcon();
  var _scrollBtn=document.getElementById('scrollToBottomBtn');
 
  function _updateScrollBtn(){
+  if(_chatViewRestoring) return;
   if(!_scrollBtn) return;
   var awayFromBottom=chat.scrollHeight-chat.scrollTop-chat.clientHeight;
   if(awayFromBottom>150){
@@ -342,6 +549,8 @@ _syncThemeIcon();
 
  chat.addEventListener('scroll',function(){
   if(window._currentTab!==1&&window._currentTab!==undefined) return;
+  if(_chatViewRestoring) return;
+  _snapshotChatScroll();
   _updateScrollBtn();
   if(chat.scrollTop<80&&window._historyHasMore&&!window._historyLoading){
    window._loadMoreHistory();
@@ -351,17 +560,23 @@ _syncThemeIcon();
 fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(function(d){
   var items=d.history||[];
   window._historyHasMore=d.has_more||false;
-  window._historyOffset=items.length;
-  if(items.length===0) return;
+  var chat=document.getElementById('chat');
+  var renderedTurns=_countRenderedHistoryTurns(chat);
+  window._historyOffset=Math.max(items.length, renderedTurns);
+  if(items.length===0){
+   if(_restoredTimelineSnapshot){
+    _rebindStepToggles(chat);
+   }
+   return;
+  }
   if(typeof window._clearSessionTaskPlan==='function'){
    window._clearSessionTaskPlan();
   }
-  var chat=document.getElementById('chat');
-  chat.innerHTML=window._renderHistoryItems(items);
-  chatHistory=chat.innerHTML;
-  chat.style.scrollBehavior='auto';
-  chat.scrollTop=chat.scrollHeight;
-  requestAnimationFrame(function(){ chat.style.scrollBehavior=''; });
+  if(!_restoredTimelineSnapshot || !renderedTurns){
+   chat.innerHTML=window._renderHistoryItems(items);
+   chatHistory=chat.innerHTML;
+   _schedulePinChatToBottom();
+  }
   console.log('[Nova] 从后端恢复聊天历史，消息数:', items.length, '更多:', window._historyHasMore);
   // 重新绑定步骤折叠按钮事件
   _rebindStepToggles(chat);
@@ -430,46 +645,86 @@ function _setModelLabel(label){
 };
 
 function show(n){
+ var chat = document.getElementById('chat');
  window._currentTab=n;
- _closeSkillModal(true);
+ try{
+  _closeSkillModal(true);
+ }catch(e){
+  console.warn('[Nova] close skill modal failed', e);
+ }
  for(var i=1;i<=6;i++){
   var menu=document.getElementById('m'+i);
   if(menu) menu.classList.remove('active');
  }
- document.getElementById('m'+n).classList.add('active');
- var chat = document.getElementById('chat');
+ var activeMenu=document.getElementById('m'+n);
+ if(activeMenu) activeMenu.classList.add('active');
  var isLight = document.body.classList.contains('light');
 
  if(n==1){
+  if(typeof window._beginChatViewRestore==='function'){
+   window._beginChatViewRestore(900);
+  }
   setInputVisible(true);
-  if(chatHistory && chatHistory.trim()!==''){
+  if(!chatHistory || chatHistory.trim()===''){
+   try{
+    chatHistory=localStorage.getItem('nova_chat_history')||'';
+   }catch(e){
+    chatHistory='';
+   }
+  }
+  if(typeof window._looksLikeChatSnapshot==='function' && window._looksLikeChatSnapshot(chatHistory)){
    chat.innerHTML=chatHistory;
-   var currentMsgCount=chat.querySelectorAll('.msg').length;
-   if(currentMsgCount<window._historyOffset){
-    window._historyOffset=currentMsgCount;
+   var currentTurnCount=(typeof window._countRenderedHistoryTurns==='function')
+    ?window._countRenderedHistoryTurns(chat)
+    :chat.querySelectorAll('.msg.user, .msg.assistant:not(.process-msg):not(.reply-part-msg):not(.thinking-msg):not(.thinking-trace-msg)').length;
+   if(currentTurnCount<window._historyOffset){
+    window._historyOffset=currentTurnCount;
     window._historyHasMore=true;
    }
-   chat.style.scrollBehavior='auto';
-   chat.scrollTop=chat.scrollHeight;
-   requestAnimationFrame(function(){ chat.style.scrollBehavior=''; });
+   if(typeof window._rebindStepToggles==='function'){
+    window._rebindStepToggles(chat);
+   }
+   if(!(typeof window._restoreChatScroll==='function' && window._restoreChatScroll())){
+    if(typeof window._schedulePinChatToBottom==='function'){
+     window._schedulePinChatToBottom();
+    }
+   }
   } else {
-   chat.innerHTML='';
+   if(typeof window._reloadChatFromServer==='function'){
+    window._reloadChatFromServer(true);
+   }
   }
  }
 
  if(n==2){
   setInputVisible(false);
   _skillsSearchQuery='';
-  _closeSkillModal(true);
+  try{
+   _closeSkillModal(true);
+  }catch(e){
+   console.warn('[Nova] close skill modal failed on skills tab', e);
+  }
   chat.innerHTML='<div class="skill-store"><div class="skill-store-head"><div class="skill-store-hero"><div class="page-title">'+t('skills.title')+'</div><div class="skill-store-subtitle">'+t('skills.subtitle')+'</div></div><div class="skill-store-toolbar" id="skillsToolbar"></div></div><div class="skill-tabs" id="skillsViewTabs"></div><div id="skillsList">'+t('loading')+'</div></div>';
-  _renderSkillsToolbar();
-  _loadSkillsList();
+  try{
+   _renderSkillsToolbar();
+  }catch(e){
+   console.warn('[Nova] render skills toolbar failed', e);
+  }
+  try{
+   _loadSkillsList();
+  }catch(e){
+   console.warn('[Nova] load skills list failed', e);
+  }
  }
 
  if(n==3){
   setInputVisible(false);
   chat.innerHTML='<div class="stats-page"><div style="text-align:right;margin-bottom:8px;"><button class="stats-refresh-btn" onclick="loadStatsData()" title="'+t('common.refresh')+'"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div><div id="statsBox">'+t('loading')+'</div></div>';
-  loadStatsData();
+  try{
+   loadStatsData();
+  }catch(e){
+   console.warn('[Nova] load stats failed', e);
+  }
  }
 
  if(n==4){

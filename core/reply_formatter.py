@@ -1149,34 +1149,105 @@ def _resolve_active_task_plan(bundle: dict) -> dict:
     return {}
 
 
+def _resolve_active_working_state(bundle: dict) -> dict:
+    l2_session = bundle.get("l2") if isinstance(bundle.get("l2"), dict) else {}
+    working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
+    if working_state:
+        return working_state
+    try:
+        from core.task_store import get_active_task_working_state
+
+        preferred_fs_target = _load_task_plan_fs_target(bundle) or _load_context_fs_target(bundle) or ""
+        inferred = get_active_task_working_state(
+            str(bundle.get("user_input") or ""),
+            preferred_fs_target=str(preferred_fs_target or ""),
+        )
+        if isinstance(inferred, dict) and inferred:
+            if isinstance(l2_session, dict):
+                updated_l2 = dict(l2_session)
+                updated_l2["working_state"] = inferred
+                bundle["l2"] = updated_l2
+            return inferred
+    except Exception:
+        pass
+    return {}
+
+
 def _build_active_task_context(bundle: dict, recent_attempts: list[dict] | None = None) -> str:
     task_plan = _resolve_active_task_plan(bundle)
-    if not task_plan:
+    l2_session = bundle.get("l2") if isinstance(bundle.get("l2"), dict) else {}
+    working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
+    if not working_state and not task_plan:
+        working_state = _resolve_active_working_state(bundle)
+    if not task_plan and not working_state:
         return ""
 
-    goal = str(task_plan.get("goal") or bundle.get("user_input") or "").strip()
+    goal = str((working_state.get("goal") if working_state else "") or task_plan.get("goal") or bundle.get("user_input") or "").strip()
     if not goal:
         return ""
 
     lines = [f"Current task goal in this turn: {goal}"]
+    items = task_plan.get("items") if isinstance(task_plan.get("items"), list) else []
 
-    phase = str(task_plan.get("phase") or "").strip()
-    summary = str(task_plan.get("summary") or "").strip()
-    current_item_id = str(task_plan.get("current_item_id") or "").strip()
+    phase = str((working_state.get("phase") if working_state else "") or task_plan.get("phase") or "").strip()
+    summary = str((working_state.get("summary") if working_state else "") or task_plan.get("summary") or "").strip()
+    current_item_id = str((working_state.get("current_item_id") if working_state else "") or task_plan.get("current_item_id") or "").strip()
+    current_step = str((working_state.get("current_step") if working_state else "") or "").strip()
+    recent_progress = str((working_state.get("recent_progress") if working_state else "") or "").strip()
+    blocker = str((working_state.get("blocker") if working_state else "") or "").strip()
+    next_step = str((working_state.get("next_step") if working_state else "") or "").strip()
+    if task_plan and items:
+        current_item = next((item for item in items if isinstance(item, dict) and str(item.get("id") or "").strip() == current_item_id), {})
+        current_status = str(current_item.get("status") or "").strip()
+        if not current_step:
+            current_step = str(current_item.get("title") or "").strip()
+        if not recent_progress:
+            done_item = next(
+                (
+                    item
+                    for item in reversed(items)
+                    if isinstance(item, dict)
+                    and str(item.get("status") or "").strip() == "done"
+                    and str(item.get("id") or "").strip() != current_item_id
+                ),
+                {},
+            )
+            recent_progress = str(done_item.get("title") or "").strip()
+        if not blocker and (phase == "blocked" or current_status in {"blocked", "error", "failed", "waiting_user"}):
+            blocker = str(current_item.get("detail") or task_plan.get("summary") or "").strip()
+        if not next_step:
+            next_step = current_step
+            if not next_step:
+                pending_item = next(
+                    (
+                        item
+                        for item in items
+                        if isinstance(item, dict) and str(item.get("status") or "").strip() in {"running", "pending", "waiting_user"}
+                    ),
+                    {},
+                )
+                next_step = str(pending_item.get("title") or "").strip()
     if phase:
         lines.append(f"Current phase: {phase}")
     if summary:
-        lines.append(f"Plan summary: {summary}")
-    if current_item_id:
+        lines.append(f"Working summary: {summary}")
+    if current_step:
+        lines.append(f"Current step: {current_step}")
+    elif current_item_id:
         lines.append(f"Current plan item: {current_item_id}")
-    task_fs_target = _load_task_plan_fs_target(bundle)
+    if recent_progress and recent_progress != current_step:
+        lines.append(f"Recent progress: {recent_progress}")
+    if blocker:
+        lines.append(f"Current blocker: {blocker}")
+    if next_step and next_step != current_step:
+        lines.append(f"Default next step: {next_step}")
+    task_fs_target = _load_task_plan_fs_target(bundle) or str((working_state.get("fs_target") if working_state else "") or "").strip()
     if task_fs_target:
         lines.append(f"Current task directory/file target: {task_fs_target}")
         focus_guidance = _build_fs_focus_guidance(bundle, {"file_path": task_fs_target})
         if focus_guidance:
             lines.append("Execution focus:")
             lines.extend(f"- {line}" for line in focus_guidance.splitlines() if line.strip())
-    items = task_plan.get("items") if isinstance(task_plan.get("items"), list) else []
     if items:
         lines.append("Current plan checklist:")
         for item in items[:6]:
@@ -1787,6 +1858,29 @@ def _build_session_context_text(l2_session: dict) -> str:
     user_state = str(l2_session.get("user_state") or "").strip()
     if user_state:
         parts.append(f"\u7528\u6237\u72b6\u6001\uff1a{user_state}")
+    working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
+    if working_state:
+        goal = str(working_state.get("goal") or "").strip()
+        current_step = str(working_state.get("current_step") or "").strip()
+        working_summary = str(l2_session.get("working_summary") or working_state.get("summary") or "").strip()
+        recent_progress = str(working_state.get("recent_progress") or "").strip()
+        blocker = str(working_state.get("blocker") or "").strip()
+        next_step = str(working_state.get("next_step") or "").strip()
+        fs_target = str(working_state.get("fs_target") or "").strip()
+        if goal:
+            parts.append(f"\u5f53\u524d\u5de5\u4f5c\u76ee\u6807\uff1a{goal}")
+        if current_step:
+            parts.append(f"\u5f53\u524d\u6b65\u9aa4\uff1a{current_step}")
+        if working_summary and working_summary not in {goal, current_step}:
+            parts.append(f"\u5de5\u4f5c\u6458\u8981\uff1a{working_summary}")
+        if recent_progress and recent_progress != current_step:
+            parts.append(f"\u6700\u8fd1\u8fdb\u5c55\uff1a{recent_progress}")
+        if blocker:
+            parts.append(f"\u5f53\u524d\u963b\u585e\uff1a{blocker}")
+        if next_step and next_step != current_step:
+            parts.append(f"\u9ed8\u8ba4\u4e0b\u4e00\u6b65\uff1a{next_step}")
+        if fs_target:
+            parts.append(f"\u5f53\u524d\u76ee\u6807\u8def\u5f84\uff1a{fs_target}")
     return "\n".join(parts)
 
 
@@ -1903,15 +1997,7 @@ def _build_cod_system_prompt(bundle: dict) -> str:
     l7_text = format_l7_context(l7) or "\u6682\u65e0"
     style_hints = _build_style_hints_from_l4(l4)
 
-    session_parts = []
-    topics = l2_session.get("topics", [])
-    if topics and topics != ["\u95f2\u804a"]:
-        _topics_joined = "\u3001".join(topics)
-        session_parts.append(f"\u5f53\u524d\u8bdd\u9898\uff1a{_topics_joined}")
-    mood = l2_session.get("mood", "")
-    if mood:
-        session_parts.append(f"\u7528\u6237\u60c5\u7eea\uff1a{mood}")
-    session_text = "\uff1b".join(session_parts) if session_parts else ""
+    session_text = _build_session_context_text(l2_session).replace("\n", "\uff1b").strip()
 
     # 从配置文件读取（实验室可修改的部分）
     cfg = _load_prompt_config()
@@ -2886,7 +2972,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             yield chunk
 
     if tool_calls_signal and streamed_text:
-        # 允许短引导句 + tool_call 并存，避免模型先说一句就把工具调用丢掉。
+        # ?????? + tool_call ????????????????????
         joined = "".join(collected_tokens).strip()
         visible_joined = _strip_think_markup(joined)
         is_preamble = _looks_like_tool_preamble(visible_joined)
@@ -3075,7 +3161,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         _append_runtime_guidance(messages, _build_tool_arg_failure_system_note(tool_name, tool_args, missing_fields))
 
     # ── 多轮 tool_call 循环（LLM 自主决定何时停止）──
-    MAX_TOOL_ROUNDS = 20  # 安全上限，正常情况 LLM 自己决定停
+    MAX_TOOL_ROUNDS = 40  # 安全上限，放宽多步桌面/文件任务的工具轮数
     if requires_user_takeover:
         final_messages = list(messages)
         _append_runtime_guidance(

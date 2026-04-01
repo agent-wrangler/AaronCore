@@ -13,8 +13,56 @@ Menu.setApplicationMenu(null);
 
 let win;
 const WINDOW_CONTROLS_MODE = 'custom-html';
-const ROOT_DIR = process.env.NOVACORE_ROOT || path.resolve(__dirname, '..');
+function isNovaCoreRoot(candidate) {
+  if (!candidate) return false;
+  const required = ['agent_final.py', 'core', 'routes', 'static', 'shell', 'brain', 'memory_db'];
+  try {
+    return required.every((name) => fs.existsSync(path.join(candidate, name)));
+  } catch (_err) {
+    return false;
+  }
+}
+
+function resolvePackagedDevRoot() {
+  const candidates = [];
+  if (process.env.NOVACORE_DEV_ROOT) {
+    candidates.push(process.env.NOVACORE_DEV_ROOT);
+  }
+
+  if (process.platform === 'win32') {
+    const exeDir = path.dirname(process.execPath);
+    const desktopDir = path.dirname(exeDir);
+    const desktopName = path.basename(desktopDir);
+    if (desktopName.toLowerCase().endsWith('desktop')) {
+      const repoName = desktopName.slice(0, -'Desktop'.length);
+      if (repoName) {
+        candidates.push(path.join(path.dirname(desktopDir), repoName));
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate);
+    if (isNovaCoreRoot(resolved)) return resolved;
+  }
+  return '';
+}
+
+function resolveRootDir() {
+  if (process.env.NOVACORE_ROOT && isNovaCoreRoot(process.env.NOVACORE_ROOT)) {
+    return process.env.NOVACORE_ROOT;
+  }
+  if (app.isPackaged) {
+    const devRoot = resolvePackagedDevRoot();
+    if (devRoot) return devRoot;
+  }
+  return path.resolve(__dirname, '..');
+}
+
+const ROOT_DIR = resolveRootDir();
+process.env.NOVACORE_ROOT = ROOT_DIR;
 const BACKEND_ENTRY = process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
+process.env.NOVACORE_BACKEND_ENTRY = BACKEND_ENTRY;
 const WINDOW_ICON = path.join(ROOT_DIR, 'static', 'icon', 'nova.ico');
 const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
 const BACKEND_PORT = 8090;
