@@ -1,13 +1,11 @@
-// L7 锻造炉
-
 function loadLabPage() {
   var chat = document.getElementById('chat');
   setInputVisible(false);
   chat.innerHTML =
     '<div class="settings-page" style="position:relative;z-index:1;">' +
-      '<div class="lab-subtitle">这里先收失败样本、修正提案和可晋升经验，再决定什么值得真正锻进 L7。</div>' +
+      '<div class="lab-subtitle">' + t('lab.view.subtitle') + '</div>' +
       '<div id="forgeNotice" class="forge-history-stats" style="margin:8px 0 14px; opacity:.72;"></div>' +
-      '<div id="labBox"><div style="opacity:.72;">正在点亮锻造炉…</div></div>' +
+      '<div id="labBox"><div style="opacity:.72;">' + t('lab.loading') + '</div></div>' +
     '</div>';
   _fetchForgeData();
 }
@@ -19,7 +17,7 @@ function _fetchForgeData() {
     .catch(function() {
       var box = document.getElementById('labBox');
       if (box) {
-        box.innerHTML = '<div style="color:#ef4444;">锻造炉暂时没有点亮成功</div>';
+        box.innerHTML = '<div style="color:#ef4444;">' + t('lab.fetch.fail') + '</div>';
       }
     });
 }
@@ -37,101 +35,109 @@ function _renderForge(data) {
   var html = '';
 
   html += '<div class="forge-card forge-input-card">';
-  html += '<div class="forge-card-title">投炉入口</div>';
-  html += '<div class="forge-card-desc">先把值得锻的失败场景、纠偏线索或新问题放进来。这里只收候选，先观察、预演、再决定是否晋升。</div>';
+  html += '<div class="forge-card-title">' + t('lab.input.title') + '</div>';
+  html += '<div class="forge-card-desc">' + t('lab.input.desc') + '</div>';
   html += '<div class="forge-input-row">';
-  html += '<input id="forgeNeed" class="forge-input" placeholder="比如：网页只打开了首页，却误判成搜索已经完成">';
-  html += '<button class="forge-btn" onclick="submitForgeNeed()">投入锻造炉</button>';
+  html += '<input id="forgeNeed" class="forge-input" placeholder="' + _escAttr(t('lab.input.placeholder')) + '">';
+  html += '<button class="forge-btn" onclick="submitForgeNeed()">' + t('lab.input.submit') + '</button>';
   html += '</div>';
   html += '</div>';
 
   html += '<div class="forge-card">';
-  html += '<div class="forge-card-title">炉内概况</div>';
-  html += '<div class="forge-history-stats">待锻候选 ' + (summary.queued || 0) + ' · 失败轨迹 ' + (summary.failed_runs || 0) + ' · 修正提案 ' + (summary.repair_reports || 0) + ' · 已晋升规则 ' + (summary.active_rules || 0) + '</div>';
+  html += '<div class="forge-card-title">' + t('lab.overview.title') + '</div>';
+  html += '<div class="forge-history-stats">' + tf(
+    'lab.overview.summary',
+    summary.queued || 0,
+    summary.failed_runs || 0,
+    summary.repair_reports || 0,
+    summary.active_rules || 0
+  ) + '</div>';
   html += '</div>';
 
-  html += _renderForgeSection('待锻候选', queue, function(item) {
+  html += _renderForgeSection(t('lab.section.queue'), queue, function(item) {
     var text = '';
     text += '<div class="forge-history-item">';
     text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.need || item.query || '未命名需求') + '</div>';
+    text += '<div class="forge-history-label">' + _esc(item.need || item.query || t('lab.unnamed.need')) + '</div>';
     text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
     text += '</div>';
     if (item.source) {
-      text += '<div class="forge-history-goal">来源：' + _esc(item.source) + '</div>';
+      text += '<div class="forge-history-goal">' + t('lab.source') + ': ' + _esc(item.source) + '</div>';
     }
     text += '<div class="forge-history-stats">' + _esc(_fmtTime(item.updated_at || item.created_at)) + '</div>';
     text += '<div class="forge-history-actions">';
     if (item.status === 'queued') {
-      text += '<button class="forge-action-btn primary" onclick="startLabExperiment(\'' + _escAttr(item.id) + '\')">开始锻造</button>';
+      text += '<button class="forge-action-btn primary" onclick="startLabExperiment(\'' + _escAttr(item.id) + '\')">' + t('lab.action.start') + '</button>';
     }
     if (item.status !== 'promoted') {
-      text += '<button class="forge-action-btn" onclick="applyLabResult(\'' + _escAttr(item.id) + '\')">标记可晋升</button>';
+      text += '<button class="forge-action-btn" onclick="applyLabResult(\'' + _escAttr(item.id) + '\')">' + t('lab.action.promote') + '</button>';
     }
     text += '</div>';
     text += '</div>';
     return text;
   });
 
-  html += _renderForgeSection('失败样本', failedRuns, function(item) {
+  html += _renderForgeSection(t('lab.section.failed'), failedRuns, function(item) {
     var meta = item.meta || {};
     var text = '';
     text += '<div class="forge-history-item">';
     text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.title || '未命名技能') + '</div>';
-    text += '<div class="forge-status-badge danger">待锻</div>';
+    text += '<div class="forge-history-label">' + _esc(item.title || t('lab.unnamed.skill')) + '</div>';
+    text += '<div class="forge-status-badge danger">' + t('lab.status.queued') + '</div>';
     text += '</div>';
     if (item.goal) {
-      text += '<div class="forge-history-goal">目标：' + _esc(item.goal) + '</div>';
+      text += '<div class="forge-history-goal">' + t('lab.goal') + ': ' + _esc(item.goal) + '</div>';
     }
-    text += '<div class="forge-history-stats">' + _esc(item.subtitle || '这次执行没有闭环') + '</div>';
+    text += '<div class="forge-history-stats">' + _esc(item.subtitle || t('lab.meta.noLoop')) + '</div>';
     if (meta.repair_hint) {
-      text += '<div class="forge-history-goal">repair_hint：' + _esc(meta.repair_hint) + '</div>';
+      text += '<div class="forge-history-goal">' + t('lab.meta.repairHint') + ': ' + _esc(meta.repair_hint) + '</div>';
     }
     text += '</div>';
     return text;
   });
 
-  html += _renderForgeSection('修正提案', reports, function(item) {
+  html += _renderForgeSection(t('lab.section.reports'), reports, function(item) {
     var meta = item.meta || {};
+    var previewText = '';
     var text = '';
+
     text += '<div class="forge-history-item">';
     text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.title || 'L7 提案') + '</div>';
+    text += '<div class="forge-history-label">' + _esc(item.title || t('lab.report.default')) + '</div>';
     text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
     text += '</div>';
     if (item.goal) {
-      text += '<div class="forge-history-goal">相关问题：' + _esc(item.goal) + '</div>';
+      text += '<div class="forge-history-goal">' + t('lab.relatedIssue') + ': ' + _esc(item.goal) + '</div>';
     }
-    text += '<div class="forge-history-stats">' + _esc(item.subtitle || item.summary || '已生成一条候选提案') + '</div>';
+    text += '<div class="forge-history-stats">' + _esc(item.subtitle || item.summary || t('lab.meta.defaultReport')) + '</div>';
     if (meta.risk_level) {
-      text += '<div class="forge-history-goal">风险：' + _esc(meta.risk_level) + '</div>';
+      text += '<div class="forge-history-goal">' + t('lab.risk') + ': ' + _esc(meta.risk_level) + '</div>';
     }
     if (meta.preview_status || meta.preview_error || meta.preview_summary) {
-      var previewText = meta.preview_summary || meta.preview_error || meta.preview_decision || '';
+      previewText = meta.preview_summary || meta.preview_error || meta.preview_decision_reason || '';
       if (!previewText && meta.preview_status) {
-        previewText = '当前没有更多细节。';
+        previewText = t('lab.preview.placeholder');
       }
-      text += '<div class="forge-history-goal">最近试炼：' + _esc(meta.preview_status || 'unknown') + (previewText ? ' / ' + _esc(_trimPreview(previewText)) : '') + '</div>';
+      text += '<div class="forge-history-goal">' + t('lab.preview') + ': ' + _esc(meta.preview_status || t('unknown')) + (previewText ? ' / ' + _esc(_trimPreview(previewText)) : '') + '</div>';
     }
     text += '<div class="forge-history-actions">';
-    text += '<button class="forge-action-btn primary" onclick="previewForgeReport(\'' + _escAttr(item.id) + '\', this)">试炼验证</button>';
+    text += '<button class="forge-action-btn primary" onclick="previewForgeReport(\'' + _escAttr(item.id) + '\', this)">' + t('lab.action.preview') + '</button>';
     text += '</div>';
     text += '</div>';
     return text;
   });
 
-  html += _renderForgeSection('已晋升的 L7 规则', rules, function(item) {
+  html += _renderForgeSection(t('lab.section.rules'), rules, function(item) {
     var meta = item.meta || {};
     var text = '';
     text += '<div class="forge-history-item">';
     text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.title || 'L7 规则') + '</div>';
+    text += '<div class="forge-history-label">' + _esc(item.title || t('lab.rule.default')) + '</div>';
     text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
     text += '</div>';
-    text += '<div class="forge-history-stats">' + _esc(item.subtitle || item.summary || '一条已启用规则') + '</div>';
+    text += '<div class="forge-history-stats">' + _esc(item.subtitle || item.summary || t('lab.meta.defaultRule')) + '</div>';
     if (meta.hit_count) {
-      text += '<div class="forge-history-goal">命中 ' + _esc(String(meta.hit_count)) + ' 次</div>';
+      text += '<div class="forge-history-goal">' + _esc(tf('lab.meta.hitCount', String(meta.hit_count))) + '</div>';
     }
     text += '</div>';
     return text;
@@ -144,7 +150,7 @@ function _renderForgeSection(title, rows, renderItem) {
   var html = '<div class="forge-card">';
   html += '<div class="forge-card-title">' + title + '</div>';
   if (!rows || !rows.length) {
-    html += '<div class="forge-history-stats" style="opacity:.72;">这一栏暂时还是空的</div>';
+    html += '<div class="forge-history-stats" style="opacity:.72;">' + t('lab.section.empty') + '</div>';
     html += '</div>';
     return html;
   }
@@ -192,11 +198,11 @@ function applyLabResult(expId) {
 }
 
 function previewForgeReport(reportId, buttonEl) {
-  _setForgeNotice('正在试炼这条修正提案…');
+  _setForgeNotice(t('lab.notice.previewing'));
   if (buttonEl) {
     buttonEl.disabled = true;
     buttonEl.dataset.label = buttonEl.textContent;
-    buttonEl.textContent = '试炼中…';
+    buttonEl.textContent = t('lab.forging') + '...';
   }
   fetch('/self_repair/preview', {
     method: 'POST',
@@ -207,25 +213,25 @@ function previewForgeReport(reportId, buttonEl) {
     var preview = report.patch_preview || {};
     if (data && data.ok) {
       var status = String(preview.status || '').trim();
+      var detail = preview.error || preview.summary || preview.decision_reason || '';
       if (status === 'preview_ready') {
-        _setForgeNotice('试炼完成：这条提案已经通过预演，可以继续往下看。');
+        _setForgeNotice(t('lab.notice.previewReady'));
       } else if (status) {
-        var detail = preview.error || preview.summary || preview.decision_reason || '';
-        _setForgeNotice('试炼完成：当前结果是 ' + status + (detail ? ' / ' + _trimPreview(detail) : '') + '。');
+        _setForgeNotice(tf('lab.notice.previewResult', status, detail ? ' / ' + _trimPreview(detail) : ''));
       } else {
-        _setForgeNotice('试炼完成：这条提案已经重新预演过了。');
+        _setForgeNotice(tf('lab.notice.previewResult', t('unknown'), ''));
       }
     } else {
-      _setForgeNotice('试炼失败：' + ((data && data.error) || '暂时没有拿到结果。'));
+      _setForgeNotice(tf('lab.notice.previewFailed', ((data && data.error) || t('unknown'))));
     }
     _fetchForgeData();
   }).catch(function() {
-    _setForgeNotice('试炼失败：这次没有顺利跑通。');
+    _setForgeNotice(t('lab.notice.previewCatch'));
     _fetchForgeData();
   }).finally(function() {
     if (buttonEl) {
       buttonEl.disabled = false;
-      buttonEl.textContent = buttonEl.dataset.label || '试炼验证';
+      buttonEl.textContent = buttonEl.dataset.label || t('lab.action.preview');
     }
   });
 }
@@ -233,13 +239,13 @@ function previewForgeReport(reportId, buttonEl) {
 function _statusText(status) {
   var key = String(status || '').trim();
   return {
-    queued: '待入炉',
-    reviewing: '锻造中',
-    promoted: '可晋升',
-    active: '已晋升',
-    disabled: '已封存',
-    needs_attention: '待观察'
-  }[key] || key || '未知';
+    queued: t('lab.status.queued'),
+    reviewing: t('lab.status.reviewing'),
+    promoted: t('lab.status.promoted'),
+    active: t('lab.status.active'),
+    disabled: t('lab.status.disabled'),
+    needs_attention: t('lab.status.needs_attention')
+  }[key] || key || t('unknown');
 }
 
 function _badgeClass(status) {
@@ -258,7 +264,7 @@ function _fmtTime(value) {
 
 function _trimPreview(text) {
   var value = String(text || '').replace(/\s+/g, ' ').trim();
-  if (value.length > 120) return value.slice(0, 120) + '…';
+  if (value.length > 120) return value.slice(0, 120) + '...';
   return value;
 }
 

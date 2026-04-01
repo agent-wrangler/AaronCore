@@ -71,10 +71,6 @@
         "to": "novacore/tools"
       },
       {
-        "from": "../home/.gitkeep",
-        "to": "novacore/home/.gitkeep"
-      },
-      {
         "from": "../memory/.gitkeep",
         "to": "novacore/memory/.gitkeep"
       },
@@ -84,7 +80,7 @@
       }
     ],
     "directories": {
-      "output": "dist"
+      "output": "../../NovaCoreDesktop"
     },
     "win": {
       "icon": "../static/icon/nova.ico",

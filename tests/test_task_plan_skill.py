@@ -110,6 +110,45 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertEqual(statuses.get("implement"), "running")
         self.assertEqual(plan.get("current_item_id"), "implement")
 
+    def test_advance_prefers_explicit_transition_over_stale_items_payload(self):
+        task_plan_module.execute(
+            "",
+            {
+                "action": "create_or_update",
+                "goal": "Diagnose execution stalls",
+                "items": [
+                    {"id": "1", "title": "Inspect config", "status": "running"},
+                    {"id": "2", "title": "Analyze root cause", "status": "pending"},
+                    {"id": "3", "title": "Propose fixes", "status": "pending"},
+                ],
+            },
+        )
+
+        result = task_plan_module.execute(
+            "",
+            {
+                "action": "advance",
+                "goal": "Diagnose execution stalls",
+                "completed_item_id": "1",
+                "next_item_id": "2",
+                "summary": "Config inspected, now analyzing the root cause",
+                # Simulate the model echoing a stale full plan payload while also
+                # sending explicit transition signals.
+                "items": [
+                    {"id": "1", "title": "Inspect config", "status": "running"},
+                    {"id": "2", "title": "Analyze root cause", "status": "pending"},
+                    {"id": "3", "title": "Propose fixes", "status": "pending"},
+                ],
+            },
+        )
+
+        plan = result.get("task_plan") or {}
+        statuses = {item.get("id"): item.get("status") for item in plan.get("items") or []}
+        self.assertEqual(statuses.get("1"), "done")
+        self.assertEqual(statuses.get("2"), "running")
+        self.assertEqual(plan.get("current_item_id"), "2")
+        self.assertEqual(plan.get("summary"), "Config inspected, now analyzing the root cause")
+
     def test_build_active_task_context_uses_stored_plan_when_bundle_has_none(self):
         task_plan_module.execute(
             "",
@@ -276,6 +315,72 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIsInstance(resumed, dict)
         self.assertEqual(resumed.get("goal"), "continue NovaNotes")
         self.assertNotEqual(resumed.get("goal"), "OtherProject build pipeline")
+
+    def test_referential_followup_prefers_matching_task_plan_when_preferred_fs_target_is_known(self):
+        _older_task, older_snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            older_snapshot,
+            {"path": "C:/Users/36459/NovaNotes/templates/index.html", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        task_store_module.save_task_plan_snapshot(
+            "找回丢失物品",
+            {
+                "goal": "找回丢失物品",
+                "summary": "通过系统化回溯与排查，定位并取回丢失物品。",
+                "items": [{"id": "trace_back", "title": "回溯活动路径", "status": "running"}],
+                "current_item_id": "trace_back",
+                "phase": "immediate_search",
+            },
+        )
+
+        resumed = task_store_module.get_active_task_plan_snapshot(
+            "怎么又丢了",
+            preferred_fs_target="C:/Users/36459/NovaNotes/templates/index.html",
+        )
+
+        self.assertIsInstance(resumed, dict)
+        self.assertEqual(resumed.get("goal"), "continue NovaNotes")
+
+    def test_shared_task_plan_project_does_not_borrow_fs_target_from_other_task(self):
+        _older_task, older_snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "continue NovaNotes",
+                "items": [{"id": "inspect", "title": "Inspect project", "status": "running"}],
+                "current_item_id": "inspect",
+                "phase": "inspect",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            older_snapshot,
+            {"path": "C:/Users/36459/NovaNotes/templates/index.html", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        _newer_task, newer_snapshot = task_store_module.save_task_plan_snapshot(
+            "找回丢失物品",
+            {
+                "goal": "找回丢失物品",
+                "summary": "通过系统化回溯与排查，定位并取回丢失物品。",
+                "items": [{"id": "trace_back", "title": "回溯活动路径", "status": "running"}],
+                "current_item_id": "trace_back",
+                "phase": "immediate_search",
+            },
+        )
+
+        loaded = task_store_module.get_structured_fs_target_for_task_plan(newer_snapshot)
+
+        self.assertIsNone(loaded)
 
 
 class TaskPlanMetaTests(unittest.TestCase):

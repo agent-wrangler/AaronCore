@@ -223,7 +223,7 @@ function createWindow() {
 
   nativeTheme.themeSource = 'light';
   const getWindowPalette = (theme) => ({
-    backgroundColor: theme === 'dark' ? '#00161618' : '#00ffffff',
+    backgroundColor: theme === 'dark' ? '#161618' : '#ffffff',
     overlayColor: theme === 'dark' ? '#161618' : '#ffffff',
     symbolColor: theme === 'dark' ? '#ebebf0' : '#334155',
   });
@@ -235,7 +235,7 @@ function createWindow() {
     x: Math.round((sw - ww) / 2),
     y: Math.round((sh - wh) / 2),
     frame: false,
-    transparent: true,
+    transparent: false,
     roundedCorners: true,
     thickFrame: true,
     ...(WINDOW_CONTROLS_MODE === 'native-overlay' ? {

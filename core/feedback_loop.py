@@ -4,7 +4,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from core.state_loader import PRIMARY_STATE_DIR
+from core.runtime_state.state_loader import PRIMARY_STATE_DIR
 
 # ── 注入依赖 ──────────────────────────────────────────────
 _debug_write = lambda stage, data: None
@@ -225,7 +225,7 @@ def _l7_apply_amendment(rule: dict):
 
 def _amend_l4_rules(rule: dict, amendment: str, category: str):
     """写入 L4 interaction_rules，按 category 加前缀标注来源"""
-    from core.json_store import load_json, write_json
+    from core.runtime_state.json_store import load_json, write_json
 
     # 按类别加语义前缀，让 LLM 理解这条规则的用途
     _PREFIX = {

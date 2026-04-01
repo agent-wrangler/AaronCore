@@ -1,16 +1,36 @@
 {
-  "name": "屏幕感知",
-  "keywords": ["截图", "截屏", "屏幕截图", "窗口截图", "屏幕状态", "当前屏幕"],
-  "anti_keywords": ["截图软件", "截图工具推荐"],
-  "description": "截取全屏、指定窗口或屏幕区域，观察当前屏幕状态。",
-  "priority": 8,
-  "category": "桌面操作",
-  "icon": "📸",
+  "name": "澶╂皵鏌ヨ",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Fetch weather information for a location when current conditions or forecast are needed.",
+  "priority": 6,
+  "category": "淇℃伅鏌ヨ",
+  "icon": "馃尋",
   "parameters": {
     "type": "object",
     "properties": {
-      "user_input": {"type": "string", "description": "截图目标描述"}
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      },
+      "city": {
+        "type": "string",
+        "description": "Location inferred from user intent and context."
+      }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "desktop",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "inspect",
+  "effect_level": "read_only",
+  "risk_level": "low",
+  "protocol_subfamily": "desktop_perception",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

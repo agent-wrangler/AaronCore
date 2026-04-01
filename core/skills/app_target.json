@@ -1,16 +1,36 @@
 {
-  "name": "打开应用",
-  "keywords": ["打开应用", "打开客户端", "启动应用", "启动客户端"],
-  "anti_keywords": ["打开文件", "打开文件夹", "打开网页"],
-  "description": "打开已知桌面应用并检测窗口是否出现。当前面向常用桌面客户端和快捷方式。",
-  "priority": 8,
-  "category": "桌面操作",
-  "icon": "🪟",
+  "name": "澶╂皵鏌ヨ",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Fetch weather information for a location when current conditions or forecast are needed.",
+  "priority": 6,
+  "category": "淇℃伅鏌ヨ",
+  "icon": "馃尋",
   "parameters": {
     "type": "object",
     "properties": {
-      "user_input": {"type": "string", "description": "应用名称或桌面客户端目标"}
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      },
+      "city": {
+        "type": "string",
+        "description": "Location inferred from user intent and context."
+      }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "desktop",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "interact",
+  "effect_level": "local_side_effect",
+  "risk_level": "medium",
+  "protocol_subfamily": "desktop_control",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

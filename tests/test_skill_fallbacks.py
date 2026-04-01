@@ -248,6 +248,25 @@ class RunEventMappingTests(unittest.TestCase):
                 "| 方案 | 技术栈 | 优点 |\n|------|--------|------|\n| A | HTML + LocalStorage | 零部署 |"
             )
         )
+        self.assertTrue(
+            reply_formatter_module._looks_like_trailing_tool_handoff(
+                "主人，你说到点子上了！这确实是个很关键的问题。\n\n"
+                "我理解你的感受：\n"
+                "- 日常聊天还能接住\n"
+                "- 一到任务就容易断片\n\n"
+                "好消息是我现在有完整的记忆系统了。\n\n"
+                "让我先回忆一下我们最近的开发任务："
+            )
+        )
+        self.assertTrue(
+            reply_formatter_module._looks_like_incomplete_tool_handoff(
+                "主人，你说到点子上了！这确实是个很关键的问题。\n\n"
+                "我理解你的感受：\n"
+                "- 日常聊天还能接住\n"
+                "- 一到任务就容易断片\n\n"
+                "让我先回忆一下我们最近的开发任务："
+            )
+        )
 
     def test_failed_tool_retry_note_guides_environment_or_file_inspection(self):
         write_note = reply_formatter_module._build_failed_tool_retry_note(
@@ -2341,6 +2360,152 @@ class StructuredToolHandoffRegressionTests(unittest.TestCase):
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
         self.assertEqual(done.get("tool_used"), "folder_explore")
+        self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_keeps_long_trailing_handoff_before_recall_tool(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield (
+                    "主人，你说到点子上了！这确实是个很关键的问题。\n\n"
+                    "我理解你的感受：\n"
+                    "- 日常聊天还能接住\n"
+                    "- 一到任务就容易断片\n\n"
+                    "好消息是我现在有完整的记忆系统了。\n\n"
+                    "让我先回忆一下我们最近的开发任务："
+                )
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_recall_1",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_memory",
+                                "arguments": json.dumps(
+                                    {"query": "NovaNotes 开发项目 任务进度 最近遇到的问题"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "我已经回忆完最近的开发任务了。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 5}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "已找到 NovaNotes 相关任务记忆",
+                "meta": {
+                    "action": {
+                        "action_kind": "recall_memory",
+                        "target_kind": "memory",
+                        "display_hint": "已回忆开发任务",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "而且说着说着就断了 感觉还是这个问题",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "recall_memory")
+        self.assertEqual(executed[0][1].get("query"), "NovaNotes 开发项目 任务进度 最近遇到的问题")
+        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "recall_memory")
+        self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_keeps_trailing_handoff_after_code_block(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield (
+                    "主人说得对，我刚才的表达确实不够清晰。让我重新解释一下：\n\n"
+                    "### 1. 检查当前配置\n"
+                    "我们应该查看代码里关于记忆 token 的设置。\n\n"
+                    "### 2. 具体要查什么\n"
+                    "```python\n"
+                    "max_tokens = 4096\n"
+                    "context_window = 8192\n"
+                    "memory_limit = 4096\n"
+                    "```\n\n"
+                    "## 📝 让我实际查看一下"
+                )
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_read_cfg_1",
+                            "type": "function",
+                            "function": {
+                                "name": "read_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "C:/Users/36459/NovaCore/agent_final.py"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "我已经查看过相关配置位置。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 5}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "已查看 agent_final.py",
+                "meta": {
+                    "action": {
+                        "action_kind": "read_file",
+                        "target_kind": "file",
+                        "display_hint": "已查看 agent_final.py",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "看看我们的记忆 token 设置情况是什么意思",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "read_file")
+        self.assertEqual(executed[0][1].get("file_path"), "C:/Users/36459/NovaCore/agent_final.py")
+        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "read_file")
         self.assertEqual(done.get("success"), True)
 
 

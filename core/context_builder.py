@@ -4,7 +4,7 @@
 import json
 from datetime import datetime
 
-from core.state_loader import (
+from core.runtime_state.state_loader import (
     get_recent_messages, load_l3_long_term, load_l4_persona, load_l5_knowledge,
 )
 from core.feedback_classifier import search_relevant_rules

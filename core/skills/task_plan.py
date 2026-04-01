@@ -116,8 +116,6 @@ def _apply_create_or_update(goal: str, existing: dict, ctx: dict) -> dict:
 
 
 def _apply_advance(goal: str, existing: dict, ctx: dict) -> dict:
-    if ctx.get("items"):
-        return _apply_create_or_update(goal, existing, ctx)
     plan = _clone_plan(existing or _auto_plan_from_goal(goal))
     completed_item_id = str(ctx.get("completed_item_id") or "").strip()
     next_item_id = str(ctx.get("next_item_id") or "").strip()
@@ -141,8 +139,6 @@ def _apply_advance(goal: str, existing: dict, ctx: dict) -> dict:
 
 
 def _apply_blocked(goal: str, existing: dict, ctx: dict) -> dict:
-    if ctx.get("items"):
-        return _apply_create_or_update(goal, existing, ctx)
     plan = _clone_plan(existing or _auto_plan_from_goal(goal))
     item = _find_item(plan, ctx.get("current_item_id")) or _current_or_first_pending(plan)
     reason = str(ctx.get("blocked_reason") or ctx.get("summary") or "").strip()
@@ -158,8 +154,6 @@ def _apply_blocked(goal: str, existing: dict, ctx: dict) -> dict:
 
 
 def _apply_done(goal: str, existing: dict, ctx: dict) -> dict:
-    if ctx.get("items"):
-        return _apply_create_or_update(goal, existing, ctx)
     plan = _clone_plan(existing or _auto_plan_from_goal(goal))
     for item in plan.get("items") or []:
         if item.get("status") in {"pending", "running", "blocked", "waiting_user"}:
@@ -171,8 +165,6 @@ def _apply_done(goal: str, existing: dict, ctx: dict) -> dict:
 
 
 def _apply_resume(goal: str, existing: dict, ctx: dict) -> dict:
-    if ctx.get("items"):
-        return _apply_create_or_update(goal, existing, ctx)
     plan = _clone_plan(existing or _auto_plan_from_goal(goal))
     target = _find_item(plan, ctx.get("next_item_id")) or _find_item(plan, ctx.get("current_item_id"))
     if not target:
@@ -306,6 +298,17 @@ def _failure_result(reply: str, reason: str, hint: str = "") -> dict:
     return result
 
 
+def _extract_preferred_fs_target(ctx: dict) -> str:
+    ctx = ctx if isinstance(ctx, dict) else {}
+    fs_target = ctx.get("fs_target") if isinstance(ctx.get("fs_target"), dict) else {}
+    path = str(fs_target.get("path") or "").strip()
+    if path:
+        return path
+    context_data = ctx.get("context_data") if isinstance(ctx.get("context_data"), dict) else {}
+    inherited = context_data.get("fs_target") if isinstance(context_data.get("fs_target"), dict) else {}
+    return str(inherited.get("path") or "").strip()
+
+
 def execute(query, context=None):
     ctx = context if isinstance(context, dict) else {}
     action = str(ctx.get("action") or "create_or_update").strip().lower() or "create_or_update"
@@ -331,7 +334,11 @@ def execute(query, context=None):
         normalized_action = aliases.get(action, "create_or_update")
 
     goal = str(ctx.get("goal") or query or "").strip()
-    existing = get_active_task_plan_snapshot(goal or query or "") or {}
+    preferred_fs_target = _extract_preferred_fs_target(ctx) if normalized_action == "resume" else ""
+    existing = get_active_task_plan_snapshot(
+        goal or query or "",
+        preferred_fs_target=preferred_fs_target,
+    ) or {}
 
     if normalized_action == "get_current":
         if not existing:

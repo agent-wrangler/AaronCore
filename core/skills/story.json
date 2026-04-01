@@ -18,6 +18,19 @@
         "description": "Story topic or direction inferred from user intent and context."
       }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "domain_skill",
+  "substrate_layer": "skill",
+  "protocol_family": "creative_output",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "contextual",
+  "operation_kind": "generate",
+  "effect_level": "read_only",
+  "risk_level": "low",
+  "protocol_subfamily": "creative_generation",
+  "trust_level": "trusted_local",
+  "user_view_scope": "default"
 }

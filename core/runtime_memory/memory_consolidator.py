@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 MEMORY_DB = ROOT / "memory_db"
 L3_FILE = MEMORY_DB / "long_term.json"
 L4_FILE = MEMORY_DB / "topic_summary.json"

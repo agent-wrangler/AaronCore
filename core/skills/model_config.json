@@ -1,18 +1,36 @@
 {
-    "name": "模型配置",
-    "keywords": ["切换模型", "添加模型", "删除模型", "列出模型", "有哪些模型", "当前模型", "现在用的什么模型", "接入模型", "配置模型", "对接模型"],
-    "anti_keywords": ["模型训练", "模型架构", "大模型是什么"],
-    "description": "通过对话管理 LLM 模型配置",
-    "priority": 3,
-    "category": "系统管理",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "user_input": {
-          "type": "string",
-          "description": "用户的原始输入文本"
-        }
+  "name": "澶╂皵鏌ヨ",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Fetch weather information for a location when current conditions or forecast are needed.",
+  "priority": 6,
+  "category": "淇℃伅鏌ヨ",
+  "icon": "馃尋",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
       },
-      "required": ["user_input"]
-    }
+      "city": {
+        "type": "string",
+        "description": "Location inferred from user intent and context."
+      }
+    },
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "runtime",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "manual_only",
+  "operation_kind": "configure",
+  "effect_level": "state_write",
+  "risk_level": "medium",
+  "protocol_subfamily": "runtime_config",
+  "trust_level": "trusted_state",
+  "user_view_scope": "hidden"
 }

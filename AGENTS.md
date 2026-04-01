@@ -19,6 +19,8 @@ These constraints are hard project rules for any new coding conversation in this
 - If a feature already exists in `task_plan.py`, `task_store.py`, `reply_formatter.py`, or related architecture files, do not create a second overlapping layer.
 - Fix protocol and execution-chain gaps at the correct existing layer instead of adding prompt-time or keyword-based patches.
 - Do not fall back to keyword routing for architecture or system-capability problems unless the user explicitly asks for that approach.
+- Task continuity and continuation must be state-driven through existing runtime state such as `task_plan`, `task_store`, `fs_target`, last executed action, blocker, and verification status. Do not replace explicit execution state with keyword-style continuation heuristics.
+- Keep continuation semantics split correctly: LLM handles next-step reasoning, while runtime anchors continuity and completion through explicit state and execution results.
 
 ## Working Rule
 
@@ -29,5 +31,3 @@ When the user gives architectural boundaries, treat them as binding constraints,
 For work in this repository touching architecture, routing, planning, continuity, protocol/context injection, or tool-call main-chain behavior, always apply the installed skill `$bie-tm-fan-sha-bi` as a default guardrail.
 
 When the user adds a new architectural boundary or repeats a correction, append one concise entry to the skill's `references/violations.md` record before making further architecture changes.
-
-The repository mirror for this skill lives at [agent_skills/bie-tm-fan-sha-bi/SKILL.md](/c:/Users/36459/NovaCore/agent_skills/bie-tm-fan-sha-bi/SKILL.md).

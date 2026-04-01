@@ -218,7 +218,7 @@ def _infer_primary_scene(
     return "自主学习"
 
 
-from core.json_store import load_json as _load_json, write_json as _write_json
+    from core.runtime_state.json_store import load_json as _load_json, write_json as _write_json
 
 
 def _normalize_query(text: str) -> str:

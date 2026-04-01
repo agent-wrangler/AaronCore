@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from core import state_loader
+from core.runtime_state import state_loader
 from routes import data
 
 

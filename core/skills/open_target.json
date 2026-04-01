@@ -1,11 +1,11 @@
 {
-  "name": "打开目标",
+  "name": "鎵撳紑鐩爣",
   "keywords": [],
   "anti_keywords": [],
   "description": "Open a folder, file, or web destination. Infer and complete the concrete target from user intent, current context, and task state.",
   "priority": 8,
-  "category": "本地操作",
-  "icon": "📨",
+  "category": "鏈湴鎿嶄綔",
+  "icon": "馃摠",
   "parameters": {
     "type": "object",
     "properties": {
@@ -18,6 +18,20 @@
         "description": "Target path or URL inferred from user intent, current context, and task state."
       }
     },
-    "required": ["user_input", "path"]
-  }
+    "required": [
+      "user_input",
+      "path"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "target_resolution",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "interact",
+  "effect_level": "local_side_effect",
+  "risk_level": "medium",
+  "protocol_subfamily": "target_resolution",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

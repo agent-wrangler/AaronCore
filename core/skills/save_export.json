@@ -1,19 +1,46 @@
 {
-  "name": "保存导出",
+  "name": "淇濆瓨瀵煎嚭",
   "keywords": [],
   "anti_keywords": [],
   "description": "Save text content as a file. Infer missing content, filename, and destination from the current task when needed.",
   "priority": 8,
-  "category": "本地操作",
-  "icon": "💾",
+  "category": "鏈湴鎿嶄綔",
+  "icon": "馃捑",
   "parameters": {
     "type": "object",
     "properties": {
-      "user_input": {"type": "string", "description": "Original user request."},
-      "content": {"type": "string", "description": "Complete text content to save."},
-      "filename": {"type": "string", "description": "Filename without extension."},
-      "destination": {"type": "string", "description": "Destination inferred from the current task."}
+      "user_input": {
+        "type": "string",
+        "description": "Original user request."
+      },
+      "content": {
+        "type": "string",
+        "description": "Complete text content to save."
+      },
+      "filename": {
+        "type": "string",
+        "description": "Filename without extension."
+      },
+      "destination": {
+        "type": "string",
+        "description": "Destination inferred from the current task."
+      }
     },
-    "required": ["user_input", "content", "filename"]
-  }
+    "required": [
+      "user_input",
+      "content",
+      "filename"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "filesystem",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "mutate",
+  "effect_level": "local_write",
+  "risk_level": "medium",
+  "protocol_subfamily": "filesystem_write",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

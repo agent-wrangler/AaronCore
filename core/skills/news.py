@@ -2,6 +2,7 @@ import json
 import os
 import re
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from core.network_protocol import get_with_network_strategy
 
@@ -32,7 +33,7 @@ NEWSAPI_BASE = "https://newsapi.org/v2/top-headlines"
 NEWSAPI_TOPICS = {"科技": "technology", "商业": "business", "世界": "general"}
 
 _LLM_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "brain", "llm_config.json")
-_NEWS_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "news_config.json")
+_NEWS_CONFIG_PATH = str(Path(__file__).resolve().parent / "runtime_config" / "news_config.json")
 
 
 def _load_llm_config():

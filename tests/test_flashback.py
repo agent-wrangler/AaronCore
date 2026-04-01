@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-import core.flashback as flashback
+import core.runtime_memory.flashback as flashback
 
 
 class FlashbackTests(unittest.TestCase):

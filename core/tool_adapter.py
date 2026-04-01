@@ -39,6 +39,7 @@ _CONFIGS_DIR = _Path(__file__).resolve().parent.parent / "configs"
 
 # ── 注入依赖 ──
 _get_all_skills = lambda: {}
+_get_exposed_skills = None
 _debug_write = lambda stage, data: None
 _l2_search_relevant = lambda q, **kw: []
 _load_l3_long_term = lambda **kw: []
@@ -529,12 +530,86 @@ def _is_allowed_write_target(target) -> bool:
     return not _is_system_protected_target(target) and not _is_novacore_protected_write_target(target)
 
 
-def init(*, get_all_skills=None, debug_write=None,
+def _normalize_exposure_scope_values(scope) -> set[str]:
+    if isinstance(scope, (list, tuple, set)):
+        raw_values = scope
+    else:
+        raw_values = [scope]
+    normalized = {
+        str(value or "").strip().lower()
+        for value in raw_values
+        if str(value or "").strip()
+    }
+    return normalized or {"tool_call"}
+
+
+def _skill_matches_exposure_scope(info: dict | None, scope) -> bool:
+    info = info if isinstance(info, dict) else {}
+    allowed_scopes = _normalize_exposure_scope_values(scope)
+    entry_scope = str(info.get("exposure_scope") or "tool_call").strip().lower() or "tool_call"
+    return entry_scope in allowed_scopes
+
+
+def _get_exposed_skill_map(scope) -> dict:
+    if callable(_get_exposed_skills):
+        try:
+            skills = _get_exposed_skills(scope=scope)
+            if isinstance(skills, dict):
+                return skills
+        except Exception:
+            pass
+    try:
+        all_skills = _get_all_skills()
+    except Exception:
+        return {}
+    return {
+        name: info
+        for name, info in (all_skills or {}).items()
+        if _skill_matches_exposure_scope(info, scope)
+    }
+
+
+def _build_registered_skill_tool_defs(scope) -> list[dict]:
+    tools = []
+    for name, info in _get_exposed_skill_map(scope).items():
+        if not info or not callable(info.get("execute")):
+            continue
+        desc = str(info.get("description") or info.get("name") or name).strip()
+        if not desc:
+            desc = name
+        meta_params = info.get("parameters")
+        if isinstance(meta_params, dict) and meta_params.get("properties"):
+            params = meta_params
+        else:
+            params = {
+                "type": "object",
+                "properties": {
+                    "user_input": {
+                        "type": "string",
+                        "description": "Original user request.",
+                    }
+                },
+                "required": ["user_input"],
+            }
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": desc,
+                "parameters": params,
+            },
+        })
+    return tools
+
+
+def init(*, get_all_skills=None, get_exposed_skills=None, debug_write=None,
          l2_search_relevant=None, load_l3_long_term=None, find_relevant_knowledge=None):
-    global _get_all_skills, _debug_write
+    global _get_all_skills, _get_exposed_skills, _debug_write
     global _l2_search_relevant, _load_l3_long_term, _find_relevant_knowledge
     if get_all_skills:
         _get_all_skills = get_all_skills
+    if get_exposed_skills:
+        _get_exposed_skills = get_exposed_skills
     if debug_write:
         _debug_write = debug_write
     if l2_search_relevant:
@@ -790,6 +865,37 @@ def build_tools_list_cod() -> list[dict]:
         },
     })
 
+    return tools
+
+
+def build_tools_list() -> list[dict]:
+    """Build the default tool_call tool list from the exposed skill catalog."""
+    tools = _build_registered_skill_tool_defs("tool_call")
+    tools.extend(_build_file_protocol_tool_defs())
+    tools.append(get_ask_user_tool_def())
+    return tools
+
+
+def build_tools_list_cod() -> list[dict]:
+    """Build the CoD tool list from skills exposed to tool_call or tool_call_cod."""
+    tools = _build_registered_skill_tool_defs({"tool_call", "tool_call_cod"})
+    tools.extend(_load_cod_tool_defs())
+    tools.append(get_ask_user_tool_def())
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "sense_environment",
+            "description": "Inspect the current computer environment before desktop actions or when the current state is unclear.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "detail_level": {"type": "string", "description": "Environment detail level.", "enum": ["basic", "full"]}
+                },
+                "required": [],
+            },
+        },
+    })
+    tools.extend(_build_file_protocol_tool_defs())
     return tools
 
 

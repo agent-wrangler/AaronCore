@@ -5,6 +5,16 @@ var _abortController = null; // 用于中断 SSE 请求
 
 var _sendSvg = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 18V6.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><path d="M7 11.2L12 6.5L17 11.2" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 var _stopSvg = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>';
+var _taskProgressWorkingSvg = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.5"/><circle cx="8" cy="8" r="2.4" fill="currentColor"/></svg>';
+var _taskProgressDoneSvg = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M5.1 8.1L7.1 10.1L11 6.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function _processMarkerText(label, status){
+ var text=String(label||'');
+ if(status==='error') return '!';
+ if(/思考|thinking/i.test(text)) return '∴';
+ if(/计划|plan/i.test(text)) return '⌁';
+ return status==='running' ? '›' : '·';
+}
 
 (function(){
  var inp=document.getElementById('inp');
@@ -205,17 +215,30 @@ function addMessage(sender,text,type,imageUrl){
  }
 }
 
+function _snapshotChatHistory(){
+ var chat=document.getElementById('chat');
+ if(!chat) return;
+ chatHistory=chat.innerHTML;
+ trimChatHistory();
+ localStorage.setItem('nova_chat_history',chatHistory);
+}
+
+function _createNovaAvatar(){
+ var avatar=document.createElement('div');
+ avatar.className='avatar';
+ avatar.textContent='N';
+ avatar.title='Nova AI';
+ avatar.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+ return avatar;
+}
+
 var _thinkingLabels=null; // removed: no more fake rotating labels
 
 function buildPendingAssistantMessage(){
  var msgDiv=document.createElement('div');
  msgDiv.className='msg assistant thinking-msg';
 
- var avatar=document.createElement('div');
- avatar.className='avatar';
- avatar.textContent='N';
- avatar.title='Nova AI';
- avatar.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+ var avatar=_createNovaAvatar();
 
  var wrap=document.createElement('div');
  wrap.className='msg-content-wrap';
@@ -226,17 +249,17 @@ function buildPendingAssistantMessage(){
 
  var tracker=document.createElement('div');
  tracker.className='step-tracker';
+ tracker.style.display='none';
 
  var status=document.createElement('div');
  status.className='step-tracker-status';
  status.innerHTML='<span class="thinking-status-text">'+t('chat.thinking')+'</span>';
- status.style.display='none';
+ status.style.display='';
 
  var contentArea=document.createElement('div');
  contentArea.className='msg-content';
  contentArea.style.display='none';
 
- wrap.appendChild(tracker);
  wrap.appendChild(status);
  wrap.appendChild(contentArea);
  msgDiv.appendChild(avatar);
@@ -248,20 +271,39 @@ function buildPendingAssistantMessage(){
   planStrip: planStrip,
   tracker: tracker,
   status: status,
-  contentArea: contentArea,
-  plan: null,
-  steps: [],
-  labelTimer: null,
+ contentArea: contentArea,
+ plan: null,
+ steps: [],
+ labelTimer: null,
+  placeholderTimer: null,
+  replyVisible: false,
   persisted: false
  };
 }
 
 function finalizePendingAssistantMessage(pendingState, replyText){
  if(!pendingState || !pendingState.root) return;
+ if(pendingState.placeholderTimer){
+  clearTimeout(pendingState.placeholderTimer);
+  pendingState.placeholderTimer=null;
+ }
+ var chat=document.getElementById('chat');
+ if(chat){
+  chat.appendChild(pendingState.root);
+ }
+ pendingState.replyVisible=true;
  if(typeof window._clearAskUserSlot==='function') window._clearAskUserSlot();
  if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
  if(pendingState.steps && pendingState.steps.length){
-  _collapseSteps();
+  for(var si=0;si<pendingState.steps.length;si++){
+   var step=pendingState.steps[si];
+   if(!step) continue;
+   step.status='done';
+   if(step.kind==='process'){
+    if(step.root) step.root.className='msg assistant process-msg';
+    if(step.line) step.line.className='process-line done';
+   }
+  }
  }
  if(pendingState.status) pendingState.status.style.display='none';
  pendingState.root.className='msg assistant';
@@ -289,9 +331,7 @@ function finalizePendingAssistantMessage(pendingState, replyText){
  contentArea.appendChild(meta);
  contentArea.appendChild(bubble);
  if(!pendingState.persisted){
-  chatHistory+=pendingState.root.outerHTML;
-  trimChatHistory();
-  localStorage.setItem('nova_chat_history',chatHistory);
+  _snapshotChatHistory();
   pendingState.persisted=true;
  }
  if(_sessionTaskPlan){
@@ -345,25 +385,59 @@ function hideRepairBar(){
 
 // cleanInlineText is in utils.js
 
-function createProcessBubble(card){
+function createProcessMessage(card){
+ var msgDiv=document.createElement('div');
+ msgDiv.className='msg assistant process-msg';
+ var content=document.createElement('div');
+ content.className='msg-content process-content';
+ var line=document.createElement('div');
+ var status=String((card&&card.status)||'running');
+ line.className='process-line '+(status==='error'?'error':(status==='running'?'running':'done'));
+ var marker=document.createElement('span');
+ marker.className='process-marker';
+ marker.textContent=_processMarkerText(card&&card.label, status);
+ var label=document.createElement('span');
+ label.className='process-label';
+ label.textContent=String((card&&card.label)||'')||t('chat.process');
+ var detail=document.createElement('span');
+ detail.className='process-detail';
+ detail.textContent=String((card&&card.detail)||'');
+ line.appendChild(marker);
+ line.appendChild(label);
+ line.appendChild(detail);
+ content.appendChild(line);
+ msgDiv.appendChild(_createNovaAvatar());
+ msgDiv.appendChild(content);
+ return {
+  kind:'process',
+  root:msgDiv,
+  content:content,
+  line:line,
+  markerEl:marker,
+  labelEl:label,
+  detailEl:detail,
+  label:String((card&&card.label)||''),
+  status:status,
+  summaryDetail:'',
+  fullDetail:''
+ };
+}
+
+function createReplyPartMessage(html){
+ var msgDiv=document.createElement('div');
+ msgDiv.className='msg assistant reply-part-msg';
+ var content=document.createElement('div');
+ content.className='msg-content';
  var bubble=document.createElement('div');
- bubble.className='thinking-bubble done';
-
- var body=document.createElement('div');
- body.className='thinking-bubble-body';
-
- var label=document.createElement('div');
- label.className='thinking-bubble-label';
- label.textContent=card.label||t('chat.process');
-
- var detail=document.createElement('div');
- detail.className='thinking-bubble-text';
- detail.textContent=card.detail||'';
-
- body.appendChild(label);
- body.appendChild(detail);
- bubble.appendChild(body);
- return bubble;
+ bubble.className='bubble';
+ bubble.innerHTML=String(html||'');
+ content.appendChild(bubble);
+ msgDiv.appendChild(_createNovaAvatar());
+ msgDiv.appendChild(content);
+ return {
+  root:msgDiv,
+  bubble:bubble
+ };
 }
 
 async function send(){
@@ -390,8 +464,6 @@ async function send(){
  _enterStopMode();
  var pendingState=buildPendingAssistantMessage();
  var chat=document.getElementById('chat');
- chat.appendChild(pendingState.root);
- chat.scrollTop=chat.scrollHeight;
 
  var replyText='';
  var replyImage='';
@@ -403,9 +475,52 @@ async function send(){
   var _streamText=''; // 流式累积的文本
   var _streamStarted=false;
 
- function _setStepStatus(stepObj, newStatus){
+ function _clearPendingPlaceholderTimer(){
+  if(pendingState.placeholderTimer){
+   clearTimeout(pendingState.placeholderTimer);
+   pendingState.placeholderTimer=null;
+  }
+ }
+
+ function _placePendingRootAtEnd(){
+  _clearPendingPlaceholderTimer();
+  chat.appendChild(pendingState.root);
+  pendingState.replyVisible=true;
+ }
+
+ function _detachIdlePendingRoot(){
+  if(!pendingState.root || pendingState.replyVisible) return;
+  if(pendingState.root.parentNode){
+   pendingState.root.parentNode.removeChild(pendingState.root);
+  }
+ }
+
+ pendingState.placeholderTimer=setTimeout(function(){
+  if(pendingState.replyVisible || pendingState.steps.length>0 || replyText) return;
+  chat.appendChild(pendingState.root);
+  chat.scrollTop=chat.scrollHeight;
+ },260);
+
+ var _streamParts=[];
+
+ function _clearStreamParts(){
+  while(_streamParts.length){
+   var part=_streamParts.pop();
+   if(part && part.root && part.root.parentNode){
+    part.root.parentNode.removeChild(part.root);
+   }
+  }
+ }
+
+function _setStepStatus(stepObj, newStatus){
   if(!stepObj) return;
   stepObj.status=newStatus;
+  if(stepObj.kind==='process'){
+   stepObj.root.className='msg assistant process-msg'+(newStatus==='running'?' is-running':'')+(newStatus==='error'?' is-error':'');
+   if(stepObj.line) stepObj.line.className='process-line '+(newStatus==='error'?'error':(newStatus==='running'?'running':'done'));
+   if(stepObj.markerEl) stepObj.markerEl.textContent=_processMarkerText(stepObj.label, newStatus);
+   return;
+  }
   stepObj.el.className='step-item '+newStatus;
   var icon=stepObj.el.querySelector('.step-icon');
   if(icon) icon.className='step-icon '+newStatus;
@@ -415,6 +530,11 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   if(!stepObj || !stepObj.detailEl) return;
   stepObj.summaryDetail=String(detail||'');
   stepObj.fullDetail=String(fullDetail||'').trim();
+  if(stepObj.kind==='process'){
+   if(stepObj.labelEl) stepObj.labelEl.textContent=stepObj.label||t('chat.process');
+   stepObj.detailEl.textContent=stepObj.fullDetail||stepObj.summaryDetail;
+   return;
+  }
   stepObj.expandable=false;
   stepObj.expanded=true;
   stepObj.el.classList.remove('expandable');
@@ -480,6 +600,7 @@ function _applyStepDetail(stepObj, detail, fullDetail){
 
  function addStep(card){
   if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
+  _clearPendingPlaceholderTimer();
   hasTrace=true;
   var label=card.label||'';
   var detail=card.detail||'';
@@ -493,8 +614,10 @@ function _applyStepDetail(stepObj, detail, fullDetail){
    statusText.offsetHeight;
    statusText.style.animation='statusFade 0.5s ease';
   }
+  pendingState.status.style.display='none';
   var dotsEl=pendingState.status.querySelector('.thinking');
   if(dotsEl) dotsEl.style.display='none';
+  _detachIdlePendingRoot();
 
   // 如果上一个 step 是 running 且 label 不同 → 自动标记为 done
   var steps=pendingState.steps;
@@ -515,24 +638,14 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   }
 
   // 创建新 step-item
- var el=document.createElement('div');
- el.className='step-item '+status;
-  var icon=document.createElement('div');
-  icon.className='step-icon '+status;
-  var mainEl=document.createElement('div');
-  mainEl.className='step-main';
-  var labelEl=document.createElement('div');
-  labelEl.className='step-label';
-  labelEl.textContent=label;
-  var detailEl=document.createElement('div');
-  detailEl.className='step-detail';
-  el.appendChild(icon);
-  mainEl.appendChild(labelEl);
-  mainEl.appendChild(detailEl);
-  el.appendChild(mainEl);
-  var stepObj={el:el, label:label, status:status, labelEl:labelEl, detailEl:detailEl, summaryDetail:'', fullDetail:'', expandable:false, expanded:true};
+  var stepObj=createProcessMessage({label:label,detail:detail,status:status});
+  stepObj.label=label;
   _applyStepDetail(stepObj, detail, card.full_detail||'');
-  pendingState.tracker.appendChild(el);
+  if(pendingState.replyVisible && pendingState.root && pendingState.root.parentNode===chat){
+   chat.insertBefore(stepObj.root, pendingState.root);
+  }else{
+   chat.appendChild(stepObj.root);
+  }
   steps.push(stepObj);
   chat.scrollTop=chat.scrollHeight;
  }
@@ -540,11 +653,12 @@ function _applyStepDetail(stepObj, detail, fullDetail){
  function _collapseSteps(){
   var tracker=pendingState.tracker;
   var steps=pendingState.steps;
-  if(!tracker || steps.length===0) return;
+  if(steps.length===0) return;
   // 确保所有 running 变 done
   for(var i=0;i<steps.length;i++){
    if(steps[i].status==='running') _setStepStatus(steps[i],'done');
   }
+  if(!tracker || !tracker.children.length) return;
   tracker.style.display='flex';
   tracker.classList.remove('collapsed');
   var existingToggle=tracker.querySelector('.step-tracker-toggle');
@@ -553,6 +667,7 @@ function _applyStepDetail(stepObj, detail, fullDetail){
 
  function _initStreamBubble(){
   // 把所有 running 步骤标记为 done
+  _placePendingRootAtEnd();
   for(var i=0;i<pendingState.steps.length;i++){
    if(pendingState.steps[i].status==='running') _setStepStatus(pendingState.steps[i],'done');
   }
@@ -610,11 +725,49 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   // 创建临时容器解析出块元素
   var temp=document.createElement('div');
   temp.innerHTML=html;
-  var newBlocks=temp.children;
-  var totalBlocks=newBlocks.length;
+  var blocks=[];
+  while(temp.firstChild){
+   blocks.push(temp.firstChild);
+   temp.removeChild(temp.firstChild);
+  }
+  var totalBlocks=blocks.length;
   // 清空气泡内容（保留光标）
   var cursor=_streamBubble.querySelector('.typing-cursor');
   _streamBubble.innerHTML='';
+  var _actualTotalBlocks=totalBlocks;
+  var finalizedCount=Math.max(0,_actualTotalBlocks-1);
+  while(_streamParts.length>finalizedCount){
+   var removed=_streamParts.pop();
+   if(removed && removed.root && removed.root.parentNode){
+    removed.root.parentNode.removeChild(removed.root);
+   }
+  }
+  var partAnchor=pendingState.root;
+  for(var pi=finalizedCount-1;pi>=0;pi--){
+   var finalizedHtml=blocks[pi].outerHTML;
+   var part=_streamParts[pi];
+   if(!part){
+    part=createReplyPartMessage(finalizedHtml);
+    _streamParts[pi]=part;
+    chat.insertBefore(part.root, partAnchor);
+   }else{
+    part.bubble.innerHTML=finalizedHtml;
+   }
+   if(part.root && part.root.parentNode===chat){
+    partAnchor=part.root;
+   }
+  }
+  var newBlocks=[];
+  if(_actualTotalBlocks>0){
+   var tailBlock=blocks[_actualTotalBlocks-1];
+   if(_actualTotalBlocks>_lastRenderedBlockCount){
+    tailBlock.classList.add('block-fade-in');
+   }
+   newBlocks.push(tailBlock);
+   totalBlocks=1;
+  }else{
+   totalBlocks=0;
+  }
   // 逐块插入，新块带 fade-in
   for(var bi=0;bi<totalBlocks;bi++){
    var block=newBlocks[0]; // 始终取第一个（因为 appendChild 会从 temp 中移走）
@@ -626,7 +779,7 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   // 光标放末尾
   if(!cursor){cursor=document.createElement('span');cursor.className='typing-cursor';}
   _streamBubble.appendChild(cursor);
-  _lastRenderedBlockCount=totalBlocks;
+  _lastRenderedBlockCount=_actualTotalBlocks;
   _streamTokenCount++;
   // 滚动控制
   if(_streamTokenCount<=5 || _nearBottom()){
@@ -652,11 +805,45 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   if(!_streamBubble) return;
   // 清除未执行的渐进渲染定时器
   if(_renderTimer){clearTimeout(_renderTimer);_renderTimer=0;}
+  // 保留已展开的 reply parts，避免最终收尾时丢掉它们与过程项之间的相对顺序。
   // 最终渲染：用完整文本做一次格式化（确保和 reply 事件的文本一致）
   _streamBubble.innerHTML=formatBubbleText(fullText);
   // 移除所有 fade-in 动画类（已经渲染完毕）
   var fadingBlocks=_streamBubble.querySelectorAll('.block-fade-in');
   for(var fi=0;fi<fadingBlocks.length;fi++){fadingBlocks[fi].classList.remove('block-fade-in');}
+  var finalTemp=document.createElement('div');
+  finalTemp.innerHTML=formatBubbleText(fullText);
+  var finalBlocks=[];
+  while(finalTemp.firstChild){
+   finalBlocks.push(finalTemp.firstChild);
+   finalTemp.removeChild(finalTemp.firstChild);
+  }
+  if(finalBlocks.length>1){
+   var finalCount=finalBlocks.length-1;
+   var finalAnchor=pendingState.root;
+   for(var ri=finalCount-1;ri>=0;ri--){
+    var finalHtml=finalBlocks[ri].outerHTML;
+    var finalPart=_streamParts[ri];
+    if(!finalPart){
+     finalPart=createReplyPartMessage(finalHtml);
+     _streamParts[ri]=finalPart;
+     chat.insertBefore(finalPart.root, finalAnchor);
+    }else{
+     finalPart.bubble.innerHTML=finalHtml;
+    }
+    if(finalPart.root && finalPart.root.parentNode===chat){
+     finalAnchor=finalPart.root;
+    }
+   }
+   while(_streamParts.length>finalCount){
+    var stalePart=_streamParts.pop();
+    if(stalePart && stalePart.root && stalePart.root.parentNode){
+     stalePart.root.parentNode.removeChild(stalePart.root);
+    }
+   }
+   _streamBubble.innerHTML='';
+   _streamBubble.appendChild(finalBlocks[finalBlocks.length-1]);
+  }
   // 如果有附带图片，追加到气泡末尾
   if(replyImage){
    var img=document.createElement('img');
@@ -699,9 +886,7 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   _collapseSteps();
   chat.scrollTop=chat.scrollHeight;
   if(!pendingState.persisted){
-   chatHistory+=pendingState.root.outerHTML;
-   trimChatHistory();
-   localStorage.setItem('nova_chat_history',chatHistory);
+   _snapshotChatHistory();
    // 持久化 steps 摘要
    if(pendingState.steps&&pendingState.steps.length>0){
     var stepsMap=JSON.parse(localStorage.getItem('nova_steps_map')||'{}');
@@ -724,6 +909,7 @@ function _applyStepDetail(stepObj, detail, fullDetail){
  }
 
  function showFinalReply(text){
+  _placePendingRootAtEnd();
   // 把所有 running 步骤标记为 done
   for(var i=0;i<pendingState.steps.length;i++){
    if(pendingState.steps[i].status==='running') _setStepStatus(pendingState.steps[i],'done');
@@ -801,12 +987,10 @@ function _applyStepDetail(stepObj, detail, fullDetail){
     // 所有块显示完毕 → 持久化
     _collapseSteps();
     chat.scrollTop=chat.scrollHeight;
-    if(!pendingState.persisted){
-     chatHistory+=pendingState.root.outerHTML;
-     trimChatHistory();
-     localStorage.setItem('nova_chat_history',chatHistory);
-     pendingState.persisted=true;
-    }
+     if(!pendingState.persisted){
+      _snapshotChatHistory();
+      pendingState.persisted=true;
+     }
     return;
    }
    var block=allBlocks[blockIdx];
@@ -882,7 +1066,27 @@ function _applyStepDetail(stepObj, detail, fullDetail){
          for(var si=0;si<pendingState.steps.length;si++){
           if(pendingState.steps[si].status==='running') _setStepStatus(pendingState.steps[si],'done');
          }
-        }
+         }else if(parsed.phase==='waiting'){
+          var _waitLabel=String(parsed.label||'').trim();
+          var _waitDetail=String(parsed.detail||'').trim();
+          var _runningStep=null;
+          for(var wi=pendingState.steps.length-1;wi>=0;wi--){
+           if(pendingState.steps[wi] && pendingState.steps[wi].status==='running'){
+            _runningStep=pendingState.steps[wi];
+            break;
+           }
+          }
+          if(_runningStep){
+           if(_waitLabel && _runningStep.label!==_waitLabel){
+            addStep({label:_waitLabel,detail:_waitDetail||_waitLabel,status:'running',full_detail:_waitDetail||_waitLabel});
+           }else if(_waitDetail){
+            _applyStepDetail(_runningStep, _waitDetail, _waitDetail);
+            chat.scrollTop=chat.scrollHeight;
+           }
+          }else if(_waitLabel || _waitDetail){
+           addStep({label:_waitLabel||t('chat.process'),detail:_waitDetail||_waitLabel,status:'running',full_detail:_waitDetail||_waitLabel});
+          }
+         }
        }else if(currentEvent==='thinking'){
         var _thinkingText=String(parsed.content||'').replace(/<\/?think>/ig,' ').trim();
         if(_thinkingText){
@@ -989,6 +1193,23 @@ function _taskPlanStateIcon(status){
  return '○';
 }
 
+function _taskPlanStateIconMarkup(status){
+ status=String(status||'pending');
+ if(status==='running'){
+  return '<svg viewBox="0 0 16 16" class="task-plan-glyph task-plan-glyph-running" fill="none" aria-hidden="true"><circle class="track" cx="8" cy="8" r="5.4" stroke="currentColor" stroke-width="1.5"></circle><path class="arc" d="M12.8 8A4.8 4.8 0 0 0 8 3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
+ }
+ if(status==='done'){
+  return '<svg viewBox="0 0 16 16" class="task-plan-glyph task-plan-glyph-done" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.4" stroke="currentColor" stroke-width="1.5"></circle><path d="M5.2 8.2l1.8 1.9 3.8-4.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+ }
+ if(status==='waiting_user'){
+  return '<svg viewBox="0 0 16 16" class="task-plan-glyph task-plan-glyph-waiting" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.4" stroke="currentColor" stroke-width="1.5"></circle><circle cx="5.2" cy="8" r="0.9" fill="currentColor"></circle><circle cx="8" cy="8" r="0.9" fill="currentColor"></circle><circle cx="10.8" cy="8" r="0.9" fill="currentColor"></circle></svg>';
+ }
+ if(status==='blocked' || status==='error' || status==='failed'){
+  return '<svg viewBox="0 0 16 16" class="task-plan-glyph task-plan-glyph-error" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.4" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><circle cx="8" cy="11.6" r="0.9" fill="currentColor"></circle></svg>';
+ }
+ return '<svg viewBox="0 0 16 16" class="task-plan-glyph task-plan-glyph-pending" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.4" stroke="currentColor" stroke-width="1.5"></circle></svg>';
+}
+
 function _scheduleTaskPlanClear(delayMs){
  if(_taskPlanClearTimer){ clearTimeout(_taskPlanClearTimer); _taskPlanClearTimer=null; }
  _taskPlanClearTimer=setTimeout(function(){
@@ -1028,29 +1249,20 @@ function _renderSessionTaskPlan(){
  var row=document.createElement('div');
   var status=String((item&&item.status)||'pending');
   row.className='task-plan-item '+status;
+  row.title=_taskPlanStateLabel(status);
 
   var index=document.createElement('div');
   index.className='task-plan-index';
-  index.textContent=_taskPlanStateIcon(status);
-  index.title=_taskPlanStateLabel(status);
+  index.innerHTML=_taskPlanStateIconMarkup(status);
+  index.setAttribute('aria-hidden','true');
 
   var body=document.createElement('div');
   body.className='task-plan-body';
 
-  var titleRow=document.createElement('div');
-  titleRow.className='task-plan-title-row';
-
   var title=document.createElement('div');
   title.className='task-plan-title';
   title.textContent=String((item&&item.title)||'');
-
-  var state=document.createElement('div');
-  state.className='task-plan-state '+status;
-  state.textContent=_taskPlanStateLabel(status);
-
-  titleRow.appendChild(title);
-  titleRow.appendChild(state);
-  body.appendChild(titleRow);
+  body.appendChild(title);
 
   var detailText=String((item&&item.detail)||'').trim();
   if(detailText){
@@ -1122,6 +1334,16 @@ function _addTaskProgress(label, value){
  item.className='task-progress-item';
  item.innerHTML='<span class="task-progress-icon">■</span><span class="task-progress-label">'+escapeHtml(label)+'</span><span class="task-progress-value">'+escapeHtml(value)+'</span>';
  item.dataset.status='working';
+ var taskText=escapeHtml(String(label||'').trim());
+ var valueText=escapeHtml(String(value||'').trim());
+ var textHtml='<span class="task-progress-label">'+taskText+'</span>';
+ if(valueText){
+  textHtml+='<span class="task-progress-sep">：</span><span class="task-progress-value">'+valueText+'</span>';
+ }
+ if(valueText){
+  textHtml='<span class="task-progress-label">'+taskText+'</span><span class="task-progress-sep">: </span><span class="task-progress-value">'+valueText+'</span>';
+ }
+ item.innerHTML='<span class="task-progress-icon" aria-hidden="true">'+_taskProgressWorkingSvg+'</span><span class="task-progress-text">'+textHtml+'</span>';
  bar.appendChild(item);
 }
 
@@ -1133,6 +1355,12 @@ function _completeTaskProgress(){
   if(items[i].dataset.status==='working'){
    items[i].dataset.status='done';
    var icon=items[i].querySelector('.task-progress-icon');
+   if(icon){
+    setTimeout(function(target){
+     target.innerHTML=_taskProgressDoneSvg;
+     target.classList.add('done');
+    },0,icon);
+   }
    if(icon){icon.textContent='✓';icon.classList.add('done');}
   }
  }

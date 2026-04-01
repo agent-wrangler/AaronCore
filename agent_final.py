@@ -8,7 +8,7 @@ import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
 
-from core.state_loader import (
+from core.runtime_state.state_loader import (
     ENGINE_DIR, CORE_DIR, PRIMARY_STATE_DIR, LOGS_DIR,
     HTML_FILE, RESTORED_OUTPUT_JS_FILE,
     load_current_model,
@@ -19,7 +19,7 @@ from core.state_loader import (
     extract_doc_title, build_docs_index, resolve_doc_path,
     PRIMARY_HISTORY_FILE,
 )
-from core.state_loader import init as _state_loader_init
+from core.runtime_state.state_loader import init as _state_loader_init
 from core.context_builder import (
     normalize_event_time, build_persona_events, stringify_event_value,
     build_dialogue_context, render_dialogue_context,
@@ -48,11 +48,21 @@ try:
     sys.path.insert(0, str(CORE_DIR))
     from router import route as nova_route
     from executor import execute as nova_execute
-    from core.skills import get_all_skills, get_all_skills_for_ui, set_skill_enabled
+    from core.skills import (
+        get_all_skills,
+        get_all_skills_for_ui,
+        get_exposed_skills,
+        get_skill_catalog_summary,
+        get_surfacing_view,
+        get_tool_view,
+        get_user_view,
+        get_user_visible_skills,
+        set_skill_enabled,
+    )
     NOVA_CORE_READY = True
     CORE_IMPORT_ERROR = ""
 except Exception as exc:
-    nova_route = nova_execute = get_all_skills = get_all_skills_for_ui = set_skill_enabled = None
+    nova_route = nova_execute = get_all_skills = get_all_skills_for_ui = get_exposed_skills = get_skill_catalog_summary = get_surfacing_view = get_tool_view = get_user_view = get_user_visible_skills = set_skill_enabled = None
     NOVA_CORE_READY = False
     CORE_IMPORT_ERROR = str(exc)
 
@@ -72,15 +82,15 @@ from core.self_repair import (
 )
 from memory import add_to_history, evolve, get_history as get_text_history
 from core.session_context import extract_session_context
-from core.l2_memory import (
+from core.runtime_memory.l2_memory import (
     add_memory as l2_add_memory, search_relevant as l2_search_relevant,
 )
-from core.l2_memory import init as _l2_memory_init
-from core.history_recall import (
+from core.runtime_memory.l2_memory import init as _l2_memory_init
+from core.runtime_memory.history_recall import (
     detect_recall_intent, recall_by_time,
     init as _history_recall_init,
 )
-from core.json_store import load_json
+from core.runtime_state.json_store import load_json
 try:
     from core.route_resolver import (
         is_registered_skill_name, looks_like_news_request, resolve_route,
@@ -242,6 +252,7 @@ _reply_formatter_init(
 from core.tool_adapter import init as _tool_adapter_init
 _tool_adapter_init(
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
+    get_exposed_skills=get_exposed_skills if NOVA_CORE_READY else None,
     debug_write=debug_write,
     l2_search_relevant=l2_search_relevant,
     load_l3_long_term=load_l3_long_term,
@@ -286,6 +297,12 @@ S.NOVA_CORE_READY = NOVA_CORE_READY
 S.CORE_IMPORT_ERROR = CORE_IMPORT_ERROR
 for _name, _val in {
     "nova_route": nova_route, "nova_execute": nova_execute, "get_all_skills": get_all_skills,
+    "get_exposed_skills": get_exposed_skills if NOVA_CORE_READY else None,
+    "get_skill_catalog_summary": get_skill_catalog_summary if NOVA_CORE_READY else None,
+    "get_tool_view": get_tool_view if NOVA_CORE_READY else None,
+    "get_surfacing_view": get_surfacing_view if NOVA_CORE_READY else None,
+    "get_user_view": get_user_view if NOVA_CORE_READY else None,
+    "get_user_visible_skills": get_user_visible_skills if NOVA_CORE_READY else None,
     "get_all_skills_for_ui": get_all_skills_for_ui if NOVA_CORE_READY else None,
     "set_skill_enabled": set_skill_enabled if NOVA_CORE_READY else None,
     "think": think, "evolve": evolve, "raw_llm_call": _raw_llm_call,

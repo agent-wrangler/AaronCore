@@ -1,30 +1,63 @@
 {
-  "name": "看文件夹",
-  "keywords": [
-    "看看文件夹",
-    "看下文件夹",
-    "看看目录",
-    "看下目录",
-    "这个文件夹里有什么",
-    "这个目录里有什么",
-    "帮我看看这个路径",
-    "看这个路径",
-    "浏览文件夹",
-    "浏览目录"
-  ],
-  "anti_keywords": ["文件夹图标", "目录结构图", "如果看文件夹"],
-  "description": "读取本地文件夹结构，挑几个关键文件先看，再给出目录总结",
-  "priority": 7,
-  "category": "本地探索",
-  "icon": "📁",
+  "name": "Local command runner",
+  "keywords": [],
+  "anti_keywords": [],
+  "description": "Run a safe local workspace command for build, package, install, or test tasks. Capture stdout and stderr, repair common PyInstaller flag mistakes, and verify expected artifacts when possible. Use this for pyinstaller, pytest, pip install, npm build, and similar commands. Do not use run_code for those tasks.",
+  "priority": 9,
+  "category": "Development",
+  "icon": "Terminal",
   "parameters": {
     "type": "object",
     "properties": {
+      "command": {
+        "type": "string",
+        "description": "Exact local command to run. Prefer direct commands plus workdir instead of shell chaining."
+      },
+      "workdir": {
+        "type": "string",
+        "description": "Working directory for the command. Use a workspace path or Desktop/Documents/Downloads path."
+      },
+      "expected_artifacts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Files or folders that must exist after the command succeeds."
+      },
+      "timeout_sec": {
+        "type": "integer",
+        "description": "Optional timeout in seconds."
+      },
+      "background": {
+        "type": "boolean",
+        "description": "Set true for long-running local services or app launches that should keep running in the background."
+      },
+      "startup_wait_sec": {
+        "type": "integer",
+        "description": "Optional startup wait in seconds for background launches."
+      },
+      "description": {
+        "type": "string",
+        "description": "Short human summary of what the command should accomplish."
+      },
       "user_input": {
         "type": "string",
-        "description": "用户原始输入，需包含本地文件夹路径"
+        "description": "Original user request."
       }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "command"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "filesystem",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "inspect",
+  "effect_level": "read_only",
+  "risk_level": "low",
+  "protocol_subfamily": "filesystem_read",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

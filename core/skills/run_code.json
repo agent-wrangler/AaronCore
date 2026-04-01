@@ -17,5 +17,16 @@
     "required": [
       "user_input"
     ]
-  }
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "shell",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "execute",
+  "effect_level": "local_side_effect",
+  "risk_level": "high",
+  "protocol_subfamily": "shell_exec",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

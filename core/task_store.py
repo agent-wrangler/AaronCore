@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path as _Path
 import re
 
-from core.state_loader import (
+from core.runtime_state.state_loader import (
     load_task_projects,
     save_task_projects,
     load_tasks,
@@ -438,6 +438,10 @@ def _task_matches_query_paths(task: dict | None, query_paths: list[str]) -> bool
     return any(_paths_overlap_for_resume(target_path, query_path) for query_path in (query_paths or []))
 
 
+def _has_task_fs_target(task: dict | None) -> bool:
+    return bool(_extract_task_fs_target(task))
+
+
 def _merge_task_fs_target(task: dict, fs_target: dict) -> dict:
     task = _normalize_task(task)
     normalized_target = _normalize_fs_target_for_store(fs_target)
@@ -496,6 +500,11 @@ def get_structured_fs_target_for_task_plan(task_plan: dict | None) -> dict | Non
         target = _extract_task_fs_target(task)
         if target:
             return target
+
+    if project_id:
+        project = get_project(project_id)
+        if isinstance(project, dict) and project.get("kind") == "generic" and project.get("title") == PLAN_PROJECT_TITLE:
+            return None
 
     if project_id:
         project = get_project(project_id)
@@ -913,7 +922,7 @@ def _all_task_plan_tasks() -> list[dict]:
     return [task for task in tasks if _is_task_plan_task(task)]
 
 
-def _find_matching_task_plan_task(user_input: str = ""):
+def _find_matching_task_plan_task(user_input: str = "", preferred_fs_target: str = ""):
     tasks = _all_task_plan_tasks()
     if not tasks:
         return None
@@ -930,6 +939,14 @@ def _find_matching_task_plan_task(user_input: str = ""):
         for task in reversed(non_terminal):
             if _task_matches_query_paths(task, query_paths):
                 return task
+        return None
+    prefer_by_fs_target = _normalize_query_path(preferred_fs_target)
+    if prefer_by_fs_target:
+        matching_tasks = [task for task in reversed(non_terminal) if _task_matches_query_paths(task, [prefer_by_fs_target])]
+        if matching_tasks:
+            return matching_tasks[0]
+        if any(_has_task_fs_target(task) for task in non_terminal):
+            return None
     if _looks_like_task_plan_continuation(raw):
         return latest
     if _looks_like_short_referential_followup(raw) or _looks_like_long_referential_followup(raw):
@@ -953,8 +970,8 @@ def task_to_plan_snapshot(task: dict | None) -> dict | None:
     return normalized
 
 
-def get_active_task_plan_snapshot(user_input: str = "") -> dict | None:
-    task = _find_matching_task_plan_task(user_input)
+def get_active_task_plan_snapshot(user_input: str = "", preferred_fs_target: str = "") -> dict | None:
+    task = _find_matching_task_plan_task(user_input, preferred_fs_target=preferred_fs_target)
     return task_to_plan_snapshot(task)
 
 

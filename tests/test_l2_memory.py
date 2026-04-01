@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from core import l2_memory
+from core.runtime_memory import l2_memory
 
 
 class L2MemoryTests(unittest.TestCase):

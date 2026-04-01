@@ -159,5 +159,11 @@ RESTORED_OUTPUT_JS_FILE = None
 load_json = None
 
 # skill store
+get_skill_catalog_summary = None
+get_exposed_skills = None
+get_tool_view = None
+get_surfacing_view = None
+get_user_view = None
+get_user_visible_skills = None
 get_all_skills_for_ui = None
 set_skill_enabled = None

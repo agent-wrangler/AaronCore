@@ -3577,5 +3577,2739 @@
       }
     },
     "events": []
+  },
+  {
+    "id": "task_20260331_072",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": null,
+    "kind": "development",
+    "title": "优化 NovaNotes 项目，解决打不开的问题",
+    "status": "planned",
+    "stage": "planned",
+    "priority": "normal",
+    "created_at": "2026-03-31T19:30:52.219704",
+    "updated_at": "2026-03-31T19:30:52.369509",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_flow",
+      "summary": "优化 NovaNotes 项目，解决打不开的问题"
+    },
+    "input": {
+      "query": "优化 NovaNotes 项目，解决打不开的问题"
+    },
+    "context": {},
+    "plan": {
+      "steps": [
+        "收集错误日志和用户反馈，定位打不开的具体表现和触发条件",
+        "检查项目依赖、环境配置和启动流程，识别潜在兼容性或初始化问题",
+        "制定修复方案，优先解决阻塞启动的关键错误"
+      ]
+    },
+    "artifacts": {},
+    "result": {
+      "understanding": "NovaNotes 项目存在无法打开的问题，需要诊断并修复启动故障。",
+      "next_steps": [
+        "收集错误日志和用户反馈，定位打不开的具体表现和触发条件",
+        "检查项目依赖、环境配置和启动流程，识别潜在兼容性或初始化问题",
+        "制定修复方案，优先解决阻塞启动的关键错误"
+      ]
+    },
+    "memory": {
+      "last_user_reference": "优化 NovaNotes 项目，解决打不开的问题",
+      "resume_tokens": [
+        "继续",
+        "处理",
+        "修复",
+        "开始"
+      ],
+      "last_active_at": null
+    },
+    "domain": {
+      "development": {
+        "source": "task_intake"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-03-31T19:30:52.242514",
+        "summary": "Development task created"
+      }
+    ]
+  },
+  {
+    "id": "task_20260331_073",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": "task_20260331_072",
+    "kind": "plan_step",
+    "title": "收集错误日志和用户反馈，定位打不开的具体表现和触发条件",
+    "status": "planned",
+    "stage": "queued",
+    "priority": "normal",
+    "created_at": "2026-03-31T19:30:52.267481",
+    "updated_at": "2026-03-31T19:30:52.267481",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_substep",
+      "summary": "收集错误日志和用户反馈，定位打不开的具体表现和触发条件"
+    },
+    "input": {
+      "query": "收集错误日志和用户反馈，定位打不开的具体表现和触发条件"
+    },
+    "context": {},
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {},
+    "domain": {
+      "development_step": {
+        "index": 1
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_074",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": "task_20260331_072",
+    "kind": "plan_step",
+    "title": "检查项目依赖、环境配置和启动流程，识别潜在兼容性或初始化问题",
+    "status": "planned",
+    "stage": "queued",
+    "priority": "normal",
+    "created_at": "2026-03-31T19:30:52.297507",
+    "updated_at": "2026-03-31T19:30:52.297507",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_substep",
+      "summary": "检查项目依赖、环境配置和启动流程，识别潜在兼容性或初始化问题"
+    },
+    "input": {
+      "query": "检查项目依赖、环境配置和启动流程，识别潜在兼容性或初始化问题"
+    },
+    "context": {},
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {},
+    "domain": {
+      "development_step": {
+        "index": 2
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_075",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": "task_20260331_072",
+    "kind": "plan_step",
+    "title": "制定修复方案，优先解决阻塞启动的关键错误",
+    "status": "planned",
+    "stage": "queued",
+    "priority": "normal",
+    "created_at": "2026-03-31T19:30:52.336405",
+    "updated_at": "2026-03-31T19:30:52.336405",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_substep",
+      "summary": "制定修复方案，优先解决阻塞启动的关键错误"
+    },
+    "input": {
+      "query": "制定修复方案，优先解决阻塞启动的关键错误"
+    },
+    "context": {},
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {},
+    "domain": {
+      "development_step": {
+        "index": 3
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_076",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "找回丢失物品",
+    "status": "active",
+    "stage": "immediate_search",
+    "priority": "normal",
+    "created_at": "2026-03-31T20:45:44.010310",
+    "updated_at": "2026-03-31T20:45:44.056403",
+    "started_at": "2026-03-31T20:45:44.010310",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "找回丢失物品"
+    },
+    "input": {
+      "query": "找回丢失物品"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "找回丢失物品",
+        "mode": "multi_step",
+        "phase": "immediate_search",
+        "summary": "通过系统化回溯与排查，定位并取回丢失物品。",
+        "items": [
+          {
+            "id": "immediate_search",
+            "title": "快速现场排查",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "trace_back",
+            "title": "回溯活动路径",
+            "status": "running",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "check_possible_locations",
+            "title": "检查高频存放点",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "ask_around",
+            "title": "询问相关人员",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "systematic_review",
+            "title": "系统复盘与记录",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          }
+        ],
+        "current_item_id": "trace_back",
+        "updated_at": "2026-03-31T20:45:44.010310"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "通过系统化回溯与排查，定位并取回丢失物品。"
+    },
+    "memory": {
+      "last_user_reference": "怎么又丢了。",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-03-31T20:45:44.010310"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "找回丢失物品"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-03-31T20:45:44.035742",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-03-31T20:45:44.056403",
+        "summary": "通过系统化回溯与排查，定位并取回丢失物品。",
+        "phase": "immediate_search",
+        "current_item_id": "trace_back"
+      }
+    ]
+  },
+  {
+    "id": "task_20260331_077",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_076",
+    "kind": "plan_step",
+    "title": "快速现场排查",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T20:45:44.102638",
+    "updated_at": "2026-03-31T20:45:44.102638",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "immediate_search"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "immediate_search",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_078",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_076",
+    "kind": "plan_step",
+    "title": "回溯活动路径",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-03-31T20:45:44.119053",
+    "updated_at": "2026-03-31T20:45:44.119053",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "trace_back"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "trace_back",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_079",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_076",
+    "kind": "plan_step",
+    "title": "检查高频存放点",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T20:45:44.155035",
+    "updated_at": "2026-03-31T20:45:44.155035",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "check_possible_locations"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "check_possible_locations",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_080",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_076",
+    "kind": "plan_step",
+    "title": "询问相关人员",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T20:45:44.185923",
+    "updated_at": "2026-03-31T20:45:44.185923",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "ask_around"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "ask_around",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_081",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_076",
+    "kind": "plan_step",
+    "title": "系统复盘与记录",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T20:45:44.219723",
+    "updated_at": "2026-03-31T20:45:44.219723",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "systematic_review"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "systematic_review",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_082",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "诊断并解决 agent 执行卡顿问题",
+    "status": "active",
+    "stage": "分析卡顿原因",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:51:16.005503",
+    "updated_at": "2026-03-31T21:52:09.143624",
+    "started_at": "2026-03-31T21:51:16.003068",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "诊断并解决 agent 执行卡顿问题"
+    },
+    "input": {
+      "query": "诊断并解决 agent 执行卡顿问题"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "诊断并解决 agent 执行卡顿问题",
+        "mode": "multi_step",
+        "phase": "分析卡顿原因",
+        "summary": "已检查配置文件，现在分析卡顿原因",
+        "items": [
+          {
+            "id": "1",
+            "title": "检查 agent_final.py 中的配置参数",
+            "status": "running",
+            "kind": "analysis",
+            "detail": "查找 max_tokens、context_window、memory_limit 等配置"
+          },
+          {
+            "id": "2",
+            "title": "分析卡顿原因",
+            "status": "pending",
+            "kind": "diagnosis",
+            "detail": "根据配置分析为什么执行时会卡住"
+          },
+          {
+            "id": "3",
+            "title": "提出解决方案",
+            "status": "pending",
+            "kind": "solution",
+            "detail": "调整配置或优化代码来解决卡顿问题"
+          },
+          {
+            "id": "4",
+            "title": "实施优化",
+            "status": "pending",
+            "kind": "implementation",
+            "detail": "修改配置文件或代码"
+          }
+        ],
+        "current_item_id": "1",
+        "updated_at": "2026-03-31T21:52:09.110218"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "已检查配置文件，现在分析卡顿原因"
+    },
+    "memory": {
+      "last_user_reference": "诊断并解决 agent 执行卡顿问题",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-03-31T21:52:09.125878"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "诊断并解决 agent 执行卡顿问题"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-03-31T21:51:16.021937",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-03-31T21:51:16.049172",
+        "summary": "检查 agent_final.py 中的记忆和 token 配置",
+        "phase": "检查配置",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-03-31T21:52:09.143624",
+        "summary": "已检查配置文件，现在分析卡顿原因",
+        "phase": "分析卡顿原因",
+        "current_item_id": "1"
+      }
+    ]
+  },
+  {
+    "id": "task_20260331_083",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_082",
+    "kind": "plan_step",
+    "title": "检查 agent_final.py 中的配置参数",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:51:16.117582",
+    "updated_at": "2026-03-31T21:52:09.176385",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "查找 max_tokens、context_window、memory_limit 等配置"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "analysis"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_084",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_082",
+    "kind": "plan_step",
+    "title": "分析卡顿原因",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:51:16.155592",
+    "updated_at": "2026-03-31T21:52:09.209201",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "根据配置分析为什么执行时会卡住"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "diagnosis"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_085",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_082",
+    "kind": "plan_step",
+    "title": "提出解决方案",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:51:16.189235",
+    "updated_at": "2026-03-31T21:52:09.228521",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "调整配置或优化代码来解决卡顿问题"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "solution"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_086",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_082",
+    "kind": "plan_step",
+    "title": "实施优化",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:51:16.235673",
+    "updated_at": "2026-03-31T21:52:09.260071",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "修改配置文件或代码"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "implementation"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_087",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "开发一个基于大语言模型的智能体系统",
+    "status": "active",
+    "stage": "requirements",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:58:06.891488",
+    "updated_at": "2026-03-31T21:58:06.925025",
+    "started_at": "2026-03-31T21:58:06.890338",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "开发一个基于大语言模型的智能体系统"
+    },
+    "input": {
+      "query": "开发一个基于大语言模型的智能体系统"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "开发一个基于大语言模型的智能体系统",
+        "mode": "multi_step",
+        "phase": "requirements",
+        "summary": "????????????????",
+        "items": [
+          {
+            "id": "requirements",
+            "title": "需求分析与架构设计",
+            "status": "done",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "core_development",
+            "title": "核心智能体功能开发",
+            "status": "running",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "integration",
+            "title": "工具与API集成",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "testing",
+            "title": "系统测试与优化",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "deployment",
+            "title": "部署与监控上线",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          }
+        ],
+        "current_item_id": "core_development",
+        "updated_at": "2026-03-31T21:58:06.885798"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "????????????????"
+    },
+    "memory": {
+      "last_user_reference": "????? agent ??????",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-03-31T21:58:06.890338"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "开发一个基于大语言模型的智能体系统"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-03-31T21:58:06.908396",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-03-31T21:58:06.925025",
+        "summary": "????????????????",
+        "phase": "requirements",
+        "current_item_id": "core_development"
+      }
+    ]
+  },
+  {
+    "id": "task_20260331_088",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_087",
+    "kind": "plan_step",
+    "title": "需求分析与架构设计",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:58:06.961150",
+    "updated_at": "2026-03-31T21:58:06.961150",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "requirements"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "requirements",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_089",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_087",
+    "kind": "plan_step",
+    "title": "核心智能体功能开发",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:58:06.988737",
+    "updated_at": "2026-03-31T21:58:06.988737",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "core_development"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "core_development",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_090",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_087",
+    "kind": "plan_step",
+    "title": "工具与API集成",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:58:07.027267",
+    "updated_at": "2026-03-31T21:58:07.027267",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "integration"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "integration",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_091",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_087",
+    "kind": "plan_step",
+    "title": "系统测试与优化",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:58:07.060122",
+    "updated_at": "2026-03-31T21:58:07.060122",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "testing"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "testing",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260331_092",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260331_087",
+    "kind": "plan_step",
+    "title": "部署与监控上线",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-03-31T21:58:07.108496",
+    "updated_at": "2026-03-31T21:58:07.108496",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "deployment"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "deployment",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_093",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "分析Claude Code源码泄露的技术细节，提取有价值的设计模式，改进我们的AI助手系统",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:06:51.134899",
+    "updated_at": "2026-04-01T13:07:23.613858",
+    "started_at": "2026-04-01T13:06:51.132418",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "分析Claude Code源码泄露的技术细节，提取有价值的设计模式，改进我们的AI助手系统"
+    },
+    "input": {
+      "query": "分析Claude Code源码泄露的技术细节，提取有价值的设计模式，改进我们的AI助手系统"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "分析Claude Code源码泄露的技术细节，提取有价值的设计模式，改进我们的AI助手系统",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "基于Claude Code源码泄露信息，进行技术分析和对齐改进",
+        "items": [
+          {
+            "id": "1",
+            "title": "收集Claude Code源码泄露的详细信息",
+            "status": "done",
+            "kind": "research",
+            "detail": "通过web搜索获取最新的源码泄露分析和技术细节"
+          },
+          {
+            "id": "2",
+            "title": "分析Claude Code的核心架构设计",
+            "status": "done",
+            "kind": "analysis",
+            "detail": "重点分析记忆管理、工具系统、任务规划等关键模块"
+          },
+          {
+            "id": "3",
+            "title": "对比我们的系统与Claude Code的差异",
+            "status": "running",
+            "kind": "comparison",
+            "detail": "识别各自的优势和不足，确定改进方向"
+          },
+          {
+            "id": "4",
+            "title": "制定具体的技术对齐方案",
+            "status": "pending",
+            "kind": "planning",
+            "detail": "设计具体的改进点和实施步骤"
+          },
+          {
+            "id": "5",
+            "title": "实施优先级最高的改进",
+            "status": "pending",
+            "kind": "implementation",
+            "detail": "选择1-2个关键改进点进行实际优化"
+          }
+        ],
+        "current_item_id": "3",
+        "updated_at": "2026-04-01T13:06:51.128201"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "基于Claude Code源码泄露信息，进行技术分析和对齐改进"
+    },
+    "memory": {
+      "last_user_reference": "分析Claude Code源码泄露的技术细节，提取有价值的设计模式，改进我们的AI助手系统",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T13:07:23.580127"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "分析claude code源码泄露的技术细节 提取有价值的设计模式 改进我们的ai助手系统"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T13:06:51.159108",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T13:06:51.186053",
+        "summary": "基于Claude Code源码泄露信息，进行技术分析和对齐改进",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T13:07:11.085280",
+        "summary": "基于Claude Code源码泄露信息，进行技术分析和对齐改进",
+        "phase": "1",
+        "current_item_id": "2"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T13:07:23.613858",
+        "summary": "基于Claude Code源码泄露信息，进行技术分析和对齐改进",
+        "phase": "1",
+        "current_item_id": "3"
+      }
+    ]
+  },
+  {
+    "id": "task_20260401_094",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_093",
+    "kind": "plan_step",
+    "title": "收集Claude Code源码泄露的详细信息",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:06:51.215901",
+    "updated_at": "2026-04-01T13:07:23.647332",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "通过web搜索获取最新的源码泄露分析和技术细节"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "research"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_095",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_093",
+    "kind": "plan_step",
+    "title": "分析Claude Code的核心架构设计",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:06:51.236721",
+    "updated_at": "2026-04-01T13:07:23.681742",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "重点分析记忆管理、工具系统、任务规划等关键模块"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "analysis"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_096",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_093",
+    "kind": "plan_step",
+    "title": "对比我们的系统与Claude Code的差异",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:06:51.284573",
+    "updated_at": "2026-04-01T13:07:23.723974",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "识别各自的优势和不足，确定改进方向"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "comparison"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_097",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_093",
+    "kind": "plan_step",
+    "title": "制定具体的技术对齐方案",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:06:51.334787",
+    "updated_at": "2026-04-01T13:07:23.747381",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "设计具体的改进点和实施步骤"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "planning"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_098",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_093",
+    "kind": "plan_step",
+    "title": "实施优先级最高的改进",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:06:51.367917",
+    "updated_at": "2026-04-01T13:07:23.780518",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "选择1-2个关键改进点进行实际优化"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "implementation"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_099",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "基于Claude Code源码泄露信息进行技术分析和对齐改进",
+    "status": "active",
+    "stage": "source_analysis",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:54:26.185112",
+    "updated_at": "2026-04-01T13:54:26.243332",
+    "started_at": "2026-04-01T13:54:26.183101",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "基于Claude Code源码泄露信息进行技术分析和对齐改进"
+    },
+    "input": {
+      "query": "基于Claude Code源码泄露信息进行技术分析和对齐改进"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "基于Claude Code源码泄露信息进行技术分析和对齐改进",
+        "mode": "multi_step",
+        "phase": "source_analysis",
+        "summary": "通过分析泄露源码的技术架构与对齐机制，提出改进方案并验证可行性。",
+        "items": [
+          {
+            "id": "source_analysis",
+            "title": "泄露源码技术架构分析",
+            "status": "done",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "alignment_evaluation",
+            "title": "现有对齐机制评估",
+            "status": "running",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "improvement_design",
+            "title": "对齐改进方案设计",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          },
+          {
+            "id": "feasibility_validation",
+            "title": "方案可行性验证",
+            "status": "pending",
+            "kind": "phase",
+            "detail": ""
+          }
+        ],
+        "current_item_id": "alignment_evaluation",
+        "updated_at": "2026-04-01T13:54:26.179106"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "通过分析泄露源码的技术架构与对齐机制，提出改进方案并验证可行性。"
+    },
+    "memory": {
+      "last_user_reference": "基于Claude Code源码泄露信息，进行技术分析和对齐改进",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T13:54:26.182105"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "基于claude code源码泄露信息进行技术分析和对齐改进"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T13:54:26.208287",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T13:54:26.243332",
+        "summary": "通过分析泄露源码的技术架构与对齐机制，提出改进方案并验证可行性。",
+        "phase": "source_analysis",
+        "current_item_id": "alignment_evaluation"
+      }
+    ]
+  },
+  {
+    "id": "task_20260401_100",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_099",
+    "kind": "plan_step",
+    "title": "泄露源码技术架构分析",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:54:26.274897",
+    "updated_at": "2026-04-01T13:54:26.274897",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "source_analysis"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "source_analysis",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_101",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_099",
+    "kind": "plan_step",
+    "title": "现有对齐机制评估",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:54:26.302803",
+    "updated_at": "2026-04-01T13:54:26.302803",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "alignment_evaluation"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "alignment_evaluation",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_102",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_099",
+    "kind": "plan_step",
+    "title": "对齐改进方案设计",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:54:26.342443",
+    "updated_at": "2026-04-01T13:54:26.342443",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "improvement_design"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "improvement_design",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_103",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_099",
+    "kind": "plan_step",
+    "title": "方案可行性验证",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T13:54:26.386230",
+    "updated_at": "2026-04-01T13:54:26.386230",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": ""
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "feasibility_validation"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "feasibility_validation",
+        "kind": "phase"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_104",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "清理和重组NovaCore项目文件夹，使其结构清晰、易于维护",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:20:23.757124",
+    "updated_at": "2026-04-01T15:20:35.334160",
+    "started_at": "2026-04-01T15:20:23.757124",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "清理和重组NovaCore项目文件夹，使其结构清晰、易于维护"
+    },
+    "input": {
+      "query": "清理和重组NovaCore项目文件夹，使其结构清晰、易于维护"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "清理和重组NovaCore项目文件夹，使其结构清晰、易于维护",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "清理临时文件、重组文件夹结构、标准化命名、建立文档",
+        "items": [
+          {
+            "id": "1",
+            "title": "清理根目录临时文件",
+            "status": "done",
+            "kind": "cleanup",
+            "detail": "删除.tmp_*文件、清理日志文件、删除测试图片"
+          },
+          {
+            "id": "2",
+            "title": "创建新的文件夹结构",
+            "status": "running",
+            "kind": "reorganize",
+            "detail": "创建src、config、runtime、data等标准文件夹"
+          },
+          {
+            "id": "3",
+            "title": "移动文件到对应位置",
+            "status": "pending",
+            "kind": "move",
+            "detail": "将现有文件分类移动到新文件夹中"
+          },
+          {
+            "id": "4",
+            "title": "标准化命名和版本管理",
+            "status": "pending",
+            "kind": "standardize",
+            "detail": "统一desktop_runtime版本，清理重复文件"
+          },
+          {
+            "id": "5",
+            "title": "创建项目文档",
+            "status": "pending",
+            "kind": "document",
+            "detail": "创建README.md说明项目结构和用途"
+          }
+        ],
+        "current_item_id": "2",
+        "updated_at": "2026-04-01T15:20:23.755613"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "清理临时文件、重组文件夹结构、标准化命名、建立文档"
+    },
+    "memory": {
+      "last_user_reference": "清理和重组NovaCore项目文件夹，使其结构清晰、易于维护",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T15:20:35.302382"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "清理和重组novacore项目文件夹 使其结构清晰 易于维护"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T15:20:23.783177",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:20:23.821566",
+        "summary": "清理临时文件、重组文件夹结构、标准化命名、建立文档",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:20:35.334160",
+        "summary": "清理临时文件、重组文件夹结构、标准化命名、建立文档",
+        "phase": "1",
+        "current_item_id": "2"
+      }
+    ]
+  },
+  {
+    "id": "task_20260401_105",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_104",
+    "kind": "plan_step",
+    "title": "清理根目录临时文件",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:20:23.839759",
+    "updated_at": "2026-04-01T15:20:35.384826",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "删除.tmp_*文件、清理日志文件、删除测试图片"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "cleanup"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_106",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_104",
+    "kind": "plan_step",
+    "title": "创建新的文件夹结构",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:20:23.873711",
+    "updated_at": "2026-04-01T15:20:35.403597",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建src、config、runtime、data等标准文件夹"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "reorganize"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_107",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_104",
+    "kind": "plan_step",
+    "title": "移动文件到对应位置",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:20:23.923468",
+    "updated_at": "2026-04-01T15:20:35.436717",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "将现有文件分类移动到新文件夹中"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "move"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_108",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_104",
+    "kind": "plan_step",
+    "title": "标准化命名和版本管理",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:20:23.961768",
+    "updated_at": "2026-04-01T15:20:35.468391",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "统一desktop_runtime版本，清理重复文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "standardize"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_109",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_104",
+    "kind": "plan_step",
+    "title": "创建项目文档",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:20:24.006689",
+    "updated_at": "2026-04-01T15:20:35.486075",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建README.md说明项目结构和用途"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "document"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_110",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "重新组织NovaCore项目的文件夹结构，使其更清晰、可维护",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.454929",
+    "updated_at": "2026-04-01T15:21:34.267219",
+    "started_at": "2026-04-01T15:21:22.441412",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "重新组织NovaCore项目的文件夹结构，使其更清晰、可维护"
+    },
+    "input": {
+      "query": "重新组织NovaCore项目的文件夹结构，使其更清晰、可维护"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "重新组织NovaCore项目的文件夹结构，使其更清晰、可维护",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "清理混乱的文件夹结构，建立标准化的目录组织",
+        "items": [
+          {
+            "id": "1",
+            "title": "分析当前文件夹结构",
+            "status": "done",
+            "kind": "analysis",
+            "detail": "查看当前所有文件和文件夹，了解混乱程度"
+          },
+          {
+            "id": "2",
+            "title": "设计新的目录结构",
+            "status": "running",
+            "kind": "design",
+            "detail": "基于最佳实践设计清晰的文件夹结构"
+          },
+          {
+            "id": "3",
+            "title": "创建新目录结构",
+            "status": "pending",
+            "kind": "execution",
+            "detail": "按照设计创建新的文件夹层次"
+          },
+          {
+            "id": "4",
+            "title": "迁移现有文件",
+            "status": "pending",
+            "kind": "execution",
+            "detail": "将现有文件移动到新位置，保持功能完整"
+          },
+          {
+            "id": "5",
+            "title": "更新路径引用",
+            "status": "pending",
+            "kind": "code",
+            "detail": "更新代码中的文件路径引用"
+          },
+          {
+            "id": "6",
+            "title": "验证和测试",
+            "status": "pending",
+            "kind": "verification",
+            "detail": "确保所有功能在新结构下正常工作"
+          }
+        ],
+        "current_item_id": "2",
+        "updated_at": "2026-04-01T15:21:22.424953"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "清理混乱的文件夹结构，建立标准化的目录组织"
+    },
+    "memory": {
+      "last_user_reference": "重新组织NovaCore项目的文件夹结构，使其更清晰、可维护",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T15:21:34.233047"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "重新组织novacore项目的文件夹结构 使其更清晰 可维护"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T15:21:22.473116",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:21:22.504913",
+        "summary": "清理混乱的文件夹结构，建立标准化的目录组织",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:21:34.267219",
+        "summary": "清理混乱的文件夹结构，建立标准化的目录组织",
+        "phase": "1",
+        "current_item_id": "2"
+      }
+    ]
+  },
+  {
+    "id": "task_20260401_111",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_110",
+    "kind": "plan_step",
+    "title": "分析当前文件夹结构",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.523715",
+    "updated_at": "2026-04-01T15:21:34.316150",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "查看当前所有文件和文件夹，了解混乱程度"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "analysis"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_112",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_110",
+    "kind": "plan_step",
+    "title": "设计新的目录结构",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.563690",
+    "updated_at": "2026-04-01T15:21:34.350638",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "基于最佳实践设计清晰的文件夹结构"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "design"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_113",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_110",
+    "kind": "plan_step",
+    "title": "创建新目录结构",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.607640",
+    "updated_at": "2026-04-01T15:21:34.366897",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "按照设计创建新的文件夹层次"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "execution"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_114",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_110",
+    "kind": "plan_step",
+    "title": "迁移现有文件",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.640937",
+    "updated_at": "2026-04-01T15:21:34.401232",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "将现有文件移动到新位置，保持功能完整"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "execution"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_115",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_110",
+    "kind": "plan_step",
+    "title": "更新路径引用",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.689324",
+    "updated_at": "2026-04-01T15:21:34.416135",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "更新代码中的文件路径引用"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "code"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_116",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_110",
+    "kind": "plan_step",
+    "title": "验证和测试",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:21:22.723861",
+    "updated_at": "2026-04-01T15:21:34.457972",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "确保所有功能在新结构下正常工作"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "6"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "6",
+        "kind": "verification"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_117",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "整理桌面文件，合并同类文件夹，清理临时文件",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:54:02.837884",
+    "updated_at": "2026-04-01T15:57:38.569296",
+    "started_at": "2026-04-01T15:54:02.834895",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "整理桌面文件，合并同类文件夹，清理临时文件"
+    },
+    "input": {
+      "query": "整理桌面文件，合并同类文件夹，清理临时文件"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "整理桌面文件，合并同类文件夹，清理临时文件",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "正在推进：创建Nova项目文件夹并合并相关文件夹",
+        "items": [
+          {
+            "id": "1",
+            "title": "创建Nova项目文件夹并合并相关文件夹",
+            "status": "running",
+            "kind": "folder",
+            "detail": "创建Nova项目文件夹，将Nova截图、Nova故事、Nova故事集、Nova海报合并进去"
+          },
+          {
+            "id": "2",
+            "title": "创建宠物墓园项目文件夹",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "创建宠物墓园项目文件夹，合并pet-grave、宠物永恒墓园-项目说明、宠物墓地网站.lnk"
+          },
+          {
+            "id": "3",
+            "title": "创建AI研究文件夹",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "创建AI研究文件夹，合并记忆粒子引擎skills开发、AI相关html文件、开发者笔记.html"
+          },
+          {
+            "id": "4",
+            "title": "清理临时文件",
+            "status": "pending",
+            "kind": "cleanup",
+            "detail": "删除所有日期格式的临时文件"
+          },
+          {
+            "id": "5",
+            "title": "整理快捷方式",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "创建快捷方式文件夹，放入所有.lnk文件"
+          },
+          {
+            "id": "6",
+            "title": "整理文档笔记",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "创建文档笔记文件夹，放入.txt、.md、.docx文件"
+          }
+        ],
+        "current_item_id": "1",
+        "updated_at": "2026-04-01T15:57:38.527095"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "正在推进：创建Nova项目文件夹并合并相关文件夹"
+    },
+    "memory": {
+      "last_user_reference": "整理桌面文件，合并同类文件夹，清理临时文件",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T15:57:38.540622"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "整理桌面文件 合并同类文件夹 清理临时文件"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T15:54:02.867282",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:54:02.899499",
+        "summary": "正在推进：创建主项目文件夹",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:54:16.820240",
+        "summary": "创建文件夹命令被拦截，尝试手动创建文件夹",
+        "phase": "1",
+        "current_item_id": "2"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:55:26.875649",
+        "summary": "无法直接创建文件夹，需要找到其他方法整理桌面",
+        "phase": "blocked",
+        "current_item_id": "2"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T15:57:38.569296",
+        "summary": "正在推进：创建Nova项目文件夹并合并相关文件夹",
+        "phase": "1",
+        "current_item_id": "1"
+      }
+    ]
+  },
+  {
+    "id": "task_20260401_118",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_117",
+    "kind": "plan_step",
+    "title": "创建Nova项目文件夹并合并相关文件夹",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:54:02.933537",
+    "updated_at": "2026-04-01T15:57:38.605693",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建Nova项目文件夹，将Nova截图、Nova故事、Nova故事集、Nova海报合并进去"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_119",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_117",
+    "kind": "plan_step",
+    "title": "创建宠物墓园项目文件夹",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:54:02.966890",
+    "updated_at": "2026-04-01T15:57:38.633514",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建宠物墓园项目文件夹，合并pet-grave、宠物永恒墓园-项目说明、宠物墓地网站.lnk"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_120",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_117",
+    "kind": "plan_step",
+    "title": "创建AI研究文件夹",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:54:03.011089",
+    "updated_at": "2026-04-01T15:57:38.668760",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建AI研究文件夹，合并记忆粒子引擎skills开发、AI相关html文件、开发者笔记.html"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_121",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_117",
+    "kind": "plan_step",
+    "title": "清理临时文件",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:54:03.055924",
+    "updated_at": "2026-04-01T15:57:38.693830",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "删除所有日期格式的临时文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "cleanup"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_122",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_117",
+    "kind": "plan_step",
+    "title": "整理快捷方式",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:54:03.103981",
+    "updated_at": "2026-04-01T15:57:38.720119",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建快捷方式文件夹，放入所有.lnk文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_123",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_117",
+    "kind": "plan_step",
+    "title": "整理文档笔记",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T15:57:38.755138",
+    "updated_at": "2026-04-01T15:57:38.755138",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建文档笔记文件夹，放入.txt、.md、.docx文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "6"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "6",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_124",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "整理桌面文件和文件夹，建立清晰的结构",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:07.823530",
+    "updated_at": "2026-04-01T16:02:52.273484",
+    "started_at": "2026-04-01T16:01:07.819447",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "整理桌面文件和文件夹，建立清晰的结构"
+    },
+    "input": {
+      "query": "整理桌面文件和文件夹，建立清晰的结构"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "整理桌面文件和文件夹，建立清晰的结构",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "文件夹创建遇到权限限制，先进行合并操作",
+        "items": [
+          {
+            "id": "1",
+            "title": "创建主项目文件夹",
+            "status": "done",
+            "kind": "folder",
+            "detail": "创建 Nova项目、宠物墓园项目、AI研究 三个主文件夹"
+          },
+          {
+            "id": "2",
+            "title": "合并同类文件夹",
+            "status": "running",
+            "kind": "move",
+            "detail": "将相关文件夹移动到对应的主项目文件夹中"
+          },
+          {
+            "id": "3",
+            "title": "清理临时文件",
+            "status": "pending",
+            "kind": "delete",
+            "detail": "删除日期格式的临时导出文件"
+          },
+          {
+            "id": "4",
+            "title": "整理快捷方式",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "创建快捷方式文件夹并移动所有.lnk文件"
+          },
+          {
+            "id": "5",
+            "title": "归档文档文件",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "创建文档笔记文件夹并移动txt、md、docx文件"
+          },
+          {
+            "id": "6",
+            "title": "整理图片文件",
+            "status": "pending",
+            "kind": "folder",
+            "detail": "整理图片到对应项目或图片文件夹"
+          }
+        ],
+        "current_item_id": "2",
+        "updated_at": "2026-04-01T16:01:07.802043"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "文件夹创建遇到权限限制，先进行合并操作"
+    },
+    "memory": {
+      "last_user_reference": "整理桌面文件和文件夹，建立清晰的结构",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T16:02:52.242260"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "整理桌面文件和文件夹 建立清晰的结构"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T16:01:07.854760",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T16:01:07.887338",
+        "summary": "正在推进：创建主项目文件夹",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-01T16:02:52.273484",
+        "summary": "文件夹创建遇到权限限制，先进行合并操作",
+        "phase": "1",
+        "current_item_id": "2"
+      }
+    ]
+  },
+  {
+    "id": "task_20260401_125",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_124",
+    "kind": "plan_step",
+    "title": "创建主项目文件夹",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:07.934562",
+    "updated_at": "2026-04-01T16:02:52.318687",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建 Nova项目、宠物墓园项目、AI研究 三个主文件夹"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_126",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_124",
+    "kind": "plan_step",
+    "title": "合并同类文件夹",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:07.965532",
+    "updated_at": "2026-04-01T16:02:52.348397",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "将相关文件夹移动到对应的主项目文件夹中"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "move"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_127",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_124",
+    "kind": "plan_step",
+    "title": "清理临时文件",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:08.007575",
+    "updated_at": "2026-04-01T16:02:52.377360",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "删除日期格式的临时导出文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "delete"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_128",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_124",
+    "kind": "plan_step",
+    "title": "整理快捷方式",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:08.050248",
+    "updated_at": "2026-04-01T16:02:52.405266",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建快捷方式文件夹并移动所有.lnk文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_129",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_124",
+    "kind": "plan_step",
+    "title": "归档文档文件",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:08.095856",
+    "updated_at": "2026-04-01T16:02:52.433659",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "创建文档笔记文件夹并移动txt、md、docx文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_130",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260401_124",
+    "kind": "plan_step",
+    "title": "整理图片文件",
+    "status": "planned",
+    "stage": "pending",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:01:08.147935",
+    "updated_at": "2026-04-01T16:02:52.461375",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "整理图片到对应项目或图片文件夹"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "6"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "6",
+        "kind": "folder"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260401_131",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "整理桌面文件，清理临时文件，创建分类文件夹",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-01T16:10:15.029964",
+    "updated_at": "2026-04-01T16:10:15.057556",
+    "started_at": "2026-04-01T16:10:15.026521",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "整理桌面文件，清理临时文件，创建分类文件夹"
+    },
+    "input": {
+      "query": "整理桌面文件，清理临时文件，创建分类文件夹"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "整理桌面文件，清理临时文件，创建分类文件夹",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "正在推进：清理临时文件",
+        "items": [
+          {
+            "id": "1",
+            "title": "清理临时文件",
+            "status": "running",
+            "kind": "cleanup",
+            "detail": "删除所有日期格式的临时文件"
+          },
+          {
+            "id": "2",
+            "title": "创建主要项目文件夹",
+            "status": "pending",
+            "kind": "organize",
+            "detail": "创建 Nova项目、宠物墓园项目、AI研究等文件夹"
+          },
+          {
+            "id": "3",
+            "title": "移动文件到对应文件夹",
+            "status": "pending",
+            "kind": "organize",
+            "detail": "将相关文件移动到新建的文件夹中"
+          },
+          {
+            "id": "4",
+            "title": "整理快捷方式和文档",
+            "status": "pending",
+            "kind": "organize",
+            "detail": "创建快捷方式和文档笔记文件夹"
+          }
+        ],
+        "current_item_id": "1",
+        "updated_at": "2026-04-01T16:10:15.011490"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "正在推进：清理临时文件"
+    },
+    "memory": {
+      "last_user_reference": "整理桌面文件，清理临时文件，创建分类文件夹",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-01T16:10:15.026521"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "整理桌面文件 清理临时文件 创建分类文件夹"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-01T16:10:15.057556",
+        "summary": "Task plan created"
+      }
+    ]
   }
 ]

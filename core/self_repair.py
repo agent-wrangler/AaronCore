@@ -24,7 +24,7 @@ AUTO_APPLY_MAX_FILE_COUNT = 2
 AUTO_APPLY_MAX_EDIT_COUNT = 3
 
 
-from core.json_store import load_json as _load_json, write_json as _write_json
+from core.runtime_state.json_store import load_json as _load_json, write_json as _write_json
 
 
 def load_self_repair_reports(limit: int | None = None) -> list[dict]:

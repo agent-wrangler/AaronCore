@@ -1,7 +1,7 @@
 import unittest
 
 import core.reply_formatter as reply_formatter_module
-from core import state_loader as state_loader_module
+from core.runtime_state import state_loader as state_loader_module
 
 
 class RecentMessagesTests(unittest.TestCase):

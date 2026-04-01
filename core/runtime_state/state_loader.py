@@ -5,10 +5,10 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from core.json_store import load_json, write_json, load_json_store
+from core.runtime_state.json_store import load_json, write_json, load_json_store
 
 # ── 路径常量 ──────────────────────────────────────────────
-ENGINE_DIR = Path(__file__).resolve().parent.parent
+ENGINE_DIR = Path(__file__).resolve().parents[2]
 CORE_DIR = ENGINE_DIR / "core"
 PRIMARY_STATE_DIR = ENGINE_DIR / "memory_db"
 LEGACY_STATE_DIR = ENGINE_DIR / "memory"

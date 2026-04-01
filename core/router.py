@@ -10,7 +10,7 @@ from core.skills import get_all_skills
 from core.rule_runtime import has_rule
 
 # 文章选择状态文件
-_article_state_path = os.path.join(os.path.dirname(__file__), 'skills', '.article_state.json')
+_article_state_path = os.path.join(os.path.dirname(__file__), 'skills', 'runtime_state', 'article_state.json')
 
 
 CHAT_WORDS = [

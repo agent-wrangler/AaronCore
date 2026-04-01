@@ -906,7 +906,7 @@ def _raw_llm(prompt: str, temperature=0.1, max_tokens=150, timeout=10) -> str:
     usage = result.get("usage", {})
     if usage:
         try:
-            from core.state_loader import record_stats
+            from core.runtime_state.state_loader import record_stats
             record_stats(
                 input_tokens=usage.get("prompt_tokens", 0),
                 output_tokens=usage.get("completion_tokens", 0),
@@ -945,7 +945,7 @@ def vision_llm_call(prompt: str, images: list = None) -> str:
     usage = result.get("usage", {})
     if usage:
         try:
-            from core.state_loader import record_stats
+            from core.runtime_state.state_loader import record_stats
             record_stats(
                 input_tokens=usage.get("prompt_tokens", 0),
                 output_tokens=usage.get("completion_tokens", 0),
@@ -1358,7 +1358,7 @@ def think(prompt: str, context: str = "", image: str = None, model_id: str = Non
             usage = result.get("usage", {})
             if usage:
                 try:
-                    from core.state_loader import record_stats
+                    from core.runtime_state.state_loader import record_stats
                     record_stats(
                         input_tokens=usage.get("prompt_tokens", 0),
                         output_tokens=usage.get("completion_tokens", 0),
@@ -1488,7 +1488,7 @@ def think_stream(prompt: str, context: str = "", image: str = None, model_id: st
     # 记录 usage
     if usage:
         try:
-            from core.state_loader import record_stats
+            from core.runtime_state.state_loader import record_stats
             record_stats(
                 input_tokens=usage.get("prompt_tokens", 0),
                 output_tokens=usage.get("completion_tokens", 0),

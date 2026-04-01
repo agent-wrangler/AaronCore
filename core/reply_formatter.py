@@ -1413,17 +1413,54 @@ def list_primary_capabilities() -> list[str]:
     return labels or ["陪你聊天"]
 
 
+_SKILL_DISPLAY_NAME_FALLBACKS = {
+    "weather": "天气查询",
+    "news": "新闻抓取",
+    "stock": "股票查询",
+    "article": "写文章",
+    "story": "讲故事",
+    "draw": "AI画图",
+}
+
+
+def _looks_like_mojibake(text: str) -> bool:
+    value = str(text or "").strip()
+    if not value:
+        return False
+    suspicious_fragments = (
+        "�",
+        "æ",
+        "ç",
+        "é",
+        "锟",
+        "澶",
+        "鏌",
+        "鏂",
+        "鑲",
+        "鍐",
+        "璁",
+        "鐢",
+        "淇",
+        "闄",
+    )
+    return any(fragment in value for fragment in suspicious_fragments)
+
+
 def get_skill_display_name(skill_name: str) -> str:
     name = str(skill_name or "").strip()
     if not name:
         return "技能"
+    fallback = _SKILL_DISPLAY_NAME_FALLBACKS.get(name)
     if _nova_core_ready:
         try:
             skill_info = _get_all_skills().get(name, {})
-            return str(skill_info.get("name") or name)
+            label = str(skill_info.get("name") or name).strip()
+            if fallback and _looks_like_mojibake(label):
+                return fallback
+            return label or fallback or name
         except Exception:
             pass
-    return name
+    return fallback or name
 
 
 # ── 特殊意图回复 ──────────────────────────────────────────
@@ -2113,7 +2150,7 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
 
     # 记录第一次调用的 token 统计
     try:
-        from core.state_loader import record_stats
+        from core.runtime_state.state_loader import record_stats
         record_stats(
             input_tokens=usage.get("prompt_tokens", 0),
             output_tokens=usage.get("completion_tokens", 0),
@@ -2140,7 +2177,7 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
             result = _llm_call(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30)
             usage_retry = result.get("usage", {})
             try:
-                from core.state_loader import record_stats
+                from core.runtime_state.state_loader import record_stats
                 record_stats(
                     input_tokens=usage_retry.get("prompt_tokens", 0),
                     output_tokens=usage_retry.get("completion_tokens", 0),
@@ -2223,7 +2260,7 @@ def unified_reply_with_tools(bundle: dict, tools: list[dict], tool_executor) -> 
 
     # 记录第二次调用的 token 统计
     try:
-        from core.state_loader import record_stats
+        from core.runtime_state.state_loader import record_stats
         record_stats(
             input_tokens=usage2.get("prompt_tokens", 0),
             output_tokens=usage2.get("completion_tokens", 0),
@@ -2370,9 +2407,118 @@ def _strip_legacy_tool_markup(text: str) -> str:
     return cleaned
 
 
+def _strip_mid_reply_restart(text: str) -> tuple[str, list[str]]:
+    raw = str(text or "").strip()
+    if not raw or len(raw) < 80:
+        return raw, []
+
+    restart_prefixes = (
+        "好的，我明白了",
+        "明白了，我",
+        "明白了！",
+        "抱歉抱歉",
+        "啊！抱歉抱歉",
+        "让我重新整理一下",
+        "我重新整理一下",
+        "让我重新说一遍",
+        "我重新总结一下",
+        "那我重新",
+        "我再重新",
+    )
+
+    paragraphs = [part.strip() for part in _re.split(r"\n\s*\n", raw) if part.strip()]
+    for idx in range(1, len(paragraphs)):
+        prefix_text = "\n\n".join(paragraphs[:idx]).strip()
+        current = paragraphs[idx]
+        if len(prefix_text) < 60:
+            continue
+        if not any(current.startswith(prefix) for prefix in restart_prefixes):
+            continue
+        if not (
+            _re.search(r"[。！？!?]\s*$", prefix_text)
+            or "\n- " in prefix_text
+            or "\n1." in prefix_text
+            or "**" in prefix_text
+            or len(prefix_text) > 220
+        ):
+            continue
+        return prefix_text, [current[:40]]
+
+    for inline_match in _re.finditer(
+        r"([。！？!?])\s*(好的，我明白了|明白了，我|明白了！|抱歉抱歉|啊！抱歉抱歉|让我重新整理一下|我重新整理一下|让我重新说一遍|我重新总结一下|那我重新|我再重新)",
+        raw,
+    ):
+        if inline_match.start(2) <= 30:
+            continue
+        trimmed = raw[:inline_match.start(2)].rstrip()
+        if trimmed:
+            return trimmed, [inline_match.group(2)]
+
+    return raw, []
+
+
+def _prefer_tool_grounded_tail(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw or len(raw) < 80:
+        return raw
+
+    grounded_prefixes = (
+        "这一步已经完成",
+        "现在我看到了",
+        "我现在看到了",
+        "现在我看到",
+        "我现在看到",
+        "我查到了",
+        "根据刚才",
+        "从刚才看到",
+        "从工具结果看",
+        "结合刚才查到的",
+        "按刚才查到的",
+        "我刚看了",
+    )
+    stale_prefix_markers = (
+        "这样清楚了吗",
+        "需要我详细说明",
+        "需要我进一步解释",
+        "需要我详细解释",
+        "**核心建议**",
+        "**建议方向**",
+        "**当前问题**",
+        "**核心问题**",
+    )
+
+    candidate = ""
+    paragraphs = [part.strip() for part in _re.split(r"\n\s*\n", raw) if part.strip()]
+    for idx in range(1, len(paragraphs)):
+        prefix = "\n\n".join(paragraphs[:idx]).strip()
+        current = paragraphs[idx]
+        if len(prefix) < 40:
+            continue
+        if not any(current.startswith(marker) for marker in grounded_prefixes):
+            continue
+        if "需要我" not in prefix and not any(marker in prefix for marker in stale_prefix_markers):
+            continue
+        candidate = "\n\n".join(paragraphs[idx:]).strip()
+
+    for inline_match in _re.finditer(
+        r"([。！？!?])\s*(这一步已经完成|现在我看到了|我现在看到了|现在我看到|我现在看到|我查到了|根据刚才|从刚才看到|从工具结果看|结合刚才查到的|按刚才查到的|我刚看了)",
+        raw,
+    ):
+        if inline_match.start(2) <= 30:
+            continue
+        prefix = raw[:inline_match.start(2)].strip()
+        if "需要我" not in prefix and not any(marker in prefix for marker in stale_prefix_markers):
+            continue
+        candidate = raw[inline_match.start(2):].strip()
+
+    return candidate or raw
+
+
 def _clean_visible_reply_text(text: str) -> str:
     cleaned = _strip_think_markup(text)
     cleaned = _strip_legacy_tool_markup(cleaned)
+    cleaned = _prefer_tool_grounded_tail(cleaned)
+    cleaned, _ = _strip_mid_reply_restart(cleaned)
     cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -2572,11 +2718,48 @@ def _looks_like_structured_tool_handoff(text: str) -> bool:
     return _contains_tool_handoff_phrase(handoff_line)
 
 
+def _looks_like_trailing_tool_handoff(text: str) -> bool:
+    visible = _clean_visible_reply_text(text)
+    if not visible:
+        return False
+
+    # Earlier sections may contain example code blocks; only the trailing
+    # paragraph matters for deciding whether the model is handing off to a tool.
+    trailing_visible = _re.sub(r"```.*?```", "\n", visible, flags=_re.S).strip()
+    if not trailing_visible:
+        return False
+
+    lines = [line.strip(" -") for line in trailing_visible.replace("\r", "\n").splitlines() if line.strip()]
+    paragraphs = [part.strip() for part in _re.split(r"\n\s*\n", trailing_visible) if part.strip()]
+
+    candidates = []
+    if paragraphs:
+        candidates.append(paragraphs[-1])
+    if len(lines) >= 2:
+        candidates.append("\n".join(lines[-2:]))
+    if lines:
+        candidates.append(lines[-1])
+
+    seen = set()
+    for candidate in candidates:
+        candidate = str(candidate or "").strip()
+        if not candidate or candidate == trailing_visible or candidate in seen:
+            continue
+        seen.add(candidate)
+        if _looks_like_tool_preamble(candidate) or _looks_like_structured_tool_handoff(candidate):
+            return True
+    return False
+
+
 def _looks_like_incomplete_tool_handoff(text: str) -> bool:
     visible = _clean_visible_reply_text(text)
     if not visible:
         return False
-    return _looks_like_tool_preamble(visible) or _looks_like_structured_tool_handoff(visible)
+    return (
+        _looks_like_tool_preamble(visible)
+        or _looks_like_structured_tool_handoff(visible)
+        or _looks_like_trailing_tool_handoff(visible)
+    )
 
 
 def _build_initial_tool_handoff_retry_note() -> str:
@@ -2601,7 +2784,8 @@ def _resolve_stream_tool_calls_signal(
     if tool_calls_signal and visible_joined:
         is_preamble = _looks_like_tool_preamble(visible_joined)
         is_structured_handoff = _looks_like_structured_tool_handoff(visible_joined)
-        if not (is_preamble or is_structured_handoff):
+        is_trailing_handoff = _looks_like_trailing_tool_handoff(visible_joined)
+        if not (is_preamble or is_structured_handoff or is_trailing_handoff):
             _debug_write("tool_call_stream_mixed_output", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
                 "text_len": len(visible_joined),
@@ -2612,6 +2796,7 @@ def _resolve_stream_tool_calls_signal(
             _debug_write("tool_call_stream_preamble_kept", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
                 "structured_handoff": is_structured_handoff,
+                "trailing_handoff": is_trailing_handoff,
                 "text_len": len(visible_joined),
                 "text_preview": visible_joined[:80],
             })
@@ -2706,7 +2891,8 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         visible_joined = _strip_think_markup(joined)
         is_preamble = _looks_like_tool_preamble(visible_joined)
         is_structured_handoff = _looks_like_structured_tool_handoff(visible_joined)
-        if visible_joined and not (is_preamble or is_structured_handoff):
+        is_trailing_handoff = _looks_like_trailing_tool_handoff(visible_joined)
+        if visible_joined and not (is_preamble or is_structured_handoff or is_trailing_handoff):
             _debug_write("tool_call_stream_mixed_output", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
                 "text_len": len(visible_joined),
@@ -2717,6 +2903,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
             _debug_write("tool_call_stream_preamble_kept", {
                 "tool_name": ((tool_calls_signal[0] or {}).get("function", {}) or {}).get("name", ""),
                 "structured_handoff": is_structured_handoff,
+                "trailing_handoff": is_trailing_handoff,
                 "text_len": len(visible_joined),
                 "text_preview": visible_joined[:80],
             })
@@ -2771,7 +2958,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
         # LLM 直接回复，没有调工具
         # 记录第一次调用的 token 统计
         try:
-            from core.state_loader import record_stats
+            from core.runtime_state.state_loader import record_stats
             record_stats(
                 input_tokens=usage.get("prompt_tokens", 0),
                 output_tokens=usage.get("completion_tokens", 0),
@@ -2788,7 +2975,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
     # LLM 选择了 tool_call → 执行工具
     # 记录第一次调用的 token 统计
     try:
-        from core.state_loader import record_stats as _rs1
+        from core.runtime_state.state_loader import record_stats as _rs1
         _rs1(
             input_tokens=usage.get("prompt_tokens", 0),
             output_tokens=usage.get("completion_tokens", 0),
@@ -2938,7 +3125,7 @@ def unified_reply_with_tools_stream(bundle: dict, tools: list[dict], tool_execut
 
         # 记录本轮 token 统计
         try:
-            from core.state_loader import record_stats as _rsn
+            from core.runtime_state.state_loader import record_stats as _rsn
             _rsn(
                 input_tokens=usage_n.get("prompt_tokens", 0),
                 output_tokens=usage_n.get("completion_tokens", 0),
@@ -3369,8 +3556,12 @@ def l1_hygiene_clean(response: str, history: list, window: int = 8, min_repeat: 
     反复出现了 min_repeat 次以上，说明 LLM 已经把它当成了"说话习惯"，
     实际上是历史坏数据导致的自我强化。将其从当前回复中移除，打断循环。
     """
+    response = str(response or "").strip()
+    response = _prefer_tool_grounded_tail(response)
+    response, restart_removed = _strip_mid_reply_restart(response)
+
     if not response or not history:
-        return response, []
+        return response, restart_removed
 
     # 收集最近的 Nova 回复
     recent_nova = []
@@ -3383,7 +3574,7 @@ def l1_hygiene_clean(response: str, history: list, window: int = 8, min_repeat: 
             break
 
     if len(recent_nova) < min_repeat:
-        return response, []
+        return response, restart_removed
 
     toxic_phrases = []
 
@@ -3413,7 +3604,7 @@ def l1_hygiene_clean(response: str, history: list, window: int = 8, min_repeat: 
             toxic_phrases.append(line)
 
     if not toxic_phrases:
-        return response, []
+        return response, restart_removed
 
     # 清除毒短语
     cleaned = response
@@ -3425,4 +3616,5 @@ def l1_hygiene_clean(response: str, history: list, window: int = 8, min_repeat: 
     cleaned = _re.sub(r'^\s*---\s*$', '', cleaned, flags=_re.MULTILINE)
     cleaned = _re.sub(r'\n{3,}', '\n\n', cleaned).strip()
 
-    return (cleaned if cleaned else response), toxic_phrases
+    removed = list(restart_removed) + toxic_phrases
+    return (cleaned if cleaned else response), removed

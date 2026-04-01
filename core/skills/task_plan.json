@@ -1,8 +1,8 @@
 {
-  "name": "任务规划",
+  "name": "浠诲姟瑙勫垝",
   "description": "Create, update, resume, or complete a short multi-step task plan for complex work so the task keeps continuity across turns.",
   "priority": 35,
-  "category": "任务",
+  "category": "浠诲姟",
   "parameters": {
     "type": "object",
     "properties": {
@@ -67,5 +67,17 @@
         }
       }
     }
-  }
+  },
+  "capability_kind": "workflow_skill",
+  "substrate_layer": "skill",
+  "protocol_family": "planning",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "contextual",
+  "stateful": true,
+  "operation_kind": "plan",
+  "effect_level": "state_write",
+  "risk_level": "medium",
+  "protocol_subfamily": "workflow_planning",
+  "trust_level": "trusted_state",
+  "user_view_scope": "hidden"
 }

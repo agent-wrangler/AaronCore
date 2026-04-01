@@ -1,19 +1,36 @@
 {
-  "name": "Computer Use",
+  "name": "澶╂皵鏌ヨ",
   "keywords": [],
   "anti_keywords": [],
-  "description": "Desktop agent capability for operating apps, handling chat windows, running browser tasks, and acting on the current computer state.",
-  "priority": 3,
-  "category": "桌面代理",
-  "icon": "🖥️",
+  "description": "Fetch weather information for a location when current conditions or forecast are needed.",
+  "priority": 6,
+  "category": "淇℃伅鏌ヨ",
+  "icon": "馃尋",
   "parameters": {
     "type": "object",
     "properties": {
       "user_input": {
         "type": "string",
-        "description": "Original user request. Preserve intent when passing it in."
+        "description": "Original user request."
+      },
+      "city": {
+        "type": "string",
+        "description": "Location inferred from user intent and context."
       }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "desktop",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "operation_kind": "execute",
+  "effect_level": "local_side_effect",
+  "risk_level": "high",
+  "protocol_subfamily": "desktop_agent",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

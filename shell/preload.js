@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('novaShell', {
   windowControlsMode: 'custom-html',
+  transparentShell: false,
   minimize:       () => ipcRenderer.send('win-minimize'),
   maximize:       () => ipcRenderer.send('win-maximize'),
   close:          () => ipcRenderer.send('win-close'),

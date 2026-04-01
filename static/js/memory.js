@@ -192,7 +192,7 @@ function setMemoryFilter(layer, el) {
     node.style.borderColor = "var(--border-chip)";
   });
   if (el) {
-    el.style.background = "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)";
+    el.style.background = "linear-gradient(135deg, #7a7267 0%, #625b52 100%)";
     el.style.color = "#ffffff";
     el.style.borderColor = "transparent";
   }

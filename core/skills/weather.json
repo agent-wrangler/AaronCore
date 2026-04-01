@@ -18,6 +18,19 @@
         "description": "Location inferred from user intent and context."
       }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "domain_skill",
+  "substrate_layer": "skill",
+  "protocol_family": "live_data",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "contextual",
+  "operation_kind": "query",
+  "effect_level": "external_lookup",
+  "risk_level": "low",
+  "protocol_subfamily": "live_data_query",
+  "trust_level": "external_data",
+  "user_view_scope": "default"
 }

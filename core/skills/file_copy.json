@@ -1,16 +1,83 @@
 {
-  "name": "复制文件",
-  "keywords": ["复制文件", "拷贝文件", "复制目录", "拷贝目录", "复制到", "拷贝到"],
-  "anti_keywords": ["如果复制文件", "文件复制原理"],
-  "description": "复制本地文件或目录到目标位置",
-  "priority": 7,
-  "category": "本地操作",
-  "icon": "📄",
+  "name": "浠诲姟瑙勫垝",
+  "description": "Create, update, resume, or complete a short multi-step task plan for complex work so the task keeps continuity across turns.",
+  "priority": 35,
+  "category": "浠诲姟",
   "parameters": {
     "type": "object",
     "properties": {
-      "user_input": {"type": "string", "description": "需包含源路径和目标路径"}
-    },
-    "required": ["user_input"]
-  }
+      "user_input": {
+        "type": "string",
+        "description": "The current user request."
+      },
+      "action": {
+        "type": "string",
+        "description": "Plan action: create_or_update, get_current, advance, mark_blocked, mark_done, resume, or cancel."
+      },
+      "goal": {
+        "type": "string",
+        "description": "Overall task goal for this plan."
+      },
+      "phase": {
+        "type": "string",
+        "description": "Optional current phase label."
+      },
+      "summary": {
+        "type": "string",
+        "description": "Optional short plan summary."
+      },
+      "current_item_id": {
+        "type": "string",
+        "description": "Optional id of the current plan item."
+      },
+      "completed_item_id": {
+        "type": "string",
+        "description": "Optional id of the item that just finished."
+      },
+      "next_item_id": {
+        "type": "string",
+        "description": "Optional id of the next item to run."
+      },
+      "blocked_reason": {
+        "type": "string",
+        "description": "Optional blocker description when the task is blocked."
+      },
+      "items": {
+        "type": "array",
+        "description": "Optional compact plan items. Provide 3-6 high-signal items for complex tasks.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "capability_kind": "protocol_tool",
+  "substrate_layer": "protocol",
+  "protocol_family": "filesystem",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "tool_only",
+  "stateful": true,
+  "operation_kind": "mutate",
+  "effect_level": "local_write",
+  "risk_level": "medium",
+  "protocol_subfamily": "filesystem_write",
+  "trust_level": "trusted_local",
+  "user_view_scope": "hidden"
 }

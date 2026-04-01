@@ -5,6 +5,7 @@ import json
 import time
 import re
 import urllib.request
+from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -36,7 +37,8 @@ _reply_timestamps = []
 
 # ── 日志 ──
 
-_LOG_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'qq_monitor_debug.log')
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_LOG_FILE = str(_REPO_ROOT / 'memory_db' / 'qq_monitor_debug.log')
 
 def _log(msg):
     line = json.dumps({"log": msg, "t": time.strftime("%H:%M:%S")}, ensure_ascii=False)
@@ -86,7 +88,7 @@ def _rate_limit_ok():
 
 def _load_llm_config():
     try:
-        p = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
+        p = str(_REPO_ROOT / 'brain' / 'llm_config.json')
         with open(p, 'r', encoding='utf-8') as f:
             data = json.load(f)
         # 优先读 default 指向的模型配置
@@ -106,7 +108,7 @@ def _load_llm_config():
 def _load_persona():
     """读 persona.json 提取人格信息"""
     try:
-        p = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'persona.json')
+        p = str(_REPO_ROOT / 'memory_db' / 'persona.json')
         with open(p, 'r', encoding='utf-8') as f:
             data = json.load(f)
         mode = data.get('active_mode', 'sweet')

@@ -4,12 +4,13 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 from datetime import date
 
 from core.skills.save_export import execute as save_export_execute
 
 # 状态文件：缓存新闻列表 + 最近生成的文章
-_state_path = os.path.join(os.path.dirname(__file__), '.article_state.json')
+_state_path = str(Path(__file__).resolve().parent / "runtime_state" / "article_state.json")
 
 # 文章保存目录
 ARTICLE_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "Nova\u65b0\u95fb")

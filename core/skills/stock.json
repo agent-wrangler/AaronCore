@@ -1,7 +1,30 @@
 {
   "name": "股票查询",
-  "keywords": ["股票", "股价", "A股", "美股", "大盘", "行情", "指数", "纳指", "标普", "道指", "沪指", "深成指", "创业板", "上证", "股票代码"],
-  "anti_keywords": ["股票市场怎么样", "股票行业", "股票知识", "炒股技巧", "投资理财", "如果买股票"],
+  "keywords": [
+    "股票",
+    "股价",
+    "A股",
+    "美股",
+    "大盘",
+    "行情",
+    "指数",
+    "纳指",
+    "标普",
+    "道指",
+    "沪指",
+    "深成指",
+    "创业板",
+    "上证",
+    "股票代码"
+  ],
+  "anti_keywords": [
+    "股票市场怎么样",
+    "股票行业",
+    "股票知识",
+    "炒股技巧",
+    "投资理财",
+    "如果买股票"
+  ],
   "description": "查询股票、指数和市场行情",
   "priority": 7,
   "category": "信息查询",
@@ -14,6 +37,19 @@
         "description": "用户的原始输入文本"
       }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "domain_skill",
+  "substrate_layer": "skill",
+  "protocol_family": "live_data",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "contextual",
+  "operation_kind": "query",
+  "effect_level": "external_lookup",
+  "risk_level": "low",
+  "protocol_subfamily": "live_data_query",
+  "trust_level": "external_data",
+  "user_view_scope": "default"
 }

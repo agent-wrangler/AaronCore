@@ -9,10 +9,20 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 import re as _re
 from core import shared as S
-from core.state_loader import (
+from core.runtime_state.state_loader import (
     DEFAULT_L1_RECENT_TOKEN_BUDGET as _L1_RECENT_TOKEN_BUDGET,
 )
-from routes import companion as _comp
+try:
+    from routes import companion as _comp
+except Exception:
+    class _CompanionState:
+        activity = "idle"
+        reply_id = ""
+        last_reply = ""
+        last_reply_full = ""
+        emotion = "neutral"
+
+    _comp = _CompanionState()
 
 
 def _summarize_execution_text(text: str) -> str:
@@ -227,7 +237,7 @@ def _ensure_tool_call_failure_reply(
 def _get_tool_call_enabled() -> bool:
     """tool_call 总开关，由配置控制。"""
     try:
-        from core.state_loader import PRIMARY_STATE_DIR
+        from core.runtime_state.state_loader import PRIMARY_STATE_DIR
         cfg = json.loads((PRIMARY_STATE_DIR / "tool_call_config.json").read_text("utf-8"))
         return bool(cfg.get("enabled", True))
     except Exception:
@@ -237,7 +247,7 @@ def _get_tool_call_enabled() -> bool:
 def _get_cod_enabled() -> bool:
     """CoD (Context-on-Demand) \u6a21\u5f0f\u5f00\u5173"""
     try:
-        from core.state_loader import PRIMARY_STATE_DIR
+        from core.runtime_state.state_loader import PRIMARY_STATE_DIR
         cfg = json.loads((PRIMARY_STATE_DIR / "tool_call_config.json").read_text("utf-8"))
         return bool(cfg.get("cod_enabled", False))
     except Exception:
@@ -572,6 +582,11 @@ class ChatRequest(BaseModel):
     images: list[str] | None = None
 
 
+class ChatAnswerRequest(BaseModel):
+    question_id: str
+    answer: str
+
+
 @router.post("/chat")
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     msg = request.message
@@ -602,10 +617,45 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
         # 收集步骤，用于持久化到 msg_history
         _collected_steps = []
+        _last_progress_label = ""
+        _last_progress_detail = ""
+        _last_progress_at = asyncio.get_running_loop().time()
+        _last_wait_event_at = 0.0
 
         async def _trace(label, detail, status="running"):
+            nonlocal _last_progress_label, _last_progress_detail, _last_progress_at, _last_wait_event_at
             _collected_steps.append({"label": label, "detail": detail, "status": status})
+            _last_progress_label = str(label or "").strip()
+            _last_progress_detail = str(detail or "").strip()
+            _last_progress_at = asyncio.get_running_loop().time()
+            _last_wait_event_at = 0.0
             return {"event": "trace", "data": json.dumps({"label": label, "detail": detail, "status": status}, ensure_ascii=False)}
+
+        async def _agent_step(phase, detail="", label="", waited_seconds=0):
+            nonlocal _last_wait_event_at
+            _last_wait_event_at = asyncio.get_running_loop().time()
+            payload = {
+                "phase": str(phase or "").strip(),
+                "label": str(label or "").strip(),
+                "detail": str(detail or "").strip(),
+            }
+            if waited_seconds:
+                payload["waited_seconds"] = int(waited_seconds)
+            return {"event": "agent_step", "data": json.dumps(payload, ensure_ascii=False)}
+
+        def _build_waiting_step(waited_seconds: float, *, tool_active: bool = False, streamed: bool = False) -> tuple[str, str]:
+            waited = max(1, int(waited_seconds))
+            label = _last_progress_label or ("调用技能" if tool_active else "模型思考")
+            base_detail = str(_last_progress_detail or "").strip()
+            if tool_active:
+                wait_note = f"还在等待工具执行结果，已等待 {waited}s"
+            elif streamed:
+                wait_note = f"还在等待模型继续输出，已等待 {waited}s"
+            else:
+                wait_note = f"还在等待模型继续处理，已等待 {waited}s"
+            if base_detail:
+                return label, f"{base_detail} · {wait_note}"
+            return label, wait_note
 
         def _summarize_tool_response_text(text: str) -> str:
             text = str(text or "").strip()
@@ -682,7 +732,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             l8 = S.find_relevant_knowledge(msg, limit=3, touch=True)
 
         try:
-            from core.state_loader import record_memory_stats
+            from core.runtime_state.state_loader import record_memory_stats
             _cod_this = None if _use_tool_call else False
             _l4_ok = bool(l4 and isinstance(l4, dict) and len(l4) > 0)
             record_memory_stats(
@@ -735,7 +785,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
         # 闪回检测：旧记忆联想（潜意识层）
         try:
-            from core.flashback import detect_flashback
+            from core.runtime_memory.flashback import detect_flashback
             _fb_hint = detect_flashback(msg)
             if _fb_hint:
                 bundle["flashback_hint"] = _fb_hint
@@ -804,7 +854,12 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
             # ── tool_call 模式分支 ──
             if _use_tool_call:
-                from core.tool_adapter import build_tools_list, build_tools_list_cod, execute_tool_call
+                from core.tool_adapter import (
+                    build_tools_list,
+                    build_tools_list_cod,
+                    execute_tool_call,
+                    get_ask_user_pending,
+                )
                 from core.reply_formatter import unified_reply_with_tools_stream
 
                 # tool_call 模式：一次 LLM 调用搞定路由+回复，不走规则路由
@@ -879,6 +934,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 try:
                     import queue, threading
                     _q = queue.Queue()
+                    _last_ask_user_id = ""
                     def _tc_stream_worker():
                         try:
                             for _token in unified_reply_with_tools_stream(bundle, tools, execute_tool_call):
@@ -894,8 +950,31 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         try:
                             _item = _q.get(timeout=0.05)
                         except queue.Empty:
+                            try:
+                                _pending_question = get_ask_user_pending()
+                            except Exception:
+                                _pending_question = None
+                            if isinstance(_pending_question, dict):
+                                _pending_id = str(_pending_question.get("id") or "").strip()
+                                if _pending_id and _pending_id != _last_ask_user_id:
+                                    _last_ask_user_id = _pending_id
+                                    yield {
+                                        "event": "ask_user",
+                                        "data": json.dumps(_pending_question, ensure_ascii=False),
+                                    }
+                            _now = asyncio.get_running_loop().time()
+                            _idle_for = _now - _last_progress_at
+                            if _idle_for >= 4 and (_now - _last_wait_event_at) >= 2.5:
+                                _wait_label, _wait_detail = _build_waiting_step(
+                                    _idle_for,
+                                    tool_active=bool(_tool_trace_started and not _tool_used),
+                                    streamed=bool(_stream_chunks),
+                                )
+                                yield await _agent_step("waiting", _wait_detail, _wait_label, int(_idle_for))
                             await asyncio.sleep(0.02)
                             continue
+                        _last_progress_at = asyncio.get_running_loop().time()
+                        _last_wait_event_at = 0.0
                         if _item is None:
                             break
                         if isinstance(_item, tuple) and len(_item) == 2 and _item[0] == "__error__":
@@ -1062,7 +1141,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
                 # ── CoD 闪念/溯源 + L6 埋点（tool_call 路径）──────────────
                 try:
-                    from core.state_loader import record_memory_stats
+                    from core.runtime_state.state_loader import record_memory_stats
                     _RECALL_TOOLS = {"recall_memory", "query_knowledge"}
                     _tc_cod_used = bool(_tool_used and _tool_used in _RECALL_TOOLS)
                     # L6：tool_call 调的是真实技能（非记忆工具）= 技能执行
@@ -1101,6 +1180,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     if _blocked_plan and _blocked_plan != _task_plan:
                         _task_plan = _blocked_plan
                         yield {"event": "plan", "data": json.dumps(_blocked_plan, ensure_ascii=False)}
+                try:
+                    from core.reply_formatter import l1_hygiene_clean
+                    response, _pre_cleaned = l1_hygiene_clean(response, history)
+                    if _pre_cleaned:
+                        S.debug_write("l1_hygiene_pre_reply", {"removed": _pre_cleaned})
+                except Exception:
+                    pass
                 S.debug_write("pre_reply_yield", {"response_len": len(response), "response_preview": response[:100]})
                 await asyncio.sleep(0.05)
                 yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
@@ -1125,7 +1211,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 # ── L7 埋点 ──
                 if feedback_rule:
                     try:
-                        from core.state_loader import record_memory_stats
+                        from core.runtime_state.state_loader import record_memory_stats
                         record_memory_stats(l7_hits=1, count_query=False)
                     except Exception:
                         pass
@@ -1204,6 +1290,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         except Exception:
             pass
         response = _strip_markdown(response)
+        try:
+            from core.reply_formatter import l1_hygiene_clean
+            response, _pre_cleaned = l1_hygiene_clean(response, history)
+            if _pre_cleaned:
+                S.debug_write("l1_hygiene_pre_reply", {"removed": _pre_cleaned})
+        except Exception:
+            pass
         S.debug_write("pre_reply_yield", {"response_len": len(response), "response_preview": response[:100]})
         await asyncio.sleep(0.05)
         yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
@@ -1232,7 +1325,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         # ── L7 埋点 ──
         if feedback_rule:
             try:
-                from core.state_loader import record_memory_stats
+                from core.runtime_state.state_loader import record_memory_stats
                 record_memory_stats(l7_hits=1, count_query=False)
             except Exception:
                 pass
@@ -1309,3 +1402,15 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         raise
 
     return EventSourceResponse(event_stream(), ping=2)
+
+
+@router.post("/chat/answer")
+async def chat_answer(request: ChatAnswerRequest):
+    from core.tool_adapter import ask_user_submit
+
+    accepted = ask_user_submit(request.question_id, request.answer)
+    S.debug_write("chat_answer_submit", {
+        "question_id": request.question_id,
+        "accepted": bool(accepted),
+    })
+    return {"ok": bool(accepted)}

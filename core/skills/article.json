@@ -14,7 +14,12 @@
     "你选一个写",
     "帮我选一条写"
   ],
-  "anti_keywords": ["文章结构", "文章风格", "文章怎么写", "如果写文章"],
+  "anti_keywords": [
+    "文章结构",
+    "文章风格",
+    "文章怎么写",
+    "如果写文章"
+  ],
   "description": "根据新闻素材生成头条号风格文章，支持重写和桌面保存",
   "priority": 6,
   "category": "内容创作",
@@ -27,6 +32,19 @@
         "description": "用户的原始输入文本"
       }
     },
-    "required": ["user_input"]
-  }
+    "required": [
+      "user_input"
+    ]
+  },
+  "capability_kind": "domain_skill",
+  "substrate_layer": "skill",
+  "protocol_family": "content_workflow",
+  "exposure_scope": "tool_call",
+  "surfacing_profile": "contextual",
+  "operation_kind": "generate",
+  "effect_level": "read_only",
+  "risk_level": "low",
+  "protocol_subfamily": "content_generation",
+  "trust_level": "trusted_local",
+  "user_view_scope": "default"
 }

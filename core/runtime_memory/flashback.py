@@ -5,7 +5,7 @@
 import json
 import re
 
-from core.state_loader import PRIMARY_STATE_DIR
+from core.runtime_state.state_loader import PRIMARY_STATE_DIR
 
 # ── 触发词：用户话里有这些才启动闪回搜索 ──
 
@@ -121,7 +121,7 @@ def _load_l2_recent(limit: int = 240) -> list:
 def _search_l2_backstop(query: str, limit: int = 4) -> list:
     """只给强任务连续性场景兜底，不把闪回退回成普通检索。"""
     try:
-        from core.l2_memory import search_relevant
+        from core.runtime_memory.l2_memory import search_relevant
 
         return search_relevant(query, limit=limit)
     except Exception:
@@ -130,7 +130,7 @@ def _search_l2_backstop(query: str, limit: int = 4) -> list:
 
 def _lexical_echo(user_input: str, candidate_text: str, keywords: list[str]) -> float:
     try:
-        from core.l2_memory import _normalize_signal_text, _normalize_signature_anchor
+        from core.runtime_memory.l2_memory import _normalize_signal_text, _normalize_signature_anchor
 
         query_norm = _normalize_signal_text(user_input)
         cand_norm = _normalize_signal_text(candidate_text)
@@ -157,7 +157,7 @@ def _lexical_echo(user_input: str, candidate_text: str, keywords: list[str]) -> 
 
 def _resonance_score(query_profile: set[str], candidate_profile: set[str]) -> float:
     try:
-        from core.l2_memory import _signal_overlap
+        from core.runtime_memory.l2_memory import _signal_overlap
 
         return _signal_overlap(query_profile, candidate_profile)
     except Exception:
@@ -178,7 +178,7 @@ def _score_l3_candidate(user_input: str, query_profile: set[str], keywords: list
     if not event or _is_low_signal_text(event):
         return 0.0
     try:
-        from core.l2_memory import build_signal_profile, _freshness
+        from core.runtime_memory.l2_memory import build_signal_profile, _freshness
 
         candidate_profile = build_signal_profile(event)
         freshness = _freshness(mem.get("created_at", ""))
@@ -204,7 +204,7 @@ def _score_l2_candidate(user_input: str, query_profile: set[str], keywords: list
         return 0.0
 
     try:
-        from core.l2_memory import build_signal_profile, classify_retention_bucket, _freshness
+        from core.runtime_memory.l2_memory import build_signal_profile, classify_retention_bucket, _freshness
 
         candidate_profile = build_signal_profile(text)
         retention = classify_retention_bucket(mem)
@@ -247,7 +247,7 @@ def detect_flashback(user_input: str) -> str | None:
 
     keywords = _extract_keywords(user_input)
     try:
-        from core.l2_memory import build_signal_profile
+        from core.runtime_memory.l2_memory import build_signal_profile
 
         query_profile = build_signal_profile(user_input)
     except Exception:

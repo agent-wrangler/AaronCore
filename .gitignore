@@ -11,6 +11,8 @@ venv/
 .tmp_chrome_settings_test*/
 .tmp_settings_patch_check.js
 .tmp_thinking_css_check.txt
+.tmp_home_live.html
+tmp_home_live.html
 .tmp_settings_check.js
 .tmp_server_stdout.log
 .tmp_server_stderr.log

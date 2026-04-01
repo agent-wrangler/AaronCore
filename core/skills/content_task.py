@@ -4,7 +4,7 @@ from pathlib import Path
 
 from core.skills.save_export import execute as save_export_execute
 from core.skills.article import _llm_call, _fetch_news
-from core.state_loader import load_content_topic_registry, save_content_topic_registry
+from core.runtime_state.state_loader import load_content_topic_registry, save_content_topic_registry
 from core.task_store import (
     ensure_content_project_migrated,
     create_project,

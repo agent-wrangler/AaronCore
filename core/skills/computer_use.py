@@ -17,10 +17,12 @@ import sys
 import time
 import json
 import re
+from pathlib import Path
 
 # ── 监听进程管理（支持多群） ──
 _monitor_processes = {}  # {group_name: subprocess.Popen}
 _MONITOR_STATE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'qq_monitor_state.json')
+_INTERNAL_WORKERS_DIR = Path(__file__).resolve().parent / "internal_workers"
 
 
 def _save_monitor_state(active, group=None):
@@ -72,7 +74,7 @@ except ImportError:
 def qq_send_message(group_name: str, message: str) -> str:
     """在指定 QQ 群里发送消息。用子进程执行避免 FastAPI 兼容问题。"""
     import subprocess
-    worker = os.path.join(os.path.dirname(__file__), '_qq_worker.py')
+    worker = str(_INTERNAL_WORKERS_DIR / "_qq_worker.py")
     try:
         result = subprocess.run(
             [sys.executable, '-u', worker, group_name, message],
@@ -113,7 +115,7 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
             return f"\u300c{group_name}\u300d\u5df2\u5728\u54cd\u5e94\u4e2d\uff0c\u65e0\u9700\u91cd\u590d\u5f00\u542f"
 
     # 先用 _qq_worker 打开群聊窗口
-    open_worker = os.path.join(os.path.dirname(__file__), '_qq_open_group.py')
+    open_worker = str(_INTERNAL_WORKERS_DIR / "_qq_open_group.py")
     try:
         result = subprocess.run(
             [sys.executable, '-u', open_worker, group_name],
@@ -133,7 +135,7 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
         return f"QQ \u6253\u5f00\u7fa4\u5931\u8d25\uff1a{e}"
 
     # 启动监听 worker
-    worker = os.path.join(os.path.dirname(__file__), '_qq_monitor_worker.py')
+    worker = str(_INTERNAL_WORKERS_DIR / "_qq_monitor_worker.py")
     proc = subprocess.Popen(
         [sys.executable, '-u', worker, group_name, my_name, '8'],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -223,7 +225,7 @@ def _connect_browser(port: int = 9333):
 def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1, original_goal: str = "", duration_sec: int = 0) -> str:
     """在网页版 AI（豆包等）发送消息并获取回复。用子进程执行避免 async 冲突。"""
     import subprocess
-    worker = os.path.join(os.path.dirname(__file__), '_web_chat_worker.py')
+    worker = str(_INTERNAL_WORKERS_DIR / "_web_chat_worker.py")
     timeout = duration_sec + 60 if duration_sec > 0 else (60 if rounds <= 1 else min(rounds * 50 + 30, 600))
     try:
         result = subprocess.run(
