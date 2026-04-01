@@ -1328,70 +1328,26 @@ body.light .thinking-bubble-text {
   content: none;
 }
 
-.step-tracker.collapsed {
-  display: flex !important;
-}
-
-.step-tracker.collapsed .step-item {
-  display: none;
-}
-
-.step-tracker-toggle {
-  display: none;
-  align-items: center;
+.step-tracker {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  padding: 0 0 0 18px;
-  font-size: 11px;
-  color: #7c8aa0;
-  cursor: pointer;
-  user-select: none;
-  border: none;
-  background: none;
-  font-family: inherit;
-  position: relative;
-  z-index: 4;
-  pointer-events: auto;
+  padding: 0 0 0 20px;
 }
 
-.step-tracker-toggle:hover {
-  color: #cbd5e1;
-}
-
-.step-tracker.collapsed .step-tracker-toggle,
-.step-tracker .step-tracker-toggle.visible {
-  display: inline-flex;
-}
-
-.step-tracker-toggle svg {
-  width: 12px;
-  height: 12px;
-  transition: transform 0.2s;
-}
-
-.step-tracker-toggle svg {
-  width: 12px;
-  height: 12px;
-  transition: transform 0.2s;
-}
-
-.step-tracker:not(.collapsed) .step-tracker-toggle svg {
-  transform: rotate(180deg);
+.step-tracker.collapsed {
+  display: none !important;
 }
 
 .step-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 0;
   font-size: 12px;
   position: relative;
-  animation: stepFadeIn 0.22s ease;
-  transition: opacity 0.18s ease, color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(24, 34, 54, 0.58);
-  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.12);
-  backdrop-filter: blur(10px);
+  animation: stepFadeIn 0.18s ease;
+  transition: color 0.18s ease, opacity 0.18s ease;
 }
 
 .step-item::after {
@@ -1404,32 +1360,29 @@ body.light .thinking-bubble-text {
 }
 
 .step-icon {
-  width: 18px;
-  height: 18px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  margin-top: 1px;
-  z-index: 1;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.08);
+  margin-top: 4px;
 }
 
 .step-icon.running {
-  color: #7dd3fc;
-  background: rgba(125, 211, 252, 0.12);
+  color: #8fb5d9;
 }
 
 .step-icon.running::after {
   content: '';
-  width: 11px;
-  height: 11px;
-  border: 1.6px solid currentColor;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
   animation: stepSpin 0.8s linear infinite;
+  box-sizing: border-box;
 }
 
 @keyframes stepSpin {
@@ -1437,116 +1390,191 @@ body.light .thinking-bubble-text {
 }
 
 .step-icon.done {
-  color: #94a3b8;
-  background: rgba(148, 163, 184, 0.12);
+  color: rgba(151, 163, 184, 0.8);
 }
 
 .step-icon.done::after {
   content: '';
-  width: 7px;
-  height: 7px;
+  width: 4px;
+  height: 4px;
   border-radius: 999px;
   background: currentColor;
 }
 
 .step-icon.error {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.12);
+  color: #b67a70;
 }
 
 .step-icon.error::after {
   content: '!';
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .step-main {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
 
 .step-label {
-  color: #9fb0c4;
+  color: #98a5b7;
   display: block;
-  font-size: 10.5px;
-  line-height: 1.35;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: normal;
-  width: auto;
-  min-width: 0;
-  overflow: visible;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .step-detail {
-  color: #e5eefb;
+  color: #c8d0dd;
   display: block;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12.5px;
+  line-height: 1.55;
   white-space: normal;
-  overflow: hidden;
   min-width: 0;
+  flex: 1 1 280px;
   word-break: break-word;
 }
 
 .step-item.done {
-  opacity: 0.94;
-  background: rgba(22, 28, 43, 0.42);
-}
-
-.step-item.running {
-  opacity: 1;
-  border-color: rgba(96, 165, 250, 0.2);
-  background: rgba(24, 34, 54, 0.72);
+  opacity: 0.9;
 }
 
 .step-item.error {
   opacity: 1;
-  border-color: rgba(248, 113, 113, 0.18);
-  background: rgba(56, 25, 30, 0.48);
 }
 
-.step-item.expandable {
-  cursor: pointer;
+.step-item.done .step-detail {
+  color: #aeb7c5;
 }
 
-.step-item.expandable:hover .step-label,
-.step-item.expandable:hover .step-detail {
-  color: #e7edf5;
+.step-item.error .step-label {
+  color: #c2938a;
 }
 
-.step-item.expanded {
-  opacity: 1;
-}
-
-.step-item.expanded .step-detail {
-  display: block;
-  white-space: pre-wrap;
+.step-item.error .step-detail {
+  color: #d9b1a9;
 }
 
 .step-tracker-status {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 2px 2px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0;
   color: #9fb0c4;
   font-size: 12px;
   letter-spacing: 0.01em;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  width: 100%;
 }
 
-.step-tracker-status::before {
-  content: '';
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: #60a5fa;
-  box-shadow: 0 0 10px rgba(96, 165, 250, 0.28);
+.step-tracker-status.has-steps {
+  cursor: pointer;
+}
+
+.step-tracker-status-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #bac6d6;
+}
+
+.step-tracker-title {
+  font-size: 12.5px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.step-tracker-summary {
+  display: block;
+  margin-left: 20px;
+  max-width: min(78vw, 720px);
+  color: #c7cfdb;
+  font-size: 12.5px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.step-tracker-summary:empty {
+  display: none;
+}
+
+.step-tracker-toggle-text {
+  display: block;
+  margin-left: 20px;
+  color: #7c8aa0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.step-tracker-toggle-text:empty {
+  display: none;
+}
+
+.step-tracker-status.expanded .step-tracker-toggle-text,
+.step-tracker-status.has-steps:hover .step-tracker-toggle-text {
+  color: #cbd5e1;
+}
+
+.step-tracker-spinner {
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
+  position: relative;
+}
+
+.step-tracker-spinner.running {
+  color: #8fb5d9;
+}
+
+.step-tracker-spinner.running::before {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: stepSpin 0.8s linear infinite;
+}
+
+.step-tracker-spinner.done {
+  color: rgba(151, 163, 184, 0.8);
+}
+
+.step-tracker-spinner.done::before {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  margin: 3px auto 0;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.step-tracker-spinner.error {
+  color: #b67a70;
+}
+
+.step-tracker-spinner.error::before {
+  content: '!';
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
 }
 
 /* 白天模式适配 */
@@ -1578,83 +1606,79 @@ body.light .plan-item.running {
   border-color: rgba(59, 130, 246, 0.24);
 }
 
-body.light .step-item {
-  background: rgba(251, 248, 243, 0.92);
-  border-color: rgba(114, 105, 94, 0.12);
-  box-shadow: 0 10px 22px rgba(34, 29, 24, 0.05);
-}
-
-body.light .step-item.running {
-  background: rgba(255, 252, 246, 0.98);
-  border-color: rgba(177, 145, 89, 0.18);
-}
-
-body.light .step-item.done {
-  background: rgba(245, 240, 233, 0.82);
-}
-
-body.light .step-item.error {
-  background: rgba(249, 238, 234, 0.94);
-  border-color: rgba(154, 102, 93, 0.16);
-}
-
 body.light .step-icon.running {
   color: #8f6d3f;
-  background: rgba(177, 145, 89, 0.12);
 }
 
 body.light .step-icon.done {
   color: #7f8e99;
-  background: rgba(127, 142, 153, 0.12);
 }
 
 body.light .step-icon.error {
   color: #9a665d;
-  background: rgba(154, 102, 93, 0.12);
 }
 
 body.light .step-detail {
   color: #3c352d;
 }
 
-body.light .step-tracker-toggle {
-  color: #64748b;
+body.light .step-item.done .step-detail {
+  color: #70675d;
 }
 
-body.light .step-tracker-toggle:hover {
-  color: #1f2937;
+body.light .step-item.error .step-label {
+  color: #9a665d;
 }
 
-body.light .step-item.done {
-  opacity: 1;
+body.light .step-item.error .step-detail {
+  color: #744a43;
 }
 
 body.light .step-tracker-status {
   color: #6f675d;
 }
 
-body.light .step-item.expandable:hover .step-label,
-body.light .step-item.expandable:hover .step-detail {
-  color: #111827;
+body.light .step-tracker-status-main {
+  color: #3c352d;
+}
+
+body.light .step-tracker-summary {
+  color: #5d554c;
+}
+
+body.light .step-tracker-toggle-text {
+  color: #8f867b;
+}
+
+body.light .step-tracker-status.expanded .step-tracker-toggle-text,
+body.light .step-tracker-status.has-steps:hover .step-tracker-toggle-text {
+  color: #1f2937;
+}
+
+body.light .step-tracker-spinner.running {
+  color: #8f6d3f;
+}
+
+body.light .step-tracker-spinner.done {
+  color: #7f8e99;
+}
+
+body.light .step-tracker-spinner.error {
+  color: #9a665d;
 }
 
 @media (max-width: 720px) {
-  .step-tracker-status {
-    padding: 0 0 4px 0;
-  }
-
-  .step-tracker-toggle {
+  .step-tracker {
     padding-left: 18px;
   }
 
-  .step-item {
-    gap: 10px;
-    padding: 10px 12px;
+  .step-tracker-summary,
+  .step-tracker-toggle-text {
+    margin-left: 18px;
   }
 
-  .step-label,
-  .step-detail {
-    white-space: normal;
+  .step-item {
+    gap: 7px;
   }
 
   .step-main {

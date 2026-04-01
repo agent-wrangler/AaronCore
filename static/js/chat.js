@@ -249,11 +249,20 @@ function buildPendingAssistantMessage(){
 
  var tracker=document.createElement('div');
  tracker.className='step-tracker';
+ tracker.classList.add('collapsed');
  tracker.style.display='none';
 
- var status=document.createElement('div');
- status.className='step-tracker-status';
- status.innerHTML='<span class="thinking-status-text">'+t('chat.thinking')+'</span>';
+ var status=document.createElement('button');
+ status.type='button';
+ status.className='step-tracker-status running';
+ status.setAttribute('aria-expanded','false');
+ status.innerHTML=''
+  +'<span class="step-tracker-status-main">'
+  +'<span class="step-tracker-spinner running" aria-hidden="true"></span>'
+  +'<span class="step-tracker-title">Thinking</span>'
+  +'</span>'
+  +'<span class="step-tracker-summary"></span>'
+  +'<span class="step-tracker-toggle-text"></span>';
  status.style.display='';
 
  var contentArea=document.createElement('div');
@@ -261,6 +270,8 @@ function buildPendingAssistantMessage(){
  contentArea.style.display='none';
 
  wrap.appendChild(status);
+ wrap.appendChild(planStrip);
+ wrap.appendChild(tracker);
  wrap.appendChild(contentArea);
  msgDiv.appendChild(avatar);
  msgDiv.appendChild(wrap);
@@ -271,14 +282,49 @@ function buildPendingAssistantMessage(){
   planStrip: planStrip,
   tracker: tracker,
   status: status,
- contentArea: contentArea,
- plan: null,
- steps: [],
- labelTimer: null,
+  statusSpinner: status.querySelector('.step-tracker-spinner'),
+  statusSummary: status.querySelector('.step-tracker-summary'),
+  statusToggle: status.querySelector('.step-tracker-toggle-text'),
+  contentArea: contentArea,
+  plan: null,
+  steps: [],
+  stepsExpanded: false,
+  userToggledSteps: false,
+  activitySummary: '',
+  traceRoot: null,
+  traceWrap: null,
+  traceDetached: false,
+  labelTimer: null,
   placeholderTimer: null,
   replyVisible: false,
   persisted: false
  };
+}
+
+function _detachTraceMessageForPendingState(pendingState){
+ if(!pendingState || pendingState.traceDetached || !(pendingState.steps&&pendingState.steps.length)) return;
+ var chat=document.getElementById('chat');
+ if(chat && pendingState.root && pendingState.root.parentNode!==chat){
+  chat.appendChild(pendingState.root);
+ }
+ var traceRoot=document.createElement('div');
+ traceRoot.className='msg assistant thinking-msg thinking-trace-msg';
+ var traceWrap=document.createElement('div');
+ traceWrap.className='msg-content-wrap';
+ traceRoot.appendChild(_createNovaAvatar());
+ traceRoot.appendChild(traceWrap);
+ if(pendingState.status.parentNode===pendingState.wrap) pendingState.wrap.removeChild(pendingState.status);
+ if(pendingState.planStrip.parentNode===pendingState.wrap) pendingState.wrap.removeChild(pendingState.planStrip);
+ if(pendingState.tracker.parentNode===pendingState.wrap) pendingState.wrap.removeChild(pendingState.tracker);
+ traceWrap.appendChild(pendingState.status);
+ traceWrap.appendChild(pendingState.planStrip);
+ traceWrap.appendChild(pendingState.tracker);
+ if(pendingState.root && pendingState.root.parentNode){
+  pendingState.root.parentNode.insertBefore(traceRoot, pendingState.root);
+ }
+ pendingState.traceRoot=traceRoot;
+ pendingState.traceWrap=traceWrap;
+ pendingState.traceDetached=true;
 }
 
 function finalizePendingAssistantMessage(pendingState, replyText){
@@ -294,18 +340,44 @@ function finalizePendingAssistantMessage(pendingState, replyText){
  pendingState.replyVisible=true;
  if(typeof window._clearAskUserSlot==='function') window._clearAskUserSlot();
  if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
- if(pendingState.steps && pendingState.steps.length){
+ var _stepCount=(pendingState.steps&&pendingState.steps.length)?pendingState.steps.length:0;
+ var _finalState='done';
+ if(_stepCount){
   for(var si=0;si<pendingState.steps.length;si++){
    var step=pendingState.steps[si];
    if(!step) continue;
-   step.status='done';
+   if(step.status==='error') _finalState='error';
+   if(step.status==='running') step.status='done';
    if(step.kind==='process'){
     if(step.root) step.root.className='msg assistant process-msg';
     if(step.line) step.line.className='process-line done';
+   }else{
+    if(step.el) step.el.className='step-item '+(step.status||'done');
+    if(step.iconEl) step.iconEl.className='step-icon '+(step.status||'done');
    }
   }
  }
- if(pendingState.status) pendingState.status.style.display='none';
+ if(pendingState.status){
+  pendingState.status.style.display=_stepCount?'':'none';
+  pendingState.status.classList.remove('running','done','error','expanded','has-steps');
+  pendingState.status.classList.add(_finalState);
+  if(_stepCount) pendingState.status.classList.add('has-steps');
+  if(_stepCount && pendingState.stepsExpanded) pendingState.status.classList.add('expanded');
+  if(pendingState.statusSpinner){
+   pendingState.statusSpinner.className='step-tracker-spinner '+_finalState;
+  }
+  if(pendingState.statusToggle){
+   pendingState.statusToggle.textContent=_stepCount
+    ?(pendingState.stepsExpanded?'\u6536\u8d77\u6b65\u9aa4':('\u5c55\u5f00\u6b65\u9aa4 \u00b7 '+_stepCount))
+    :'';
+  }
+  pendingState.status.setAttribute('aria-expanded', pendingState.stepsExpanded?'true':'false');
+ }
+ if(pendingState.tracker){
+  pendingState.tracker.style.display=(_stepCount&&pendingState.stepsExpanded)?'flex':'none';
+  pendingState.tracker.classList.toggle('collapsed', !pendingState.stepsExpanded);
+ }
+ if(_stepCount) _detachTraceMessageForPendingState(pendingState);
  pendingState.root.className='msg assistant';
  var contentArea=pendingState.contentArea;
  if(!contentArea){
@@ -512,7 +584,122 @@ async function send(){
   }
  }
 
-function _setStepStatus(stepObj, newStatus){
+ function _ensureTraceDetached(){
+  _placePendingRootAtEnd();
+  _detachTraceMessageForPendingState(pendingState);
+ }
+
+ function _looksLikeThinkingLabel(label){
+  return /thinking|\u6a21\u578b\u601d\u8003/i.test(String(label||''));
+ }
+
+ function _extractToolKey(detail){
+  var text=String(detail||'').trim();
+  if(!text) return '';
+  var parts=text.split(/\s*[\u00b7\u2022]\s*/);
+  var head=String(parts[0]||'').trim();
+  if(!head && parts.length>1) head=String(parts[1]||'').trim();
+  return head.toLowerCase();
+ }
+
+ function _normalizeStepCard(card){
+  var rawLabel=String((card&&card.label)||'').trim();
+  var rawStatus=String((card&&card.status)||'running');
+  var state=(rawStatus==='error'?'error':(rawStatus==='running'?'running':'done'));
+  var summaryDetail=String((card&&card.detail)||'').trim();
+  var fullDetail=String((card&&((card.full_detail&&String(card.full_detail).trim())||card.detail))||'').trim();
+  var phase='info';
+  var displayLabel=rawLabel||t('chat.process');
+  if(_looksLikeThinkingLabel(rawLabel)){
+   phase='thinking';
+   displayLabel='Thinking';
+  }else if(rawLabel==='\u8c03\u7528\u6280\u80fd'){
+   phase='tool';
+   displayLabel='\u8c03\u7528';
+  }else if(rawLabel==='\u6280\u80fd\u5b8c\u6210'){
+   phase='tool';
+   displayLabel='\u5b8c\u6210';
+  }else if(rawLabel==='\u6280\u80fd\u5931\u8d25'){
+   phase='tool';
+   displayLabel='\u5931\u8d25';
+  }else if(/\u7b49\u5f85|waiting/i.test(rawLabel)){
+   phase='waiting';
+   displayLabel='\u7b49\u5f85';
+  }
+  return {
+   rawLabel:rawLabel,
+   status:state,
+   phase:phase,
+   displayLabel:displayLabel,
+   summaryDetail:summaryDetail,
+   fullDetail:fullDetail,
+   toolKey:phase==='tool' ? _extractToolKey(summaryDetail) : ''
+  };
+ }
+
+ function _buildActivitySummary(meta){
+  if(!meta) return '';
+  var detail=String(meta.summaryDetail||meta.fullDetail||'').trim();
+  if(!detail) return meta.displayLabel||'';
+  if(meta.phase==='thinking') return detail;
+  if(detail.indexOf(meta.displayLabel)===0) return detail;
+  return meta.displayLabel+' \u00b7 '+detail;
+ }
+
+ function _hasErroredSteps(){
+  for(var i=0;i<pendingState.steps.length;i++){
+   if(pendingState.steps[i] && pendingState.steps[i].status==='error') return true;
+  }
+  return false;
+ }
+
+ function _hasRunningSteps(){
+  for(var i=0;i<pendingState.steps.length;i++){
+   if(pendingState.steps[i] && pendingState.steps[i].status==='running') return true;
+  }
+  return false;
+ }
+
+ function _syncTrackerChrome(){
+  var hasSteps=pendingState.steps.length>0;
+  var state='done';
+  if(_hasErroredSteps()) state='error';
+  else if(_hasRunningSteps() || (!hasSteps && !_streamStarted && !replyText)) state='running';
+  pendingState.status.style.display=(hasTrace||hasSteps||!replyText)?'':'none';
+  pendingState.status.classList.remove('running','done','error','expanded','has-steps');
+  pendingState.status.classList.add(state);
+  if(hasSteps) pendingState.status.classList.add('has-steps');
+  if(hasSteps && pendingState.stepsExpanded) pendingState.status.classList.add('expanded');
+  if(pendingState.statusSpinner){
+   pendingState.statusSpinner.className='step-tracker-spinner '+state;
+  }
+  if(pendingState.statusSummary){
+   pendingState.statusSummary.textContent=String(pendingState.activitySummary||'').trim();
+  }
+  if(pendingState.statusToggle){
+   pendingState.statusToggle.textContent=hasSteps ? (pendingState.stepsExpanded ? '\u6536\u8d77\u6b65\u9aa4' : ('\u5c55\u5f00\u6b65\u9aa4 \u00b7 '+pendingState.steps.length)) : '';
+  }
+  pendingState.status.setAttribute('aria-expanded', (hasSteps && pendingState.stepsExpanded)?'true':'false');
+  if(pendingState.tracker){
+   pendingState.tracker.style.display=(hasSteps && pendingState.stepsExpanded)?'flex':'none';
+   pendingState.tracker.classList.toggle('collapsed', !(hasSteps && pendingState.stepsExpanded));
+  }
+ }
+
+ function _setTrackerExpanded(expanded, userTriggered){
+  pendingState.stepsExpanded=!!expanded;
+  if(userTriggered) pendingState.userToggledSteps=true;
+  _syncTrackerChrome();
+ }
+
+ pendingState.status.addEventListener('click', function(){
+  if(!pendingState.steps.length) return;
+  _setTrackerExpanded(!pendingState.stepsExpanded, true);
+ });
+
+ _syncTrackerChrome();
+
+ function _setStepStatus(stepObj, newStatus){
   if(!stepObj) return;
   stepObj.status=newStatus;
   if(stepObj.kind==='process'){
@@ -522,27 +709,80 @@ function _setStepStatus(stepObj, newStatus){
    return;
   }
   stepObj.el.className='step-item '+newStatus;
-  var icon=stepObj.el.querySelector('.step-icon');
-  if(icon) icon.className='step-icon '+newStatus;
+  if(stepObj.iconEl) stepObj.iconEl.className='step-icon '+newStatus;
  }
 
-function _applyStepDetail(stepObj, detail, fullDetail){
+ function _applyStepDetail(stepObj, detail, fullDetail){
   if(!stepObj || !stepObj.detailEl) return;
-  stepObj.summaryDetail=String(detail||'');
+  stepObj.summaryDetail=String(detail||'').trim();
   stepObj.fullDetail=String(fullDetail||'').trim();
-  if(stepObj.kind==='process'){
-   if(stepObj.labelEl) stepObj.labelEl.textContent=stepObj.label||t('chat.process');
-   stepObj.detailEl.textContent=stepObj.fullDetail||stepObj.summaryDetail;
-   return;
-  }
-  stepObj.expandable=false;
-  stepObj.expanded=true;
-  stepObj.el.classList.remove('expandable');
-  stepObj.el.classList.add('expanded');
+ if(stepObj.kind==='process'){
+  if(stepObj.labelEl) stepObj.labelEl.textContent=stepObj.label||t('chat.process');
   stepObj.detailEl.textContent=stepObj.fullDetail||stepObj.summaryDetail;
-  stepObj.el.removeAttribute('role');
-  stepObj.el.removeAttribute('tabindex');
-  stepObj.el.removeAttribute('title');
+  return;
+ }
+ stepObj.detailEl.textContent=stepObj.fullDetail||stepObj.summaryDetail;
+  if(stepObj.status==='running'){
+   pendingState.activitySummary=_buildActivitySummary({
+    displayLabel:stepObj.displayLabel||stepObj.label||t('chat.process'),
+    summaryDetail:stepObj.summaryDetail,
+    fullDetail:stepObj.fullDetail,
+    phase:stepObj.phase||'info'
+   });
+   _syncTrackerChrome();
+  }
+ }
+
+ function _applyStepMeta(stepObj, meta){
+  if(!stepObj || !meta) return;
+  stepObj.label=meta.rawLabel;
+  stepObj.phase=meta.phase;
+  stepObj.toolKey=meta.toolKey;
+  stepObj.displayLabel=meta.displayLabel;
+  if(stepObj.labelEl) stepObj.labelEl.textContent=meta.displayLabel||t('chat.process');
+  _applyStepDetail(stepObj, meta.summaryDetail, meta.fullDetail);
+ }
+
+ function _createActivityStep(meta){
+  var el=document.createElement('div');
+  el.className='step-item '+meta.status;
+  var icon=document.createElement('span');
+  icon.className='step-icon '+meta.status;
+  var main=document.createElement('div');
+  main.className='step-main';
+  var labelEl=document.createElement('span');
+  labelEl.className='step-label';
+  labelEl.textContent=meta.displayLabel||t('chat.process');
+  var detailEl=document.createElement('span');
+  detailEl.className='step-detail';
+  detailEl.textContent=meta.fullDetail||meta.summaryDetail;
+  main.appendChild(labelEl);
+  main.appendChild(detailEl);
+  el.appendChild(icon);
+  el.appendChild(main);
+  pendingState.tracker.appendChild(el);
+  return {
+   kind:'trace',
+   el:el,
+   iconEl:icon,
+   labelEl:labelEl,
+   detailEl:detailEl,
+   label:meta.rawLabel,
+   displayLabel:meta.displayLabel,
+   summaryDetail:meta.summaryDetail,
+   fullDetail:meta.fullDetail,
+   phase:meta.phase,
+   toolKey:meta.toolKey,
+   status:meta.status
+  };
+ }
+
+ function _canMergeStep(existing, meta){
+  if(!existing || !meta) return false;
+  if(existing.phase==='thinking' && meta.phase==='thinking') return true;
+  if(existing.phase==='tool' && meta.phase==='tool' && existing.toolKey && existing.toolKey===meta.toolKey) return true;
+  if(existing.label===meta.rawLabel && existing.phase===meta.phase) return true;
+  return false;
  }
 
  function _planCssStatus(status){
@@ -602,67 +842,55 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
   _clearPendingPlaceholderTimer();
   hasTrace=true;
-  var label=card.label||'';
-  var detail=card.detail||'';
-  var status=card.status||'running';
+  var meta=_normalizeStepCard(card);
+  pendingState.activitySummary=_buildActivitySummary(meta);
+  _placePendingRootAtEnd();
 
-  // 更新 spinner 状态文字，隐藏三个点动画
-  var statusText=pendingState.status.querySelector('.thinking-status-text');
-  if(statusText){
-   statusText.textContent=detail||label;
-   statusText.style.animation='none';
-   statusText.offsetHeight;
-   statusText.style.animation='statusFade 0.5s ease';
-  }
-  pendingState.status.style.display='none';
-  var dotsEl=pendingState.status.querySelector('.thinking');
-  if(dotsEl) dotsEl.style.display='none';
-  _detachIdlePendingRoot();
-
-  // 如果上一个 step 是 running 且 label 不同 → 自动标记为 done
   var steps=pendingState.steps;
-  if(steps.length>0){
-   var last=steps[steps.length-1];
-   if(last.status==='running' && last.label!==label){
-    _setStepStatus(last,'done');
+  var last=steps.length>0 ? steps[steps.length-1] : null;
+  var mergeTarget=null;
+  if(last && _canMergeStep(last, meta)){
+   mergeTarget=last;
+  }else if(meta.phase==='tool' && meta.status!=='running'){
+   for(var mi=steps.length-1;mi>=0;mi--){
+    if(steps[mi] && steps[mi].status==='running' && _canMergeStep(steps[mi], meta)){
+     mergeTarget=steps[mi];
+     break;
+    }
    }
   }
 
-  // 如果 label 和上一个相同 → 原地更新
-  if(steps.length>0 && steps[steps.length-1].label===label){
-   var existing=steps[steps.length-1];
-   _applyStepDetail(existing, detail, card.full_detail||'');
-   _setStepStatus(existing, status);
-   chat.scrollTop=chat.scrollHeight;
-   return;
+  if(mergeTarget){
+   _applyStepMeta(mergeTarget, meta);
+   _setStepStatus(mergeTarget, meta.status);
+  }else{
+   if(last && last.status==='running' && !_canMergeStep(last, meta)){
+    _setStepStatus(last,'done');
+   }
+   steps.push(_createActivityStep(meta));
   }
 
-  // 创建新 step-item
-  var stepObj=createProcessMessage({label:label,detail:detail,status:status});
-  stepObj.label=label;
-  _applyStepDetail(stepObj, detail, card.full_detail||'');
-  if(pendingState.replyVisible && pendingState.root && pendingState.root.parentNode===chat){
-   chat.insertBefore(stepObj.root, pendingState.root);
+  if(meta.status==='error'){
+   _setTrackerExpanded(true, false);
+  }else if(!pendingState.userToggledSteps){
+   _setTrackerExpanded(steps.length<=2, false);
   }else{
-   chat.appendChild(stepObj.root);
+   _syncTrackerChrome();
   }
-  steps.push(stepObj);
   chat.scrollTop=chat.scrollHeight;
  }
 
  function _collapseSteps(){
-  var tracker=pendingState.tracker;
   var steps=pendingState.steps;
-  if(steps.length===0) return;
-  // 确保所有 running 变 done
+  if(steps.length===0){
+   _syncTrackerChrome();
+   return;
+  }
   for(var i=0;i<steps.length;i++){
    if(steps[i].status==='running') _setStepStatus(steps[i],'done');
   }
-  if(!tracker || !tracker.children.length) return;
-  tracker.style.display='flex';
-  tracker.classList.remove('collapsed');
-  var existingToggle=tracker.querySelector('.step-tracker-toggle');
-  if(existingToggle) existingToggle.remove();
+  pendingState.userToggledSteps=false;
+  _setTrackerExpanded(_hasErroredSteps(), false);
  }
 
  function _initStreamBubble(){
@@ -673,8 +901,9 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   }
   if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
   _collapseSteps();
+  if(pendingState.steps.length) _ensureTraceDetached();
   // 隐藏 spinner，显示内容区
-  pendingState.status.style.display='none';
+  pendingState.status.style.display=pendingState.steps.length?'':'none';
   pendingState.root.className='msg assistant';
   var contentArea=pendingState.contentArea;
   contentArea.style.display='';
@@ -719,7 +948,7 @@ function _applyStepDetail(stepObj, detail, fullDetail){
  // 新出现的块自动带 fade-in 动画，光标始终在末尾。
  function _progressiveRender(){
   _renderTimer=0;
-  if(!_streamBubble || !_streamText) return;
+ if(!_streamBubble || !_streamText) return;
   // 用 formatBubbleText 把当前累积文本渲染成结构化 HTML
   var html=formatBubbleText(_streamText);
   // 创建临时容器解析出块元素
@@ -916,8 +1145,9 @@ function _applyStepDetail(stepObj, detail, fullDetail){
   }
   if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
   _collapseSteps();
+  if(pendingState.steps.length) _ensureTraceDetached();
   // 隐藏 spinner，显示内容区
-  pendingState.status.style.display='none';
+  pendingState.status.style.display=pendingState.steps.length?'':'none';
   pendingState.root.className='msg assistant';
   var contentArea=pendingState.contentArea;
   contentArea.style.display='';
