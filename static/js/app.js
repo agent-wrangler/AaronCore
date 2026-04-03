@@ -1770,7 +1770,10 @@ function toggleModelDropdown(e){
  e.stopPropagation();
  var dd=document.getElementById('modelDropdown');
  if(!dd)return;
- if(dd.style.display!=='none'){dd.style.display='none';return;}
+ if(dd.style.display!=='none'){
+  dd.style.display='none';
+  return;
+ }
  var models=window._novaModels||{};
  var current=window._novaCurrentModel||'';
  var catalog=window._novaCatalog||null;
@@ -1812,7 +1815,7 @@ function toggleModelDropdown(e){
    if(!first) html+='<div style="height:1px;background:rgba(128,128,128,0.15);margin:4px 0;"></div>';
    first=false;
    var label=pk.charAt(0).toUpperCase()+pk.slice(1);
-   html+='<div style="padding:6px 12px 2px;font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;user-select:none;pointer-events:none;">'+label+'</div>';
+   html+='<div class="model-dropdown-header">'+label+'</div>';
    items.forEach(function(mid){
     var m=models[mid];
     var displayName=m.model||mid;
@@ -1823,7 +1826,7 @@ function toggleModelDropdown(e){
   }
   if(uncategorized.length>0){
    if(!first) html+='<div style="height:1px;background:rgba(128,128,128,0.15);margin:4px 0;"></div>';
-   html+='<div style="padding:6px 12px 2px;font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;user-select:none;pointer-events:none;">Other</div>';
+   html+='<div class="model-dropdown-header">Other</div>';
    uncategorized.forEach(function(mid){
     var m=models[mid];
     var displayName=m.model||mid;

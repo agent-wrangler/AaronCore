@@ -14,12 +14,14 @@ _MARKDOWN_RENDERER = (
     else None
 )
 _ANCHOR_TAG_RE = re.compile(r"<a\b", re.I)
+_HORIZONTAL_RULE_TAG_RE = re.compile(r"<hr\b[^>]*\/?>", re.I)
 
 
 def _decorate_links(html: str) -> str:
     if not html:
         return ""
-    return _ANCHOR_TAG_RE.sub('<a target="_blank" rel="noopener noreferrer"', html)
+    html = _ANCHOR_TAG_RE.sub('<a target="_blank" rel="noopener noreferrer"', html)
+    return _HORIZONTAL_RULE_TAG_RE.sub("<p>---</p>", html)
 
 
 def render_markdown_html(markdown_text: str) -> str:

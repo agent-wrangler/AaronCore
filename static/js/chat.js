@@ -1378,14 +1378,19 @@ var _streamMeasureLine=null;
   return line;
  }
 
- function _streamLineHtml(line){
+function _streamLineHtml(line){
   var text=String(line||'');
   if(!text) return '<div class="bubble-spacer"></div>';
-  var html=escapeHtml(text);
-  html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  html=html.replace(/`([^`]+)`/g,'<code class="bubble-inline-code">$1</code>');
-  return '<div class="bubble-p">'+html+'</div>';
- }
+  var html;
+  if(typeof formatMarkdownInline==='function'){
+    html=formatMarkdownInline(text);
+  }else{
+    html=escapeHtml(text);
+    html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    html=html.replace(/`([^`]+)`/g,'<code>$1</code>');
+  }
+  return '<p>'+html+'</p>';
+}
 
  function _countStreamVisualLines(text){
   if(!text) return 1;
@@ -1482,7 +1487,7 @@ var _streamMeasureLine=null;
 
  function _findTypingCursorHost(root){
   if(!root) return null;
-  var blocks=root.querySelectorAll('.bubble-p,.bubble-h1,.bubble-h2,.bubble-h3,.bubble-quote,li,pre.bubble-code');
+  var blocks=root.querySelectorAll('.bubble p,.bubble h1,.bubble h2,.bubble h3,.bubble blockquote,li,pre');
   if(!blocks.length) return null;
   var last=blocks[blocks.length-1];
   if(last && last.tagName && last.tagName.toLowerCase()==='pre'){
@@ -1530,11 +1535,14 @@ function _chooseFinalStreamText(replyText, streamedText){
  function _chooseFinalStreamHtml(finalText, replyText, renderedHtml){
   var html=String(renderedHtml||'').trim();
   if(!html) return '';
+  if(typeof normalizeRenderedAssistantHtml === 'function'){
+    html=normalizeRenderedAssistantHtml(html);
+  }
   var finalNorm=_normalizeStreamCompareText(finalText);
   var replyNorm=_normalizeStreamCompareText(replyText);
   if(!finalNorm || !replyNorm) return '';
   return finalNorm===replyNorm ? html : '';
- }
+}
 
  function _renderCurrentStreamLine(){
   if(!_streamBubble) return;

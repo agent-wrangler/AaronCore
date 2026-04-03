@@ -46,9 +46,27 @@ function persistChatHistorySnapshot(){
 }
 
 function renderAssistantBubbleHtml(text, renderedHtml){
- var html=String(renderedHtml||'').trim();
- if(html) return html;
- return formatBubbleText(text);
+  var html=String(renderedHtml||'').trim();
+  if(html){
+    if(typeof normalizeRenderedAssistantHtml === 'function'){
+      html=normalizeRenderedAssistantHtml(html);
+    }
+    if(html) return html;
+  }
+  return formatBubbleText(text);
+}
+
+function normalizeRenderedAssistantHtml(html){
+  var text=String(html||'');
+  if(!text) return '';
+  return text.replace(/<hr\b[^>]*\/?>/gi, '<p>---</p>');
+}
+
+function formatMarkdownInline(text){
+  var s=escapeHtml(text);
+  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  return s;
 }
 
 function updateSendButton(){
@@ -67,104 +85,125 @@ function updateSendButton(){
 }
 
 function formatBubbleText(text){
- var raw=String(text||'').replace(/\r/g,'');
- var lines=raw.split('\n');
- var html=[];
- var inCode=false, codeLines=[];
- var inList=false, listType='';
- var paragraphLines=[];
+  var raw=String(text||'').replace(/\r/g,'');
+  var lines=raw.split('\n');
+  var html=[];
+  var inCode=false, codeLines=[];
+  var inList=false, listType='';
+  var paragraphLines=[];
 
- function flushCode(){
-  if(!inCode) return;
-  html.push('<pre class="bubble-code"><code>'+escapeHtml(codeLines.join('\n'))+'</code></pre>');
-  codeLines=[];
-  inCode=false;
- }
-
- function flushList(){
-  if(!inList) return;
-  html.push(listType==='ol'?'</ol>':'</ul>');
-  inList=false;
-  listType='';
- }
-
- function flushParagraph(){
-  if(!paragraphLines.length) return;
-  // Keep consecutive plain-text lines inside one visual paragraph so model-authored
-  // line breaks do not get amplified into multiple loose blocks.
-  html.push('<div class="bubble-p">'+paragraphLines.map(fmtInline).join('<br>')+'</div>');
-  paragraphLines=[];
- }
-
- function fmtInline(s){
-  s=escapeHtml(s);
-  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  s=s.replace(/`([^`]+)`/g,'<code class="bubble-inline-code">$1</code>');
-  return s;
- }
-
- function listTypeForLine(trimmed){
-  if(/^[-*]\s+(.+)$/.test(trimmed)) return 'ul';
-  if(/^\d+[.)]\s+(.+)$/.test(trimmed)) return 'ol';
-  return '';
- }
-
- for(var i=0;i<lines.length;i++){
-  var line=lines[i];
-  var trimmed=line.trim();
-
-  if(trimmed.startsWith('```')){
-   if(inCode){ flushCode(); }
-   else{ flushParagraph(); flushList(); inCode=true; codeLines=[]; }
-   continue;
-  }
-  if(inCode){ codeLines.push(line); continue; }
-
-  // Empty lines end the current paragraph, but a single blank line between list items
-  // should keep the same visual list instead of splitting into many one-item lists.
-  if(!trimmed){
-   var nextListType='';
-   for(var ni=i+1;ni<lines.length;ni++){
-    var nextTrimmed=lines[ni].trim();
-    if(!nextTrimmed) continue;
-    nextListType=listTypeForLine(nextTrimmed);
-    break;
-   }
-   flushParagraph();
-   if(inList && nextListType===listType) continue;
-   flushList();
-   continue;
+  function flushCode(){
+    if(!inCode) return;
+    html.push('<pre><code>'+escapeHtml(codeLines.join('\n'))+'</code></pre>');
+    codeLines=[];
+    inCode=false;
   }
 
-  var hm=trimmed.match(/^(#{1,3})\s+(.+)$/);
-  if(hm){ flushParagraph(); flushList(); html.push('<div class="bubble-h'+hm[1].length+'">'+fmtInline(hm[2])+'</div>'); continue; }
-
-  if(trimmed.startsWith('> ')){ flushParagraph(); flushList(); html.push('<blockquote class="bubble-quote">'+fmtInline(trimmed.slice(2))+'</blockquote>'); continue; }
-
-  var ulm=trimmed.match(/^[-*]\s+(.+)$/);
-  if(ulm){
-   flushParagraph();
-   if(!inList||listType!=='ul'){ flushList(); html.push('<ul class="bubble-ul">'); inList=true; listType='ul'; }
-   html.push('<li>'+fmtInline(ulm[1])+'</li>');
-   continue;
+  function flushList(){
+    if(!inList) return;
+    html.push(listType==='ol' ? '</ol>' : '</ul>');
+    inList=false;
+    listType='';
   }
 
-  var olm=trimmed.match(/^\d+[.)]\s+(.+)$/);
-  if(olm){
-   flushParagraph();
-   if(!inList||listType!=='ol'){ flushList(); html.push('<ol class="bubble-ol">'); inList=true; listType='ol'; }
-   html.push('<li>'+fmtInline(olm[1])+'</li>');
-   continue;
+  function flushParagraph(){
+    if(!paragraphLines.length) return;
+    html.push('<p>'+paragraphLines.map(formatMarkdownInline).join('<br>')+'</p>');
+    paragraphLines=[];
   }
 
+  function listTypeForLine(trimmed){
+    if(/^[-*]\s+(.+)$/.test(trimmed)) return 'ul';
+    if(/^\d+[.)]\s+(.+)$/.test(trimmed)) return 'ol';
+    return '';
+  }
+
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    var trimmed=line.trim();
+
+    if(trimmed.startsWith('```')){
+      if(inCode){
+        flushCode();
+      }else{
+        flushParagraph();
+        flushList();
+        inCode=true;
+        codeLines=[];
+      }
+      continue;
+    }
+
+    if(inCode){
+      codeLines.push(line);
+      continue;
+    }
+
+    // Empty lines end the current paragraph, but a single blank line between list items
+    // should keep the same visual list instead of splitting into many one-item lists.
+    if(!trimmed){
+      var nextListType='';
+      for(var ni=i+1;ni<lines.length;ni++){
+        var nextTrimmed=lines[ni].trim();
+        if(!nextTrimmed) continue;
+        nextListType=listTypeForLine(nextTrimmed);
+        break;
+      }
+      flushParagraph();
+      if(inList && nextListType===listType) continue;
+      flushList();
+      continue;
+    }
+
+    var hm=trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if(hm){
+      flushParagraph();
+      flushList();
+      html.push('<h'+hm[1].length+'>'+formatMarkdownInline(hm[2])+'</h'+hm[1].length+'>');
+      continue;
+    }
+
+    if(trimmed.startsWith('> ')){
+      flushParagraph();
+      flushList();
+      html.push('<blockquote>'+formatMarkdownInline(trimmed.slice(2))+'</blockquote>');
+      continue;
+    }
+
+    var ulm=trimmed.match(/^[-*]\s+(.+)$/);
+    if(ulm){
+      flushParagraph();
+      if(!inList || listType!=='ul'){
+        flushList();
+        html.push('<ul>');
+        inList=true;
+        listType='ul';
+      }
+      html.push('<li>'+formatMarkdownInline(ulm[1])+'</li>');
+      continue;
+    }
+
+    var olm=trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if(olm){
+      flushParagraph();
+      if(!inList || listType!=='ol'){
+        flushList();
+        html.push('<ol>');
+        inList=true;
+        listType='ol';
+      }
+      html.push('<li>'+formatMarkdownInline(olm[1])+'</li>');
+      continue;
+    }
+
+    flushList();
+    paragraphLines.push(trimmed);
+  }
+
+  flushCode();
+  flushParagraph();
   flushList();
-  paragraphLines.push(trimmed);
- }
-
- flushCode();
- flushParagraph();
- flushList();
- return html.join('');
+  return html.join('');
 }
 
 function escapeHtml(text){
