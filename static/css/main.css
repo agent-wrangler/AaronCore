@@ -2,6 +2,11 @@
 html{background:#FFFFFF}
 html.theme-light{background:#FFFFFF}
 html.theme-dark{background:#161618}
+html.theme-booting,
+html.theme-booting *{
+ transition:none !important;
+ animation:none !important;
+}
 
 /* 旧的 frameless 缩放触发层（当前 Electron 原生缩放为主，保留不显示） */
 .resize-edge,.resize-corner{display:none!important}

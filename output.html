@@ -1,8 +1,51 @@
 <!DOCTYPE html>
 <html class="theme-light"><head><meta charset="UTF-8"><title>Nova</title>
 <link rel="stylesheet" href="/static/css/main.css?v=20260412h">
+<script>
+(function(){
+ var t = 'light';
+ var html = document.documentElement;
+ if(html&&html.classList){
+  html.classList.add('theme-booting');
+ }
+ try{
+  t = localStorage.getItem('nova_theme') || localStorage.getItem('novaTheme') || 'light';
+  t = String(t || '').toLowerCase() === 'dark' ? 'dark' : 'light';
+  if(html&&html.classList){
+   html.classList.remove('theme-light','theme-dark');
+   html.classList.add(t === 'dark' ? 'theme-dark' : 'theme-light');
+  }
+ }catch(e){}
+ requestAnimationFrame(function(){
+  requestAnimationFrame(function(){
+   if(html&&html.classList){
+    html.classList.remove('theme-booting');
+   }
+  });
+ });
+})();
+</script>
 </head>
 <body class="light">
+<script>
+(function(){
+ var t = 'light';
+ try{
+  t = localStorage.getItem('nova_theme') || localStorage.getItem('novaTheme') || 'light';
+  t = String(t || '').toLowerCase() === 'dark' ? 'dark' : 'light';
+  var html = document.documentElement;
+  var body = document.body;
+  if(html&&html.classList){
+   html.classList.remove('theme-light','theme-dark');
+   html.classList.add(t === 'dark' ? 'theme-dark' : 'theme-light');
+  }
+  if(body&&body.classList){
+   body.classList.remove('light','dark');
+   body.classList.add(t);
+  }
+ }catch(e){}
+})();
+</script>
 <div class="window-shell" id="windowShell">
 
 <!-- 顶部通栏 -->

@@ -18,27 +18,32 @@ function _syncWindowBackdrop(theme){
  document.documentElement.classList.add(theme==='light'?'theme-light':'theme-dark');
  document.documentElement.style.backgroundColor=useTransparentShell?'transparent':bg;
  if(document.body) document.body.style.backgroundColor=useTransparentShell?'transparent':bg;
- var shell=document.getElementById('windowShell');
- if(shell) shell.style.backgroundColor=bg;
+  var shell=document.getElementById('windowShell');
+  if(shell) shell.style.backgroundColor=bg;
+}
+
+function _normalizeTheme(theme){
+ var normalized=String(theme||'').toLowerCase();
+ return normalized==='dark' ? 'dark' : 'light';
+}
+
+function _applyTheme(theme, options){
+ var target=_normalizeTheme(theme);
+ if(!document.body) return target;
+ document.body.classList.remove('light','dark');
+ document.body.classList.add(target);
+ localStorage.setItem('nova_theme',target);
+ _syncWindowBackdrop(target);
+ _syncThemeIcon();
+ if(!options||!options.deferTitlebar){
+  _syncTitleBar(target);
+ }
+ return target;
 }
 
 function toggleTheme(){
  var body=document.body;
- if(body.classList.contains('dark')){
-  body.classList.remove('dark');
-  body.classList.add('light');
-  localStorage.setItem('nova_theme','light');
-  _syncWindowBackdrop('light');
-  _syncTitleBar('light');
-  _syncThemeIcon();
- }else{
-  body.classList.remove('light');
-  body.classList.add('dark');
-  localStorage.setItem('nova_theme','dark');
-  _syncWindowBackdrop('dark');
-  _syncTitleBar('dark');
-  _syncThemeIcon();
- }
+ _applyTheme(body.classList.contains('dark')?'light':'dark');
  var currentTab=window._currentTab||1;
  if(currentTab!==1){
   setTimeout(function(){
@@ -184,16 +189,13 @@ window.onload=function(){
  })();
 
  // 加载保存的主题，默认白天
-var savedTheme=localStorage.getItem('nova_theme')||'light';
-if(savedTheme==='light'){
- document.body.classList.remove('dark');
- document.body.classList.add('light');
-}
-_syncWindowBackdrop(savedTheme==='light'?'light':'dark');
-_syncThemeIcon();
+var savedTheme=_applyTheme(
+ localStorage.getItem('nova_theme') || localStorage.getItem('novaTheme') || 'light',
+ {deferTitlebar:true}
+);
  // pywebview API 可能延迟就绪，等一下再同步标题栏颜色
  setTimeout(function(){
-  _syncTitleBar(savedTheme==='light'?'light':'dark');
+  _syncTitleBar(savedTheme);
  },800);
 
  // 从后端加载聊天历史
