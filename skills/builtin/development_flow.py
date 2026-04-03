@@ -1,7 +1,7 @@
 import json
 import re
 
-from core.task_store import create_project, create_task, update_task, update_project, get_active_task_for_project, create_relation, append_task_event
+from tasks.store import create_project, create_task, update_task, update_project, get_active_task_for_project, create_relation, append_task_event
 
 PROJECT_TITLE = 'Default development pipeline'
 
@@ -41,7 +41,7 @@ def _llm_plan(goal: str) -> dict:
 
 
 def _get_or_create_project():
-    from core.task_store import load_task_projects
+    from tasks.store import load_task_projects
     projects = load_task_projects()
     for item in projects:
         if isinstance(item, dict) and item.get('kind') == 'development' and item.get('title') == PROJECT_TITLE:

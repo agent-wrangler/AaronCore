@@ -10,7 +10,7 @@ from datetime import date
 from core.skills.save_export import execute as save_export_execute
 
 # 状态文件：缓存新闻列表 + 最近生成的文章
-_state_path = str(Path(__file__).resolve().parents[2] / "skill_runtime" / "state" / "article_state.json")
+_state_path = str(Path(__file__).resolve().parents[2] / "app_data" / "state" / "article_state.json")
 
 # 文章保存目录
 ARTICLE_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "Nova\u65b0\u95fb")

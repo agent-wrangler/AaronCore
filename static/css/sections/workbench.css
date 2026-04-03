@@ -1,0 +1,459 @@
+/* Desktop workbench and standalone runtime views */
+/* Source: main.css lines 6629-7084 */
+
+/* ===== Desktop Workbench Refresh ===== */
+.top-bar{
+  height:68px;
+  padding:0 14px 0 18px;
+  gap:14px;
+  background:linear-gradient(180deg,rgba(19,23,31,0.96) 0%,rgba(17,20,28,0.92) 100%);
+  backdrop-filter:blur(18px);
+}
+
+.top-bar-brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+  -webkit-app-region:no-drag;
+}
+
+.nova-mark{
+  width:38px;
+  height:38px;
+  border-radius:13px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  background:linear-gradient(145deg,#f8fafc 0%,#cbd5e1 100%);
+  color:#0f172a;
+  font-size:17px;
+  font-weight:800;
+  letter-spacing:-0.04em;
+  box-shadow:0 10px 24px rgba(15,23,42,0.18);
+}
+
+.nova-brand-copy{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+.nova-logo{
+  gap:0;
+  font-size:17px;
+  font-weight:700;
+  line-height:1.05;
+  letter-spacing:-0.02em;
+}
+
+.nova-logo:before{
+  content:none;
+}
+
+.nova-caption{
+  margin-top:3px;
+  font-size:11px;
+  line-height:1;
+  color:rgba(148,163,184,0.72);
+}
+
+.top-bar-center{
+  flex:1;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+
+.top-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  max-width:280px;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.04);
+  color:#cbd5e1;
+  font-size:12px;
+  font-weight:600;
+  line-height:1;
+  white-space:nowrap;
+}
+
+.top-pill-soft{
+  color:#94a3b8;
+}
+
+.top-pill-live{
+  background:rgba(255,255,255,0.06);
+}
+
+.top-pill-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  flex-shrink:0;
+  background:#22c55e;
+  box-shadow:0 0 0 4px rgba(34,197,94,0.14);
+}
+
+#topModelName{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.top-bar-controls{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-left:auto;
+  padding-left:0;
+  border-left:none;
+}
+
+.top-btn{
+  width:38px;
+  height:38px;
+  border-radius:12px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.top-btn svg{
+  width:17px;
+  height:17px;
+}
+
+.win-btn{
+  width:34px;
+  height:34px;
+  border-radius:12px;
+}
+
+.sidebar{
+  padding:14px 10px 12px;
+}
+
+.menu{
+  margin:2px 8px;
+  padding:12px 14px;
+  border-radius:14px;
+  border:1px solid transparent;
+  border-left:none;
+  font-weight:600;
+}
+
+.menu:hover{
+  background:rgba(255,255,255,0.08);
+  border-color:rgba(255,255,255,0.06);
+}
+
+.menu.active{
+  border-left:none;
+  box-shadow:0 10px 22px rgba(15,23,42,0.14);
+}
+
+.sidebar-footer{
+  padding:12px 8px 10px;
+  gap:10px;
+  border-top:none;
+}
+
+.qq-monitor-indicator{
+  border-radius:12px;
+  padding:11px 12px;
+}
+
+.model-selector-btn{
+  min-height:44px;
+  padding:11px 12px;
+  border-radius: var(--model-selector-radius);
+}
+
+.model-selector-wrap{
+  --model-selector-radius: 12px;
+}
+
+.model-dropdown{
+  top: auto;
+  bottom: 100%;
+  border-radius: var(--model-selector-radius);
+  overflow:hidden;
+}
+
+.main{
+  background:#111318;
+}
+
+.content{
+  background:
+    radial-gradient(circle at top right, rgba(99,102,241,0.08), transparent 24%),
+    linear-gradient(180deg,#1b1f28 0%,#141821 100%);
+}
+
+.chat{
+  padding:28px 26px 8px;
+  background:transparent;
+}
+
+.chat > .msg{
+  width:min(94%, 1440px);
+}
+
+.msg{
+  --content-width:min(94%, 1440px);
+}
+
+.input{
+  padding:0 24px 8px;
+  margin-top:-26px;
+}
+
+.input::before{
+  display:none;
+}
+
+.input-container{
+  width:min(100%, 1440px);
+}
+
+.inp-wrap{
+  border-radius:24px;
+}
+
+.inp-actions{
+  gap:6px;
+  padding:8px 14px 14px;
+}
+
+body.light .window-shell{
+  background:#f4f1eb;
+}
+
+body.light .top-bar{
+  background:linear-gradient(180deg,rgba(249,247,242,0.98) 0%,rgba(243,239,232,0.96) 100%);
+  border-bottom-color:rgba(114,105,94,0.14);
+}
+
+body.light .nova-mark{
+  background:linear-gradient(145deg,#2e2b26 0%,#4b453c 100%);
+  color:#ffffff;
+  box-shadow:0 10px 20px rgba(34,29,24,0.12);
+}
+
+body.light .nova-logo{
+  color:#2f2b25;
+}
+
+body.light .nova-caption{
+  color:#8b8378;
+}
+
+body.light .top-pill{
+  border-color:rgba(148,163,184,0.18);
+  background:rgba(255,255,255,0.72);
+  color:#334155;
+}
+
+body.light .top-pill-soft{
+  color:#64748b;
+}
+
+body.light .top-pill-live{
+  background:rgba(255,255,255,0.92);
+}
+
+body.light .top-btn{
+  background:rgba(255,250,244,0.92);
+  border-color:rgba(114,105,94,0.14);
+  color:#655d52;
+  box-shadow:none;
+}
+
+body.light .top-btn:hover{
+  background:#ffffff;
+  color:#2f2b25;
+  border-color:rgba(114,105,94,0.2);
+}
+
+body.light .sidebar{
+  background:linear-gradient(180deg,#f7f4ee 0%,#f1ede6 100%);
+  border-right:1px solid rgba(114,105,94,0.12);
+}
+
+body.light .sidebar::after{
+  background:rgba(99,102,241,0);
+}
+
+body.light .sidebar:hover::after{
+  background:rgba(114,105,94,0.14);
+}
+
+body.light .menu{
+  color:#655d52;
+}
+
+body.light .menu:hover{
+  background:rgba(255,252,247,0.9);
+  color:#2f2b25;
+  border-color:rgba(114,105,94,0.12);
+}
+
+body.light .menu.active{
+  background:#fbfaf7;
+  color:#2f2b25;
+  border-color:rgba(114,105,94,0.14);
+  box-shadow:none;
+}
+
+body.light .main{
+  background:#f4f2ee;
+}
+
+body.light .content{
+  background:#f7f5f1;
+}
+
+body.light .chat{
+  background:transparent;
+  padding:28px 26px 126px;
+}
+
+body.light .chat:has(.settings-page),
+body.light .chat:has(.skill-store),
+body.light .chat:has(.stats-page),
+body.light .chat:has(#memScroll),
+body.light .chat:has(.runtime-graph-page){
+  padding:0;
+  align-items:stretch;
+}
+
+body.light .input{
+  background:#f7f5f1;
+  padding:0 24px 8px;
+  margin-top:-26px;
+}
+
+body.light .input::before{
+  display:none;
+}
+
+body.light .inp-wrap{
+  background:rgba(251,248,243,0.98);
+  border-color:rgba(114,105,94,0.14);
+  border-radius:24px;
+  box-shadow:
+    0 10px 28px rgba(34,29,24,0.05),
+    0 1px 0 rgba(255,255,255,0.9) inset;
+}
+
+body.light .inp-wrap:focus-within{
+  background:rgba(251,248,243,0.98);
+  border-color:rgba(114,105,94,0.18);
+  box-shadow:
+    0 12px 30px rgba(34,29,24,0.06),
+    0 0 0 3px rgba(114,105,94,0.035);
+}
+
+body.light .input textarea{
+  padding:14px 20px;
+  color:#2f2b25;
+}
+
+body.light .input textarea::placeholder{
+  color:rgba(111,103,93,0.62);
+}
+
+body.light .inp-actions{
+  padding:8px 14px 14px;
+}
+
+body.light .image-upload-btn,
+body.light .voice-btn{
+  width:36px;
+  height:36px;
+  border-radius:12px;
+  background:transparent;
+  border:1px solid transparent;
+  color:#8a8174;
+}
+
+body.light .image-upload-btn:hover,
+body.light .voice-btn:hover{
+  background:rgba(122,116,107,0.08);
+  border-color:rgba(114,105,94,0.12);
+  color:#2f2b25;
+  box-shadow:none;
+}
+
+body.light .send-btn{
+  width:40px;
+  height:40px;
+  border-radius:14px;
+  background:linear-gradient(135deg,#3a352f 0%,#575045 100%);
+  border-color:transparent;
+  color:#ffffff;
+  box-shadow:none;
+}
+
+body.light .send-btn:hover:not(:disabled){
+  background:linear-gradient(135deg,#2f2b25 0%,#4a4339 100%);
+  border-color:transparent;
+  color:#ffffff;
+  box-shadow:none;
+}
+
+body.light .send-btn:disabled{
+  background:rgba(122,116,107,0.08);
+  border-color:rgba(114,105,94,0.12);
+  color:#9b9388;
+  box-shadow:none;
+}
+
+body.light .send-btn.stop-mode{
+  background:#d5c5b2;
+  border-color:#c1ad97;
+  color:#6c5138;
+}
+
+body.light .send-btn.stop-mode:hover{
+  background:#cabaa7;
+  border-color:#b29c84;
+  color:#5c4430;
+}
+
+body.light .model-selector-btn{
+  background:#fbfaf7;
+  border-color:rgba(114,105,94,0.12);
+  color:#4d463d;
+  box-shadow:none;
+}
+
+body.light .model-selector-btn:hover{
+  background:#ffffff;
+  border-color:rgba(114,105,94,0.18);
+  color:#2f2b25;
+}
+
+body.light .qq-monitor-indicator{
+  background:rgba(114,105,94,0.06);
+  border-color:rgba(114,105,94,0.12);
+  color:#6c645a;
+}
+
+body.light .qq-monitor-indicator svg{
+  stroke:#6c645a;
+}
+
+body.light .scroll-to-bottom-btn{
+  right:24px;
+  bottom:24px;
+}
+

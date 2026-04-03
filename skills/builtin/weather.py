@@ -25,8 +25,8 @@ CITIES = {
 }
 
 DEFAULT_CITY = "常州"
-HISTORY_PATH = Path(__file__).resolve().parents[2] / "memory_db" / "msg_history.json"
-PERSONA_PATH = Path(__file__).resolve().parents[2] / "memory_db" / "persona.json"
+HISTORY_PATH = Path(__file__).resolve().parents[2] / "state_data" / "msg_history.json"
+PERSONA_PATH = Path(__file__).resolve().parents[2] / "state_data" / "persona.json"
 
 CITY_ALIASES = {
     "新疆维吾尔自治区": "乌鲁木齐",

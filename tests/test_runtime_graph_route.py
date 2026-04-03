@@ -27,7 +27,7 @@ class RuntimeGraphRouteTests(unittest.TestCase):
             self._write(root, "static/js/app.js", "import './graph.js';\nfetch('/memory')\n")
             self._write(root, "static/js/graph.js", "console.log('graph');\n")
             self._write(root, "static/css/main.css", "body{color:#111;}\n")
-            self._write(root, "memory_db/should_hide.py", "print('ignore')\n")
+            self._write(root, "state_data/should_hide.py", "print('ignore')\n")
 
             repo_file = str(root / "routes" / "data.py").replace("/", "\\")
             history = [
@@ -63,7 +63,7 @@ class RuntimeGraphRouteTests(unittest.TestCase):
         self.assertIn("output.html", node_ids)
         self.assertIn("static/js/app.js", node_ids)
         self.assertIn("tool:folder_explore", node_ids)
-        self.assertNotIn("memory_db/should_hide.py", node_ids)
+        self.assertNotIn("state_data/should_hide.py", node_ids)
 
         self.assertIn(("agent_final.py", "routes/data.py", "import"), edge_set)
         self.assertIn(("output.html", "static/js/app.js", "asset"), edge_set)

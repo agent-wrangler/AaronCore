@@ -21,7 +21,9 @@ from pathlib import Path
 
 # ── 监听进程管理（支持多群） ──
 _monitor_processes = {}  # {group_name: subprocess.Popen}
-_MONITOR_STATE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'memory_db', 'qq_monitor_state.json')
+_STATE_DATA_DIR = Path(__file__).resolve().parents[2] / "state_data"
+_MONITOR_STATE_FILE = str(_STATE_DATA_DIR / "qq_monitor_state.json")
+_DEBUG_LOG_FILE = _STATE_DATA_DIR / "cu_debug.log"
 _INTERNAL_WORKERS_DIR = Path(__file__).resolve().parents[2] / "workers"
 
 
@@ -125,7 +127,7 @@ def qq_start_monitor(group_name: str, my_name: str = '\u6d74\u706b\u91cd\u751f')
         raw = result.stdout.decode('utf-8', errors='replace') if isinstance(result.stdout, bytes) else result.stdout
         err = result.stderr.decode('utf-8', errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr)
         try:
-            with open("memory_db/cu_debug.log", "a", encoding="utf-8") as f:
+            with open(_DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(f"[open_group] stdout={raw[:200]} stderr={err[:200]}\n")
         except: pass
         data = json.loads(raw.strip().splitlines()[-1]) if raw.strip() else {}
@@ -341,7 +343,7 @@ def execute(user_input: str, context: dict = None) -> str:
     import traceback
     def _log(msg):
         try:
-            with open("memory_db/cu_debug.log", "a", encoding="utf-8") as f:
+            with open(_DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
         except: pass
 

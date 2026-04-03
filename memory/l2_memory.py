@@ -1,6 +1,6 @@
 """
 L2 持久记忆引擎 — 评分入库 + 关键词检索 + 自动结晶 + 每20轮摘要
-存储：memory_db/l2_short_term.json（不设上限）
+存储：state_data/l2_short_term.json（不设上限）
 """
 
 import re
@@ -9,8 +9,8 @@ import json
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from core.runtime_state.json_store import load_json, write_json
-from core.runtime_state.state_loader import PRIMARY_STATE_DIR
+from storage.json_store import load_json, write_json
+from storage.paths import PRIMARY_STATE_DIR
 
 # ── 文件路径 ──
 L2_FILE = PRIMARY_STATE_DIR / "l2_short_term.json"
@@ -908,6 +908,10 @@ def classify_retention_bucket(entry: dict, now: datetime | None = None) -> dict:
             tier = "keep"
             label = "永保类"
             reason = "高复用且带任务连续性信号，说明仍在承担短中期上下文"
+        elif age_days <= 7 and crystallized and hits >= 3:
+            tier = "keep"
+            label = "永保类"
+            reason = "近期一般印象已被反复命中并结晶，继续保留原始上下文更稳"
         elif age_days <= 7 and _looks_like_low_signal_general(user_text):
             reason = "近期但低信号的一般对话印象，更适合压成轻量痕迹"
         elif age_days <= 7:

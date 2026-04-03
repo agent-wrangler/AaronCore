@@ -146,7 +146,7 @@ async def apply_self_repair_fix(request: dict | None = None):
 def _load_tool_call_config() -> dict:
     import os
     from pathlib import Path
-    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "memory_db" / "tool_call_config.json"
+    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "state_data" / "tool_call_config.json"
     try:
         if cfg_path.exists():
             return json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -158,7 +158,7 @@ def _load_tool_call_config() -> dict:
 def _save_tool_call_config(data: dict):
     import os
     from pathlib import Path
-    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "memory_db" / "tool_call_config.json"
+    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "state_data" / "tool_call_config.json"
     cfg_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

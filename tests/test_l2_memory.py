@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from core.runtime_memory import l2_memory
+from memory import l2_memory
 
 
 class L2MemoryTests(unittest.TestCase):
@@ -95,6 +95,22 @@ class L2MemoryTests(unittest.TestCase):
         self.assertEqual(active["tier"], "keep")
         self.assertEqual(low_signal["tier"], "compress")
         self.assertEqual(high_reuse["tier"], "keep")
+
+    def test_classify_retention_bucket_keeps_recent_crystallized_general_context_when_reused(self):
+        now = datetime(2026, 3, 30, 12, 0, 0)
+
+        crystallized_general = {
+            "memory_type": "general",
+            "user_text": "停止监听",
+            "importance": 0.85,
+            "hit_count": 3,
+            "crystallized": True,
+            "created_at": "2026-03-29T10:20:00",
+        }
+
+        result = l2_memory.classify_retention_bucket(crystallized_general, now=now)
+
+        self.assertEqual(result["tier"], "keep")
 
     def test_cleanup_stale_memories_only_removes_prune_candidates(self):
         now = datetime(2026, 3, 30, 12, 0, 0)

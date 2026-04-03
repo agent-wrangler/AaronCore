@@ -4,7 +4,7 @@ const { app } = require('electron');
 
 function isNovaCoreRoot(candidate) {
   if (!candidate) return false;
-  const required = ['agent_final.py', 'core', 'routes', 'static', 'shell', 'brain', 'memory_db'];
+  const required = ['agent_final.py', 'core', 'routes', 'static', 'shell', 'brain', 'state_data'];
   try {
     return required.every((name) => fs.existsSync(path.join(candidate, name)));
   } catch (_err) {
@@ -16,7 +16,7 @@ function isNovaCoreRoot(candidate) {
 // On this machine:
 // - exe dir:      C:\Users\36459\NovaCoreDesktop\win-unpacked
 // - dev repo dir: C:\Users\36459\NovaCore
-// This keeps the desktop app connected to the live workspace and its memory_db
+// This keeps the desktop app connected to the live workspace and its state_data
 // instead of silently falling back to resources/novacore.
 function resolvePackagedDevRoot() {
   const candidates = [];

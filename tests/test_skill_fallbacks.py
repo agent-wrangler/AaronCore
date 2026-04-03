@@ -309,6 +309,16 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("让我看看记忆库～"))
         self.assertTrue(
             reply_formatter_module._looks_like_tool_preamble(
+                "啊！这个发现很重要。让我帮你检查一下当前的环境状态，看看有没有隐藏的进程在运行。"
+            )
+        )
+        self.assertTrue(
+            reply_formatter_module._looks_like_tool_preamble(
+                "主人，我理解这种\"时好时坏\"的情况最让人头疼。让我帮你深入分析一下："
+            )
+        )
+        self.assertTrue(
+            reply_formatter_module._looks_like_tool_preamble(
                 "好！我来帮你全部搞定，直接上代码 👇\n\n先创建项目结构，然后我逐个文件写好～"
             )
         )
@@ -425,7 +435,22 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertIn("不支持原生 tool_call", reply)
         self.assertIn("不会再静默回退到旧 skill 链", reply)
 
-    def test_unified_reply_with_tools_stream_fallback_exposes_run_meta(self):
+    def test_unified_reply_with_tools_stream_reports_stream_only_unavailable_reply(self):
+        with patch.object(reply_formatter_module, "_llm_call_stream", None), patch.object(
+            reply_formatter_module,
+            "unified_reply_with_tools",
+            side_effect=AssertionError("frontend chat should not fall back to non-stream"),
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream({"user_input": "鎵撳紑椤圭洰鐩綍"}, [], None))
+
+        self.assertTrue(any(isinstance(chunk, str) and "只保留流式工具链" in chunk for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertIsNone(done.get("tool_used"))
+        self.assertEqual(done.get("action_count"), 0)
+        self.assertEqual(done.get("success"), None)
+        return
+
         fallback_result = {
             "reply": "好的，已经处理完了。",
             "tool_used": "open_target",
@@ -510,6 +535,190 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("_done"), True)
         self.assertEqual(done.get("tool_used"), "development_flow")
         self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_keeps_multisentence_handoff_before_environment_tool(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield "啊！这个发现很重要。让我帮你检查一下当前的环境状态，看看有没有隐藏的进程在运行。"
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_env_1",
+                            "type": "function",
+                            "function": {
+                                "name": "sense_environment",
+                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "这一步已经完成：\n\n已拿到当前环境状态。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "Environment inspected",
+                "meta": {
+                    "action": {
+                        "action_kind": "inspect_environment",
+                        "target_kind": "desktop_environment",
+                        "display_hint": "已拿到当前环境状态",
+                        "verification_detail": "environment snapshot captured",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "说是之前还有个隐秘的东西在跑",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "sense_environment")
+        self.assertEqual(executed[0][1].get("detail_level"), "basic")
+        self.assertTrue(any(isinstance(chunk, str) and "让我帮你检查一下当前的环境状态" in chunk for chunk in chunks))
+        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "sense_environment")
+        self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_closes_dropped_stream_tool_signal_as_failure(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield "结论先说：这更像是缓存残留，不是当前窗口本身的问题。"
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_env_drop_1",
+                            "type": "function",
+                            "function": {
+                                "name": "sense_environment",
+                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 4}}
+                return
+
+            yield "unexpected followup"
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {"success": True, "response": "should not run"}
+
+        bundle = {
+            "user_input": "检查一下是不是还有别的东西在后台跑",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed, [])
+        synthetic_done = next(
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict)
+            and chunk.get("_tool_call", {}).get("done")
+        )
+        self.assertTrue(synthetic_done.get("_tool_call", {}).get("synthetic"))
+        self.assertEqual(synthetic_done.get("_tool_call", {}).get("reason"), "stream_signal_dropped")
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "sense_environment")
+        self.assertEqual(done.get("success"), False)
+        self.assertEqual(done.get("synthetic"), True)
+        self.assertEqual(done.get("reason"), "stream_signal_dropped")
+
+    def test_unified_reply_with_tools_stream_closes_tool_executor_exception_as_terminal_failure(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_env_boom_1",
+                            "type": "function",
+                            "function": {
+                                "name": "sense_environment",
+                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+                return
+
+            yield "unexpected followup"
+
+        def fake_tool_executor(_name, _args, _context):
+            raise RuntimeError("boom")
+
+        bundle = {
+            "user_input": "看看当前环境状态",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertTrue(
+            any(
+                isinstance(chunk, dict)
+                and chunk.get("_tool_call", {}).get("executing")
+                and chunk.get("_tool_call", {}).get("name") == "sense_environment"
+                for chunk in chunks
+            )
+        )
+        synthetic_done = next(
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict)
+            and chunk.get("_tool_call", {}).get("done")
+        )
+        self.assertTrue(synthetic_done.get("_tool_call", {}).get("synthetic"))
+        self.assertEqual(synthetic_done.get("_tool_call", {}).get("reason"), "tool_executor_exception")
+        self.assertIn("boom", synthetic_done.get("_tool_call", {}).get("response", ""))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "sense_environment")
+        self.assertEqual(done.get("success"), False)
+        self.assertEqual(done.get("synthetic"), True)
+        self.assertEqual(done.get("reason"), "tool_executor_exception")
+        self.assertIn("boom", done.get("tool_response", ""))
 
     def test_unified_reply_with_tools_stream_keeps_visible_intro_before_ask_user(self):
         executed = []
@@ -1874,6 +2083,34 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(action.get("action_kind"), "apply_unified_diff")
         self.assertEqual(action.get("target_kind"), "file")
         self.assertEqual(action.get("verification_mode"), "path_exists")
+
+    def test_execute_tool_call_catches_executor_exception_as_tool_failure(self):
+        with patch.object(tool_adapter_module, "_execute", side_effect=RuntimeError("boom")):
+            result = tool_adapter_module.execute_tool_call(
+                "write_file",
+                {"file_path": "notes_app/templates/index.html", "content": "hello"},
+                {},
+            )
+
+        self.assertIsInstance(result, dict)
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("skill"), "write_file")
+        self.assertIn("boom", result.get("error", ""))
+        self.assertIn("执行异常", result.get("error", ""))
+        self.assertIn("执行异常", result.get("response", ""))
+
+    def test_execute_tool_call_normalizes_non_dict_executor_result(self):
+        with patch.object(tool_adapter_module, "_execute", return_value="not-a-dict-result"):
+            result = tool_adapter_module.execute_tool_call(
+                "write_file",
+                {"file_path": "notes_app/templates/index.html", "content": "hello"},
+                {},
+            )
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("skill"), "write_file")
+        self.assertIn("not-a-dict-result", result.get("response", ""))
+        self.assertIn("结果格式异常", result.get("error", ""))
 
     def test_repair_tool_args_recovers_folder_target_from_recent_project_history(self):
         repaired = reply_formatter_module._repair_tool_args_from_context(

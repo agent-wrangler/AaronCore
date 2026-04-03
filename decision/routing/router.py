@@ -8,10 +8,10 @@ import time
 from pathlib import Path
 
 from core.skills import get_all_skills
-from core.rule_runtime import has_rule
+from decision.rule_runtime import has_rule
 
 # 文章选择状态文件
-_article_state_path = str(Path(__file__).resolve().parents[2] / "skill_runtime" / "state" / "article_state.json")
+_article_state_path = str(Path(__file__).resolve().parents[2] / "app_data" / "state" / "article_state.json")
 
 
 CHAT_WORDS = [
@@ -406,7 +406,7 @@ def _score_text(text: str, skills: dict):
     _blocked_skills = set()
     _suppressed_skills = set()
     try:
-        from core.rule_runtime import get_active_constraints, match_constraint
+        from decision.rule_runtime import get_active_constraints, match_constraint
         for c in get_active_constraints():
             if match_constraint(text, c):
                 sk = c.get("skill", "")

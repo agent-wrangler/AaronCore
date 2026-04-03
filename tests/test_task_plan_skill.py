@@ -232,6 +232,36 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIn("working on Patch lower layers", session_context.get("user_state") or "")
         self.assertEqual((session_context.get("working_state") or {}).get("current_step"), "Patch lower layers")
 
+    def test_mid_sentence_continue_phrase_does_not_resume_unrelated_task_plan(self):
+        task_store_module.save_task_plan_snapshot(
+            "Plan a complex refactor",
+            {
+                "goal": "Plan a complex refactor",
+                "summary": "Working on the refactor",
+                "items": [
+                    {"id": "map_flow", "title": "Map the current flow", "status": "running"},
+                    {"id": "patch_lower_layers", "title": "Patch lower layers", "status": "pending"},
+                ],
+                "current_item_id": "map_flow",
+                "phase": "inspect",
+            },
+        )
+        casual_query = (
+            "\u6ca1\u4e8b \u6211\u5c31\u662f\u60f3\u8ba9\u4f60\u6d4b\u8bd5\u4e00\u4e0b"
+            "\u81ea\u5df1\u7684\u80fd\u529b \u770b\u770b\u6211\u6709\u4ec0\u4e48\u5730\u65b9"
+            "\u53ef\u4ee5\u7ee7\u7eed\u4f18\u5316\u7684"
+        )
+
+        resumed = task_store_module.get_active_task_plan_snapshot(casual_query)
+        session_context = session_context_module.extract_session_context([], casual_query)
+        prompt = reply_formatter_module._build_tool_call_user_prompt({"user_input": casual_query})
+
+        self.assertIsNone(resumed)
+        self.assertNotEqual(session_context.get("intent"), "task_continue")
+        self.assertFalse(bool(session_context.get("working_state")))
+        self.assertEqual(prompt, casual_query)
+        self.assertNotIn("Current task goal in this turn", prompt)
+
     def test_build_active_task_context_uses_working_state_without_bundle_task_plan(self):
         _task, snapshot = task_store_module.save_task_plan_snapshot(
             "continue NovaNotes",

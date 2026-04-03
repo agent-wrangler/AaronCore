@@ -2,7 +2,7 @@ import json
 import re
 
 from core.fs_protocol import build_operation_result
-from core.task_store import (
+from tasks.store import (
     get_active_task_plan_snapshot,
     normalize_task_plan_snapshot,
     save_task_plan_snapshot,

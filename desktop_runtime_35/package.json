@@ -75,8 +75,8 @@
         "to": "novacore/memory/.gitkeep"
       },
       {
-        "from": "../memory_db/.gitkeep",
-        "to": "novacore/memory_db/.gitkeep"
+        "from": "../state_data/.gitkeep",
+        "to": "novacore/state_data/.gitkeep"
       }
     ],
     "directories": {

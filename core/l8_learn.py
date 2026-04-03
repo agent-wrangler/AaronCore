@@ -13,7 +13,7 @@ from core.runtime_state.json_store import load_json as _load_json, write_json as
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE_DIR = ROOT / "memory_db"
+STATE_DIR = ROOT / "state_data"
 KNOWLEDGE_BASE_FILE = STATE_DIR / "knowledge_base.json"
 CONFIG_FILE = STATE_DIR / "autolearn_config.json"
 _FILE_LOCK = threading.Lock()

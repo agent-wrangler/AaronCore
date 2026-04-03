@@ -4,7 +4,7 @@ from pathlib import Path
 
 _REGISTRY_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _REGISTRY_DIR.parent
-_STORE_PATH = _REPO_ROOT / "memory_db" / "skill_store.json"
+_STORE_PATH = _REPO_ROOT / "state_data" / "skill_store.json"
 _WORKFLOW_SKILLS_DIR = _REPO_ROOT / "skills" / "builtin"
 _NATIVE_SKILL_DIRS = (
     _REPO_ROOT / "tools" / "agent",

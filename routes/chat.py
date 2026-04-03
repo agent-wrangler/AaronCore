@@ -13,6 +13,11 @@ from core.markdown_render import render_markdown_html
 from core.runtime_state.state_loader import (
     DEFAULT_L1_RECENT_TOKEN_BUDGET as _L1_RECENT_TOKEN_BUDGET,
 )
+from routes.chat_tool_steps import (
+    build_tool_done_label,
+    build_tool_done_trace_detail,
+    build_tool_execution_trace_detail,
+)
 try:
     from routes import companion as _comp
 except Exception:
@@ -178,7 +183,6 @@ def _block_task_plan_after_failure(
 
 def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
     meta_fields = (
-        "full_detail",
         "step_key",
         "phase",
         "reason_kind",
@@ -213,11 +217,7 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
             "status": "error" if status == "error" else "done",
         }
         for field in meta_fields:
-            value = item.get(field)
-            if field == "full_detail":
-                value = str(value or detail or "").strip()
-            else:
-                value = str(value or "").strip()
+            value = str(item.get(field) or "").strip()
             if value:
                 row[field] = value
         if rows and _is_thinking_label(label) and _is_thinking_label(rows[-1].get("label")):
@@ -1107,7 +1107,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
         # 闪回检测：旧记忆联想（潜意识层）
         try:
-            from core.runtime_memory.flashback import detect_flashback
+            from memory.flashback import detect_flashback
             _fb_hint = detect_flashback(msg)
             if _fb_hint:
                 bundle["flashback_hint"] = _fb_hint
@@ -1245,6 +1245,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _think_carry = ""
                 _inside_think_block = False
                 _tool_trace_started = False
+                _tool_inflight_name = ""
                 _dropped_stream_prefix = ""
                 _msg_short = msg[:20] + ("\u2026" if len(msg) > 20 else "")
                 _default_think_detail = f"\u6211\u5148\u7406\u89e3\u4f60\u8fd9\u53e5\u300c{_msg_short}\u300d\uff0c\u5224\u65ad\u662f\u76f4\u63a5\u56de\u7b54\u8fd8\u662f\u5148\u8c03\u7528\u5de5\u5177\u3002"
@@ -1491,6 +1492,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                 tc_info = _item["_tool_call"]
                                 tc_name = tc_info.get("name", "")
                                 tc_preview = str(tc_info.get("preview") or "").strip()
+                                tc_process_meta = tc_info.get("process_meta") if isinstance(tc_info.get("process_meta"), dict) else {}
                                 _MEMORY_TOOL_NAMES = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
                                 _tool_skill_display = _MEMORY_TOOL_NAMES.get(tc_name) or S.get_skill_display_name(tc_name)
                                 if tc_name == "web_search":
@@ -1512,6 +1514,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     else "\u5148\u62ff\u5230\u8fd9\u4e00\u6b65\u9700\u8981\u7684\u5173\u952e\u4f9d\u636e"
                                 )
                                 if tc_info.get("executing"):
+                                    _tool_inflight_name = tc_name
                                     async for _evt in _emit_thinking_trace(force=True):
                                         yield _evt
                                     _tool_trace_started = True
@@ -1562,12 +1565,12 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     elif not _trace_thinking_sent:
                                         async for _evt in _emit_default_thinking_trace():
                                             yield _evt
-                                    _trace_parts = [tc_name] if tc_name else []
-                                    if tc_preview:
-                                        _trace_parts.append(f"\u76ee\u6807\uff1a{tc_preview}")
-                                    elif tc_name:
-                                        _trace_parts.append(f"\u6b63\u5728\u6267\u884c {tc_name}\u2026")
-                                    _trace_detail = " \u00b7 ".join([p for p in _trace_parts if p]) or f"\u6b63\u5728{skill_display}\u2026"
+                                    _trace_detail = build_tool_execution_trace_detail(
+                                        tool_name=tc_name,
+                                        preview=tc_preview,
+                                        skill_display=skill_display,
+                                        process_meta=tc_process_meta,
+                                    )
                                     yield await _trace(
                                         _trace_label,
                                         _trace_detail,
@@ -1582,6 +1585,23 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         full_detail=_trace_detail,
                                     )
                                 elif tc_info.get("done"):
+                                    if tc_info.get("synthetic") and not _dropped_stream_prefix and _stream_chunks:
+                                        _dropped_stream_prefix = _drop_incomplete_tool_handoff_prefix(_stream_chunks)
+                                        if _dropped_stream_prefix:
+                                            yield {
+                                                "event": "stream_reset",
+                                                "data": json.dumps(
+                                                    {"reason": "tool_handoff_prefix_dropped"},
+                                                    ensure_ascii=False,
+                                                ),
+                                            }
+                                            S.debug_write("tool_call_stream_prefix_dropped", {
+                                                "tool_name": tc_name,
+                                                "text_len": len(_dropped_stream_prefix),
+                                                "text_preview": _dropped_stream_prefix[:120],
+                                                "synthetic": True,
+                                            })
+                                    _tool_inflight_name = ""
                                     _tool_used = tc_name
                                     _tool_success = bool(tc_info.get("success"))
                                     _tool_run_meta = tc_info.get("run_meta") if isinstance(tc_info.get("run_meta"), dict) else {}
@@ -1602,13 +1622,14 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             _done_label = "\u8bb0\u5fc6\u5c31\u7eea"
                                         else:
                                             _done_label = "\u6280\u80fd\u5b8c\u6210"
-                                        _done_detail = str(tc_info.get("action_summary") or "").strip()
-                                        if not _done_detail:
-                                            _done_detail = _summarize_tool_response_text(tc_info.get("response", ""))
-                                        if not _done_detail:
-                                            _done_detail = f"{_dn}\u5b8c\u6210"
-                                        if tc_name:
-                                            _done_detail = " \u00b7 ".join([p for p in [tc_name, _done_detail] if p])
+                                        _done_detail = build_tool_done_trace_detail(
+                                            tool_name=tc_name,
+                                            preview=tc_preview,
+                                            success=True,
+                                            action_summary=str(tc_info.get("action_summary") or "").strip(),
+                                            response=tc_info.get("response", ""),
+                                            process_meta=tc_process_meta,
+                                        ) or f"{_dn}\u5b8c\u6210"
                                         yield await _trace(
                                             _done_label,
                                             _done_detail,
@@ -1629,13 +1650,19 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             _fail_label = "\u68c0\u7d22\u5931\u8d25"
                                         else:
                                             _fail_label = "\u6280\u80fd\u5931\u8d25"
-                                        _fail_detail = str(tc_info.get("action_summary") or tc_info.get("response") or "").strip()
-                                        if not _fail_detail:
-                                            _fail_detail = f"{_dn}\u5931\u8d25"
-                                        if tc_preview:
-                                            _fail_detail = f"\u76ee\u6807\uff1a{tc_preview}"
-                                        if tc_name:
-                                            _fail_detail = " \u00b7 ".join([p for p in [tc_name, _fail_detail] if p])
+                                        _fail_label = build_tool_done_label(
+                                            _fail_label,
+                                            success=False,
+                                            process_meta=tc_process_meta,
+                                        )
+                                        _fail_detail = build_tool_done_trace_detail(
+                                            tool_name=tc_name,
+                                            preview=tc_preview,
+                                            success=False,
+                                            action_summary=str(tc_info.get("action_summary") or "").strip(),
+                                            response=tc_info.get("response", ""),
+                                            process_meta=tc_process_meta,
+                                        ) or f"{_dn}\u5931\u8d25"
                                         yield await _trace(
                                             _fail_label,
                                             _fail_detail,
@@ -1653,6 +1680,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                 async for _evt in _emit_thinking_trace(force=True):
                                     yield _evt
                                 _tool_used = _item.get("tool_used")
+                                _tool_inflight_name = ""
                                 if "run_meta" in _item and isinstance(_item.get("run_meta"), dict):
                                     _tool_run_meta = _item.get("run_meta") or {}
                                     _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
@@ -1661,6 +1689,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                                 if "success" in _item:
                                     _tool_success = bool(_item.get("success"))
+                                if "tool_response" in _item:
+                                    _tool_response_text = str(_item.get("tool_response") or _tool_response_text or "").strip()
                                 _tool_action_summary = str(_item.get("action_summary") or _tool_action_summary or "").strip()
                                 break
                             elif _item.get("_thinking"):
@@ -1724,11 +1754,31 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         "dropped_prefix_len": len(_dropped_stream_prefix),
                     })
                 except Exception as _tce:
-                    S.debug_write("tool_call_error", {"error": str(_tce)})
-                    if not _stream_chunks:
+                    failure_message = f"\u5de5\u5177\u6267\u884c\u5f02\u5e38\uff1a{type(_tce).__name__}: {_tce}"
+                    S.debug_write("tool_call_error", {
+                        "error": failure_message,
+                        "tool_inflight": _tool_inflight_name,
+                        "tool_used": _tool_used,
+                    })
+                    if _tool_inflight_name:
+                        _tool_used = _tool_inflight_name
+                        _tool_success = False
+                        _tool_response_text = failure_message if not _tool_response_text else f"{_tool_response_text}\n\n{failure_message}"
+                        if not _tool_action_summary:
+                            _tool_action_summary = _summarize_tool_response_text(_tool_response_text)
+                        response = _tool_response_text
+                        if _tool_action_summary:
+                            yield await _trace(
+                                "\u6280\u80fd\u5931\u8d25",
+                                " \u00b7 ".join([p for p in [_tool_used, _tool_action_summary] if p]),
+                                "error",
+                            )
+                    if not _stream_chunks and not _tool_inflight_name:
+                        response = failure_message
+                    if False and not _stream_chunks and not _tool_inflight_name:
                         # fallback 到非流式 tool_call
-                        from core.reply_formatter import unified_reply_with_tools
-                        tc_result = unified_reply_with_tools(bundle, tools, execute_tool_call)
+                        # legacy frontend non-stream fallback removed; keep branch unreachable for localized compatibility cleanup
+                        tc_result = {}
                         response = tc_result.get("reply", "")
                         _tool_used = tc_result.get("tool_used")
                         _tool_run_meta = tc_result.get("run_meta") if isinstance(tc_result.get("run_meta"), dict) else {}
@@ -1736,12 +1786,17 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         if _plan_update:
                             _task_plan = _plan_update
                             yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
-                        _tool_success = True if _tool_used else None
+                        _tool_success = tc_result.get("success") if _tool_used else None
+                        _tool_response_text = str(tc_result.get("tool_response") or "").strip()
                         _action_summary = str(tc_result.get("action_summary") or "").strip()
                         _tool_action_summary = _action_summary or _tool_action_summary
                         if _tool_used and _action_summary:
-                            yield await _trace("\u6280\u80fd\u5b8c\u6210", " \u00b7 ".join([p for p in [_tool_used, _action_summary] if p]), "done")
-                    else:
+                            yield await _trace(
+                                "技能完成" if _tool_success else "技能失败",
+                                " · ".join([p for p in [_tool_used, _action_summary] if p]),
+                                "done" if _tool_success else "error",
+                            )
+                    elif _stream_chunks or _tool_inflight_name:
                         response = "".join(_stream_chunks)
 
                 # 记录技能使用统计
@@ -1787,6 +1842,18 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     except Exception:
                         pass
                 response = _strip_markdown(response)
+                if not str(response or "").strip() and _tool_used:
+                    try:
+                        from core.reply_formatter import _build_tool_closeout_reply
+
+                        response = _build_tool_closeout_reply(
+                            success=bool(_tool_success) if _tool_success is not None else True,
+                            action_summary=_tool_action_summary,
+                            tool_response=_tool_response_text,
+                            run_meta=_tool_run_meta,
+                        )
+                    except Exception:
+                        pass
                 response = _ensure_tool_call_failure_reply(
                     response,
                     tool_used=_tool_used or "",
@@ -1795,6 +1862,22 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     action_summary=_tool_action_summary,
                     run_meta=_tool_run_meta,
                 )
+                # 情况兜底：tool_call 阶段仅输出“先做某事”的前置语而未返回 tool_result。
+                # 这类内容说明链路中断，强制转为失败闭环，避免只回一句“我先…”后无下一步。
+                if not _tool_used and _stream_chunks:
+                    try:
+                        from core.reply_formatter import _looks_like_tool_preamble, _summarize_tool_response_text
+                        if _looks_like_tool_preamble(response):
+                            response = _ensure_tool_call_failure_reply(
+                                response,
+                                tool_used="tool_call",
+                                tool_success=False,
+                                tool_response=_tool_response_text or response,
+                                action_summary=_tool_action_summary or _summarize_tool_response_text(response),
+                                run_meta=_tool_run_meta,
+                            )
+                    except Exception:
+                        pass
                 if _task_plan and _tool_success is False:
                     _blocked_plan = _block_task_plan_after_failure(
                         _task_plan,

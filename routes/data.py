@@ -7,9 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter
 from core import shared as S
 from core.markdown_render import render_markdown_html
-from core.runtime_memory.l2_memory import classify_retention_bucket
+from memory.l2_memory import classify_retention_bucket
 from core.l8_learn import classify_l8_entry_kind, should_show_l8_timeline_entry
-from core.runtime_state.state_loader import get_model_price, MODEL_PRICES
+from storage.stats_store import MODEL_PRICES, get_model_price
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ RUNTIME_GRAPH_EXCLUDED_DIRS = {
     "node_modules",
     ".venv",
     "venv",
-    "memory_db",
+    "state_data",
     "logs",
     "archive",
     "brain",
@@ -106,9 +106,19 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "skills/builtin/story.py": "故事技能",
     "skills/builtin/task_plan.py": "任务规划技能",
     "skills/builtin/weather.py": "天气技能",
-    "static/js/app.js": "主页面控制脚本",
+    "static/js/app.js": "主页面脚本索引",
+    "static/js/app/chrome.js": "主页面主题与壳层脚本",
+    "static/js/app/boot.js": "主页面启动与恢复脚本",
+    "static/js/app/views.js": "主页面视图切换脚本",
+    "static/js/app/skills.js": "主页面技能商店脚本",
+    "static/js/app/models.js": "主页面模型与统计脚本",
     "static/js/awareness.js": "感知面板脚本",
-    "static/js/chat.js": "聊天脚本",
+    "static/js/chat.js": "聊天脚本索引",
+    "static/js/chat/process.js": "聊天过程工具",
+    "static/js/chat/composer.js": "聊天输入与消息壳",
+    "static/js/chat/stream.js": "聊天流式与步骤渲染",
+    "static/js/chat/task-ui.js": "聊天任务与提问卡片",
+    "static/js/chat/voice.js": "聊天语音与 CoD 状态",
     "static/js/companion.js": "陪伴页脚本",
     "static/js/docs.js": "文档页脚本",
     "static/js/entity.js": "实体页脚本",
@@ -116,7 +126,12 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "static/js/lab.js": "实验页脚本",
     "static/js/memory.js": "记忆页脚本",
     "static/js/runtime_graph.js": "运行图谱脚本",
-    "static/js/settings.js": "设置页脚本",
+    "static/js/window-shell.js": "窗口壳层脚本",
+    "static/js/output-init.js": "首页收尾启动脚本",
+    "static/js/settings.js": "设置页脚本索引",
+    "static/js/settings/autolearn.js": "设置页自学习脚本",
+    "static/js/settings/models-base.js": "设置页模型管理基础脚本",
+    "static/js/settings/models-ui.js": "设置页模型管理界面脚本",
     "static/js/stats.js": "统计页脚本",
     "static/js/utils.js": "前端工具集",
     "static/css/main.css": "主页面样式",

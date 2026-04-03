@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE_DIR = ROOT / "memory_db"
+STATE_DIR = ROOT / "state_data"
 LAB_DIR = STATE_DIR / "lab"
 LAB_DIR.mkdir(parents=True, exist_ok=True)
 

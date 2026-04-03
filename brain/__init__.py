@@ -1396,7 +1396,7 @@ def _detect_mode_switch(user_input: str) -> str:
     if not text:
         return ''
 
-    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'state_data', 'persona.json')
     try:
         persona = json.load(open(config_path, 'r', encoding='utf-8'))
     except Exception:
@@ -1548,7 +1548,7 @@ def auto_learn(user_input: str, ai_response: str) -> str:
         if match:
             new_name = match.group(1).strip().rstrip("吧啊呀嘛")
             if new_name and len(new_name) <= 20:
-                config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
+                config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'state_data', 'persona.json')
                 try:
                     persona = {}
                     if os.path.exists(config_path):
@@ -1569,7 +1569,7 @@ def auto_learn(user_input: str, ai_response: str) -> str:
     for pattern in select_patterns:
         match = re.search(pattern, user_input.strip())
         if match:
-            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'state_data', 'persona.json')
             if os.path.exists(config_path):
                 try:
                     persona = json.load(open(config_path, 'r', encoding='utf-8'))

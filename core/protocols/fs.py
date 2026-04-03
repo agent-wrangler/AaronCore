@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-EXPORT_STATE_PATH = WORKSPACE_ROOT / 'memory_db' / 'file_export_state.json'
+EXPORT_STATE_PATH = WORKSPACE_ROOT / 'state_data' / 'file_export_state.json'
 DANGEROUS_SUFFIXES = {'.exe', '.bat', '.cmd', '.ps1', '.lnk'}
 INVALID_CHARS = r'[\\/:*?"<>|]'
 PROTOCOL_REQUIRED_FIELDS = {

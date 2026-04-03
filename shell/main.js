@@ -15,7 +15,7 @@ let win;
 const WINDOW_CONTROLS_MODE = 'custom-html';
 function isNovaCoreRoot(candidate) {
   if (!candidate) return false;
-  const required = ['agent_final.py', 'core', 'routes', 'static', 'shell', 'brain', 'memory_db'];
+  const required = ['agent_final.py', 'core', 'routes', 'static', 'shell', 'brain', 'state_data'];
   try {
     return required.every((name) => fs.existsSync(path.join(candidate, name)));
   } catch (_err) {

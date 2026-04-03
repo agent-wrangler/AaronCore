@@ -1,11 +1,12 @@
-# Memory - L3 记忆系统 + L7-L8 自动学习
+"""Top-level memory domain facade and legacy-compatible helpers."""
+
 import os
 import json
-from pathlib import Path
 from datetime import datetime
+from storage.paths import PRIMARY_STATE_DIR
 
 # 路径
-memory_dir = Path(__file__).parent.parent / "memory_db"
+memory_dir = PRIMARY_STATE_DIR
 knowledge_file = memory_dir / "knowledge.json"
 persona_file = memory_dir / "persona.json"
 long_term_file = memory_dir / "long_term.json"

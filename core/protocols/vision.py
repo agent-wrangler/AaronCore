@@ -118,7 +118,7 @@ def _should_proactive_talk(description: str) -> str:
         return ""
 
     # 加载人格
-    persona_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "memory_db", "persona.json")
+    persona_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "state_data", "persona.json")
     persona_snippet = ""
     try:
         if os.path.exists(persona_path):

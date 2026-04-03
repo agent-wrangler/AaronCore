@@ -10,7 +10,7 @@ import requests
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE_DIR = ROOT / "memory_db"
+STATE_DIR = ROOT / "state_data"
 REPORTS_FILE = STATE_DIR / "self_repair_reports.json"
 FEEDBACK_RULES_FILE = STATE_DIR / "feedback_rules.json"
 MAX_REPORTS = 80

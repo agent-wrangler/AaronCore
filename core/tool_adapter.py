@@ -899,7 +899,7 @@ def build_tools_list_cod() -> list[dict]:
     return tools
 
 
-def execute_tool_call(name: str, arguments: dict, context: dict = None) -> dict:
+def _execute_tool_call_legacy(name: str, arguments: dict, context: dict = None) -> dict:
     """\u6267\u884c tool_call\uff0c\u6620\u5c04\u5230 core/executor.py:execute() \u6216\u8bb0\u5fc6\u5de5\u5177"""
     # ask_user: 暂停执行，等用户选择
     if name == "ask_user":
@@ -917,15 +917,54 @@ def execute_tool_call(name: str, arguments: dict, context: dict = None) -> dict:
     ctx = _apply_protocol_context(name, ctx, user_input, arguments)
     _debug_write("tool_call_execute", {"name": name, "user_input": user_input[:100], "extra_args": {k: v for k, v in arguments.items() if k != "user_input"}})
     result = _execute(skill_route, user_input, ctx)
+    if isinstance(result, dict):
+        result_success = result.get("success")
+        result_response = result.get("response")
+    else:
+        result_success = None
+        result_response = result
     _remember_protocol_target(name, ctx, result)
     _debug_write("tool_call_result", {
-        "name": name, "success": result.get("success"),
-        "response_len": len(result.get("response", "")),
+        "name": name, "success": result_success,
+        "response_len": len(str(result_response or "")),
     })
     return result
 
 
 # ── 记忆工具执行 ──
+
+def _normalize_tool_adapter_result(result: object, *, name: str) -> dict:
+    normalized = result.copy() if isinstance(result, dict) else {
+        "success": False,
+        "error": "\u6267\u884c\u7ed3\u679c\u683c\u5f0f\u5f02\u5e38\uff1a\u9884\u671f\u4e3a dict",
+        "response": str(result),
+    }
+    if not isinstance(normalized.get("success"), bool):
+        normalized["success"] = bool(normalized.get("success"))
+    normalized.setdefault("skill", name)
+    if normalized.get("success") is False and "error" not in normalized:
+        normalized["error"] = normalized.get("response", "\u6267\u884c\u5931\u8d25")
+    if normalized.get("success") is True and "error" in normalized and not normalized.get("response"):
+        normalized["response"] = str(normalized.get("error"))
+        normalized.pop("error", None)
+    if normalized.get("success") is True and "response" not in normalized:
+        normalized["response"] = ""
+    return normalized
+
+
+def execute_tool_call(name: str, arguments: dict, context: dict = None) -> dict:
+    try:
+        return _normalize_tool_adapter_result(_execute_tool_call_legacy(name, arguments, context), name=name)
+    except Exception as e:
+        error_message = f"\u6267\u884c\u5f02\u5e38: {type(e).__name__}: {e}"
+        _debug_write("tool_call_execute_error", {"name": name, "error": error_message})
+        return {
+            "success": False,
+            "error": error_message,
+            "response": error_message,
+            "skill": name,
+        }
+
 
 def _format_recall(l2_results, l3_events):
     lines = []
@@ -1006,7 +1045,7 @@ def _normalize_time_sensitive_search_query(query: str) -> str:
 # ── self_fix：对话中即时自我修复 ──
 
 # 安全白名单：允许读写的目录
-_SELF_FIX_ALLOWED = ["static/", "configs/", "tools/agent/", "skills/builtin/", "skill_runtime/", "workers/", "memory_db/"]
+_SELF_FIX_ALLOWED = ["static/", "configs/", "tools/agent/", "skills/builtin/", "app_data/", "workers/", "state_data/"]
 
 def _execute_self_fix(arguments: dict) -> dict:
     """读文件 → LLM 生成最小修复 → 写回"""

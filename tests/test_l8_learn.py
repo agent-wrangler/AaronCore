@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from core.runtime_memory import l2_memory
+from memory import l2_memory
 from core import l8_learn
 
 

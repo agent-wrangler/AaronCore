@@ -33,7 +33,7 @@ NEWSAPI_BASE = "https://newsapi.org/v2/top-headlines"
 NEWSAPI_TOPICS = {"科技": "technology", "商业": "business", "世界": "general"}
 
 _LLM_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "brain", "llm_config.json")
-_NEWS_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "skill_runtime" / "config" / "news_config.json")
+_NEWS_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "app_data" / "config" / "news_config.json")
 
 
 def _load_llm_config():

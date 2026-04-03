@@ -3,12 +3,10 @@
 
 import json
 from datetime import datetime
-from pathlib import Path
+from storage.paths import PRIMARY_STATE_DIR
 
-ROOT = Path(__file__).resolve().parents[2]
-MEMORY_DB = ROOT / "memory_db"
-L3_FILE = MEMORY_DB / "long_term.json"
-L4_FILE = MEMORY_DB / "topic_summary.json"
+L3_FILE = PRIMARY_STATE_DIR / "long_term.json"
+L4_FILE = PRIMARY_STATE_DIR / "topic_summary.json"
 
 
 def load_l3():

@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-RULES_FILE = ROOT / "memory_db" / "feedback_rules.json"
+RULES_FILE = ROOT / "state_data" / "feedback_rules.json"
 
 # ── 依赖注入 ──────────────────────────────────────────────
 _llm_call = None

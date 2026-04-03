@@ -1,0 +1,480 @@
+import json
+import threading
+import time
+import unittest
+from unittest.mock import patch
+
+import core.reply_formatter as reply_formatter_module
+
+
+class ToolCallTurnBatchTests(unittest.TestCase):
+    def test_unified_reply_with_tools_runs_safe_batch_calls_in_parallel(self):
+        active = {"count": 0}
+        overlap_seen = threading.Event()
+        lock = threading.Lock()
+
+        def fake_llm_call(_cfg, _messages, **_kwargs):
+            return {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_parallel_1",
+                        "type": "function",
+                        "function": {
+                            "name": "folder_explore",
+                            "arguments": json.dumps({"query": "src"}, ensure_ascii=False),
+                        },
+                    },
+                    {
+                        "id": "call_parallel_2",
+                        "type": "function",
+                        "function": {
+                            "name": "weather",
+                            "arguments": json.dumps({"city": "Shanghai"}, ensure_ascii=False),
+                        },
+                    },
+                ],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            with lock:
+                active["count"] += 1
+                if active["count"] >= 2:
+                    overlap_seen.set()
+            time.sleep(0.05)
+            with lock:
+                active["count"] -= 1
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "mixed"}},
+            }
+
+        bundle = {
+            "user_input": "先看目录再查天气",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=[fake_llm_call(None, None), {"content": "Done.", "usage": {}}]), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertTrue(overlap_seen.is_set())
+        self.assertEqual(result.get("tools_used"), ["folder_explore", "weather"])
+        self.assertEqual(result.get("reply"), "Done.")
+
+    def test_unified_reply_with_tools_keeps_write_batches_serial(self):
+        active = {"count": 0}
+        overlap_seen = threading.Event()
+        lock = threading.Lock()
+
+        def fake_llm_call(_cfg, _messages, **_kwargs):
+            return {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_serial_1",
+                        "type": "function",
+                        "function": {
+                            "name": "write_file",
+                            "arguments": json.dumps({"file_path": "a.txt", "content": "a"}, ensure_ascii=False),
+                        },
+                    },
+                    {
+                        "id": "call_serial_2",
+                        "type": "function",
+                        "function": {
+                            "name": "folder_explore",
+                            "arguments": json.dumps({"query": "src"}, ensure_ascii=False),
+                        },
+                    },
+                ],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            with lock:
+                active["count"] += 1
+                if active["count"] >= 2:
+                    overlap_seen.set()
+            time.sleep(0.05)
+            with lock:
+                active["count"] -= 1
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "mixed"}},
+            }
+
+        bundle = {
+            "user_input": "先写文件再看目录",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=[fake_llm_call(None, None), {"content": "Done.", "usage": {}}]), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertFalse(overlap_seen.is_set())
+        self.assertEqual(result.get("tools_used"), ["write_file", "folder_explore"])
+        self.assertEqual(result.get("reply"), "Done.")
+
+    def test_unified_reply_with_tools_executes_multiple_tool_calls_in_same_non_stream_turn(self):
+        seen_messages = []
+        call_count = {"value": 0}
+        executed = []
+
+        def fake_llm_call(_cfg, messages, **_kwargs):
+            seen_messages.append(messages)
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_batch_1",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "a.py"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_batch_2",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "TODO"}, ensure_ascii=False),
+                            },
+                        },
+                    ],
+                    "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+                    "reasoning_details": [{"text": "Inspect both sources first."}],
+                }
+            return {
+                "content": "Done.",
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "看看 a.py 的结构并搜一个 TODO",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertEqual(call_count["value"], 2)
+        self.assertEqual([name for name, _args in executed], ["folder_explore", "search_text"])
+        assistant_messages = [
+            message
+            for message in seen_messages[1]
+            if isinstance(message, dict) and message.get("role") == "assistant" and message.get("tool_calls")
+        ]
+        self.assertEqual(len(assistant_messages[0]["tool_calls"]), 2)
+        tool_messages = [
+            message
+            for message in seen_messages[1]
+            if isinstance(message, dict) and message.get("role") == "tool"
+        ]
+        self.assertEqual(len(tool_messages), 2)
+        self.assertEqual(result.get("tools_used"), ["folder_explore", "search_text"])
+        self.assertEqual(result.get("action_count"), 2)
+        self.assertTrue(result.get("batch_mode"))
+        self.assertEqual(result.get("reply"), "Done.")
+
+    def test_unified_reply_with_tools_stream_executes_multiple_tool_calls_in_same_turn(self):
+        seen_messages = []
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            seen_messages.append(messages)
+            has_tool_result = any(isinstance(message, dict) and message.get("role") == "tool" for message in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_stream_batch_1",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "a.py"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_stream_batch_2",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "TODO"}, ensure_ascii=False),
+                            },
+                        },
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 2}}
+                return
+
+            yield "Done."
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "先看 a.py 再搜 TODO",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": "", "usage": {}}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual([name for name, _args in executed], ["folder_explore", "search_text"])
+        executing_events = [
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing")
+        ]
+        self.assertEqual(len(executing_events), 2)
+        self.assertEqual(executing_events[0].get("_tool_call", {}).get("process_meta", {}).get("parallel_size"), 2)
+        assistant_messages = [
+            message
+            for message in seen_messages[1]
+            if isinstance(message, dict) and message.get("role") == "assistant" and message.get("tool_calls")
+        ]
+        self.assertEqual(len(assistant_messages[0]["tool_calls"]), 2)
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tools_used"), ["folder_explore", "search_text"])
+        self.assertEqual(done.get("action_count"), 2)
+        self.assertTrue(done.get("batch_mode"))
+        self.assertEqual(done.get("tool_used"), "search_text")
+
+    def test_unified_reply_with_tools_stream_marks_failed_tool_switch_as_fallback(self):
+        executed = []
+        stream_call_index = {"value": 0}
+
+        def fake_stream(_cfg, _messages, **_kwargs):
+            current = stream_call_index["value"]
+            stream_call_index["value"] += 1
+            if current == 0:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_run_command_1",
+                            "type": "function",
+                            "function": {
+                                "name": "run_command",
+                                "arguments": json.dumps({"command": "grep foo | head -20"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 3, "completion_tokens": 1}}
+                return
+            if current == 1:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_search_text_1",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "foo"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 3, "completion_tokens": 1}}
+                return
+            yield "Done."
+            yield {"_usage": {"prompt_tokens": 2, "completion_tokens": 1}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            if name == "run_command":
+                return {
+                    "success": False,
+                    "error": "命令被拦截：不允许命令链或重定向",
+                    "meta": {"action": {"action_kind": name, "target_kind": "command"}},
+                }
+            return {
+                "success": True,
+                "response": "search_text ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "继续查代码",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+            "max_turns": 4,
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual([name for name, _args in executed], ["run_command", "search_text"])
+        search_exec = next(
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict)
+            and chunk.get("_tool_call", {}).get("executing")
+            and chunk.get("_tool_call", {}).get("name") == "search_text"
+        )
+        self.assertEqual(search_exec.get("_tool_call", {}).get("process_meta", {}).get("attempt_kind"), "fallback")
+        self.assertEqual(search_exec.get("_tool_call", {}).get("process_meta", {}).get("previous_tool"), "run_command")
+
+    def test_unified_reply_with_tools_stream_honors_explicit_max_turns(self):
+        executed = []
+        stream_call_index = {"value": 0}
+
+        def fake_stream(_cfg, _messages, **_kwargs):
+            current = stream_call_index["value"]
+            stream_call_index["value"] += 1
+            yield {
+                "_tool_calls": [
+                    {
+                        "id": f"call_stream_limit_{current}",
+                        "type": "function",
+                        "function": {
+                            "name": "search_text",
+                            "arguments": json.dumps({"query": f"round-{current}"}, ensure_ascii=False),
+                        },
+                    }
+                ]
+            }
+            yield {"_usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": f"{name} ok {args.get('query')}",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "一直查代码直到我叫停",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+            "max_turns": 3,
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(len(executed), 3)
+        self.assertTrue(
+            any(
+                isinstance(chunk, str) and "已达到当前工具往返轮次上限（3 轮）" in chunk
+                for chunk in chunks
+            )
+        )
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("turns_used"), 3)
+        self.assertEqual(done.get("max_turns"), 3)
+        self.assertTrue(done.get("turn_limit_reached"))
+        self.assertEqual(done.get("turn_reason"), "max_turns_reached")
+
+    def test_unified_reply_with_tools_stream_is_not_capped_at_forty_followup_rounds(self):
+        executed = []
+        stream_call_index = {"value": 0}
+
+        def fake_stream(_cfg, _messages, **_kwargs):
+            current = stream_call_index["value"]
+            stream_call_index["value"] += 1
+            if current <= 40:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": f"call_stream_round_{current}",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": f"round-{current}"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+                return
+
+            yield "Done after many rounds."
+            yield {"_usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": f"{name} ok {args.get('query')}",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "连续查很多轮代码",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+            "max_turns": 50,
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(len(executed), 41)
+        self.assertTrue(any(isinstance(chunk, str) and chunk == "Done after many rounds." for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("action_count"), 41)
+        self.assertEqual(done.get("tool_used"), "search_text")
+        self.assertEqual(done.get("max_turns"), 50)
+        self.assertFalse(done.get("turn_limit_reached"))
+
+
+if __name__ == "__main__":
+    unittest.main()

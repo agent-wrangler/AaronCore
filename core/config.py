@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # ==================== 路径配置 ====================
 PATH = {
     "root": str(ROOT),
-    "memory_db": str(ROOT / "memory_db"),
+    "state_data": str(ROOT / "state_data"),
     "logs": str(ROOT / "logs"),
     "skills": str(ROOT / "core" / "skills"),
 }

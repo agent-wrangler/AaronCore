@@ -82,11 +82,11 @@ from core.self_repair import (
 )
 from memory import add_to_history, evolve, get_history as get_text_history
 from core.session_context import extract_session_context
-from core.runtime_memory.l2_memory import (
+from memory.l2_memory import (
     add_memory as l2_add_memory, search_relevant as l2_search_relevant,
 )
-from core.runtime_memory.l2_memory import init as _l2_memory_init
-from core.runtime_memory.history_recall import (
+from memory.l2_memory import init as _l2_memory_init
+from memory.history_recall import (
     detect_recall_intent, recall_by_time,
     init as _history_recall_init,
 )
@@ -282,14 +282,14 @@ from core.mcp_client import init as _mcp_client_init
 _mcp_client_init(
     debug_write=debug_write,
     llm_call=_raw_llm_call,
-    servers_path=ENGINE_DIR / "memory_db" / "mcp_servers.json",
+    servers_path=PRIMARY_STATE_DIR / "mcp_servers.json",
 )
 
 # ── MCP Registry 初始化 ──
 from core.mcp_registry import init as _mcp_registry_init
 _mcp_registry_init(
     debug_write=debug_write,
-    cache_path=ENGINE_DIR / "memory_db" / "mcp_registry_cache.json",
+    cache_path=PRIMARY_STATE_DIR / "mcp_registry_cache.json",
 )
 
 # ── 填充 shared 状态供路由模块使用 ──
@@ -479,7 +479,7 @@ async def _startup_mcp():
 # 启动时清理残留的监听状态（重启后旧的监听进程已死）
 try:
     import json as _json
-    _monitor_state = ENGINE_DIR / "memory_db" / "qq_monitor_state.json"
+    _monitor_state = PRIMARY_STATE_DIR / "qq_monitor_state.json"
     if _monitor_state.exists():
         _json.dump({"active": False, "groups": [], "group": None},
                    open(_monitor_state, "w", encoding="utf-8"), ensure_ascii=False)

@@ -9,8 +9,8 @@ from pathlib import Path
 from core.skills.save_export import execute as save_export_execute
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-HISTORY_PATH = ROOT_DIR / "memory_db" / "msg_history.json"
-STORY_STATE_PATH = ROOT_DIR / "memory_db" / "story_state.json"
+HISTORY_PATH = ROOT_DIR / "state_data" / "msg_history.json"
+STORY_STATE_PATH = ROOT_DIR / "state_data" / "story_state.json"
 STORY_DIR = Path.home() / "Desktop" / "Nova故事"
 
 FOLLOW_UP_HINTS = ("继续讲", "然后呢", "后来呢", "接着讲", "讲长一点", "有点短", "太短")

@@ -38,7 +38,7 @@ _reply_timestamps = []
 # ── 日志 ──
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_LOG_FILE = str(_REPO_ROOT / 'memory_db' / 'qq_monitor_debug.log')
+_LOG_FILE = str(_REPO_ROOT / 'state_data' / 'qq_monitor_debug.log')
 
 def _log(msg):
     line = json.dumps({"log": msg, "t": time.strftime("%H:%M:%S")}, ensure_ascii=False)
@@ -108,7 +108,7 @@ def _load_llm_config():
 def _load_persona():
     """读 persona.json 提取人格信息"""
     try:
-        p = str(_REPO_ROOT / 'memory_db' / 'persona.json')
+        p = str(_REPO_ROOT / 'state_data' / 'persona.json')
         with open(p, 'r', encoding='utf-8') as f:
             data = json.load(f)
         mode = data.get('active_mode', 'sweet')
