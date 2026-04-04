@@ -1,0 +1,409 @@
+"""Meta inference helpers for L2 memory storage."""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Callable
+
+
+MEMORY_TYPES = {
+    "general",
+    "correction",
+    "knowledge",
+    "preference",
+    "goal",
+    "project",
+    "decision",
+    "fact",
+    "rule",
+}
+
+DAILY_TAG = "\u65e5\u5e38"
+TECH_TAG = "\u6280\u672f"
+STRUCTURED_TAG = "\u7ed3\u6784\u5316"
+QA_TAG = "\u95ee\u7b54"
+RECORD_TAG = "\u8bb0\u5f55"
+
+INTERACTION_PREFIXES = (
+    "\u4e0d\u8981",
+    "\u522b",
+    "\u8bb0\u4f4f",
+    "\u4ee5\u540e",
+    "\u4e0b\u6b21",
+    "\u8bf7",
+    "\u5148",
+    "\u5f53\u7528\u6237",
+    "\u5982\u679c\u6211",
+    "\u5982\u679c\u7528\u6237",
+    "\u56de\u7b54\u65f6",
+    "\u56de\u590d\u65f6",
+    "\u79f0\u547c\u6211",
+    "\u53eb\u6211",
+)
+
+INTERACTION_ANCHORS = (
+    "\u56de\u7b54",
+    "\u56de\u590d",
+    "\u79f0\u547c",
+    "\u53eb\u6211",
+    "\u95ee\u6211",
+    "\u5148\u95ee",
+    "\u8c03\u7528\u5de5\u5177",
+    "\u522b\u518d",
+    "\u4e0d\u8981\u5047\u88c5",
+    "\u5fc5\u987b",
+    "\u4f18\u5148",
+    "\u76f4\u63a5\u6267\u884c",
+    "\u4e0d\u8981\u5728\u6587\u672c\u91cc\u6a21\u62df",
+)
+
+PREFERENCE_PREFIXES = (
+    "\u6211\u559c\u6b22",
+    "\u6211\u4e0d\u559c\u6b22",
+    "\u6211\u8ba8\u538c",
+    "\u6211\u504f\u597d",
+    "\u6211\u66f4\u559c\u6b22",
+    "\u5e0c\u671b\u4f60",
+    "\u522b\u592a",
+    "\u4e0d\u8981\u592a",
+    "\u53eb\u6211",
+)
+
+PREFERENCE_ANCHORS = (
+    "\u559c\u6b22",
+    "\u4e0d\u559c\u6b22",
+    "\u8ba8\u538c",
+    "\u504f\u597d",
+    "\u79f0\u547c",
+    "\u53eb\u6211",
+    "\u98ce\u683c",
+    "\u81ea\u7136\u4e00\u70b9",
+    "\u522b\u592a\u6a21\u677f\u5316",
+)
+
+
+def clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, float(value)))
+
+
+def normalize_context_tag(tag: str) -> str:
+    raw = re.sub(r"\s+", "", str(tag or "").strip())
+    raw = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9_-]", "", raw)
+    return raw[:12] or DAILY_TAG
+
+
+def extract_json_object(raw: str) -> dict | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        payload = json.loads(text[start : end + 1])
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def call_memory_meta_llm(prompt: str, *, llm_call, think, debug_write: Callable[[str, dict], None]) -> dict | None:
+    raw = ""
+    try:
+        if llm_call:
+            raw = str(llm_call(prompt) or "")
+        elif think:
+            result = think(prompt, "")
+            raw = str(result.get("reply", "") if isinstance(result, dict) else result or "")
+    except Exception as exc:
+        debug_write("l2_meta_llm_err", {"err": str(exc)})
+        return None
+    payload = extract_json_object(raw)
+    if payload is None and raw.strip():
+        debug_write("l2_meta_llm_invalid", {"raw": raw[:160]})
+    return payload
+
+
+def call_yes_no_llm(prompt: str, *, llm_call, think, debug_write: Callable[[str, dict], None]) -> bool | None:
+    raw = ""
+    try:
+        if llm_call:
+            raw = str(llm_call(prompt) or "")
+        elif think:
+            result = think(prompt, "")
+            raw = str(result.get("reply", "") if isinstance(result, dict) else result or "")
+    except Exception as exc:
+        debug_write("l2_yesno_llm_err", {"err": str(exc)})
+        return None
+    verdict = raw.strip().upper()
+    if verdict.startswith("YES"):
+        return True
+    if verdict.startswith("NO"):
+        return False
+    if verdict:
+        debug_write("l2_yesno_llm_invalid", {"raw": raw[:80]})
+    return None
+
+
+def normalize_interaction_rule_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").strip())[:160]
+
+
+def is_explicit_interaction_rule(
+    text: str,
+    *,
+    llm_call,
+    think,
+    debug_write: Callable[[str, dict], None],
+    normalize_signal_text: Callable[[str], str],
+) -> bool:
+    raw = str(text or "").strip()
+    normalized = normalize_signal_text(raw)
+    if not normalized or len(normalized) < 4:
+        return False
+
+    compact = normalize_interaction_rule_text(raw)
+    if not compact or "\n" in raw or len(compact) > 80:
+        return False
+    if compact.startswith(INTERACTION_PREFIXES):
+        return True
+    if any(anchor in compact for anchor in INTERACTION_ANCHORS):
+        return True
+
+    if llm_call or think:
+        verdict = call_yes_no_llm(
+            "Decide whether the following user message should be stored into "
+            "L4 interaction_rules. Answer YES only when it clearly constrains "
+            "how the assistant should interact or execute in future turns. "
+            "Answer NO for architecture discussion, design analysis, one-off "
+            "explanations, reasoning notes, or general opinions. Reply with "
+            "YES or NO only.\n"
+            f"User message: {raw[:280]}",
+            llm_call=llm_call,
+            think=think,
+            debug_write=debug_write,
+        )
+        if verdict is not None:
+            return verdict
+    return False
+
+
+def normalize_preference_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").strip())[:160]
+
+
+def is_explicit_preference_statement(
+    text: str,
+    *,
+    llm_call,
+    think,
+    debug_write: Callable[[str, dict], None],
+    normalize_signal_text: Callable[[str], str],
+) -> bool:
+    raw = str(text or "").strip()
+    normalized = normalize_preference_text(raw)
+    if not normalized or len(normalize_signal_text(normalized)) < 4:
+        return False
+
+    if "\n" in raw or len(normalized) > 100:
+        return False
+    if normalized.startswith(PREFERENCE_PREFIXES):
+        return True
+    if any(anchor in normalized for anchor in PREFERENCE_ANCHORS) and len(normalized) <= 80:
+        return True
+
+    if llm_call or think:
+        verdict = call_yes_no_llm(
+            "Decide whether the following user message should be stored into "
+            "L4 user_profile.preference. Answer YES only when it clearly "
+            "expresses a stable user preference, aversion, naming preference, "
+            "or interaction-style preference. Answer NO for architecture "
+            "discussion, technical analysis, one-off task instructions, or "
+            "general observations. Reply with YES or NO only.\n"
+            f"User message: {raw[:280]}",
+            llm_call=llm_call,
+            think=think,
+            debug_write=debug_write,
+        )
+        if verdict is not None:
+            return verdict
+    return False
+
+
+def default_memory_type(
+    text: str,
+    ai_text: str = "",
+    *,
+    build_signal_profile: Callable[[str], set[str]],
+    normalize_signal_text: Callable[[str], str],
+) -> str:
+    profile = build_signal_profile(text)
+    normalized = normalize_signal_text(text)
+    if not normalized:
+        return "general"
+    if "meta:question" in profile and len(normalized) >= 6 and len(normalize_signal_text(ai_text)) >= 20:
+        return "knowledge"
+    if "meta:structured" in profile and len(normalized) >= 12:
+        return "project"
+    return "general"
+
+
+def default_knowledge_query(
+    text: str,
+    ai_text: str = "",
+    *,
+    build_signal_profile: Callable[[str], set[str]],
+    normalize_signal_text: Callable[[str], str],
+) -> bool:
+    profile = build_signal_profile(text)
+    normalized = normalize_signal_text(text)
+    return bool(normalized and len(normalized) >= 6 and "meta:question" in profile and len(normalize_signal_text(ai_text)) >= 20)
+
+
+def default_context_tag(
+    text: str,
+    ai_text: str = "",
+    *,
+    build_signal_profile: Callable[[str], set[str]],
+    normalize_signal_text: Callable[[str], str],
+) -> str:
+    merged = "\n".join(part for part in (str(text or "").strip(), str(ai_text or "").strip()) if part).strip()
+    normalized = normalize_signal_text(merged)
+    if not normalized:
+        return DAILY_TAG
+    profile = build_signal_profile(merged)
+    if re.search(r"[A-Za-z0-9]{2,}", merged):
+        return TECH_TAG
+    if "meta:structured" in profile and len(normalized) >= 12:
+        return STRUCTURED_TAG
+    if "meta:question" in profile:
+        return QA_TAG
+    if len(normalized) >= 16:
+        return RECORD_TAG
+    return DAILY_TAG
+
+
+def score_importance_structural(
+    text: str,
+    ai_text: str = "",
+    *,
+    build_signal_profile: Callable[[str], set[str]],
+    normalize_signal_text: Callable[[str], str],
+) -> float:
+    normalized = normalize_signal_text(text)
+    if not normalized:
+        return 0.0
+    profile = build_signal_profile(text)
+    length = len(normalized)
+    if length <= 2:
+        return 0.18
+    if length <= 4 and "meta:question" not in profile and "meta:structured" not in profile:
+        return 0.28
+
+    score = 0.42
+    if length >= 6:
+        score += 0.06
+    if length >= 12:
+        score += 0.10
+    if length >= 24:
+        score += 0.08
+    if "meta:question" in profile:
+        score += 0.08
+    if "meta:structured" in profile:
+        score += 0.10
+    if "meta:longform" in profile:
+        score += 0.05
+    if "meta:mixed_script" in profile or re.search(r"[A-Za-z0-9]{2,}", str(text or "")):
+        score += 0.05
+    if len(normalize_signal_text(ai_text)) >= 20:
+        score += 0.04
+    return clamp(score, 0.18, 0.88)
+
+
+def infer_memory_meta(
+    text: str,
+    ai_text: str = "",
+    *,
+    llm_call,
+    think,
+    debug_write: Callable[[str, dict], None],
+    build_signal_profile: Callable[[str], set[str]],
+    normalize_signal_text: Callable[[str], str],
+) -> dict:
+    default = {
+        "importance": score_importance_structural(
+            text,
+            ai_text,
+            build_signal_profile=build_signal_profile,
+            normalize_signal_text=normalize_signal_text,
+        ),
+        "memory_type": default_memory_type(
+            text,
+            ai_text,
+            build_signal_profile=build_signal_profile,
+            normalize_signal_text=normalize_signal_text,
+        ),
+        "knowledge_query": default_knowledge_query(
+            text,
+            ai_text,
+            build_signal_profile=build_signal_profile,
+            normalize_signal_text=normalize_signal_text,
+        ),
+        "context_tag": default_context_tag(
+            text,
+            ai_text,
+            build_signal_profile=build_signal_profile,
+            normalize_signal_text=normalize_signal_text,
+        ),
+    }
+    if not (llm_call or think):
+        return default
+
+    prompt = (
+        "You are NovaCore's memory metadata classifier. Infer fields from "
+        "semantics and structure, not from keyword tables.\n"
+        f"User message: {str(text or '')[:280]}\n"
+        f"Assistant reply: {str(ai_text or '')[:320]}\n\n"
+        "Return exactly one JSON object with the following fields:\n"
+        f'{{"importance": 0.0, "memory_type": "general", "knowledge_query": false, "context_tag": "{DAILY_TAG}"}}\n'
+        "Requirements:\n"
+        "- importance must be between 0 and 1.\n"
+        "- memory_type must be one of "
+        "general/correction/knowledge/preference/goal/project/decision/fact/rule.\n"
+        "- Only label as rule when the user clearly states a stable future "
+        "interaction or execution constraint.\n"
+        "- Only label as preference when the user clearly states a stable user "
+        "preference, aversion, style preference, or naming preference.\n"
+        "- Only label as fact when it is a stable user fact.\n"
+        "- knowledge_query means this turn is a genuine knowledge Q&A worth "
+        "condensing into L8, not small talk or meta-chat.\n"
+        f"- context_tag should be a short 2-6 character topic tag; use {DAILY_TAG} when unsure.\n"
+        "- Return JSON only."
+    )
+    payload = call_memory_meta_llm(prompt, llm_call=llm_call, think=think, debug_write=debug_write)
+    if not payload:
+        return default
+
+    memory_type = str(payload.get("memory_type") or default["memory_type"]).strip()
+    if memory_type not in MEMORY_TYPES:
+        memory_type = default["memory_type"]
+    context_tag = normalize_context_tag(str(payload.get("context_tag") or default["context_tag"]))
+
+    try:
+        importance = clamp(float(payload.get("importance", default["importance"])), 0.0, 1.0)
+    except Exception:
+        importance = float(default["importance"])
+
+    knowledge_query = payload.get("knowledge_query", default["knowledge_query"])
+    if isinstance(knowledge_query, str):
+        knowledge_query = knowledge_query.strip().lower() in {"1", "true", "yes"}
+    else:
+        knowledge_query = bool(knowledge_query)
+
+    return {
+        "importance": importance,
+        "memory_type": memory_type,
+        "knowledge_query": knowledge_query,
+        "context_tag": context_tag,
+    }

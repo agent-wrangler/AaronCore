@@ -6,16 +6,17 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from storage.paths import EVOLUTION_FILE, FEEDBACK_RULES_FILE, LAB_DIR as RUNTIME_LAB_DIR, RUNTIME_STORE_DIR, SELF_REPAIR_REPORTS_FILE
+
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE_DIR = ROOT / "state_data"
-LAB_DIR = STATE_DIR / "lab"
+STATE_DIR = RUNTIME_STORE_DIR
+LAB_DIR = RUNTIME_LAB_DIR
 LAB_DIR.mkdir(parents=True, exist_ok=True)
 
 FORGE_QUEUE_FILE = LAB_DIR / "forge_queue.json"
-EVOLUTION_FILE = STATE_DIR / "evolution.json"
-REPORTS_FILE = STATE_DIR / "self_repair_reports.json"
-RULES_FILE = STATE_DIR / "feedback_rules.json"
+REPORTS_FILE = SELF_REPAIR_REPORTS_FILE
+RULES_FILE = FEEDBACK_RULES_FILE
 
 MAX_QUEUE_ITEMS = 60
 

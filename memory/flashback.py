@@ -7,85 +7,8 @@ import re
 
 from storage.paths import PRIMARY_STATE_DIR
 
-# ── 触发词：用户话里有这些才启动闪回搜索 ──
-
-# 情绪波动
-_EMOTION = [
-    "烦", "累", "难", "焦", "压力", "崩溃", "无语", "头疼",
-    "开心", "高兴", "终于", "成功", "搞定", "爽",
-]
-# 回忆线索
-_RECALL = ["想起", "记得", "那天", "之前", "上次", "以前", "当初"]
-# 重复感（暗示模式）
-_PATTERN = ["又", "还是", "总是", "每次", "一直", "老是", "依然"]
-# 决策/坚持
-_RESOLVE = ["坚持", "放弃", "犹豫", "纠结", "选择", "决定"]
-# 状态追问 / 任务连续性
-_STATUS = [
-    "修好了", "好了吗", "好了没", "还没", "没成功", "失败", "报错",
-    "卡住", "设置问题", "哪里的问题", "现在呢", "刚才", "继续", "还是没",
-]
-
-_ALL_CUES = _EMOTION + _RECALL + _PATTERN + _RESOLVE + _STATUS
-_STOP_WORDS = set(_ALL_CUES) | {
-    "什么", "怎么", "可以", "不是", "就是", "这个", "那个", "因为", "所以", "但是",
-    "现在", "刚才", "然后", "已经", "还是", "真的", "一下", "这里", "那里",
-}
 _LOW_SIGNAL_TEXTS = {"好", "嗯", "行", "可以", "好的", "哈哈", "收到", "知道了"}
 L2_FILE = PRIMARY_STATE_DIR / "l2_short_term.json"
-_STRONG_FLASHBACK_TAGS = {"repair", "failure", "success", "rejection", "story", "fatigue", "stress", "memory"}
-_BACKSTOP_SEARCH_TAGS = {"repair", "failure", "success"}
-
-
-def _has_cue(text: str) -> bool:
-    """检查用户输入里有没有情绪/回忆/任务连续性触发词。"""
-    text = str(text or "").strip()
-    if not text:
-        return False
-    if any(cue in text for cue in _ALL_CUES):
-        return True
-    if len(text) <= 16 and text.endswith(("?", "？")):
-        return any(sig in text for sig in ("好", "成功", "问题", "行", "对", "完", "继续"))
-    return False
-
-
-def _extract_keywords(text: str) -> list[str]:
-    """从文本提取中文关键词，优先保留更像主题/状态短语的片段。"""
-    text = str(text or "").strip()
-    words = re.findall(r"[\u4e00-\u9fff]{2,6}", text)
-    seen = set()
-    keywords = []
-
-    for word in words:
-        word = word.strip()
-        parts = [word]
-        if len(word) > 2:
-            for size in range(2, min(4, len(word)) + 1):
-                for idx in range(0, len(word) - size + 1):
-                    parts.append(word[idx:idx + size])
-
-        for part in parts:
-            part = part.strip()
-            if not part or part in _STOP_WORDS or part in seen:
-                continue
-            seen.add(part)
-            keywords.append(part)
-
-    if not keywords:
-        compact = "".join(re.findall(r"[\u4e00-\u9fff]", text))
-        if 2 <= len(compact) <= 12:
-            keywords.append(compact)
-
-    keywords.sort(key=len, reverse=True)
-    return keywords[:6]
-
-
-def _match_score(keywords: list[str], text: str) -> float:
-    """关键词命中率。"""
-    if not keywords or not text:
-        return 0.0
-    hits = sum(1 for kw in keywords if kw in text)
-    return hits / len(keywords)
 
 
 def _is_low_signal_text(text: str) -> bool:
@@ -128,7 +51,17 @@ def _search_l2_backstop(query: str, limit: int = 4) -> list:
         return []
 
 
-def _lexical_echo(user_input: str, candidate_text: str, keywords: list[str]) -> float:
+def _bigram_echo(query_norm: str, cand_norm: str) -> float:
+    if len(query_norm) < 2 or len(cand_norm) < 2:
+        return 0.0
+    grams = {query_norm[idx:idx + 2] for idx in range(len(query_norm) - 1)}
+    if not grams:
+        return 0.0
+    hits = sum(1 for gram in grams if gram in cand_norm)
+    return hits / max(len(grams), 1)
+
+
+def _lexical_echo(user_input: str, candidate_text: str) -> float:
     try:
         from .l2_memory import _normalize_signal_text, _normalize_signature_anchor
 
@@ -148,11 +81,11 @@ def _lexical_echo(user_input: str, candidate_text: str, keywords: list[str]) -> 
         return 1.0
     if len(cand_anchor) >= 3 and (cand_anchor in query_anchor or query_anchor in cand_anchor):
         return 0.82
-    if keywords:
-        hits = sum(1 for kw in keywords if kw in candidate_text)
-        if hits > 0:
-            return min(hits / max(len(keywords), 1), 0.6)
-    return 0.0
+    if query_norm in cand_norm or cand_norm in query_norm:
+        return 0.72
+    if re.fullmatch(r"[\u4e00-\u9fff]{2,6}", query_norm) and query_norm[-1] in cand_norm:
+        return 0.44
+    return min(_bigram_echo(query_norm, cand_norm) * 0.68, 0.62)
 
 
 def _resonance_score(query_profile: set[str], candidate_profile: set[str]) -> float:
@@ -169,11 +102,34 @@ def _resonance_score(query_profile: set[str], candidate_profile: set[str]) -> fl
         return min(len(shared) / max(len(query_profile), 1), 1.0)
 
 
+def _profile_content_tokens(profile: set[str]) -> set[str]:
+    return {item for item in profile if str(item).startswith("tok:")}
+
+
 def _has_strong_theme(query_profile: set[str]) -> bool:
-    return bool(query_profile & _STRONG_FLASHBACK_TAGS)
+    content = _profile_content_tokens(query_profile)
+    if not content:
+        return False
+    longest = max(len(item.split(":", 1)[1]) for item in content if ":" in item)
+    dense = sum(1 for item in content if len(item.split(":", 1)[1]) >= 3)
+    return longest >= 4 or dense >= 3
 
 
-def _score_l3_candidate(user_input: str, query_profile: set[str], keywords: list[str], mem: dict) -> float:
+def _should_use_backstop(user_input: str, query_profile: set[str], query_anchor: str) -> bool:
+    raw = str(user_input or "").strip()
+    anchor = str(query_anchor or "").strip()
+    if len(anchor) >= 6:
+        return True
+    if "meta:question" in query_profile and len(anchor) >= 3:
+        return True
+    if re.search(r"[A-Za-z0-9]{6,}", raw):
+        return True
+    if len(anchor) >= 5 and len(raw) <= 24 and _has_strong_theme(query_profile):
+        return True
+    return False
+
+
+def _score_l3_candidate(user_input: str, query_profile: set[str], mem: dict) -> float:
     event = str(mem.get("event") or mem.get("summary") or "").strip()
     if not event or _is_low_signal_text(event):
         return 0.0
@@ -187,16 +143,16 @@ def _score_l3_candidate(user_input: str, query_profile: set[str], keywords: list
         freshness = 0.5
 
     resonance = _resonance_score(query_profile, candidate_profile)
-    lexical = _lexical_echo(user_input, event, keywords)
+    lexical = _lexical_echo(user_input, event)
     if resonance <= 0 and lexical <= 0:
         return 0.0
-    if _has_strong_theme(query_profile) and resonance < 0.72 and lexical < 0.55:
+    if _has_strong_theme(query_profile) and resonance < 0.28 and lexical < 0.42:
         return 0.0
     source_bonus = 0.08 if str(mem.get("source") or "").strip() == "l2_crystallize" else 0.03
     return resonance * 0.62 + lexical * 0.18 + freshness * 0.08 + source_bonus
 
 
-def _score_l2_candidate(user_input: str, query_profile: set[str], keywords: list[str], mem: dict) -> float:
+def _score_l2_candidate(user_input: str, query_profile: set[str], mem: dict) -> float:
     user_text = str(mem.get("user_text") or "").strip()
     ai_text = str(mem.get("ai_text") or "").strip()
     text = f"{user_text} {ai_text}".strip()
@@ -218,10 +174,10 @@ def _score_l2_candidate(user_input: str, query_profile: set[str], keywords: list
         return 0.0
 
     resonance = _resonance_score(query_profile, candidate_profile)
-    lexical = _lexical_echo(user_input, text, keywords)
+    lexical = _lexical_echo(user_input, text)
     if resonance <= 0 and lexical < 0.45:
         return 0.0
-    if _has_strong_theme(query_profile) and resonance < 0.72 and lexical < 0.55:
+    if _has_strong_theme(query_profile) and resonance < 0.28 and lexical < 0.42:
         return 0.0
 
     memory_type = str(mem.get("memory_type") or "general").strip().lower() or "general"
@@ -241,18 +197,15 @@ def detect_flashback(user_input: str) -> str | None:
     user_input = str(user_input or "").strip()
     if not user_input or len(user_input) < 4:
         return None
-
-    if not _has_cue(user_input):
-        return None
-
-    keywords = _extract_keywords(user_input)
     try:
-        from .l2_memory import build_signal_profile
+        from .l2_memory import build_signal_profile, _normalize_signature_anchor
 
         query_profile = build_signal_profile(user_input)
+        query_anchor = _normalize_signature_anchor(user_input)
     except Exception:
         query_profile = set()
-    if not keywords and not query_profile:
+        query_anchor = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", user_input.lower())[:8]
+    if not query_profile and not query_anchor:
         return None
 
     best = None
@@ -262,8 +215,8 @@ def detect_flashback(user_input: str) -> str | None:
     for mem in _load_l3():
         if not isinstance(mem, dict):
             continue
-        score = _score_l3_candidate(user_input, query_profile, keywords, mem)
-        if score > best_score and score >= 0.34:
+        score = _score_l3_candidate(user_input, query_profile, mem)
+        if score > best_score and score >= 0.30:
             best_score = score
             best = mem
             best_source = "l3"
@@ -271,24 +224,23 @@ def detect_flashback(user_input: str) -> str | None:
     for mem in _load_l2_recent(limit=240):
         if not isinstance(mem, dict):
             continue
-        score = _score_l2_candidate(user_input, query_profile, keywords, mem)
+        score = _score_l2_candidate(user_input, query_profile, mem)
         if score > best_score and score >= 0.46:
             best_score = score
             best = mem
             best_source = "l2"
 
-    if query_profile & _BACKSTOP_SEARCH_TAGS:
+    if _should_use_backstop(user_input, query_profile, query_anchor):
         for mem in _search_l2_backstop(user_input, limit=4):
             if not isinstance(mem, dict):
                 continue
             lexical = _lexical_echo(
                 user_input,
                 f"{str(mem.get('user_text') or '')} {str(mem.get('ai_text') or '')}".strip(),
-                keywords,
             )
             if lexical < 0.55 and float(mem.get("relevance") or 0.0) < 0.6:
                 continue
-            score = _score_l2_candidate(user_input, query_profile, keywords, mem) + 0.06
+            score = _score_l2_candidate(user_input, query_profile, mem) + 0.06
             if score > best_score and score >= 0.54:
                 best_score = score
                 best = mem

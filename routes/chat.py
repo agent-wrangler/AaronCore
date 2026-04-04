@@ -347,8 +347,8 @@ def _reset_stream_visible_state(stream_chunks: list[str], carry: str) -> tuple[s
 def _get_tool_call_enabled() -> bool:
     """tool_call 总开关，由配置控制。"""
     try:
-        from core.runtime_state.state_loader import PRIMARY_STATE_DIR
-        cfg = json.loads((PRIMARY_STATE_DIR / "tool_call_config.json").read_text("utf-8"))
+        from core.runtime_state.state_loader import TOOL_CALL_CONFIG_FILE
+        cfg = json.loads(TOOL_CALL_CONFIG_FILE.read_text("utf-8"))
         return bool(cfg.get("enabled", True))
     except Exception:
         return True
@@ -357,8 +357,8 @@ def _get_tool_call_enabled() -> bool:
 def _get_cod_enabled() -> bool:
     """CoD (Context-on-Demand) \u6a21\u5f0f\u5f00\u5173"""
     try:
-        from core.runtime_state.state_loader import PRIMARY_STATE_DIR
-        cfg = json.loads((PRIMARY_STATE_DIR / "tool_call_config.json").read_text("utf-8"))
+        from core.runtime_state.state_loader import TOOL_CALL_CONFIG_FILE
+        cfg = json.loads(TOOL_CALL_CONFIG_FILE.read_text("utf-8"))
         return bool(cfg.get("cod_enabled", False))
     except Exception:
         return False
@@ -422,6 +422,9 @@ _PROVIDER_CATALOG = {
         "aliases": ["openai", "gpt", "chatgpt"],
         "url_hint": "openai",
         "models": [
+            ("gpt-5.4", "\u6700\u65b0\u4e3b\u529b\uff0c\u590d\u6742\u63a8\u7406 / \u7f16\u7801"),
+            ("gpt-5.4-mini", "\u9ad8\u6027\u4ef7\u6bd4\u4e3b\u529b\uff0c\u901f\u5ea6\u66f4\u5feb"),
+            ("gpt-5.4-nano", "\u6700\u4fbf\u5b9c\uff0c\u9002\u5408\u8f7b\u4efb\u52a1"),
             ("gpt-4o", "\u591a\u6a21\u6001\u65d7\u8230\uff0c\u652f\u6301\u56fe\u7247"),
             ("gpt-4o-mini", "\u8f7b\u91cf\u5feb\u901f\uff0c\u6027\u4ef7\u6bd4\u9ad8"),
             ("gpt-4.1", "\u6700\u65b0\u4e3b\u529b\u6a21\u578b"),
@@ -1124,18 +1127,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         response = ""
         route = {"mode": "chat", "skill": "none", "reason": "default"}
         try:
-            from brain import _detect_mode_switch
-            mode_switch_reply = _detect_mode_switch(msg)
-            if mode_switch_reply:
-                response = mode_switch_reply
-                yield await _trace("\u4eba\u683c\u5207\u6362", "\u5df2\u5207\u6362\u4eba\u683c\u6a21\u5f0f", "done")
-                yield {"event": "reply", "data": json.dumps(_build_reply_payload(response), ensure_ascii=False)}
-                _comp.activity = "idle"
-                S.add_to_history("assistant", response)
-                history.append({"role": "assistant", "content": response, "time": datetime.now().isoformat()})
-                S.save_msg_history(history)
-                return
-
             # 模型切换检测
             _model_switch = _detect_model_switch(msg)
             if _model_switch:
@@ -1204,14 +1195,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     _search_topic = _search_topic.strip('"\'\u201c\u201d\u300c\u300d\u3010\u3011')
                     if len(_search_topic) < 2 or len(_search_topic) > 40:
                         _search_topic = msg
-                    if _search_topic == msg:
-                        _stop = ["\u5e2e\u6211","\u7ed9\u6211","\u80fd\u4e0d\u80fd","\u53ef\u4ee5","\u597d\u770b\u7684","\u6700\u65b0\u7684","\u4e00\u4e0b","\u51e0\u672c","\u4e00\u4e9b","\u4f60","\u5417","\u5440","\u5462","\u4e86","\u7684","\u70b9"]
-                        _cleaned = msg
-                        for sw in _stop:
-                            _cleaned = _cleaned.replace(sw, "")
-                        _cleaned = _re.sub(r'\s+', ' ', _cleaned).strip()
-                        if len(_cleaned) >= 2:
-                            _search_topic = _cleaned
                     S.debug_write("tool_call_search_topic", {"input": msg, "topic": _search_topic})
                     yield await _trace("\u8054\u7f51\u641c\u7d22", "\u641c\u7d22\u4e3b\u9898\uff1a" + _search_topic, "running")
                     _search_result = S.explicit_search_and_learn(_search_topic)

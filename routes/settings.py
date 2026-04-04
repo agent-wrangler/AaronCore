@@ -2,6 +2,7 @@
 import json
 from fastapi import APIRouter, Request
 from core import shared as S
+from core.runtime_state.state_loader import TOOL_CALL_CONFIG_FILE
 
 router = APIRouter()
 
@@ -144,22 +145,17 @@ async def apply_self_repair_fix(request: dict | None = None):
 # ── tool_call 开关 ──────────────────────────────────────────
 
 def _load_tool_call_config() -> dict:
-    import os
-    from pathlib import Path
-    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "state_data" / "tool_call_config.json"
     try:
-        if cfg_path.exists():
-            return json.loads(cfg_path.read_text(encoding="utf-8"))
+        if TOOL_CALL_CONFIG_FILE.exists():
+            return json.loads(TOOL_CALL_CONFIG_FILE.read_text(encoding="utf-8"))
     except Exception:
         pass
     return {"enabled": False}
 
 
 def _save_tool_call_config(data: dict):
-    import os
-    from pathlib import Path
-    cfg_path = Path(os.path.dirname(os.path.dirname(__file__))) / "state_data" / "tool_call_config.json"
-    cfg_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    TOOL_CALL_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOOL_CALL_CONFIG_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 @router.get("/tool_call/config")

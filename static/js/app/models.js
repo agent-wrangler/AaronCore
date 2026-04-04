@@ -54,7 +54,7 @@ function toggleModelDropdown(e){
    html+='<div class="model-dropdown-header">'+label+'</div>';
    items.forEach(function(mid){
     var m=models[mid];
-    var displayName=m.model||mid;
+    var displayName=m.display_name||m.model||mid;
     var active=mid===current?' active':'';
     var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
     html+='<div class="model-dropdown-item'+active+'" data-model-id="'+escapeHtml(mid)+'">'+displayName+vision+'</div>';
@@ -65,7 +65,7 @@ function toggleModelDropdown(e){
    html+='<div class="model-dropdown-header">Other</div>';
    uncategorized.forEach(function(mid){
     var m=models[mid];
-    var displayName=m.model||mid;
+    var displayName=m.display_name||m.model||mid;
     var active=mid===current?' active':'';
     var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
     html+='<div class="model-dropdown-item'+active+'" data-model-id="'+escapeHtml(mid)+'">'+displayName+vision+'</div>';
@@ -75,7 +75,7 @@ function toggleModelDropdown(e){
   // fallback: 无 catalog 时扁平列表
   Object.keys(models).forEach(function(mid){
    var m=models[mid];
-   var displayName=m.model||mid;
+   var displayName=m.display_name||m.model||mid;
    var active=mid===current?' active':'';
    var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
    html+='<div class="model-dropdown-item'+active+'" data-model-id="'+escapeHtml(mid)+'">'+displayName+vision+'</div>';
@@ -137,11 +137,11 @@ function _sidebarSwitchModel(mid){
   console.log('[models][sidebar] switch start', mid, 'current=', previousModel||'');
  var previousSettingsModel=(typeof _settingsCurrentModel!=='undefined')?_settingsCurrentModel:'';
  var previousCfg=(window._novaModels||{})[previousModel];
- var previousLabel=(previousCfg&&previousCfg.model)?previousCfg.model:(previousModel||t('unknown'));
+ var previousLabel=(previousCfg&&(previousCfg.display_name||previousCfg.model))?(previousCfg.display_name||previousCfg.model):(previousModel||t('unknown'));
  // 即时更新侧边栏显示
  window._novaCurrentModel=mid;
  var _m=(window._novaModels||{})[mid];
- _setModelLabel((_m&&_m.model)?_m.model:mid);
+ _setModelLabel((_m&&(_m.display_name||_m.model))?(_m.display_name||_m.model):mid);
  // 如果在设置页，即时高亮
  var items=_resetModelSwitchButtons();
  items.forEach(function(it){it.style.pointerEvents='none';it.style.opacity='0.5';});

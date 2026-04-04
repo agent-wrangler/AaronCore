@@ -1,6 +1,5 @@
-"""Protocol package for target, filesystem, network, and vision bridges."""
+"""Compatibility shim for the top-level protocols domain."""
 
-from .fs import *  # noqa: F401,F403
-from .network import *  # noqa: F401,F403
-from .target import *  # noqa: F401,F403
-from .vision import *  # noqa: F401,F403
+from protocols import fs, network, target, vision
+
+__all__ = ["fs", "network", "target", "vision"]

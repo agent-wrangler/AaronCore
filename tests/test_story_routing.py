@@ -1,10 +1,10 @@
 import unittest
 
-from agent_final import detect_story_follow_up_route
+from agent_final import resolve_route
 
 
 class StoryRoutingTests(unittest.TestCase):
-    def test_detect_story_follow_up_route_uses_recent_story_title(self):
+    def test_resolve_route_keeps_story_follow_up_as_chat(self):
         bundle = {
             "user_input": "然后呢",
             "l2": [
@@ -13,14 +13,12 @@ class StoryRoutingTests(unittest.TestCase):
             ],
         }
 
-        route = detect_story_follow_up_route(bundle)
+        route = resolve_route(bundle)
 
-        self.assertIsNotNone(route)
-        self.assertEqual(route["mode"], "skill")
-        self.assertEqual(route["skill"], "story")
-        self.assertEqual(route["source"], "context")
+        self.assertEqual(route["mode"], "chat")
+        self.assertEqual(route["skill"], "none")
 
-    def test_detect_story_follow_up_route_ignores_non_story_context(self):
+    def test_resolve_route_stays_chat_for_non_story_context(self):
         bundle = {
             "user_input": "然后呢",
             "l2": [
@@ -29,9 +27,10 @@ class StoryRoutingTests(unittest.TestCase):
             ],
         }
 
-        route = detect_story_follow_up_route(bundle)
+        route = resolve_route(bundle)
 
-        self.assertIsNone(route)
+        self.assertEqual(route["mode"], "chat")
+        self.assertEqual(route["skill"], "none")
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ from playwright.sync_api import sync_playwright
 def _load_llm_config():
     """读取 brain/llm_config.json"""
     try:
-        cfg_path = Path(__file__).resolve().parents[3] / 'brain' / 'llm_config.json'
+        cfg_path = Path(__file__).resolve().parents[1] / 'brain' / 'llm_config.json'
         with open(cfg_path, 'r', encoding='utf-8') as f:
             raw = json.load(f)
         if "models" in raw:

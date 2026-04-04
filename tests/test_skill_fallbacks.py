@@ -81,6 +81,15 @@ class SkillFallbackTests(unittest.TestCase):
         self.assertIn("没接上", reply)
         self.assertIn("新闻", reply)
 
+    def test_unified_chat_reply_no_longer_uses_news_keywords_without_missing_skill_signal(self):
+        reply = unified_chat_reply(
+            {"user_input": "今天有什么新闻", "l3": [], "l4": {}, "l5": {"skills": {}}, "l8": []},
+            {"mode": "chat", "skill": "nonexistent_skill_xyz", "intent": "missing_skill", "missing_skill": "nonexistent_skill_xyz", "rewritten_input": "今天有什么新闻"},
+        )
+
+        self.assertIn("没接上", reply)
+        self.assertNotIn("不乱报", reply)
+
     def test_resolve_route_short_circuits_news_to_missing_skill(self):
         # news 技能现在已存在，改用不存在的技能测试 missing_skill 短路
         bundle = {
@@ -230,7 +239,8 @@ class DialogueContextTests(unittest.TestCase):
         self.assertIn("reference_hint", ctx)
         self.assertIn("vision_hint", ctx)
         self.assertNotIn("fallback_summary", ctx)
-        self.assertTrue(ctx["follow_up_hint"])
+        self.assertEqual(ctx["follow_up_hint"], "")
+        self.assertEqual(ctx["reference_hint"], "")
 
     def test_render_dialogue_context_accepts_legacy_string(self):
         self.assertEqual(render_dialogue_context("旧格式上下文"), "旧格式上下文")

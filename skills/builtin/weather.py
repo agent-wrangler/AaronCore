@@ -4,6 +4,8 @@ from pathlib import Path
 
 import requests
 
+from storage.paths import PERSONA_FILE, PRIMARY_HISTORY_FILE
+
 
 CITIES = {
     "常州": ("Changzhou", 31.81, 119.97),
@@ -25,41 +27,13 @@ CITIES = {
 }
 
 DEFAULT_CITY = "常州"
-HISTORY_PATH = Path(__file__).resolve().parents[2] / "state_data" / "msg_history.json"
-PERSONA_PATH = Path(__file__).resolve().parents[2] / "state_data" / "persona.json"
+HISTORY_PATH = PRIMARY_HISTORY_FILE
+PERSONA_PATH = PERSONA_FILE
 
 CITY_ALIASES = {
     "新疆维吾尔自治区": "乌鲁木齐",
     "新疆": "乌鲁木齐",
     "乌市": "乌鲁木齐",
-}
-
-FOLLOW_UP_WEATHER_HINTS = (
-    "多少度",
-    "几度",
-    "冷不冷",
-    "热不热",
-    "下雨",
-    "下雪",
-    "有雨",
-    "有雪",
-    "会不会",
-    "还冷吗",
-    "天气吗",
-    "温度吗",
-    "气温吗",
-)
-
-FOLLOW_UP_WEATHER_TEXTS = {
-    "",
-    "今天",
-    "明天",
-    "后天",
-    "这周",
-    "未来几天",
-    "还冷吗",
-    "会下雨吗",
-    "会下雪吗",
 }
 
 
@@ -115,30 +89,8 @@ def _resolve_city(text: str) -> str | None:
 
 
 def _clean_weather_query(text: str) -> str:
-    cleaned = re.sub(r"[，。？！、\s]", "", str(text or ""))
-    replacements = (
-        "今天天气怎么样",
-        "天气怎么样",
-        "天气如何",
-        "什么天气",
-        "天气",
-        "气温",
-        "温度",
-        "查询",
-        "查一个",
-        "查查",
-        "看一个",
-        "看看",
-        "现在",
-        "目前",
-        "多少",
-        "度",
-        "会不会",
-        "有没有",
-    )
-    for item in replacements:
-        cleaned = cleaned.replace(item, "")
-    return cleaned.strip("啊呀呢嘛吧啦哦")
+    cleaned = re.sub(r"[\s，。？！、,.!?]", "", str(text or ""))
+    return cleaned.strip("啊呀呢吗嘛吧啦")
 
 
 def _infer_city_from_history() -> str:
@@ -152,24 +104,27 @@ def _infer_city_from_history() -> str:
 
 
 def _extract_city(query: str) -> str:
-    text = (query or "").strip()
+    text = str(query or "").strip()
     resolved = _resolve_city(text)
     if resolved:
         return resolved
 
     cleaned = _clean_weather_query(text)
-    resolved = _resolve_city(cleaned)
-    if resolved:
-        return resolved
+    if cleaned and cleaned != text:
+        resolved = _resolve_city(cleaned)
+        if resolved:
+            return resolved
 
-    if cleaned in FOLLOW_UP_WEATHER_TEXTS or (not cleaned and any(word in text for word in FOLLOW_UP_WEATHER_HINTS)):
+    # 在 weather skill 内，如果这句没有显式城市且本身很短，
+    # 视为沿用上一轮天气上下文里的城市，而不是再靠关键词词表判断。
+    if not cleaned or len(cleaned) <= 6:
         return _infer_city_from_history()
 
     return ""
 
 
 def _extract_day_offset(query: str) -> int:
-    text = (query or "").strip()
+    text = str(query or "").strip()
     if "后天" in text:
         return 2
     if "明天" in text:
@@ -330,7 +285,7 @@ def execute(query, context=None):
 
     resolved = _resolve_city_coords(city)
     if not resolved:
-        return f"我暂时没法确认「{city}」对应的城市位置，你可以再说得完整一点，比如加上省市名。"
+        return f"我暂时没法确认“{city}”对应的城市位置，你可以再说得完整一点，比如加上省市名。"
 
     city, coords = resolved
     _save_user_default_city(city)
@@ -348,7 +303,7 @@ def execute(query, context=None):
 
     if result:
         return result
-    return f"我这次没查到{city}的天气，你再让我试一次嘛。"
+    return f"我这次没查到{city}的天气，你再让我试一次吧。"
 
 
 if __name__ == "__main__":

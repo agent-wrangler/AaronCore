@@ -1,5 +1,5 @@
-"""Feedback package for classifier, loop, and self-repair flows."""
+"""Compatibility shim for the top-level feedback domain."""
 
-from .classifier import *  # noqa: F401,F403
-from .loop import *  # noqa: F401,F403
-from .repair import *  # noqa: F401,F403
+from feedback import classifier, loop, repair
+
+__all__ = ["classifier", "loop", "repair"]

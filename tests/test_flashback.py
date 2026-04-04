@@ -135,6 +135,28 @@ class FlashbackTests(unittest.TestCase):
 
         self.assertIsNone(hint)
 
+    def test_detect_flashback_no_longer_requires_keyword_cue_gate(self):
+        query = "mcp protocol"
+        l2_items = [
+            {
+                "user_text": "mcp protocol",
+                "ai_text": "we were just talking about how this protocol connects tools.",
+                "created_at": "2026-03-29T10:00:00",
+                "memory_type": "project",
+                "importance": 0.6,
+                "hit_count": 1,
+                "crystallized": False,
+                "relevance": 0.7,
+                "final_score": 0.8,
+            }
+        ]
+
+        with patch.object(flashback, "_load_l3", return_value=[]), patch.object(flashback, "_load_l2_recent", return_value=l2_items):
+            hint = flashback.detect_flashback(query)
+
+        self.assertIsNotNone(hint)
+        self.assertIn("mcp protocol", hint)
+
 
 if __name__ == "__main__":
     unittest.main()

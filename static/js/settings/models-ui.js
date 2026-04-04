@@ -35,11 +35,12 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
  html+='</div>';
  html+='<div id="modelListBox" style="display:flex;flex-direction:column;gap:8px;">';
  if(!_settingsModels||!_settingsCatalog){
-  html+='\u52a0\u8f7d\u4e2d...';
+  html+='加载中...';
  }else{
   var catalog=_settingsCatalog;
   var models=_settingsModels;
   var currentModel=_settingsCurrentModel;
+  var displayCounts=_buildModelNameCounts(models);
   var providerConfigured={};
   var uncategorized=[];
   for(var mid in models){
@@ -56,13 +57,14 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   for(var pk in catalog){
    var pi=catalog[pk];
    var configured=providerConfigured[pk]||[];
+   var subscriptionReady=_providerSupportsSubscription(pk, pi);
    var isExpanded=_settingsExpandedProviders[pk]!==undefined?_settingsExpandedProviders[pk]:(pk===currentProvider);
    var hasConfigured=configured.length>0;
    var providerLabel=pk.charAt(0).toUpperCase()+pk.slice(1);
    var activeModelName='';
    for(var ci=0;ci<configured.length;ci++){
     if(configured[ci]===currentModel){
-     activeModelName=(models[configured[ci]]||{}).model||configured[ci];
+     activeModelName=_getModelDisplayName(configured[ci], models[configured[ci]], models, displayCounts);
      break;
     }
    }
@@ -74,48 +76,90 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    html+='<span style="font-size:14px;font-weight:600;color:'+theme.text+';flex:1;">'+escapeHtml(providerLabel)+'</span>';
    if(activeModelName){
     html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+escapeHtml(activeModelName)+'</span>';
+   }else if(subscriptionReady){
+    html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;">订阅可用</span>';
    }else if(!hasConfigured){
     html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.inactiveTagBg+';color:'+theme.inactiveTagText+';font-size:11px;">'+t('settings.models.notconfigured')+'</span>';
    }
    html+='</div>';
-   if(isExpanded){
+  if(isExpanded){
     html+='<div style="padding:6px 14px 12px;display:flex;flex-direction:column;gap:5px;">';
-    for(var j=0;j<configured.length;j++){
-     var cmid=configured[j];
-     var cm=models[cmid]||{};
-     var isCurrent=cmid===currentModel;
-     var rowBg=isCurrent?theme.currentRowBg:theme.softRowBg;
-     var rowBorder=isCurrent?theme.currentRowBorder:theme.border;
-     var visionDot=cm.vision?'<span style="width:6px;height:6px;border-radius:50%;background:#8a948f;display:inline-block;margin-left:4px;" title="'+t('settings.models.vision')+'"></span>':'';
-     var checkMark=isCurrent?'<span style="color:'+theme.currentCheck+';font-size:14px;margin-right:6px;">\u2713</span>':'';
-     html+='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:'+rowBg+';border:1px solid '+rowBorder+';border-radius:10px;transition:all 0.15s;">';
-     html+=checkMark;
-     html+='<span style="font-size:13px;font-weight:'+(isCurrent?'700':'500')+';color:'+theme.text+';flex:1;">'+escapeHtml(cm.model||cmid)+'</span>';
-     html+=visionDot;
-     html+='<span style="font-size:11px;color:'+theme.sub+';margin-right:4px;">'+escapeHtml(cmid)+'</span>';
-     if(isCurrent){
-      html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
-     }else{
-      html+='<button type="button" data-model-action="switch" data-model-id="'+escapeHtml(cmid)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.activate')+'</button>';
-     }
-     html+='<button type="button" data-model-action="edit-dialog" data-model-id="'+escapeHtml(cmid)+'" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
-     html+='</div>';
-    }
-    var configuredIds={};
-    for(var k=0;k<configured.length;k++){
-     configuredIds[configured[k].toLowerCase()]=true;
-     var mname=((models[configured[k]]||{}).model||'').toLowerCase();
-     if(mname) configuredIds[mname]=true;
-    }
     var catalogModels=pi.models||[];
+    var configuredLookup={};
+    var matchedConfigured={};
+    for(var k=0;k<configured.length;k++){
+     var cfgId=configured[k];
+     var cfgItem=models[cfgId]||{};
+     var cfgKeys=[String(cfgId||'').toLowerCase(), String((cfgItem.model||'')).toLowerCase()];
+     for(var kk=0;kk<cfgKeys.length;kk++){
+      var cfgKey=cfgKeys[kk];
+      if(cfgKey && !configuredLookup[cfgKey]) configuredLookup[cfgKey]=cfgId;
+     }
+    }
     for(var m=0;m<catalogModels.length;m++){
      var catModel=catalogModels[m];
-     if(configuredIds[catModel.id.toLowerCase()]) continue;
-     html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:'+theme.softDashedBg+';border:1px dashed '+theme.softDashedBorder+';border-radius:10px;">';
-     html+='<span style="font-size:13px;color:'+theme.sub+';flex:1;">'+escapeHtml(catModel.id)+'<span style="font-size:11px;margin-left:6px;opacity:0.7;">'+escapeHtml(catModel.desc)+'</span></span>';
-     if(hasConfigured){
-      html+='<button type="button" data-model-action="quick-add" data-provider-key="'+escapeHtml(pk)+'" data-model-id="'+escapeHtml(catModel.id)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.quickadd')+'</button>';
+     var matchedId=configuredLookup[String(catModel.id||'').toLowerCase()]||'';
+     var hasSaved=!!matchedId;
+     if(hasSaved) matchedConfigured[matchedId]=true;
+     var rowModel=hasSaved?(models[matchedId]||{}):{model:catModel.id,vision:false};
+     var isCurrentRow=hasSaved&&matchedId===currentModel;
+     var rowBg=isCurrentRow?theme.currentRowBg:theme.softRowBg;
+     var rowBorder=isCurrentRow?theme.currentRowBorder:theme.border;
+     var visionDot=rowModel.vision?'<span style="width:6px;height:6px;border-radius:50%;background:#8a948f;display:inline-block;margin-left:4px;" title="'+t('settings.models.vision')+'"></span>':'';
+     var checkMark=isCurrentRow?'<span style="color:'+theme.currentCheck+';font-size:14px;margin-right:6px;">\u2713</span>':'';
+     var rowId=hasSaved?matchedId:catModel.id;
+     var rowLabel=hasSaved?_getModelDisplayName(matchedId, rowModel, models, displayCounts):catModel.id;
+     html+='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:'+rowBg+';border:1px solid '+rowBorder+';border-radius:10px;transition:all 0.15s;">';
+     html+=checkMark;
+     html+='<span style="font-size:13px;font-weight:'+(isCurrentRow?'700':'500')+';color:'+theme.text+';flex:1;">'+escapeHtml(rowLabel)+'<span style="font-size:11px;margin-left:6px;color:'+theme.sub+';opacity:0.9;">'+escapeHtml(catModel.desc||'')+'</span></span>';
+     html+=visionDot;
+     html+='<span style="font-size:11px;color:'+theme.sub+';margin-right:4px;">'+escapeHtml(rowId)+'</span>';
+     if(hasSaved){
+      var needsSubscriptionSwitch=subscriptionReady&&_getModelTransport(rowModel)!=='codex_cli';
+      if(needsSubscriptionSwitch){
+       html+='<button type="button" data-model-action="switch-subscription" data-model-id="'+escapeHtml(matchedId)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.successText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">转订阅</button>';
+      }
+      if(isCurrentRow){
+       html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
+      }else if(!needsSubscriptionSwitch){
+       html+='<button type="button" data-model-action="switch" data-model-id="'+escapeHtml(matchedId)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.activate')+'</button>';
+      }
+      html+='<button type="button" data-model-action="edit-dialog" data-model-id="'+escapeHtml(matchedId)+'" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
+     }else{
+      if(subscriptionReady){
+       html+='<button type="button" data-model-action="enable-subscription" data-provider-key="'+escapeHtml(pk)+'" data-model-id="'+escapeHtml(catModel.id)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.successText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">启用</button>';
+      }else if(hasConfigured){
+       html+='<button type="button" data-model-action="quick-add" data-provider-key="'+escapeHtml(pk)+'" data-model-id="'+escapeHtml(catModel.id)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.quickadd')+'</button>';
+      }
+      html+='<button type="button" data-model-action="catalog-edit-dialog" data-provider-key="'+escapeHtml(pk)+'" data-model-id="'+escapeHtml(catModel.id)+'" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      }
+     html+='</div>';
+    }
+    var extraConfigured=configured.filter(function(cmid){ return !matchedConfigured[cmid]; });
+    extraConfigured.sort(function(a,b){
+     var aLabel=_getModelDisplayName(a, models[a]||{}, models, displayCounts).toLowerCase();
+     var bLabel=_getModelDisplayName(b, models[b]||{}, models, displayCounts).toLowerCase();
+     return aLabel.localeCompare(bLabel);
+    });
+    for(var ex=0;ex<extraConfigured.length;ex++){
+     var extraId=extraConfigured[ex];
+     var extraModel=models[extraId]||{};
+     var extraCurrent=extraId===currentModel;
+     var extraBg=extraCurrent?theme.currentRowBg:theme.softRowBg;
+     var extraBorder=extraCurrent?theme.currentRowBorder:theme.border;
+     var extraVision=extraModel.vision?'<span style="width:6px;height:6px;border-radius:50%;background:#8a948f;display:inline-block;margin-left:4px;" title="'+t('settings.models.vision')+'"></span>':'';
+     var extraCheck=extraCurrent?'<span style="color:'+theme.currentCheck+';font-size:14px;margin-right:6px;">\u2713</span>':'';
+     html+='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:'+extraBg+';border:1px solid '+extraBorder+';border-radius:10px;transition:all 0.15s;">';
+     html+=extraCheck;
+     html+='<span style="font-size:13px;font-weight:'+(extraCurrent?'700':'500')+';color:'+theme.text+';flex:1;">'+escapeHtml(_getModelDisplayName(extraId, extraModel, models, displayCounts))+'</span>';
+     html+=extraVision;
+     html+='<span style="font-size:11px;color:'+theme.sub+';margin-right:4px;">'+escapeHtml(extraId)+'</span>';
+     if(extraCurrent){
+      html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
+     }else{
+      html+='<button type="button" data-model-action="switch" data-model-id="'+escapeHtml(extraId)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.activate')+'</button>';
+     }
+     html+='<button type="button" data-model-action="edit-dialog" data-model-id="'+escapeHtml(extraId)+'" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      html+='</div>';
     }
     html+='</div>';
@@ -140,7 +184,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      var uRowBorder=uCurrent?theme.currentRowBorder:theme.border;
      html+='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:'+uRowBg+';border:1px solid '+uRowBorder+';border-radius:10px;">';
      if(uCurrent) html+='<span style="color:'+theme.currentCheck+';font-size:14px;margin-right:6px;">\u2713</span>';
-     html+='<span style="font-size:13px;font-weight:'+(uCurrent?'700':'500')+';color:'+theme.text+';flex:1;">'+escapeHtml(um.model||umid)+'</span>';
+     html+='<span style="font-size:13px;font-weight:'+(uCurrent?'700':'500')+';color:'+theme.text+';flex:1;">'+escapeHtml(_getModelDisplayName(umid, um, models, displayCounts))+'</span>';
      html+='<span style="font-size:11px;color:'+theme.sub+';margin-right:4px;">'+escapeHtml(umid)+'</span>';
      if(uCurrent){
       html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
@@ -159,15 +203,41 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
  return html;
 }
 
-function openModelDialog(editId){
+function openCatalogModelDialog(modelId, providerKey){
+ var seedId=String(modelId||'').trim();
+ if(!seedId) return;
+ var providerInfo=((_settingsCatalog||{})[providerKey]||{});
+ var useSubscription=_providerSupportsSubscription(providerKey, providerInfo);
+ openModelDialog('',{
+  id:seedId,
+  config:{
+   model:seedId,
+   vision:false,
+   transport:useSubscription?'codex_cli':'openai_api',
+   base_url:useSubscription?'codex://local':''
+  }
+ });
+}
+
+function openModelDialog(editId, draftSeed){
  var isEdit=!!editId;
- var m=isEdit?(_settingsModels[editId]||{}):{};
+ var draft=(draftSeed&&typeof draftSeed==='object')?draftSeed:{};
+ var draftId=!isEdit?String(draft.id||'').trim():'';
+ var m=isEdit?(_settingsModels[editId]||{}):((draft.config&&typeof draft.config==='object')?draft.config:{});
+ var transport=_getModelTransport(m);
  var isCurrent=isEdit&&editId===_settingsCurrentModel;
  var isLight=document.body.classList.contains('light');
  var theme=getSettingsTheme(isLight);
  var labelStyle='font-size:12px;font-weight:600;color:'+theme.sub+';margin-bottom:5px;';
  var inputStyle='width:100%;padding:10px 14px;border-radius:10px;border:1px solid '+theme.border+';background:'+theme.dialogInputBg+';color:'+theme.text+';outline:none;font-size:13px;box-sizing:border-box;';
  var title=isEdit?t('settings.models.edit'):t('settings.models.add');
+ var maskedKey='';
+ var fullKey='';
+ if(isEdit&&transport!=='codex_cli'&&m.api_key){
+  var k=m.api_key;
+  fullKey=k;
+  maskedKey=k.length>14?(k.slice(0,6)+'****'+k.slice(-4)):k.replace(/./g,'*');
+ }
 
  var overlay=document.createElement('div');
  overlay.id='modelDialog';
@@ -177,18 +247,23 @@ function openModelDialog(editId){
  html+='<div style="font-size:16px;font-weight:600;color:'+theme.text+';margin-bottom:18px;">'+escapeHtml(title)+'</div>';
  html+='<div style="display:flex;flex-direction:column;gap:14px;">';
  html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.id')+'</div>';
- html+='<input id="mdlId" value="'+escapeHtml(isEdit?editId:'')+'" placeholder="gpt-4o, claude-3 ..." style="'+inputStyle+(isEdit?'opacity:0.5;cursor:not-allowed;':'')+'\"'+(isEdit?' disabled':'')+'></div>';
+ html+='<input id="mdlId" value="'+escapeHtml(isEdit?editId:draftId)+'" placeholder="gpt-4o, claude-3 ..." style="'+inputStyle+(isEdit?'opacity:0.5;cursor:not-allowed;':'')+'\"'+(isEdit?' disabled':'')+'></div>';
  html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.name')+'</div>';
  html+='<input id="mdlName" value="'+escapeHtml(m.model||'')+'" placeholder="'+t('settings.models.field.name.hint')+'" style="'+inputStyle+'"></div>';
- html+='<div><div style="'+labelStyle+'">Base URL</div>';
- html+='<input id="mdlUrl" value="'+escapeHtml(m.base_url||'')+'" placeholder="https://api.openai.com/v1" style="'+inputStyle+'"></div>';
- html+='<div><div style="'+labelStyle+'">API Key</div>';
- var maskedKey='';
- var fullKey='';
- if(isEdit&&m.api_key){var k=m.api_key;fullKey=k;maskedKey=k.length>14?(k.slice(0,6)+'****'+k.slice(-4)):k.replace(/./g,'*');}
+ html+='<div><div style="'+labelStyle+'">Connection</div>';
+ html+='<select id="mdlTransport" onchange="_syncModelDialogTransport()" style="'+inputStyle+'">';
+ html+='<option value="openai_api"'+(transport==='codex_cli'?'':' selected')+'>API (Base URL + Key)</option>';
+ html+='<option value="codex_cli"'+(transport==='codex_cli'?' selected':'')+'>Codex Subscription (local login)</option>';
+ html+='</select></div>';
+ html+='<div data-model-transport="api"><div style="'+labelStyle+'">Base URL</div>';
+ html+='<input id="mdlUrl" value="'+escapeHtml(transport==='codex_cli'?'':(m.base_url||''))+'" placeholder="https://api.openai.com/v1" style="'+inputStyle+'"></div>';
+ html+='<div data-model-transport="api"><div style="'+labelStyle+'">API Key</div>';
  html+='<div style="position:relative;"><input id="mdlKey" value="" placeholder="'+(isEdit?(maskedKey||t('settings.models.field.key.hint')):'sk-...')+'" style="'+inputStyle+';padding-right:40px;">';
  if(isEdit&&fullKey){html+='<button type="button" id="mdlKeyToggle" onclick="(function(b){var inp=document.getElementById(\'mdlKey\');var showing=b.getAttribute(\'data-show\')===\'1\';if(!showing){inp.value=\''+escapeHtml(fullKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94\\\'/><path d=\\\'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19\\\'/><line x1=\\\'1\\\' y1=\\\'1\\\' x2=\\\'23\\\' y2=\\\'23\\\'/></svg>\';b.setAttribute(\'data-show\',\'1\');}else{inp.value=\'\';inp.placeholder=\''+escapeHtml(maskedKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\\'/><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'3\\\'/></svg>\';b.setAttribute(\'data-show\',\'0\');}})(this)" data-show="0" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.5;color:'+theme.sub+';display:flex;align-items:center;" title="Show/Hide"><svg width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\'/><circle cx=\'12\' cy=\'12\' r=\'3\'/></svg></button>';}
  html+='</div></div>';
+ html+='<div data-model-transport="codex" style="display:none;padding:10px 12px;border:1px dashed '+theme.border+';border-radius:10px;color:'+theme.sub+';font-size:12px;line-height:1.6;">';
+ html+='Uses the local <code>codex</code> login on this machine. No Base URL or API Key is required here.';
+ html+='</div>';
  var checked=m.vision?'checked':'';
  html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">';
  html+='<input id="mdlVision" type="checkbox" '+checked+' style="width:16px;height:16px;accent-color:'+(isLight?'#7a7267':'#9e907c')+';">';
@@ -205,16 +280,15 @@ function openModelDialog(editId){
  overlay.innerHTML=html;
  document.body.appendChild(overlay);
  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+ _syncModelDialogTransport();
  var first=isEdit?document.getElementById('mdlName'):document.getElementById('mdlId');
  if(first)setTimeout(function(){first.focus();},50);
 }
 
-
 function switchModel(mid){
  if(mid===_settingsCurrentModel) return;
  console.log('[models][settings] switch start', mid, 'current=', _settingsCurrentModel||'');
- // 即时视觉反馈：禁用所有启用按钮
- var btns=document.querySelectorAll('[data-model-action="switch"],[onclick*="switchModel"]');
+ var btns=document.querySelectorAll('[data-model-action="switch"],[data-model-action="switch-subscription"],[onclick*="switchModel"]');
  btns.forEach(function(el){el.style.pointerEvents='none';el.style.opacity='0.5';});
  var clicked=null;
  btns.forEach(function(el){
@@ -226,25 +300,24 @@ function switchModel(mid){
  fetch('/model/'+encodeURIComponent(mid),{method:'POST'})
   .then(function(r){return r.json();})
   .then(function(d){
-    if(d.ok||d.model){
-     console.log('[models][settings] switch ok', mid);
+   if(d.ok||d.model){
+    console.log('[models][settings] switch ok', mid);
     _settingsCurrentModel=mid;
     window._novaCurrentModel=mid;
     var el=document.getElementById('modelName');
-    var _sw=(_settingsModels[mid]||{}).model||mid;
-    if(el) el.textContent=_sw;
+    var cfg=_settingsModels[mid]||{};
+    var label=(cfg.display_name||cfg.model||mid);
+    if(el) el.textContent=label;
     if(typeof updateImageBtnState==='function') updateImageBtnState();
-    // 延迟刷新，让用户先看到切换成功
     setTimeout(function(){loadSettingsModels();},300);
-    }else{
-     console.warn('[models][settings] switch fail', mid, d&&d.error);
-    alert(d.error||'\u5207\u6362\u5931\u8d25');
+   }else{
+    console.warn('[models][settings] switch fail', mid, d&&d.error);
+    alert(d.error||'切换失败');
     loadSettingsModels();
    }
-   }).catch(function(){
-    console.warn('[models][settings] switch error', mid);
-   alert('\u5207\u6362\u5931\u8d25');
+  }).catch(function(){
+   console.warn('[models][settings] switch error', mid);
+   alert('切换失败');
    loadSettingsModels();
   });
 }
-

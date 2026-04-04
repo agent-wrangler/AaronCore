@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from storage import content_store as _content_store
 from storage import history_store as _history_store
@@ -7,26 +8,49 @@ from storage import task_files as _task_files
 from storage.json_store import load_json, write_json
 from storage.model_config import load_current_model as _default_load_current_model
 from storage.paths import (
+    AUTOLEARN_CONFIG_FILE,
+    CONTENT_STORE_DIR,
     CONTENT_PROJECTS_FILE,
     CONTENT_TOPIC_REGISTRY_FILE,
     CORE_DIR,
+    CU_DEBUG_LOG_FILE,
     DEFAULT_L1_RECENT_TOKEN_BUDGET,
     DOCS_DIR,
     ENGINE_DIR,
+    FEEDBACK_RULES_FILE,
+    FILE_EXPORT_STATE_FILE,
+    GROWTH_FILE,
     HTML_FILE,
+    KNOWLEDGE_BASE_FILE,
+    KNOWLEDGE_FILE,
+    LAB_DIR,
     LEGACY_HISTORY_FILE,
     LEGACY_L3_SKILL_ARCHIVE_FILE,
     LEGACY_STATE_DIR,
     LEGACY_STATS_FILE,
     LLM_CONFIG_FILE,
     LOGS_DIR,
+    LONG_TERM_FILE,
+    MCP_REGISTRY_CACHE_FILE,
+    MCP_SERVERS_FILE,
+    MEMORY_STORE_DIR,
+    PERSONA_FILE,
     PRIMARY_HISTORY_FILE,
     PRIMARY_STATE_DIR,
     PRIMARY_STATS_FILE,
+    QQ_MONITOR_DEBUG_LOG_FILE,
+    QQ_MONITOR_STATE_FILE,
+    QUERY_CACHE_FILE,
     RESTORED_OUTPUT_JS_FILE,
+    RUNTIME_STORE_DIR,
+    SELF_REPAIR_REPORTS_FILE,
+    SKILL_STORE_FILE,
+    STATE_DATA_DIR,
     TASK_PROJECTS_FILE,
     TASK_RELATIONS_FILE,
     TASKS_FILE,
+    TASK_STORE_DIR,
+    TOOL_CALL_CONFIG_FILE,
 )
 
 
@@ -50,7 +74,13 @@ def init(*, debug_write=None, get_all_skills=None, nova_core_ready=False):
 def event_text(item: dict) -> str:
     if not isinstance(item, dict):
         return ""
-    return str(item.get("event") or item.get("summary") or item.get("content") or "").strip()
+    text = str(item.get("event") or item.get("summary") or item.get("content") or "").strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
+    if not text:
+        return ""
+    if any(marker in text for marker in ("根据对话上下文", "作为AI助手", "系统提示中可能有时间信息", "让我们检查")):
+        return ""
+    return text
 
 
 def is_legacy_l3_skill_log(item: dict) -> bool:
@@ -75,7 +105,7 @@ def ensure_long_term_clean():
     if _LONG_TERM_CLEANUP_DONE:
         return
 
-    l3_file = PRIMARY_STATE_DIR / "long_term.json"
+    l3_file = LONG_TERM_FILE
     data = load_json(l3_file, [])
     if not isinstance(data, list):
         _LONG_TERM_CLEANUP_DONE = True
@@ -272,7 +302,7 @@ def save_task_relations(relations):
 
 def load_l3_long_term(limit=8):
     ensure_long_term_clean()
-    items = load_json(PRIMARY_STATE_DIR / "long_term.json", [])
+    items = load_json(LONG_TERM_FILE, [])
     allowed_types = {"event", "milestone", "general"}
     out = []
     for item in items[-limit:]:
@@ -288,17 +318,17 @@ def load_l3_long_term(limit=8):
 
 
 def load_l4_persona():
-    local_persona = load_json(PRIMARY_STATE_DIR / "persona.json", {})
+    local_persona = load_json(PERSONA_FILE, {})
     interaction_rules = local_persona.get("interaction_rules") or []
-    return {
-        "local_persona": local_persona,
-        "style_rules": interaction_rules[-8:] if isinstance(interaction_rules, list) else [],
-    }
+    payload = dict(local_persona) if isinstance(local_persona, dict) else {}
+    payload["local_persona"] = local_persona if isinstance(local_persona, dict) else {}
+    payload["style_rules"] = interaction_rules[-8:] if isinstance(interaction_rules, list) else []
+    return payload
 
 
 def load_l5_knowledge():
-    knowledge = load_json(PRIMARY_STATE_DIR / "knowledge.json", [])
-    knowledge_base = load_json(PRIMARY_STATE_DIR / "knowledge_base.json", [])
+    knowledge = load_json(KNOWLEDGE_FILE, [])
+    knowledge_base = load_json(KNOWLEDGE_BASE_FILE, [])
     skills = _get_all_skills() if _nova_core_ready else {}
     return {
         "knowledge": knowledge[-10:],

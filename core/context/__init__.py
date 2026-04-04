@@ -1,6 +1,5 @@
-"""Context package for runtime context assembly and extraction."""
+"""Compatibility shim for the top-level context domain."""
 
-from .builder import *  # noqa: F401,F403
-from .events import *  # noqa: F401,F403
-from .pull import *  # noqa: F401,F403
-from .session import *  # noqa: F401,F403
+from context import builder, events, pull, session
+
+__all__ = ["builder", "events", "pull", "session"]

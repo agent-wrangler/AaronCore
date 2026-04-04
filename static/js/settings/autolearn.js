@@ -503,8 +503,20 @@ document.addEventListener('click',function(event){
   switchModel(modelId);
   return;
  }
+ if(action==='switch-subscription'&&modelId){
+  _switchConfiguredModelToSubscription(modelId);
+  return;
+ }
  if(action==='edit-dialog'&&modelId){
   openModelDialog(modelId);
+  return;
+ }
+ if(action==='catalog-edit-dialog'&&providerKey&&modelId){
+  openCatalogModelDialog(modelId, providerKey);
+  return;
+ }
+ if(action==='enable-subscription'&&providerKey&&modelId){
+  _quickEnableCatalogModel(providerKey, modelId);
   return;
  }
  if(action==='quick-add'&&providerKey&&modelId){

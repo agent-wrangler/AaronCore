@@ -48,7 +48,6 @@ NOVA_CORE_READY = False
 CORE_IMPORT_ERROR = ""
 
 # 函数引用
-nova_route = None
 nova_execute = None
 get_all_skills = None
 think = None
@@ -118,7 +117,6 @@ extract_session_context = None
 # route_resolver
 resolve_route = None
 resolve_route_fast = None
-looks_like_news_request = None
 is_registered_skill_name = None
 
 # state_loader functions

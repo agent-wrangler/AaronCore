@@ -1,4 +1,5 @@
-"""MCP package for client connectivity and registry integration."""
+"""Compatibility shim for the top-level MCP integration domain."""
 
-from .client import *  # noqa: F401,F403
-from .registry import *  # noqa: F401,F403
+from mcp_integration import client, registry
+
+__all__ = ["client", "registry"]

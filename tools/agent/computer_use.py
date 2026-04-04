@@ -19,11 +19,13 @@ import json
 import re
 from pathlib import Path
 
+from storage.paths import CU_DEBUG_LOG_FILE, QQ_MONITOR_STATE_FILE, RUNTIME_STORE_DIR
+
 # ── 监听进程管理（支持多群） ──
 _monitor_processes = {}  # {group_name: subprocess.Popen}
-_STATE_DATA_DIR = Path(__file__).resolve().parents[2] / "state_data"
-_MONITOR_STATE_FILE = str(_STATE_DATA_DIR / "qq_monitor_state.json")
-_DEBUG_LOG_FILE = _STATE_DATA_DIR / "cu_debug.log"
+_STATE_DATA_DIR = RUNTIME_STORE_DIR
+_MONITOR_STATE_FILE = str(QQ_MONITOR_STATE_FILE)
+_DEBUG_LOG_FILE = CU_DEBUG_LOG_FILE
 _INTERNAL_WORKERS_DIR = Path(__file__).resolve().parents[2] / "workers"
 
 

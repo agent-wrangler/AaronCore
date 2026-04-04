@@ -231,20 +231,6 @@ def evolve(user_input: str, skill_used: str, run_event: dict | None = None):
         evo["skill_runs"] = runs[-240:]
         _maybe_promote_success_path(skill_name, run_event, now)
     
-    # 检测用户偏好
-    user_keywords = []
-    if any(w in user_input for w in ["天气", "温度"]):
-        user_keywords.append("天气")
-    if any(w in user_input for w in ["游戏", "做个", "写个"]):
-        user_keywords.append("编程")
-    if any(w in user_input for w in ["画", "海报", "图"]):
-        user_keywords.append("画图")
-    
-    for kw in user_keywords:
-        if kw not in evo.get("user_preferences", {}):
-            evo["user_preferences"][kw] = 0
-        evo["user_preferences"][kw] += 1
-    
     # 定期更新knowledge.json的优先级
     if can_count_skill and knowledge_file.exists():
         try:

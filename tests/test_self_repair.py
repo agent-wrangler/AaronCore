@@ -39,7 +39,7 @@ class SelfRepairTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
-    def test_create_routing_report_for_code_question_targets_router_and_run_code(self):
+    def test_create_routing_report_points_to_active_route_files(self):
         rule_item = {
             "id": "rule_1",
             "scene": "routing",
@@ -53,7 +53,7 @@ class SelfRepairTests(unittest.TestCase):
         with patch.object(
             self_repair,
             "run_targeted_tests",
-            return_value={"ran": True, "all_passed": True, "test_runs": [{"pattern": "test_capability_routing.py", "ok": True}], "duration_ms": 12},
+            return_value={"ran": True, "all_passed": True, "test_runs": [{"pattern": "tests/test_feedback_classifier.py", "ok": True}], "duration_ms": 12},
         ):
             report = self_repair.create_self_repair_report(
                 rule_item,
@@ -63,9 +63,12 @@ class SelfRepairTests(unittest.TestCase):
 
         paths = [item["path"] for item in report["candidate_files"]]
 
-        self.assertIn("core/router.py", paths)
+        self.assertIn("decision/routing/route_resolver.py", paths)
+        self.assertIn("routes/chat.py", paths)
         self.assertIn("agent_final.py", paths)
-        self.assertIn("tools/agent/run_code.json", paths)
+        test_paths = [item["path"] for item in report["suggested_tests"]]
+        self.assertIn("tests/test_feedback_classifier.py", test_paths)
+        self.assertIn("tests/test_trace_payload.py", test_paths)
         self.assertEqual(report["status"], "awaiting_confirmation")
         self.assertTrue(report["validation"]["ran"])
         self.assertTrue(report["validation"]["all_passed"])
@@ -113,15 +116,15 @@ class SelfRepairTests(unittest.TestCase):
         self.assertEqual(explicit["id"], "rule_old")
 
     def test_apply_self_repair_report_writes_patch_when_validation_passes(self):
-        target = self._write_repo_file("core/router.py", "def route():\n    return 'wrong'\n")
+        target = self._write_repo_file("decision/routing/route_resolver.py", "def route():\n    return 'wrong'\n")
         report = {
             "id": "repair_apply_ok",
             "created_at": "2026-03-14T03:00:00",
             "updated_at": "2026-03-14T03:00:00",
             "apply_mode": "confirm",
             "status": "awaiting_confirmation",
-            "candidate_files": [{"path": "core/router.py", "reason": "修这里"}],
-            "suggested_tests": [{"path": "tests/test_capability_routing.py", "reason": "回归"}],
+            "candidate_files": [{"path": "decision/routing/route_resolver.py", "reason": "修这里"}],
+            "suggested_tests": [{"path": "tests/test_feedback_classifier.py", "reason": "回归"}],
             "validation": {"ran": True, "all_passed": True, "test_runs": [], "duration_ms": 8},
         }
         self_repair.save_self_repair_report(report)
@@ -132,10 +135,10 @@ class SelfRepairTests(unittest.TestCase):
             return_value={
                 "ok": True,
                 "summary": "把错误返回值改正",
-                "allowed_paths": ["core/router.py"],
+                "allowed_paths": ["decision/routing/route_resolver.py"],
                 "edits": [
                     {
-                        "path": "core/router.py",
+                        "path": "decision/routing/route_resolver.py",
                         "old": "return 'wrong'",
                         "new": "return 'fixed'",
                         "reason": "修正返回值",
@@ -145,7 +148,7 @@ class SelfRepairTests(unittest.TestCase):
         ), patch.object(
             self_repair,
             "run_targeted_tests",
-            return_value={"ran": True, "all_passed": True, "test_runs": [{"pattern": "test_capability_routing.py", "ok": True}], "duration_ms": 15},
+            return_value={"ran": True, "all_passed": True, "test_runs": [{"pattern": "test_feedback_classifier.py", "ok": True}], "duration_ms": 15},
         ):
             saved = self_repair.apply_self_repair_report("repair_apply_ok", config={}, run_validation=True)
 
@@ -155,15 +158,15 @@ class SelfRepairTests(unittest.TestCase):
         self.assertTrue((self.state_dir / "self_repair_backups" / "repair_apply_ok").exists())
 
     def test_apply_self_repair_report_rolls_back_when_validation_fails(self):
-        target = self._write_repo_file("core/router.py", "def route():\n    return 'wrong'\n")
+        target = self._write_repo_file("decision/routing/route_resolver.py", "def route():\n    return 'wrong'\n")
         report = {
             "id": "repair_apply_fail",
             "created_at": "2026-03-14T04:00:00",
             "updated_at": "2026-03-14T04:00:00",
             "apply_mode": "confirm",
             "status": "awaiting_confirmation",
-            "candidate_files": [{"path": "core/router.py", "reason": "修这里"}],
-            "suggested_tests": [{"path": "tests/test_capability_routing.py", "reason": "回归"}],
+            "candidate_files": [{"path": "decision/routing/route_resolver.py", "reason": "修这里"}],
+            "suggested_tests": [{"path": "tests/test_feedback_classifier.py", "reason": "回归"}],
             "validation": {"ran": True, "all_passed": True, "test_runs": [], "duration_ms": 8},
         }
         self_repair.save_self_repair_report(report)
@@ -174,10 +177,10 @@ class SelfRepairTests(unittest.TestCase):
             return_value={
                 "ok": True,
                 "summary": "先试着改一下",
-                "allowed_paths": ["core/router.py"],
+                "allowed_paths": ["decision/routing/route_resolver.py"],
                 "edits": [
                     {
-                        "path": "core/router.py",
+                        "path": "decision/routing/route_resolver.py",
                         "old": "return 'wrong'",
                         "new": "return 'broken'",
                         "reason": "模拟失败补丁",
@@ -187,7 +190,7 @@ class SelfRepairTests(unittest.TestCase):
         ), patch.object(
             self_repair,
             "run_targeted_tests",
-            return_value={"ran": True, "all_passed": False, "test_runs": [{"pattern": "test_capability_routing.py", "ok": False}], "duration_ms": 18},
+            return_value={"ran": True, "all_passed": False, "test_runs": [{"pattern": "test_feedback_classifier.py", "ok": False}], "duration_ms": 18},
         ):
             saved = self_repair.apply_self_repair_report("repair_apply_fail", config={}, run_validation=True)
 
@@ -197,15 +200,15 @@ class SelfRepairTests(unittest.TestCase):
         self.assertTrue(saved["apply_result"]["rolled_back"])
 
     def test_preview_self_repair_report_saves_preview_edits(self):
-        self._write_repo_file("core/router.py", "def route():\n    return 'wrong'\n")
+        self._write_repo_file("decision/routing/route_resolver.py", "def route():\n    return 'wrong'\n")
         report = {
             "id": "repair_preview_ok",
             "created_at": "2026-03-14T05:00:00",
             "updated_at": "2026-03-14T05:00:00",
             "apply_mode": "confirm",
             "status": "awaiting_confirmation",
-            "candidate_files": [{"path": "core/router.py", "reason": "修这里"}],
-            "suggested_tests": [{"path": "tests/test_capability_routing.py", "reason": "回归"}],
+            "candidate_files": [{"path": "decision/routing/route_resolver.py", "reason": "修这里"}],
+            "suggested_tests": [{"path": "tests/test_feedback_classifier.py", "reason": "回归"}],
             "validation": {"ran": True, "all_passed": True, "test_runs": [], "duration_ms": 8},
         }
         self_repair.save_self_repair_report(report)
@@ -216,10 +219,10 @@ class SelfRepairTests(unittest.TestCase):
             return_value={
                 "ok": True,
                 "summary": "先预览一下最小修改",
-                "allowed_paths": ["core/router.py"],
+                "allowed_paths": ["decision/routing/route_resolver.py"],
                 "edits": [
                     {
-                        "path": "core/router.py",
+                        "path": "decision/routing/route_resolver.py",
                         "old": "return 'wrong'",
                         "new": "return 'fixed'",
                         "reason": "修正返回值",
@@ -232,7 +235,7 @@ class SelfRepairTests(unittest.TestCase):
         self.assertEqual(saved["status"], "awaiting_confirmation")
         self.assertEqual(saved["patch_preview"]["status"], "preview_ready")
         self.assertEqual(saved["patch_preview"]["summary"], "先预览一下最小修改")
-        self.assertEqual(saved["patch_preview"]["edits"][0]["path"], "core/router.py")
+        self.assertEqual(saved["patch_preview"]["edits"][0]["path"], "decision/routing/route_resolver.py")
         self.assertEqual(saved["patch_preview"]["risk_level"], "medium")
         self.assertFalse(saved["patch_preview"]["auto_apply_ready"])
         self.assertTrue(saved["patch_preview"]["confirmation_required"])
@@ -288,15 +291,15 @@ class SelfRepairTests(unittest.TestCase):
         self.assertFalse(saved["patch_preview"]["confirmation_required"])
 
     def test_preview_self_repair_report_keeps_medium_risk_patch_for_confirmation(self):
-        target = self._write_repo_file("core/router.py", "def route():\n    return 'wrong'\n")
+        target = self._write_repo_file("decision/routing/route_resolver.py", "def route():\n    return 'wrong'\n")
         report = {
             "id": "repair_auto_apply_wait",
             "created_at": "2026-03-14T07:00:00",
             "updated_at": "2026-03-14T07:00:00",
             "apply_mode": "confirm",
             "status": "awaiting_confirmation",
-            "candidate_files": [{"path": "core/router.py", "reason": "修路由"}],
-            "suggested_tests": [{"path": "tests/test_capability_routing.py", "reason": "回归"}],
+            "candidate_files": [{"path": "decision/routing/route_resolver.py", "reason": "修路由"}],
+            "suggested_tests": [{"path": "tests/test_feedback_classifier.py", "reason": "回归"}],
             "validation": {"ran": True, "all_passed": True, "test_runs": [], "duration_ms": 8},
         }
         self_repair.save_self_repair_report(report)
@@ -307,10 +310,10 @@ class SelfRepairTests(unittest.TestCase):
             return_value={
                 "ok": True,
                 "summary": "先把路由条目整理出来",
-                "allowed_paths": ["core/router.py"],
+                "allowed_paths": ["decision/routing/route_resolver.py"],
                 "edits": [
                     {
-                        "path": "core/router.py",
+                        "path": "decision/routing/route_resolver.py",
                         "old": "return 'wrong'",
                         "new": "return 'fixed'",
                         "reason": "修正路由结果",

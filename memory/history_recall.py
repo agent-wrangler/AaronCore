@@ -21,19 +21,23 @@ def init(*, llm_call=None, debug_write=None):
 
 
 # ── 回忆词 ──
-_RECALL_WORDS = [
-    "\u804a\u4e86", "\u5e72\u4e86", "\u505a\u4e86", "\u8bf4\u4e86", "\u8ba8\u8bba\u4e86", "\u8c08\u4e86", "\u95ee\u4e86",
-    "\u804a\u8fc7", "\u8bf4\u8fc7", "\u505a\u8fc7", "\u8c08\u8fc7",
-    "\u804a\u4ec0\u4e48", "\u5e72\u4ec0\u4e48", "\u505a\u4ec0\u4e48", "\u8bf4\u4ec0\u4e48",
-    "\u804a\u5565", "\u5e72\u5565", "\u505a\u5565",
-    "\u56de\u5fc6", "\u603b\u7ed3", "\u804a\u7684",
-]
+def _is_recall_request(text: str, time_label: str) -> bool:
+    if not _llm_call:
+        return False
 
-def _has_recall_word(text: str) -> bool:
-    for w in _RECALL_WORDS:
-        if w in text:
-            return True
-    return False
+    prompt = (
+        f"User message: {text[:120]}\n"
+        f"Detected time range: {time_label}\n\n"
+        "Decide whether the user is asking to recall or summarize prior conversation history from that time range.\n"
+        "Answer YES only when the user clearly wants chat history recall, recap, or summary.\n"
+        "Answer NO for regular factual questions that merely mention time, such as weather, news, or events.\n"
+        "Return YES or NO only."
+    )
+    try:
+        result = str(_llm_call(prompt) or "").strip().upper()
+        return result == "YES"
+    except Exception:
+        return False
 
 
 # ── 时间解析 ──
@@ -99,9 +103,9 @@ def detect_recall_intent(user_input: str):
     time_info = _parse_time_range(text)
     if not time_info:
         return None
-    if not _has_recall_word(text):
-        return None
     label, start_dt, end_dt = time_info
+    if not _is_recall_request(text, label):
+        return None
     return {
         "is_recall": True,
         "start_dt": start_dt,
@@ -166,6 +170,31 @@ def _time_period(dt):
     return "\u665a\u4e0a"
 
 
+def _collect_l2_snippets(l2_entries, limit: int = 8) -> list[str]:
+    seen = set()
+    snippets = []
+    for entry in l2_entries:
+        if not isinstance(entry, dict):
+            continue
+        text = (
+            str(entry.get("user_text") or "")
+            or str(entry.get("query") or "")
+            or str(entry.get("summary") or "")
+        ).strip()
+        if not text:
+            continue
+        normalized = re.sub(r"\s+", " ", text)
+        if len(normalized) > 24:
+            normalized = normalized[:24] + "..."
+        if len(normalized) < 3 or normalized in seen:
+            continue
+        seen.add(normalized)
+        snippets.append(normalized)
+        if len(snippets) >= limit:
+            break
+    return snippets
+
+
 def _format_topic_list(user_msgs, l2_entries, time_label) -> str:
     """消息 <= 40 条时，按时段分组直接列出"""
     groups = {}
@@ -188,15 +217,10 @@ def _format_topic_list(user_msgs, l2_entries, time_label) -> str:
         for item in items:
             lines.append(f"\u00b7 {item}")
 
-    # 补充 L2 关键词
-    if l2_entries:
-        kws = set()
-        for e in l2_entries:
-            for kw in e.get("keywords", []):
-                kws.add(kw)
-        if kws:
-            kw_str = "\u3001".join(list(kws)[:15])
-            lines.append(f"\n\u6838\u5fc3\u8bdd\u9898\uff1a{kw_str}")
+    snippets = _collect_l2_snippets(l2_entries, limit=6)
+    if snippets:
+        snippet_text = "\u3001".join(snippets)
+        lines.append(f"\n\u76f8\u5173\u8bb0\u5fc6\uff1a{snippet_text}")
 
     return "\n".join(lines)
 
@@ -237,14 +261,7 @@ def _summarize_with_llm(user_msgs, l2_entries, time_label) -> str:
 
 
 def _fallback_extract(user_msgs, l2_entries, time_label) -> str:
-    """规则兜底：L2 关键词 + L1 消息前缀去重"""
-    # L2 关键词
-    kws = set()
-    for e in l2_entries:
-        for kw in e.get("keywords", []):
-            kws.add(kw)
-
-    # L1 消息前缀去重
+    """规则兜底：L2/L1 原文片段去重汇总"""
     seen = set()
     topics = []
     for m in user_msgs:
@@ -256,9 +273,10 @@ def _fallback_extract(user_msgs, l2_entries, time_label) -> str:
             break
 
     lines = [f"{time_label}\u5171 {len(user_msgs)} \u6761\u5bf9\u8bdd\u3002"]
-    if kws:
-        kw_str = "\u3001".join(list(kws)[:15])
-        lines.append(f"\u6838\u5fc3\u8bdd\u9898\uff1a{kw_str}")
+    snippets = _collect_l2_snippets(l2_entries, limit=10)
+    if snippets:
+        snippet_text = "\u3001".join(snippets)
+        lines.append(f"\u76f8\u5173\u8bb0\u5fc6\uff1a{snippet_text}")
     if topics:
         topic_str = "\u3001".join(topics)
         lines.append(f"\u7528\u6237\u63d0\u5230\u8fc7\uff1a{topic_str}")

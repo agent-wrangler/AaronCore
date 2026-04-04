@@ -21,10 +21,7 @@ def process(nms, request, scene, skill_route):
 
 def l7_reflect(skill_result, user_input, skill_name):
     """L7 经验沉淀"""
-    # 检测负面反馈
-    negative_keywords = ["不对", "不是", "没用", "错了", "重新来"]
-    
-    # 这里会在主逻辑中调用
+    # Legacy keyword feedback heuristics are retired; active L7 logic lives elsewhere.
     pass
 
 

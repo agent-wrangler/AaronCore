@@ -1,5 +1,5 @@
 """
-L2 持久记忆引擎 — 评分入库 + 关键词检索 + 自动结晶 + 每20轮摘要
+L2 持久记忆引擎 — 评分入库 + 检索召回 + 自动结晶 + 每20轮摘要
 存储：state_data/l2_short_term.json（不设上限）
 """
 
@@ -9,6 +9,14 @@ import json
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
+from memory.l2 import crystallization as _l2_crystallization
+from memory.l2 import hygiene as _l2_hygiene
+from memory.l2 import meta_inference as _l2_meta
+from memory.l2 import retention as _l2_retention
+from memory.l2 import retrieval as _l2_retrieval
+from memory.l2 import signals as _l2_signals
+from memory.l2 import storage as _l2_storage
+from memory.l2 import summaries as _l2_summaries
 from storage.json_store import load_json, write_json
 from storage.paths import PRIMARY_STATE_DIR
 
@@ -32,219 +40,192 @@ def init(*, debug_write=None, think=None, llm_call=None):
     if think: _think = think
     if llm_call: _llm_call = llm_call
 
-# ── 重要性关键词 ──
-_HIGH = ['我叫','我在','我住','喜欢','想要','目标','决定','讨厌','记住','偏好','绝对','必须']
-_MED  = ['在做','项目','开发','研究','计划','AI','产品']
-_LOW  = ['你好','哈哈','嗯','啊','哦']
-
-def score_importance(text: str) -> float:
-    s = 0.5
-    for kw in _HIGH:
-        if kw in text:
-            s = max(s, 0.85); break
-    for kw in _MED:
-        if kw in text:
-            s = max(s, 0.6); break
-    for kw in _LOW:
-        if kw in text and len(text) < 10:
-            s = min(s, 0.25)
-    return s
-
-def _detect_type(text: str) -> str:
-    t = text.lower()
-    # 纠正/不满 → L7
-    if any(k in t for k in ['不对','错了','不好','太短','太长','不是这个','说错']): return 'correction'
-    # 知识类 → L8（严格匹配，防止"有意思""是什么模式"等误判）
-    _knowledge_phrases = ['什么是','怎么回事','是谁','什么意思','意思是什么','什么原理','原理是']
-    # "为什么"单独处理：排除"你为什么/我让你为什么"等元对话
-    _why_ok = '为什么' in t and not t.startswith('你') and '我让你' not in t and '你为什么' not in t
-    # "是什么"需要后面跟实体词，排除"你是什么""现在是什么"等问Nova自身状态的句子
-    is_knowledge = any(k in t for k in _knowledge_phrases) or _why_ok
-    if not is_knowledge and '是什么' in t:
-        # "X是什么" 前面不能是 你/我/它/这/那/现在 等代词
-        idx = t.index('是什么')
-        if idx > 0:
-            prev = t[idx-1]
-            if prev not in '你我它他她这那现在的了':
-                is_knowledge = True
-    if is_knowledge and len(t) >= 4:
-        return 'knowledge'
-    if any(k in t for k in ['喜欢','偏好','讨厌']): return 'preference'
-    if any(k in t for k in ['想要','目标','计划']): return 'goal'
-    if any(k in t for k in ['项目','在做','开发','产品']): return 'project'
-    if any(k in t for k in ['决定','选择']): return 'decision'
-    if any(k in t for k in ['我叫','我是','我在','我住','人在','定居','坐标']): return 'fact'
-    if any(k in t for k in ['记住','不要','必须','规则']): return 'rule'
-    return 'general'
-
-# ── 关键词提取 ──
-_KW_MAP = {
-    '天气':'天气','气温':'天气','温度':'天气',
-    '股票':'股票','股价':'股票',
-    '画':'画图','海报':'画图',
-    '故事':'故事','小说':'故事',
-    '代码':'编程','编程':'编程','python':'编程','bug':'编程',
-    '笑话':'笑话',
-    '喜欢':'喜欢','偏好':'偏好','讨厌':'讨厌',
-    '目标':'目标','想要':'想要','计划':'计划',
-    '项目':'项目','开发':'开发','产品':'产品',
-    'AI':'AI','人工智能':'AI',
-    '创业':'创业','研究':'研究',
-}
-
-def _extract_kw(text: str) -> list:
-    found = []
-    tl = text.lower()
-    for trigger, kw in _KW_MAP.items():
-        if trigger in tl and kw not in found:
-            found.append(kw)
-    chars = re.sub(r'[^\u4e00-\u9fff\w]', '', text)
-    for i in range(len(chars)-1):
-        bg = chars[i:i+2]
-        if len(bg)==2 and bg not in found:
-            found.append(bg)
-    return found[:20]
-
-
-_SIGNAL_GROUPS = {
-    "repair": ["修", "修复", "排查", "修正", "设置", "配置"],
-    "failure": ["没成功", "失败", "报错", "卡住", "不对", "出错", "哪里的问题", "问题"],
-    "success": ["修好了", "搞定", "成功", "好了没", "好了吗", "完成"],
-    "continuation": ["继续", "还是", "又", "刚才", "现在呢", "然后"],
-    "rejection": ["不要", "别", "不想", "拒绝", "算了"],
-    "story": ["故事", "小说", "笑话", "冷笑话"],
-    "game": ["游戏", "玩"],
-    "fatigue": ["累", "疲惫", "熬夜", "困"],
-    "stress": ["烦", "焦", "崩溃", "无语", "压力", "头疼"],
-    "memory": ["记忆", "想起", "记得", "上次", "之前", "以前", "当初"],
-    "dev": ["代码", "前端", "后端", "客户端", "文件", "窗口", "主链", "路由", "监听", "工具"],
-    "model": ["模型", "claude", "gpt", "nova", "agent", "codex"],
-    "weather": ["天气", "气温", "温度"],
-    "stock": ["股票", "股价", "a股"],
-    "image": ["海报", "画", "图片"],
-    "news": ["新闻", "热点", "头条"],
-    "knowledge": ["知识", "学习", "教程", "原理", "是什么", "为什么", "怎么回事"],
-}
-
-_SIGNAL_FILLERS = "吗呢吧啊呀嘛啦喔哦"
-_SIGNATURE_EXCLUDED_TAGS = {"question", "structured", "longform", "continuation"}
-
-
 def _normalize_signal_text(text: str) -> str:
-    text = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", str(text or "").lower())
-    return text.strip()
+    return _l2_signals.normalize_signal_text(text)
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return _l2_meta.clamp(value, low, high)
+
+
+def _normalize_context_tag(tag: str) -> str:
+    return _l2_meta.normalize_context_tag(tag)
+
+
+def _extract_json_object(raw: str) -> dict | None:
+    return _l2_meta.extract_json_object(raw)
+
+
+def _call_memory_meta_llm(prompt: str) -> dict | None:
+    return _l2_meta.call_memory_meta_llm(
+        prompt,
+        llm_call=_llm_call,
+        think=_think,
+        debug_write=_debug_write,
+    )
+
+
+def _call_yes_no_llm(prompt: str) -> bool | None:
+    return _l2_meta.call_yes_no_llm(
+        prompt,
+        llm_call=_llm_call,
+        think=_think,
+        debug_write=_debug_write,
+    )
+
+
+def _normalize_interaction_rule_text(text: str) -> str:
+    return _l2_meta.normalize_interaction_rule_text(text)
+
+
+def _is_explicit_interaction_rule(text: str) -> bool:
+    return _l2_meta.is_explicit_interaction_rule(
+        text,
+        llm_call=_llm_call,
+        think=_think,
+        debug_write=_debug_write,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def _normalize_preference_text(text: str) -> str:
+    return _l2_meta.normalize_preference_text(text)
+
+
+def _is_explicit_preference_statement(text: str) -> bool:
+    return _l2_meta.is_explicit_preference_statement(
+        text,
+        llm_call=_llm_call,
+        think=_think,
+        debug_write=_debug_write,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def _default_memory_type(text: str, ai_text: str = "") -> str:
+    return _l2_meta.default_memory_type(
+        text,
+        ai_text,
+        build_signal_profile=build_signal_profile,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def _default_knowledge_query(text: str, ai_text: str = "") -> bool:
+    return _l2_meta.default_knowledge_query(
+        text,
+        ai_text,
+        build_signal_profile=build_signal_profile,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def _default_context_tag(text: str, ai_text: str = "") -> str:
+    return _l2_meta.default_context_tag(
+        text,
+        ai_text,
+        build_signal_profile=build_signal_profile,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def _score_importance_structural(text: str, ai_text: str = "") -> float:
+    return _l2_meta.score_importance_structural(
+        text,
+        ai_text,
+        build_signal_profile=build_signal_profile,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def _infer_memory_meta(text: str, ai_text: str = "") -> dict:
+    return _l2_meta.infer_memory_meta(
+        text,
+        ai_text,
+        llm_call=_llm_call,
+        think=_think,
+        debug_write=_debug_write,
+        build_signal_profile=build_signal_profile,
+        normalize_signal_text=_normalize_signal_text,
+    )
+
+
+def score_importance(text: str, ai_text: str = "") -> float:
+    return float(_infer_memory_meta(text, ai_text).get("importance", 0.0))
+
+
+def _detect_type(text: str, ai_text: str = "") -> str:
+    return str(_infer_memory_meta(text, ai_text).get("memory_type") or "general")
+
+
+def _profile_content_tokens(text: str) -> list[str]:
+    return _l2_signals.profile_content_tokens(text)
 
 
 def build_signal_profile(text: str) -> set[str]:
-    """构建轻量信号画像：任务连续性、情绪、场景主题等。"""
-    raw = str(text or "").strip().lower()
-    normalized = _normalize_signal_text(raw)
-    if not normalized:
-        return set()
-
-    profile = set()
-    for tag, triggers in _SIGNAL_GROUPS.items():
-        if any(trigger in normalized for trigger in triggers):
-            profile.add(tag)
-
-    if any(sig in raw for sig in ("?", "？", "什么", "怎么", "为什么", "哪里", "哪个")):
-        profile.add("question")
-    if any(sig in raw for sig in (":", "：", "\n")) or any(ch.isdigit() for ch in normalized):
-        profile.add("structured")
-    if len(normalized) >= 12:
-        profile.add("longform")
-    return profile
+    return _l2_signals.build_signal_profile(text)
 
 
 def _signal_overlap(query_profile: set[str], candidate_profile: set[str]) -> float:
-    if not query_profile or not candidate_profile:
-        return 0.0
-    shared = query_profile & candidate_profile
-    if not shared:
-        return 0.0
-    score = len(shared) / max(len(query_profile), 1)
-    if {"repair", "failure"} <= shared:
-        score = max(score, 0.9)
-    elif {"rejection", "story"} <= shared:
-        score = max(score, 0.82)
-    elif "fatigue" in shared or "stress" in shared:
-        score = max(score, 0.72)
-    elif "continuation" in shared and ("repair" in shared or "success" in shared):
-        score = max(score, 0.75)
-    return min(score, 1.0)
+    return _l2_signals.signal_overlap(query_profile, candidate_profile)
 
 
 def _normalize_signature_anchor(text: str) -> str:
-    normalized = _normalize_signal_text(text)
-    for filler in _SIGNAL_FILLERS:
-        normalized = normalized.replace(filler, "")
-    return normalized[:8]
+    return _l2_signals.normalize_signature_anchor(text)
 
 
 def _is_low_signal_general_candidate(text: str) -> bool:
-    text = str(text or "").strip()
-    normalized = _normalize_signal_text(text)
-    if not normalized:
-        return True
-    if len(normalized) <= 2:
-        return True
-    return _looks_like_low_signal_general(text)
+    return _l2_retrieval.is_low_signal_general_candidate(
+        text,
+        normalize_signal_text=_normalize_signal_text,
+        looks_like_low_signal_general=_looks_like_low_signal_general,
+    )
 
 
 def _build_retrieval_signature(entry: dict) -> str:
-    memory_type = str(entry.get("memory_type") or "general").strip().lower() or "general"
-    text = str(entry.get("user_text") or "").strip()
-    profile = sorted(tag for tag in build_signal_profile(text) if tag not in _SIGNATURE_EXCLUDED_TAGS)
-    parts = []
-    if profile:
-        parts.extend(profile[:2])
-    anchor = _normalize_signature_anchor(text)
-    if anchor:
-        parts.append(anchor)
-    elif text:
-        parts.append(text[:8])
-    return f"{memory_type}:{'|'.join(parts[:3])}"
+    return _l2_signals.build_retrieval_signature(entry)
 
 
 def _memory_type_retrieval_bonus(memory_type: str) -> float:
-    memory_type = str(memory_type or "general").strip().lower() or "general"
-    if memory_type in ("rule", "fact", "preference", "goal"):
-        return 0.1
-    if memory_type in ("project", "decision", "correction", "knowledge"):
-        return 0.08
-    return 0.04
+    return _l2_signals.memory_type_retrieval_bonus(memory_type)
 
 # ── 文本相关度 ──
-def _relevance(query: str, stored: str, stored_kw: list) -> float:
-    qkw = _extract_kw(query)
-    # keyword overlap
-    if qkw and stored_kw:
-        ov = len(set(qkw) & set(stored_kw))
-        ks = min(ov / max(len(qkw),1), 1.0)
-    else:
-        ks = 0.0
-    # bigram overlap
-    qc = re.sub(r'\s+','',query.lower())
-    sc = re.sub(r'\s+','',stored.lower())
-    bs = 0.0
-    if len(qc)>=2:
-        m = sum(1 for i in range(len(qc)-1) if qc[i:i+2] in sc)
-        bs = m / max(len(qc)-1, 1)
-    # direct substring
-    ds = 0.8 if (query.lower() in stored.lower() or stored.lower() in query.lower()) else 0.0
-    return max(ks, bs, ds)
+def _normalize_retrieval_text(text: str) -> str:
+    return _l2_signals.normalize_retrieval_text(text)
+
+
+def _token_overlap_score(query: str, stored: str) -> float:
+    return _l2_signals.token_overlap_score(query, stored)
+
+
+def _relevance(query: str, stored: str) -> float:
+    return _l2_signals.relevance(query, stored)
 
 def _freshness(created_at: str) -> float:
-    try:
-        d = (datetime.now() - datetime.fromisoformat(created_at)).total_seconds() / 86400
-        return 1.0 / (1.0 + 0.1 * d)
-    except: return 0.5
+    return _l2_signals.freshness(created_at)
 
 # ── 存储操作 ──
-def _load():  return load_json(L2_FILE, [])
-def _save(d): write_json(L2_FILE, d)
-def _cfg():   return load_json(L2_CFG, {"total_rounds":0,"last_summary_round":0,"total_summaries":0})
-def _save_cfg(c): write_json(L2_CFG, c)
+def _load():
+    data = _l2_storage.load_entries(L2_FILE)
+    cleaned, changed = _l2_hygiene.clean_memory_entries(
+        data,
+        normalize_signal_text=_normalize_signal_text,
+    )
+    if changed:
+        _l2_storage.save_entries(L2_FILE, cleaned)
+    return cleaned
+
+
+def _save(data):
+    _l2_storage.save_entries(L2_FILE, data)
+
+
+def _cfg():
+    return _l2_storage.load_config(L2_CFG)
+
+
+def _save_cfg(config):
+    _l2_storage.save_config(L2_CFG, config)
 
 THRESHOLD = 0.35
 
@@ -252,16 +233,31 @@ def add_memory(user_input: str, ai_response: str):
     """每轮对话后调用，评分入库+结晶+摘要检查"""
     if not user_input or not user_input.strip():
         return None
-    imp = score_importance(user_input)
+    user_input = str(user_input or "").strip()
+    ai_response = _l2_hygiene.sanitize_ai_response_for_memory(ai_response)
+    if not ai_response:
+        _debug_write("l2_skip_empty_reply", {"input": user_input[:80]})
+        return None
+    if _l2_hygiene.is_dirty_memory_turn(
+        user_input,
+        ai_response,
+        normalize_signal_text=_normalize_signal_text,
+    ):
+        _debug_write("l2_skip_dirty", {"input": user_input[:80]})
+        return None
+
+    meta = _infer_memory_meta(user_input, ai_response)
+    imp = float(meta.get("importance", 0.0) or 0.0)
     if imp < THRESHOLD:
         _debug_write("l2_skip", {"input": user_input[:50], "imp": imp})
         return None
-    mtype = _detect_type(user_input)
-    kws = _extract_kw(user_input)
+    mtype = str(meta.get("memory_type") or "general")
     mid = f"l2_{int(time.time()*1000)}"
     entry = {
         "id": mid, "user_text": user_input, "ai_text": ai_response,
-        "importance": imp, "memory_type": mtype, "keywords": kws,
+        "importance": imp, "memory_type": mtype,
+        "context_tag": _normalize_context_tag(meta.get("context_tag") or "日常"),
+        "knowledge_query": bool(meta.get("knowledge_query")),
         "created_at": datetime.now().isoformat(),
         "hit_count": 0, "crystallized": False,
     }
@@ -284,134 +280,51 @@ def add_memory(user_input: str, ai_response: str):
 
 def search_relevant(query: str, limit: int = 8) -> list:
     """多信号相关度检索：不再只靠关键词和 freshness。"""
-    if not query or not query.strip():
-        return []
-    store = _load()
-    if not store:
-        return []
-    query_profile = build_signal_profile(query)
-    query_anchor = _normalize_signature_anchor(query)
-    scored = []
-    for m in store:
-        user_text = str(m.get("user_text", ""))
-        ai_text = str(m.get("ai_text", ""))
-        candidate_text = f"{user_text} {ai_text}".strip()
-        rel = _relevance(query, user_text, m.get("keywords",[]))
-        signal_score = _signal_overlap(query_profile, build_signal_profile(candidate_text))
-        anchor = _normalize_signature_anchor(user_text)
-        direct_score = 0.0
-        if query_anchor and anchor:
-            if query_anchor == anchor:
-                direct_score = 1.0
-            elif len(anchor) >= 3 and (anchor in query_anchor or query_anchor in anchor):
-                direct_score = 0.82
-
-        if rel <= 0 and signal_score <= 0 and direct_score <= 0:
-            continue
-
-        memory_type = str(m.get("memory_type") or "general").strip().lower() or "general"
-        if memory_type == "general" and _is_low_signal_general_candidate(user_text) and direct_score < 1.0 and signal_score < 0.7:
-            continue
-
-        retention = classify_retention_bucket(m)
-        if retention.get("tier") == "prune":
-            continue
-
-        frs = _freshness(m.get("created_at",""))
-        hit_bonus = min(int(m.get("hit_count", 0) or 0) / 8.0, 1.0)
-        retention_bonus = 0.08 if retention.get("tier") == "keep" else 0.04
-        type_bonus = _memory_type_retrieval_bonus(memory_type)
-        fs = (
-            rel * 0.38
-            + signal_score * 0.24
-            + direct_score * 0.16
-            + frs * 0.10
-            + hit_bonus * 0.06
-            + type_bonus * 0.04
-            + retention_bonus * 0.02
-        )
-        if fs > 0.15:
-            scored.append({
-                **m,
-                "relevance": round(rel, 3),
-                "signal_score": round(signal_score, 3),
-                "freshness": round(frs, 3),
-                "direct_score": round(direct_score, 3),
-                "final_score": round(fs, 3),
-            })
-    scored.sort(
-        key=lambda x: (
-            x["final_score"],
-            x.get("signal_score", 0),
-            x.get("direct_score", 0),
-            x.get("relevance", 0),
-            x.get("freshness", 0),
-        ),
-        reverse=True,
+    return _l2_retrieval.search_relevant(
+        query,
+        limit=limit,
+        load_entries=_load,
+        save_entries=_save,
+        build_signal_profile=build_signal_profile,
+        normalize_signature_anchor=_normalize_signature_anchor,
+        relevance=_relevance,
+        signal_overlap=_signal_overlap,
+        classify_retention_bucket=classify_retention_bucket,
+        freshness=_freshness,
+        memory_type_retrieval_bonus=_memory_type_retrieval_bonus,
+        build_retrieval_signature=_build_retrieval_signature,
+        is_low_signal_general_candidate=_is_low_signal_general_candidate,
     )
-    result = []
-    seen_signatures = set()
-    for item in scored:
-        signature = _build_retrieval_signature(item)
-        if signature in seen_signatures:
-            continue
-        seen_signatures.add(signature)
-        result.append(item)
-        if len(result) >= limit:
-            break
-    if result:
-        _bump_hits([r["id"] for r in result])
-    return result
 
 def _bump_hits(ids):
-    try:
-        store = _load()
-        changed = False
-        for m in store:
-            if m.get("id") in ids:
-                m["hit_count"] = m.get("hit_count",0)+1
-                changed = True
-        if changed: _save(store)
-    except: pass
+    _l2_retrieval.bump_hits(
+        ids,
+        load_entries=_load,
+        save_entries=_save,
+    )
 
-# ── 知识问答二次验证 ──
-_CASUAL_PATTERNS = [
-    '有意思', '没意思', '挺有', '真有', '好有', '太有',
-    '不错', '还行', '可以', '厉害', '牛', '哈哈', '嗯嗯',
-    '好的', '知道了', '明白', '懂了', '谢谢', '感谢',
-    '你现在', '你怎么', '你是不是', '你会不会',
-]
-
-def _is_real_knowledge_query(text: str) -> bool:
-    """二次验证：确认用户输入确实是在问知识，而非闲聊/感叹/评价"""
-    t = text.strip()
-    # 太短的不是知识问答
-    if len(t) < 6:
-        return False
-    # 命中闲聊模式 → 不是知识
-    if any(p in t for p in _CASUAL_PATTERNS):
-        return False
-    # 以"你"开头 → 是在问 Nova，不是在问知识
-    if t.startswith('你'):
-        return False
-    # 含"我让你/你为什么/你怎么/你没/你自己" → 元对话，不是知识
-    _meta = ['我让你', '你为什么', '你怎么', '你没', '你自己', '你去', '你回来', '你聊']
-    if any(m in t for m in _meta):
-        return False
-    # 必须包含至少一个疑问信号
-    question_signals = ['?', '\uff1f', '\u4ec0\u4e48', '\u4e3a\u4ec0\u4e48', '\u4e3a\u5565',
-                        '\u600e\u4e48', '\u5982\u4f55', '\u54ea\u91cc', '\u54ea\u4e2a',
-                        '\u662f\u8c01', '\u539f\u7406', '\u533a\u522b']
-    if not any(s in t for s in question_signals):
-        return False
-    return True
+def _is_real_knowledge_query(text: str, ai_text: str = "") -> bool:
+    """二次验证：确认当前对话是否真的是可沉淀到 L8 的知识问答。"""
+    return bool(_infer_memory_meta(text, ai_text).get("knowledge_query"))
 
 
 def _try_crystallize(entry):
+    return _l2_crystallization.try_crystallize(
+        entry,
+        is_real_knowledge_query=_is_real_knowledge_query,
+        to_l7=_to_l7,
+        to_l8=_to_l8,
+        try_update_city=_try_update_city,
+        mark_crystal=_mark_crystal,
+        to_l3=_to_l3,
+        to_l4=_to_l4,
+    )
     imp = entry.get("importance",0)
     mtype = entry.get("memory_type","general")
     text = entry.get("user_text","")
     ai_text = entry.get("ai_text","")
+    context_tag = entry.get("context_tag")
+    knowledge_query = entry.get("knowledge_query")
 
     # L7: 纠正/不满 — 不要求高分，只要检测到就推
     if mtype == "correction":
@@ -419,7 +332,9 @@ def _try_crystallize(entry):
 
     # L8: 知识类 — 需要二次验证确实是知识问答，防止闲聊污染
     if mtype == "knowledge" and len(ai_text) > 20:
-        if _is_real_knowledge_query(text):
+        if knowledge_query is None:
+            knowledge_query = _is_real_knowledge_query(text, ai_text)
+        if knowledge_query:
             _to_l8(text, ai_text)
 
     # 城市提取 — 不受分数限制，用户提到"我在X"就更新L4
@@ -430,11 +345,16 @@ def _try_crystallize(entry):
         return
     _mark_crystal(entry["id"])
     if mtype in ("event","milestone","general","decision"):
-        _to_l3(text, mtype, ai_text=ai_text)
+        _to_l3(text, mtype, ai_text=ai_text, context_tag=context_tag)
     if mtype in ("fact","preference","goal","rule"):
         _to_l4(text, mtype)
 
 def _mark_crystal(mid):
+    return _l2_crystallization.mark_crystal(
+        mid,
+        load_entries=_load,
+        save_entries=_save,
+    )
     try:
         store = _load()
         for m in store:
@@ -443,7 +363,23 @@ def _mark_crystal(mid):
         _save(store)
     except: pass
 
-def _to_l3(text, mtype, *, ai_text=""):
+def _to_l3(text, mtype, *, ai_text="", context_tag=None):
+    return _l2_crystallization.to_l3(
+        text,
+        mtype,
+        ai_text=ai_text,
+        context_tag=context_tag,
+        load_json_fn=load_json,
+        write_json_fn=write_json,
+        l3_file=L3_FILE,
+        normalize_context_tag=_normalize_context_tag,
+        extract_context_tag=_extract_context_tag,
+        debug_write=_debug_write,
+        llm_call=_llm_call,
+        think=_think,
+        thread_factory=threading.Thread,
+        refine_l3_entry_async=_refine_l3_entry_async,
+    )
     """L2→L3 结晶：提炼高保真经历摘要，异步执行不阻塞主请求"""
     try:
         l3 = load_json(L3_FILE, [])
@@ -451,8 +387,7 @@ def _to_l3(text, mtype, *, ai_text=""):
         for it in l3[-20:]:
             if text in str(it.get("event") or it.get("summary", "")) or str(it.get("event") or it.get("summary", "")) in text:
                 return
-        # 话题标签（规则提取，零成本）
-        tag = _extract_context_tag(text + " " + ai_text)
+        tag = _normalize_context_tag(context_tag or _extract_context_tag(text, ai_text))
         # 先写入原文占位，保证不丢
         entry = {
             "event": text[:200],
@@ -476,27 +411,28 @@ def _to_l3(text, mtype, *, ai_text=""):
         _debug_write("l2_crystal_l3_err", {"err": str(e)})
 
 
-def _extract_context_tag(text: str) -> str:
-    """从文本中提取话题标签，复用 session_context 的规则"""
-    _tag_rules = [
-        (["天气", "气温", "温度"], "天气"),
-        (["股票", "股价", "涨", "跌"], "股票"),
-        (["画", "海报", "图片"], "画图"),
-        (["故事", "小说", "童话"], "故事"),
-        (["代码", "编程", "python", "bug"], "编程"),
-        (["新闻", "热点", "头条"], "新闻"),
-        (["AI", "模型", "MCP", "API"], "技术"),
-        (["项目", "开发", "产品", "创业"], "项目"),
-        (["学习", "教程", "知识"], "学习"),
-        (["目标", "计划", "想做", "打算"], "规划"),
-    ]
-    for keywords, tag in _tag_rules:
-        if any(kw in text for kw in keywords):
-            return tag
-    return "日常"
+def _extract_context_tag(text: str, ai_text: str = "") -> str:
+    return _l2_crystallization.extract_context_tag(
+        text,
+        ai_text,
+        infer_memory_meta=_infer_memory_meta,
+    )
+    return str(_infer_memory_meta(text, ai_text).get("context_tag") or "日常")
 
 
 def _refine_l3_entry_async(user_text: str, ai_text: str, created_at: str):
+    return _l2_crystallization.refine_l3_entry_async(
+        user_text,
+        ai_text,
+        created_at,
+        llm_call=_llm_call,
+        think=_think,
+        clean_summary=_clean_summary,
+        load_json_fn=load_json,
+        write_json_fn=write_json,
+        l3_file=L3_FILE,
+        debug_write=_debug_write,
+    )
     """后台线程：用 LLM 提炼结晶摘要，回写到 L3 对应条目"""
     prompt = (
         f"\u7528\u6237\u8bf4\uff1a{user_text[:300]}\n"
@@ -542,6 +478,7 @@ _KNOWN_CITIES = [
 ]
 
 def _append_l4_changelog(persona: dict, content: str):
+    return _l2_crystallization.append_l4_changelog(persona, content)
     """在 persona.json 里追加一条变更日志，供记忆页展示"""
     changelog = persona.setdefault("_changelog", [])
     changelog.append({
@@ -553,6 +490,14 @@ def _append_l4_changelog(persona: dict, content: str):
         persona["_changelog"] = changelog[-50:]
 
 def _try_update_city(text):
+    return _l2_crystallization.try_update_city(
+        text,
+        load_json_fn=load_json,
+        write_json_fn=write_json,
+        l4_file=L4_FILE,
+        append_l4_changelog=_append_l4_changelog,
+        debug_write=_debug_write,
+    )
     """独立的城市提取，不受重要性分数限制"""
     try:
         city_m = re.search(r'(?:\u6211\u5728|\u6211\u4f4f|\u5750\u6807|\u4eba\u5728|\u5b9a\u5c45)([^\s\uff0c,\u3002\u3001\uff01!\uff1f?\u7684\u4e86]+)', text)
@@ -574,6 +519,19 @@ def _try_update_city(text):
         _debug_write("l2_city_update_err", {"err": str(e)})
 
 def _to_l4(text, mtype):
+    return _l2_crystallization.to_l4(
+        text,
+        mtype,
+        load_json_fn=load_json,
+        write_json_fn=write_json,
+        l4_file=L4_FILE,
+        normalize_preference_text=_normalize_preference_text,
+        is_explicit_preference_statement=_is_explicit_preference_statement,
+        normalize_interaction_rule_text=_normalize_interaction_rule_text,
+        is_explicit_interaction_rule=_is_explicit_interaction_rule,
+        append_l4_changelog=_append_l4_changelog,
+        debug_write=_debug_write,
+    )
     try:
         persona = load_json(L4_FILE, {})
         updated = False
@@ -587,17 +545,25 @@ def _to_l4(text, mtype):
                     up["identity"] = (eid+"\uff0c"+f"\u53eb{name}").strip("\uff0c")
                     updated = True
         if mtype == "preference":
-            up = persona.setdefault("user_profile",{})
-            ep = str(up.get("preference",""))
-            short = text[:60]
-            if short not in ep:
-                up["preference"] = (ep+"\uff1b"+short).strip("\uff1b")
-                updated = True
+            pref_text = _normalize_preference_text(text)
+            if _is_explicit_preference_statement(pref_text):
+                up = persona.setdefault("user_profile",{})
+                ep = str(up.get("preference",""))
+                if pref_text not in ep:
+                    up["preference"] = (ep+"\uff1b"+pref_text).strip("\uff1b")
+                    updated = True
+            else:
+                _debug_write("l2_l4_preference_skip", {"text": text[:80], "reason": "not_explicit_preference"})
         if mtype == "rule":
-            rules = persona.setdefault("interaction_rules",[])
-            if not any(text[:30] in str(r) for r in rules):
-                rules.append(text)
-                updated = True
+            rule_text = _normalize_interaction_rule_text(text)
+            if _is_explicit_interaction_rule(rule_text):
+                rules = persona.setdefault("interaction_rules",[])
+                existing = {_normalize_interaction_rule_text(r) for r in rules}
+                if rule_text and rule_text not in existing:
+                    rules.append(rule_text)
+                    updated = True
+            else:
+                _debug_write("l2_l4_rule_skip", {"text": text[:80], "reason": "not_explicit_interaction_rule"})
         if updated:
             _changelog_labels = {
                 "fact": "\u8bb0\u5f55\u4e86\u7528\u6237\u4fe1\u606f",
@@ -613,6 +579,14 @@ def _to_l4(text, mtype):
         _debug_write("l2_crystal_l4_err", {"err":str(e)})
 
 def _to_l7(text, ai_text):
+    return _l2_crystallization.to_l7(
+        text,
+        ai_text,
+        load_json_fn=load_json,
+        write_json_fn=write_json,
+        l7_file=L7_FILE,
+        debug_write=_debug_write,
+    )
     """L2→L7：检测到纠正/不满时，带上对话上下文推给L7，让反馈更精准"""
     try:
         l7 = load_json(L7_FILE, [])
@@ -635,6 +609,12 @@ def _to_l7(text, ai_text):
         _debug_write("l2_crystal_l7_err", {"err": str(e)})
 
 def _condense_knowledge(user_text: str, ai_text: str) -> str:
+    return _l2_crystallization.condense_knowledge(
+        user_text,
+        ai_text,
+        llm_call=_llm_call,
+        debug_write=_debug_write,
+    )
     """用 LLM 从对话中凝结纯知识，同时过滤非知识内容。
     返回凝结后的知识摘要；如果不含可复用知识则返回空字符串。"""
     if not _llm_call or not ai_text:
@@ -671,6 +651,16 @@ def _condense_knowledge(user_text: str, ai_text: str) -> str:
 
 
 def _to_l8(text, ai_text):
+    from memory import l8_learning as l8_learn
+
+    return _l2_crystallization.to_l8(
+        text,
+        ai_text,
+        llm_call=_llm_call,
+        condense_knowledge=_condense_knowledge,
+        save_learned_knowledge=l8_learn.save_learned_knowledge,
+        debug_write=_debug_write,
+    )
     """L2→L8：知识类对话沉淀到知识库，Nova下次就记住了"""
     try:
         # LLM 凝结：从对话中提取纯知识，同时过滤非知识内容
@@ -682,7 +672,7 @@ def _to_l8(text, ai_text):
             else:
                 _debug_write("l2_crystal_l8_filtered", {"text": text[:50]})
                 return
-        from core import l8_learn
+        from memory import l8_learning as l8_learn
 
         entry = l8_learn.save_learned_knowledge(
             text,
@@ -701,6 +691,15 @@ def _to_l8(text, ai_text):
 SUMMARY_INTERVAL = 20
 
 def _auto_summary(cfg, store):
+    return _l2_summaries.auto_summary(
+        cfg,
+        store,
+        summary_interval=SUMMARY_INTERVAL,
+        l3_file=L3_FILE,
+        save_config=_save_cfg,
+        gen_summary=_gen_summary,
+        debug_write=_debug_write,
+    )
     total = cfg.get("total_rounds",0)
     last = cfg.get("last_summary_round",0)
     if total - last < SUMMARY_INTERVAL:
@@ -729,6 +728,7 @@ def _auto_summary(cfg, store):
 
 def _clean_summary(text: str) -> str:
     """清理摘要中的表情、角色扮演语句、过长内容。"""
+    return _l2_summaries.clean_summary(text)
     import re
     t = str(text or "").strip()
     # 去除 emoji 和特殊符号
@@ -746,6 +746,16 @@ def _clean_summary(text: str) -> str:
 
 def _gen_summary(mems, start, end):
     # 优先用裸 LLM，fallback 到 think
+    return _l2_summaries.gen_summary(
+        mems,
+        start,
+        end,
+        summary_interval=SUMMARY_INTERVAL,
+        llm_call=_llm_call,
+        think=_think,
+        build_signal_profile=build_signal_profile,
+        normalize_signal_text=_normalize_signal_text,
+    )
     dialog = ""
     for m in mems[-SUMMARY_INTERVAL:]:
         dialog += f"\u7528\u6237: {m.get('user_text','')}\nAI: {m.get('ai_text','')[:100]}\n\n"
@@ -777,12 +787,21 @@ def _gen_summary(mems, start, end):
                 return _clean_summary(txt)
         except Exception:
             pass
-    # fallback: 关键词提取
+    # fallback: 用结构信号提炼摘要，不再依赖关键词名单
     kps = []
-    imp_kw = ['\u9879\u76ee','\u76ee\u6807','\u559c\u6b22','\u51b3\u5b9a','\u6b63\u5728','\u5f00\u53d1','\u60f3\u505a','AI','\u521b\u4e1a','\u8bb0\u4f4f']
     for m in mems:
-        ut = m.get("user_text","")
-        if any(k in ut for k in imp_kw) and len(ut)>5:
+        ut = str(m.get("user_text", "") or "").strip()
+        if not ut:
+            continue
+        profile = build_signal_profile(ut)
+        normalized = _normalize_signal_text(ut)
+        if float(m.get("importance", 0.0) or 0.0) >= 0.65:
+            kps.append(ut[:40])
+        elif len(normalized) >= 10 and (
+            "meta:question" in profile
+            or "meta:structured" in profile
+            or "meta:mixed_script" in profile
+        ):
             kps.append(ut[:40])
     if kps:
         return f"\u5bf9\u8bdd\u8981\u70b9\uff08\u7b2c{start}-{end}\u8f6e\uff09\uff1a" + "\uff1b".join(kps[:5])
@@ -790,6 +809,7 @@ def _gen_summary(mems, start, end):
 
 # ── 格式化（供prompt注入）──
 def format_l2_context(memories: list) -> str:
+    return _l2_summaries.format_l2_context(memories)
     if not memories:
         return ""
     lines = []
@@ -806,59 +826,37 @@ def format_l2_context(memories: list) -> str:
 
 # ── 统计 ──
 def get_stats() -> dict:
-    store = _load()
-    cfg = _cfg()
-    return {
-        "total_memories": len(store),
-        "total_rounds": cfg.get("total_rounds",0),
-        "total_summaries": cfg.get("total_summaries",0),
-        "high_value": sum(1 for m in store if m.get("importance",0) >= 0.7),
-        "crystallized": sum(1 for m in store if m.get("crystallized")),
-    }
+    return _l2_storage.build_stats(_load(), _cfg())
 
 def _entry_age_days(entry: dict, now: datetime | None = None) -> int:
-    now = now or datetime.now()
-    try:
-        return max(0, (now - datetime.fromisoformat(str(entry.get("created_at") or ""))).days)
-    except Exception:
-        return 999
-
-
-_GENERAL_ACTIVE_SIGNALS = [
-    "问题", "修", "修复", "设置", "代码", "文件", "前端", "后端", "客户端",
-    "工具", "权限", "监听", "打开", "时间线", "步骤", "流程", "为什么", "怎么",
-    "还是", "成功", "失败", "报错", "不对", "继续", "刚才", "现在", "这个对话",
-    "生成", "分割线", "卡住", "主链", "记忆", "路由", "窗口",
-]
-
-_GENERAL_LOW_SIGNAL_PATTERNS = [
-    "哈哈", "牛", "厉害", "聪明", "困", "我来了", "好神奇", "越来越聪明",
-    "哇", "太牛了", "真不错", "挺好", "可以啊", "好厉害",
-]
+    return _l2_retention.entry_age_days(entry, now=now)
 
 
 def _looks_like_active_general_context(text: str) -> bool:
-    text = str(text or "").strip()
-    if not text:
-        return False
-    if any(sig in text for sig in _GENERAL_ACTIVE_SIGNALS):
-        return True
-    if len(text) >= 28 and ("：" in text or ":" in text or "\n" in text):
-        return True
-    return False
+    return _l2_retention.looks_like_active_general_context(
+        text,
+        normalize_signal_text=_normalize_signal_text,
+        build_signal_profile=build_signal_profile,
+    )
 
 
 def _looks_like_low_signal_general(text: str) -> bool:
-    text = str(text or "").strip()
-    if not text:
-        return True
-    if len(text) <= 4:
-        return True
-    return any(sig in text for sig in _GENERAL_LOW_SIGNAL_PATTERNS)
+    return _l2_retention.looks_like_low_signal_general(
+        text,
+        normalize_signal_text=_normalize_signal_text,
+        build_signal_profile=build_signal_profile,
+    )
 
 
 def classify_retention_bucket(entry: dict, now: datetime | None = None) -> dict:
     """给 L2 条目分配保留层级：keep / compress / prune。"""
+    return _l2_retention.classify_retention_bucket(
+        entry,
+        now=now,
+        normalize_signal_text=_normalize_signal_text,
+        build_signal_profile=build_signal_profile,
+        looks_like_low_signal_general=_looks_like_low_signal_general,
+    )
     now = now or datetime.now()
     user_text = str(entry.get("user_text") or "").strip()
     memory_type = str(entry.get("memory_type") or "general").strip().lower() or "general"
@@ -941,6 +939,13 @@ def classify_retention_bucket(entry: dict, now: datetime | None = None) -> dict:
 
 def cleanup_stale_memories(now: datetime | None = None) -> dict:
     """定期清理低价值记忆，返回清理统计"""
+    return _l2_retention.cleanup_stale_memories(
+        load_entries=_load,
+        save_entries=_save,
+        classify_retention_bucket=classify_retention_bucket,
+        debug_write=_debug_write,
+        now=now,
+    )
     store = _load()
     if not store:
         return {"before": 0, "after": 0, "removed": 0}
@@ -977,6 +982,12 @@ def cleanup_stale_memories(now: datetime | None = None) -> dict:
 
 def prune_legacy_l2_demands_from_l5(make_backup: bool = True, reason: str = "manual_cleanup") -> dict:
     """清理旧版 L2→L5 遗留的 l2_demand 条目。"""
+    return _l2_retention.prune_legacy_l2_demands_from_l5(
+        L5_FILE,
+        make_backup=make_backup,
+        reason=reason,
+        debug_write=_debug_write,
+    )
     store = load_json(L5_FILE, [])
     if not isinstance(store, list):
         return {"success": False, "reason": "invalid_knowledge_store"}

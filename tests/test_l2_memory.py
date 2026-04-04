@@ -1,11 +1,20 @@
 import json
 import tempfile
 import unittest
+import threading
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
 from memory import l2_memory
+
+
+class _NoopThread:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def start(self):
+        return None
 
 
 class L2MemoryTests(unittest.TestCase):
@@ -208,6 +217,36 @@ class L2MemoryTests(unittest.TestCase):
             self.assertEqual(len(matched), 1)
             self.assertEqual(matched[0]["id"], "weather_1")
 
+    def test_search_relevant_no_longer_requires_stored_keywords(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            l2_file = tmp / "l2_short_term.json"
+            l2_file.write_text(
+                json.dumps(
+                    [
+                        {
+                            "id": "protocol_1",
+                            "user_text": "mcp protocol",
+                            "ai_text": "we discussed how the protocol connects tools.",
+                            "importance": 0.5,
+                            "memory_type": "project",
+                            "keywords": [],
+                            "created_at": "2026-03-29T10:00:00",
+                            "hit_count": 1,
+                            "crystallized": False,
+                        }
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(l2_memory, "L2_FILE", l2_file):
+                matched = l2_memory.search_relevant("mcp protocol", limit=5)
+
+            self.assertEqual(len(matched), 1)
+            self.assertEqual(matched[0]["id"], "protocol_1")
+
     def test_search_relevant_skips_low_signal_general_and_reduces_same_topic_duplicates(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -272,6 +311,144 @@ class L2MemoryTests(unittest.TestCase):
             self.assertIn("repair_exact", ids)
             self.assertNotIn("low_signal", ids)
             self.assertEqual(len([item_id for item_id in ids if item_id.startswith("repair_")]), 1)
+
+    def test_add_memory_uses_inferred_meta_and_no_longer_writes_keywords(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            l2_file = tmp / "l2_short_term.json"
+            cfg_file = tmp / "l2_config.json"
+            l2_file.write_text("[]", encoding="utf-8")
+            cfg_file.write_text(json.dumps({"total_rounds": 0, "last_summary_round": 0, "total_summaries": 0}), encoding="utf-8")
+
+            meta = {
+                "importance": 0.82,
+                "memory_type": "rule",
+                "knowledge_query": False,
+                "context_tag": "技术",
+            }
+
+            with patch.object(l2_memory, "L2_FILE", l2_file), patch.object(
+                l2_memory, "L2_CFG", cfg_file
+            ), patch.object(l2_memory, "_infer_memory_meta", return_value=meta), patch.object(
+                threading, "Thread", _NoopThread
+            ), patch.object(
+                l2_memory, "_auto_summary"
+            ):
+                result = l2_memory.add_memory("以后执行前先校验路径", "我会先做校验。")
+
+            stored = json.loads(l2_file.read_text(encoding="utf-8"))
+            self.assertIsNotNone(result)
+            self.assertEqual(len(stored), 1)
+            self.assertEqual(stored[0]["memory_type"], "rule")
+            self.assertEqual(stored[0]["context_tag"], "技术")
+            self.assertFalse(stored[0]["knowledge_query"])
+            self.assertNotIn("keywords", stored[0])
+
+    def test_try_crystallize_uses_entry_knowledge_query_flag(self):
+        entry = {
+            "id": "m1",
+            "importance": 0.86,
+            "memory_type": "knowledge",
+            "user_text": "请解释这个协议设计",
+            "ai_text": "这是一个用于描述上下文边界和调用约束的协议说明。" * 2,
+            "knowledge_query": True,
+        }
+
+        with patch.object(l2_memory, "_to_l8") as to_l8, patch.object(
+            l2_memory, "_try_update_city"
+        ), patch.object(
+            l2_memory, "_mark_crystal"
+        ), patch.object(
+            l2_memory, "_is_real_knowledge_query", side_effect=AssertionError("should not fallback")
+        ):
+            l2_memory._try_crystallize(entry)
+
+        to_l8.assert_called_once()
+
+    def test_try_crystallize_passes_entry_context_tag_to_l3(self):
+        entry = {
+            "id": "m2",
+            "importance": 0.84,
+            "memory_type": "general",
+            "user_text": "把多步执行的日志补全一下",
+            "ai_text": "我会补充执行日志并记录验证状态。",
+            "context_tag": "工程",
+        }
+
+        with patch.object(l2_memory, "_to_l3") as to_l3, patch.object(
+            l2_memory, "_try_update_city"
+        ), patch.object(
+            l2_memory, "_mark_crystal"
+        ):
+            l2_memory._try_crystallize(entry)
+
+        to_l3.assert_called_once()
+        self.assertEqual(to_l3.call_args.kwargs["context_tag"], "工程")
+
+    def test_to_l4_stores_explicit_interaction_rule(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4("你必须调用工具来执行操作，不要在文本里模拟执行结果", "rule")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertIn("interaction_rules", stored)
+            self.assertEqual(len(stored["interaction_rules"]), 1)
+            self.assertIn("调用工具", stored["interaction_rules"][0])
+            self.assertIn("_changelog", stored)
+            self.assertEqual(len(stored["_changelog"]), 1)
+
+    def test_to_l4_skips_architecture_discussion_misclassified_as_rule(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            text = (
+                "我还没理解 更合理的 agent 语义\n"
+                "一轮应该是一个决策批次\n"
+                "更完整的做法是一轮里允许多个独立动作一起发出，再统一执行和回灌。"
+            )
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4(text, "rule")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored, {})
+
+    def test_to_l4_stores_explicit_preference_statement(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4("我喜欢自然一点、别太模板化的聊天", "preference")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertIn("user_profile", stored)
+            self.assertIn("preference", stored["user_profile"])
+            self.assertIn("自然", stored["user_profile"]["preference"])
+
+    def test_to_l4_skips_architecture_discussion_misclassified_as_preference(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            text = (
+                "更合理的 agent 语义应该把一轮当成一个决策批次，"
+                "允许多个独立动作统一执行和回灌。"
+            )
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4(text, "preference")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored, {})
 
     def test_prune_legacy_l2_demands_from_l5_backs_up_and_removes_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:

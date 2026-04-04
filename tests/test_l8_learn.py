@@ -38,11 +38,11 @@ class L8LearnTests(unittest.TestCase):
         self.assertTrue(allowed)
         self.assertEqual(reason, "eligible")
 
-    def test_should_trigger_auto_learn_rejects_greetings(self):
+    def test_should_trigger_auto_learn_no_longer_keyword_blocks_greetings(self):
         allowed, reason = l8_learn.should_trigger_auto_learn("hello")
 
-        self.assertFalse(allowed)
-        self.assertEqual(reason, "greeting")
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "eligible")
 
     def test_should_trigger_auto_learn_rejects_skill_handled_queries(self):
         allowed, reason = l8_learn.should_trigger_auto_learn(
@@ -53,16 +53,32 @@ class L8LearnTests(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertEqual(reason, "handled_by_skill")
 
-    def test_should_trigger_auto_learn_rejects_non_question_like_queries(self):
-        # "今天心情不错" 既不是问句也不是学习请求
+    def test_should_trigger_auto_learn_no_longer_uses_question_keyword_gate(self):
         allowed, reason = l8_learn.should_trigger_auto_learn("今天心情不错")
 
-        self.assertFalse(allowed)
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "eligible")
+
+    def test_auto_learn_uses_llm_to_reject_non_knowledge_input(self):
+        with patch.object(l8_learn, "_llm_call", return_value="NO"), \
+             patch.object(l8_learn, "search_web_results") as mock_search:
+            result = l8_learn.auto_learn("hello")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["reason"], "not_knowledge_query")
+        mock_search.assert_not_called()
+
+    def test_is_explicit_learning_request_uses_llm_yes_no(self):
+        with patch.object(l8_learn, "_llm_call", return_value="YES"):
+            self.assertTrue(l8_learn.is_explicit_learning_request("你去查一下量子计算"))
+
+        with patch.object(l8_learn, "_llm_call", return_value="NO"):
+            self.assertFalse(l8_learn.is_explicit_learning_request("量子计算是什么"))
 
     def test_save_and_find_relevant_knowledge_updates_hit_count_when_touched(self):
         l8_learn.save_learned_knowledge(
             "FastAPI 是什么？",
-            "FastAPI：现代 Python Web 框架。",
+            "FastAPI 是一个现代 Python Web 框架。",
             [
                 {
                     "title": "FastAPI 官方文档",
@@ -80,25 +96,87 @@ class L8LearnTests(unittest.TestCase):
         self.assertEqual(stored[0]["hit_count"], 1)
         self.assertIn("last_used", stored[0])
 
+    def test_find_relevant_knowledge_no_longer_requires_entry_keywords(self):
+        self.knowledge_base_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": "l8_1",
+                        "source": "bing_rss",
+                        "type": "knowledge",
+                        "query": "mcp protocol",
+                        "summary": "mcp protocol connects models with tools and external context.",
+                        "keywords": [],
+                        "trigger": [],
+                        "created_at": "2026-03-29T10:00:00",
+                        "last_used": "2026-03-29T10:00:00",
+                        "hit_count": 0,
+                        "一级场景": "自主学习",
+                        "二级场景": "自动学习-mcp",
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        hits = l8_learn.find_relevant_knowledge("mcp protocol", touch=False)
+
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["query"], "mcp protocol")
+
+    def test_find_relevant_knowledge_uses_llm_semantic_ranking_for_non_exact_matches(self):
+        self.knowledge_base_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": "l8_semantic",
+                        "source": "bing_rss",
+                        "type": "knowledge",
+                        "query": "model context protocol overview",
+                        "summary": "Model Context Protocol lets models use tools and external context through a standard interface.",
+                        "created_at": "2026-03-29T10:00:00",
+                        "last_used": "2026-03-29T10:00:00",
+                        "hit_count": 0,
+                        "一级场景": "自主学习",
+                        "二级场景": "自动学习-mcp",
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        with patch.object(l8_learn, "_llm_call", return_value='[{"id":"l8_semantic","score":2}]'):
+            hits = l8_learn.find_relevant_knowledge("什么是 MCP", touch=False)
+
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["query"], "model context protocol overview")
+
     def test_auto_learn_writes_knowledge_entry_from_search_results(self):
         mock_results = [
             {
                 "title": "FastAPI 是什么",
-                "snippet": "FastAPI 是什么？FastAPI 是用于构建 API 的现代 Python Web 框架。",
+                "snippet": "FastAPI 是用于构建 API 的现代 Python Web 框架。",
                 "url": "https://fastapi.tiangolo.com/",
             },
             {
                 "title": "FastAPI 教程",
-                "snippet": "FastAPI 是什么：一个提供类型提示驱动的开发体验的框架。",
+                "snippet": "FastAPI 提供类型提示驱动的开发体验。",
                 "url": "https://example.com/fastapi-tutorial",
             },
         ]
 
-        def fake_llm(prompt):
-            if "关键词" in prompt:
-                return "FastAPI, Python, Web框架"
-            if "提炼" in prompt or "查询词" in prompt:
-                return "FastAPI 是什么"
+        def fake_llm(prompt, *args, **kwargs):
+            max_tokens = kwargs.get("max_tokens")
+            if max_tokens == 5:
+                return "YES"
+            if max_tokens == 16:
+                return "OK"
+            if max_tokens == 20:
+                return "FastAPI"
+            if "3-5" in prompt:
+                return "FastAPI, Python, Web"
             return "FastAPI 是一个现代 Python Web 框架，支持类型提示驱动的开发。"
 
         with patch.object(l8_learn, "search_web_results", return_value=mock_results), \
@@ -114,10 +192,66 @@ class L8LearnTests(unittest.TestCase):
         self.assertEqual(stored[0]["query"], "FastAPI 是什么？")
         self.assertIn("FastAPI", stored[0]["summary"])
 
+    def test_auto_learn_accepts_semantically_relevant_results_without_keyword_overlap(self):
+        mock_results = [
+            {
+                "title": "Model Context Protocol overview",
+                "snippet": "MCP is an open protocol for connecting models with tools and external context.",
+                "url": "https://example.com/mcp",
+            }
+        ]
+
+        def fake_llm(prompt, *args, **kwargs):
+            max_tokens = kwargs.get("max_tokens")
+            if max_tokens == 5:
+                return "YES"
+            if max_tokens == 16:
+                return "OK"
+            if max_tokens == 20:
+                return "MCP"
+            if "3-5" in prompt:
+                return "MCP, protocol"
+            return "MCP 是一种连接模型与工具和外部上下文的协议。"
+
+        with patch.object(l8_learn, "search_web_results", return_value=mock_results), \
+             patch.object(l8_learn, "_llm_call", fake_llm):
+            result = l8_learn.auto_learn("什么是MCP")
+
+        stored = self._read_knowledge_base()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["result_count"], 1)
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0]["query"], "什么是MCP")
+
+    def test_auto_learn_uses_llm_to_reject_irrelevant_search_results(self):
+        mock_results = [
+            {
+                "title": "Newton biography",
+                "snippet": "A short introduction to Isaac Newton and classical mechanics.",
+                "url": "https://example.com/newton",
+            }
+        ]
+
+        def fake_llm(prompt, *args, **kwargs):
+            max_tokens = kwargs.get("max_tokens")
+            if max_tokens == 5:
+                return "NO"
+            if max_tokens == 20:
+                return "量子计算"
+            return "OK"
+
+        with patch.object(l8_learn, "search_web_results", return_value=mock_results), \
+             patch.object(l8_learn, "_llm_call", fake_llm):
+            result = l8_learn.auto_learn("帮我查一下量子计算")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["reason"], "search_results_irrelevant")
+
     def test_auto_learn_skips_search_when_query_is_already_known(self):
         l8_learn.save_learned_knowledge(
             "FastAPI 是什么？",
-            "FastAPI：现代 Python Web 框架。",
+            "FastAPI 是一个现代 Python Web 框架。",
             [
                 {
                     "title": "FastAPI 官方文档",
@@ -153,7 +287,7 @@ class L8LearnTests(unittest.TestCase):
                         "source": "bing_rss",
                         "type": "knowledge",
                         "query": "FastAPI 是什么？",
-                        "summary": "FastAPI 是一个高性能 Python Web 框架。",
+                        "summary": "FastAPI 是一个高性能 Python Web 框架，适合构建 API。",
                     },
                     {
                         "source": "l2_crystallize",
@@ -195,6 +329,58 @@ class L8LearnTests(unittest.TestCase):
 
         self.assertEqual(entry["summary"], "FastAPI 是一个高性能 Python Web 框架。")
         self.assertEqual(stored[0]["feedback_fix"], "下次先直接回答定义")
+
+    def test_save_learned_knowledge_no_longer_persists_keywords_fields(self):
+        entry = l8_learn.save_learned_knowledge(
+            "FastAPI 是什么？",
+            "FastAPI 是一个现代 Python Web 框架。",
+            [],
+        )
+
+        stored = self._read_knowledge_base()
+
+        self.assertNotIn("keywords", entry)
+        self.assertNotIn("trigger", entry)
+        self.assertNotIn("keywords", stored[0])
+        self.assertNotIn("trigger", stored[0])
+
+    def test_save_learned_knowledge_defaults_primary_scene_without_keyword_classification(self):
+        entry = l8_learn.save_learned_knowledge(
+            "天气怎么查",
+            "这是一个关于天气查询方式的知识总结，包含可复用的方法。",
+            [],
+        )
+
+        self.assertEqual(entry["一级场景"], "自主学习")
+        self.assertEqual(entry["二级场景"], "自动学习-天气怎么查")
+
+    def test_save_learned_knowledge_uses_route_signal_for_tool_scene(self):
+        entry = l8_learn.save_learned_knowledge(
+            "上海天气",
+            "这是一次天气技能返回后的知识记录，包含可复用信息。",
+            [],
+            route_result={"mode": "skill", "skill": "weather"},
+        )
+
+        self.assertEqual(entry["一级场景"], "工具应用")
+        self.assertEqual(entry["二级场景"], "技能学习-上海天气")
+
+    def test_save_learned_knowledge_uses_llm_quality_gate_for_self_referential_entries(self):
+        def fake_llm(prompt, *args, **kwargs):
+            if kwargs.get("max_tokens") == 16:
+                return "self_referential"
+            return "OK"
+
+        with patch.object(l8_learn, "_llm_call", fake_llm):
+            result = l8_learn.save_learned_knowledge(
+                "我们的记忆系统怎么工作",
+                "这条摘要主要在解释系统内部运行和记忆层的工作方式，不是外部可复用知识。",
+                [],
+            )
+
+        self.assertFalse(result["saved"])
+        self.assertEqual(result["reason"], "self_referential")
+        self.assertEqual(self._read_knowledge_base(), [])
 
     def test_feedback_relearn_does_not_persist_into_l8_knowledge_base(self):
         with patch.object(

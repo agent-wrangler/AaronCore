@@ -10,6 +10,9 @@ from fastapi.responses import HTMLResponse, Response
 
 from core.runtime_state.state_loader import (
     ENGINE_DIR, CORE_DIR, PRIMARY_STATE_DIR, LOGS_DIR,
+    CONTENT_STORE_DIR, MCP_REGISTRY_CACHE_FILE, MCP_SERVERS_FILE,
+    QQ_MONITOR_STATE_FILE, RUNTIME_STORE_DIR, STATE_DATA_DIR,
+    TASK_STORE_DIR,
     HTML_FILE, RESTORED_OUTPUT_JS_FILE,
     load_current_model,
     load_msg_history, save_msg_history, get_recent_messages,
@@ -30,7 +33,11 @@ from core.context_builder import init as _context_builder_init
 from core import shared as S
 
 LOGS_DIR.mkdir(exist_ok=True)
+STATE_DATA_DIR.mkdir(exist_ok=True)
 PRIMARY_STATE_DIR.mkdir(exist_ok=True)
+TASK_STORE_DIR.mkdir(exist_ok=True)
+CONTENT_STORE_DIR.mkdir(exist_ok=True)
+RUNTIME_STORE_DIR.mkdir(exist_ok=True)
 S.debug_log = LOGS_DIR / "chat_debug.log"
 S.ENGINE_DIR = ENGINE_DIR
 S.PRIMARY_STATE_DIR = PRIMARY_STATE_DIR
@@ -46,7 +53,6 @@ awareness_pull = S.awareness_pull
 # ── Core 模块导入 ──
 try:
     sys.path.insert(0, str(CORE_DIR))
-    from router import route as nova_route
     from executor import execute as nova_execute
     from core.skills import (
         get_all_skills,
@@ -62,7 +68,7 @@ try:
     NOVA_CORE_READY = True
     CORE_IMPORT_ERROR = ""
 except Exception as exc:
-    nova_route = nova_execute = get_all_skills = get_all_skills_for_ui = get_exposed_skills = get_skill_catalog_summary = get_surfacing_view = get_tool_view = get_user_view = get_user_visible_skills = set_skill_enabled = None
+    nova_execute = get_all_skills = get_all_skills_for_ui = get_exposed_skills = get_skill_catalog_summary = get_surfacing_view = get_tool_view = get_user_view = get_user_visible_skills = set_skill_enabled = None
     NOVA_CORE_READY = False
     CORE_IMPORT_ERROR = str(exc)
 
@@ -93,8 +99,8 @@ from memory.history_recall import (
 from core.runtime_state.json_store import load_json
 try:
     from core.route_resolver import (
-        is_registered_skill_name, looks_like_news_request, resolve_route,
-        resolve_route_fast, normalize_route_result, detect_story_follow_up_route, llm_route,
+        is_registered_skill_name, resolve_route,
+        resolve_route_fast, normalize_route_result, llm_route,
     )
     from core.route_resolver import init as _route_resolver_init
 except Exception:
@@ -103,10 +109,6 @@ except Exception:
             return bool(get_all_skills and skill_name in (get_all_skills() or {}))
         except Exception:
             return False
-
-    def looks_like_news_request(text: str) -> bool:
-        raw = str(text or '').strip()
-        return any(word in raw for word in ('新闻', '头条', '热点', '今日新闻'))
 
     def normalize_route_result(result, user_input: str = '', source: str = '') -> dict:
         result = result if isinstance(result, dict) else {}
@@ -127,26 +129,9 @@ except Exception:
         normalized['mode'] = mode
         return normalized
 
-    def detect_story_follow_up_route(bundle: dict | None = None):
-        bundle = bundle if isinstance(bundle, dict) else {}
-        text = str(bundle.get('user_input') or '').strip()
-        if text not in {'然后呢', '后来呢', '接着呢', '继续', '继续讲'}:
-            return None
-        history = bundle.get('l2') or []
-        if not isinstance(history, list):
-            return None
-        latest = next((item for item in reversed(history) if isinstance(item, dict) and item.get('role') in ('nova', 'assistant')), None)
-        content = str((latest or {}).get('content') or '')
-        if '《' in content and '》' in content:
-            return {'mode': 'skill', 'skill': 'story', 'source': 'context', 'rewritten_input': text}
-        return None
-
     def resolve_route(bundle: dict | None = None) -> dict:
         bundle = bundle if isinstance(bundle, dict) else {}
         user_input = str(bundle.get('user_input') or '').strip()
-        follow_up = detect_story_follow_up_route(bundle)
-        if follow_up:
-            return follow_up
         return {'mode': 'chat', 'skill': 'none', 'rewritten_input': user_input, 'source': 'fallback'}
 
     def resolve_route_fast(bundle: dict | None = None) -> dict:
@@ -171,9 +156,39 @@ from core.feedback_classifier import init as _feedback_classifier_init, search_r
 
 
 # ── LLM 调用函数 ──
+def _is_codex_transport(cfg: dict | None) -> bool:
+    if not isinstance(cfg, dict):
+        return False
+    transport = str(cfg.get("transport") or cfg.get("auth_mode") or "").strip().lower()
+    base_url = str(cfg.get("base_url") or "").strip().lower()
+    return transport in {"codex_cli", "codex-subscription", "codex_subscription"} or base_url.startswith("codex://")
+
+
+def _pick_internal_llm_config() -> dict:
+    import brain
+
+    current_cfg = brain.LLM_CONFIG if isinstance(getattr(brain, "LLM_CONFIG", None), dict) else {}
+    if current_cfg and not _is_codex_transport(current_cfg):
+        return current_cfg
+
+    models = getattr(brain, "MODELS_CONFIG", {}) or {}
+    for preferred_id in ("deepseek-chat", "minimax", "MiniMax-M2.7-highspeed"):
+        cfg = models.get(preferred_id)
+        if isinstance(cfg, dict) and not _is_codex_transport(cfg):
+            return cfg
+
+    for _, cfg in models.items():
+        if isinstance(cfg, dict) and not _is_codex_transport(cfg):
+            return cfg
+
+    return current_cfg
+
+
 def _raw_llm_call(prompt: str) -> str:
-    from brain import LLM_CONFIG, llm_call
-    result = llm_call(LLM_CONFIG, [{"role": "user", "content": prompt}],
+    from brain import llm_call
+
+    cfg = _pick_internal_llm_config()
+    result = llm_call(cfg, [{"role": "user", "content": prompt}],
                       temperature=0.1, max_tokens=500, timeout=15)
     usage = result.get("usage", {})
     if usage:
@@ -184,7 +199,7 @@ def _raw_llm_call(prompt: str) -> str:
                 scene="route",
                 cache_write=usage.get("prompt_cache_miss_tokens", 0),
                 cache_read=usage.get("prompt_cache_hit_tokens", 0),
-                model=LLM_CONFIG.get("model", ""),
+                model=cfg.get("model", ""),
             )
         except Exception:
             pass
@@ -192,8 +207,10 @@ def _raw_llm_call(prompt: str) -> str:
 
 
 def _knowledge_llm_call(prompt: str) -> str:
-    from brain import LLM_CONFIG, llm_call
-    result = llm_call(LLM_CONFIG, [{"role": "user", "content": prompt}],
+    from brain import llm_call
+
+    cfg = _pick_internal_llm_config()
+    result = llm_call(cfg, [{"role": "user", "content": prompt}],
                       temperature=0.2, max_tokens=300, timeout=15)
     usage = result.get("usage", {})
     if usage:
@@ -204,7 +221,7 @@ def _knowledge_llm_call(prompt: str) -> str:
                 scene="learn",
                 cache_write=usage.get("prompt_cache_miss_tokens", 0),
                 cache_read=usage.get("prompt_cache_hit_tokens", 0),
-                model=LLM_CONFIG.get("model", ""),
+                model=cfg.get("model", ""),
             )
         except Exception:
             pass
@@ -230,7 +247,6 @@ _context_builder_init(
     extract_session_context=extract_session_context,
 )
 _route_resolver_init(
-    nova_route=nova_route if NOVA_CORE_READY else None,
     debug_write=debug_write, think=think,
     get_all_skills=get_all_skills if NOVA_CORE_READY else None,
     nova_core_ready=NOVA_CORE_READY,
@@ -282,21 +298,21 @@ from core.mcp_client import init as _mcp_client_init
 _mcp_client_init(
     debug_write=debug_write,
     llm_call=_raw_llm_call,
-    servers_path=PRIMARY_STATE_DIR / "mcp_servers.json",
+    servers_path=MCP_SERVERS_FILE,
 )
 
 # ── MCP Registry 初始化 ──
 from core.mcp_registry import init as _mcp_registry_init
 _mcp_registry_init(
     debug_write=debug_write,
-    cache_path=PRIMARY_STATE_DIR / "mcp_registry_cache.json",
+    cache_path=MCP_REGISTRY_CACHE_FILE,
 )
 
 # ── 填充 shared 状态供路由模块使用 ──
 S.NOVA_CORE_READY = NOVA_CORE_READY
 S.CORE_IMPORT_ERROR = CORE_IMPORT_ERROR
 for _name, _val in {
-    "nova_route": nova_route, "nova_execute": nova_execute, "get_all_skills": get_all_skills,
+    "nova_execute": nova_execute, "get_all_skills": get_all_skills,
     "get_exposed_skills": get_exposed_skills if NOVA_CORE_READY else None,
     "get_skill_catalog_summary": get_skill_catalog_summary if NOVA_CORE_READY else None,
     "get_tool_view": get_tool_view if NOVA_CORE_READY else None,
@@ -344,7 +360,6 @@ for _name, _val in {
     "extract_session_context": extract_session_context,
     "resolve_route": resolve_route,
     "resolve_route_fast": resolve_route_fast,
-    "looks_like_news_request": looks_like_news_request,
     "is_registered_skill_name": is_registered_skill_name,
     "load_msg_history": load_msg_history, "save_msg_history": save_msg_history,
     "get_recent_messages": get_recent_messages,
@@ -423,8 +438,7 @@ def build_capability_chat_reply(route: dict | None = None) -> str:
     if intent == "missing_skill":
         missing_skill = str(route.get("missing_skill") or route.get("skill") or "\u6280\u80fd").strip() or "\u6280\u80fd"
         label = get_skill_display_name(missing_skill)
-        prompt = str(route.get("rewritten_input") or "").strip()
-        if missing_skill == "news" or looks_like_news_request(prompt):
+        if missing_skill == "news":
             return f"\u6211\u672c\u6765\u60f3\u6309\u300c{label}\u300d\u8fd9\u6761\u8def\u63a5\u4f4f\u4f60\u8fd9\u53e5\uff0c\u4f46\u8fd9\u9879\u80fd\u529b\u73b0\u5728\u6ca1\u63a5\u4e0a\uff0c\u6240\u4ee5\u6211\u5148\u4e0d\u4e71\u62a5\u201c\u4eca\u5929\u201d\u7684\u65b0\u95fb\uff0c\u514d\u5f97\u628a\u65e7\u4fe1\u606f\u5f53\u6210\u73b0\u5728\u3002"
         return f"\u6211\u672c\u6765\u60f3\u6309\u300c{label}\u300d\u8fd9\u6761\u80fd\u529b\u63a5\u4f4f\u4f60\u8fd9\u53e5\uff0c\u4e0d\u8fc7\u5b83\u73b0\u5728\u6ca1\u63a5\u4e0a\uff0c\u6240\u4ee5\u5148\u4e0d\u62ff\u4e00\u6761\u5931\u6548\u7ed3\u679c\u7cca\u5f04\u4f60\u3002"
     skills = "\u3001".join(list_primary_capabilities())
@@ -479,7 +493,7 @@ async def _startup_mcp():
 # 启动时清理残留的监听状态（重启后旧的监听进程已死）
 try:
     import json as _json
-    _monitor_state = PRIMARY_STATE_DIR / "qq_monitor_state.json"
+    _monitor_state = QQ_MONITOR_STATE_FILE
     if _monitor_state.exists():
         _json.dump({"active": False, "groups": [], "group": None},
                    open(_monitor_state, "w", encoding="utf-8"), ensure_ascii=False)

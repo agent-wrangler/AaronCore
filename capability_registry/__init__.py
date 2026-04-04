@@ -2,9 +2,11 @@ import importlib.util
 import json
 from pathlib import Path
 
+from storage.paths import SKILL_STORE_FILE
+
 _REGISTRY_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _REGISTRY_DIR.parent
-_STORE_PATH = _REPO_ROOT / "state_data" / "skill_store.json"
+_STORE_PATH = SKILL_STORE_FILE
 _WORKFLOW_SKILLS_DIR = _REPO_ROOT / "skills" / "builtin"
 _NATIVE_SKILL_DIRS = (
     _REPO_ROOT / "tools" / "agent",

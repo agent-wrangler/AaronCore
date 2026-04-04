@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from core import shared as S
 from core.markdown_render import render_markdown_html
 from memory.l2_memory import classify_retention_bucket
-from core.l8_learn import classify_l8_entry_kind, should_show_l8_timeline_entry
+from memory.l8_learning import classify_l8_entry_kind, should_show_l8_timeline_entry
 from storage.stats_store import MODEL_PRICES, get_model_price
 
 router = APIRouter()
@@ -71,12 +71,11 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "core/history_recall.py": "历史召回",
     "core/json_store.py": "JSON存储",
     "core/l2_memory.py": "L2记忆模块",
-    "core/l8_learn.py": "L8学习模块",
+    "memory/l8_learning.py": "L8学习模块",
     "core/lab.py": "实验核心",
     "core/logger.py": "日志模块",
     "core/mcp_client.py": "MCP客户端",
     "core/mcp_registry.py": "MCP注册表",
-    "core/memory_consolidator.py": "记忆凝结器",
     "core/nerve.py": "神经中枢",
     "core/network_protocol.py": "网络协议",
     "core/nova_brain.py": "Nova大脑",
