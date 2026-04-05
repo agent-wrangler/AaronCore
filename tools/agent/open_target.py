@@ -11,9 +11,30 @@ from core.fs_protocol import (
 )
 from core.network_protocol import preflight_remote_access
 from core.skills.ui_interaction import submit_browser_search
+from decision.tool_runtime.runtime_control import cooperative_sleep, raise_if_cancelled
 
 
 _BROWSERS = ["chrome.exe", "msedge.exe", "firefox.exe"]
+
+
+def _hidden_console_kwargs() -> dict:
+    if os.name != "nt":
+        return {}
+
+    kwargs = {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+
+    try:
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+        startupinfo.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+        kwargs["startupinfo"] = startupinfo
+    except Exception:
+        pass
+
+    return kwargs
 
 
 def _count_windows(title_hint: str = "") -> int:
@@ -34,6 +55,7 @@ def _check_process_running(name: str) -> bool:
             capture_output=True,
             text=True,
             timeout=5,
+            **_hidden_console_kwargs(),
         )
         return name.lower() in result.stdout.lower()
     except Exception:
@@ -41,15 +63,26 @@ def _check_process_running(name: str) -> bool:
 
 
 def _browser_running() -> bool:
-    return any(_check_process_running(browser) for browser in _BROWSERS)
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            **_hidden_console_kwargs(),
+        )
+        output = result.stdout.lower()
+        return any(browser.lower() in output for browser in _BROWSERS)
+    except Exception:
+        return any(_check_process_running(browser) for browser in _BROWSERS)
 
 
-def _verify_url_opened(pre_count: int, pre_browser: bool, wait: float = 8.0) -> dict:
+def _verify_url_opened(pre_count: int, pre_browser: bool, wait: float = 8.0, context: dict | None = None) -> dict:
     elapsed = 0.0
     interval = 2.0
 
     while elapsed < wait:
-        time.sleep(interval)
+        cooperative_sleep(interval, context, detail="open_target cancelled during browser verification")
         elapsed += interval
 
         post_count = _count_windows()
@@ -213,6 +246,8 @@ def _local_target_result(
 
 
 def execute(query, context=None):
+    context = context if isinstance(context, dict) else {}
+    raise_if_cancelled(context, detail="open_target cancelled before start")
     _, target_value = _resolve_target(query, context)
     if not target_value:
         return build_operation_result(
@@ -315,12 +350,14 @@ def execute(query, context=None):
     pre_count, pre_browser = _snapshot_before() if info["target_type"] == "url" else (0, False)
 
     if info["target_type"] == "url":
+        raise_if_cancelled(context, detail="open_target cancelled before launching browser")
         _open_url(effective_target)
     else:
+        raise_if_cancelled(context, detail="open_target cancelled before opening local target")
         os.startfile(info["target"])
 
     if info["target_type"] == "url":
-        verify = _verify_url_opened(pre_count, pre_browser)
+        verify = _verify_url_opened(pre_count, pre_browser, context=context)
         if verify.get("ok") is False:
             if pre_browser and _browser_running():
                 if remote_plan.get("search_term") and not remote_plan.get("composed"):
@@ -364,8 +401,9 @@ def execute(query, context=None):
                 )
 
             pre2, pre2_b = _snapshot_before()
+            raise_if_cancelled(context, detail="open_target cancelled before retry")
             _open_url(effective_target)
-            verify_retry = _verify_url_opened(pre2, pre2_b, wait=10.0)
+            verify_retry = _verify_url_opened(pre2, pre2_b, wait=10.0, context=context)
             if verify_retry.get("ok") is False:
                 if _browser_running():
                     return _url_result(

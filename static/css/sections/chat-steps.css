@@ -34,12 +34,14 @@
   font-size: 12px;
   line-height: 1.45;
   font-weight: 500;
+  font-family: var(--font-chat-sans);
 }
 
 .plan-summary {
   color: #7c8aa0;
   font-size: 12px;
   line-height: 1.45;
+  font-family: var(--font-chat-sans);
 }
 
 .plan-items {
@@ -53,6 +55,7 @@
   border-radius: 999px;
   font-size: 11px;
   line-height: 1.2;
+  font-family: var(--font-chat-sans);
   border: 1px solid rgba(124, 138, 160, 0.22);
   color: #8ea0b5;
   background: rgba(124, 138, 160, 0.08);
@@ -102,6 +105,7 @@
   gap: 8px;
   padding: 0;
   font-size: 12px;
+  font-family: var(--font-chat-user-sans);
   position: relative;
   animation: stepFadeIn 0.18s ease;
   transition: color 0.18s ease, opacity 0.18s ease;
@@ -194,17 +198,21 @@
   color: #98a5b7;
   display: block;
   font-size: 12px;
-  line-height: 1.5;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  line-height: 1.45;
+  font-family: var(--font-chat-user-sans);
+  font-weight: 400;
+  letter-spacing: 0.005em;
   white-space: nowrap;
 }
 
 .step-detail {
   color: #c8d0dd;
   display: block;
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-family: var(--font-chat-user-sans);
+  font-size: 12.75px;
+  line-height: 1.62;
+  font-weight: 300;
+  letter-spacing: 0;
   white-space: normal;
   min-width: 0;
   flex: 1 1 280px;
@@ -239,6 +247,7 @@
   padding: 0;
   color: #9fb0c4;
   font-size: 12px;
+  font-family: var(--font-chat-user-sans);
   letter-spacing: 0.01em;
   border: none;
   background: none;
@@ -256,14 +265,16 @@
   align-items: center;
   gap: 8px;
   color: #bac6d6;
+  font-family: var(--font-chat-user-sans);
   flex: 0 0 auto;
 }
 
 .step-tracker-title {
   font-size: 12.5px;
   line-height: 1.4;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-family: var(--font-chat-user-sans);
+  font-weight: 400;
+  letter-spacing: 0.012em;
 }
 
 .step-tracker-summary {
@@ -273,8 +284,11 @@
   min-width: 0;
   max-width: none;
   color: #c7cfdb;
+  font-family: var(--font-chat-user-sans);
   font-size: 12.5px;
   line-height: 1.55;
+  font-weight: 300;
+  letter-spacing: 0;
   word-break: break-word;
 }
 
@@ -287,8 +301,11 @@
   margin-left: auto;
   flex: 0 0 auto;
   color: #7c8aa0;
+  font-family: var(--font-chat-user-sans);
   font-size: 11px;
   line-height: 1.4;
+  font-weight: 300;
+  letter-spacing: 0;
 }
 
 .step-tracker-toggle-text:empty {

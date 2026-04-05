@@ -7,6 +7,11 @@ from decision.tool_runtime.batch import (
 )
 from decision.tool_runtime.events import synthesize_tool_failure_response
 from decision.tool_runtime.ledger import ToolCallTurnLedger
+from decision.tool_runtime.runtime_control import (
+    ToolRuntimeInterrupted,
+    raise_if_cancelled,
+    tool_runtime_cancel_reason,
+)
 
 
 def _build_non_stream_result(reply: str, terminal_record, usage: dict, ledger: ToolCallTurnLedger) -> dict:
@@ -81,6 +86,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
 
         formatter._debug_write("tool_call_request", {"tools_count": len(tools), "msg_len": len(user_prompt)})
 
+        raise_if_cancelled(bundle, detail="tool_call non-stream cancelled before initial model call")
         result = formatter._llm_call(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30)
         usage = result.get("usage", {})
         formatter._record_tool_call_usage_stats(cfg, usage)
@@ -105,6 +111,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             }
 
         skill_context = formatter._build_tool_exec_context(bundle)
+        raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before initial tool batch")
         batch_outcome = execute_tool_call_batch(
             tool_calls,
             bundle=bundle,
@@ -124,8 +131,17 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
         if batch_outcome.strict_retry_note:
             formatter._append_runtime_guidance(messages, batch_outcome.strict_retry_note)
 
-        current_record = batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal()
+        current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
         current_result = {"content": ""}
+
+        if current_record and current_record.reason == "user_interrupted":
+            reply = formatter._build_tool_closeout_reply(
+                success=False,
+                action_summary=batch_state.action_summary,
+                tool_response=batch_state.tool_response,
+                run_meta=batch_state.run_meta,
+            )
+            return _build_non_stream_result(reply, current_record, usage, ledger)
 
         if batch_outcome.requires_user_takeover:
             final_messages = list(messages)
@@ -133,6 +149,15 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 final_messages,
                 "The task is blocked by login, verification, captcha, or another user-only step. Do not call more tools. Explain clearly that the user needs to complete that step first, then you can continue.",
             )
+            if tool_runtime_cancel_reason(bundle, skill_context):
+                reply = formatter._build_tool_closeout_reply(
+                    success=bool(batch_state.tool_success) if batch_state.tool_success is not None else False,
+                    action_summary=batch_state.action_summary,
+                    tool_response=batch_state.tool_response,
+                    run_meta=batch_state.run_meta,
+                )
+                return _build_non_stream_result(reply, current_record, usage, ledger)
+            raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before takeover closeout")
             current_result = formatter._llm_call(cfg, final_messages, temperature=0.7, max_tokens=2000, timeout=25)
             formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
             formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))
@@ -153,6 +178,15 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 )
             return _build_non_stream_result(reply, terminal_record, usage, ledger)
 
+        if tool_runtime_cancel_reason(bundle, skill_context):
+            reply = formatter._build_tool_closeout_reply(
+                success=bool(batch_state.tool_success) if batch_state.tool_success is not None else False,
+                action_summary=batch_state.action_summary,
+                tool_response=batch_state.tool_response,
+                run_meta=batch_state.run_meta,
+            )
+            return _build_non_stream_result(reply, current_record, usage, ledger)
+        raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before followup model call")
         current_result = formatter._llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
         formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
         formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))
@@ -166,6 +200,15 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             if not followup_tool_calls:
                 break
 
+            if tool_runtime_cancel_reason(bundle, skill_context):
+                reply = formatter._build_tool_closeout_reply(
+                    success=bool(batch_state.tool_success) if batch_state.tool_success is not None else False,
+                    action_summary=batch_state.action_summary,
+                    tool_response=batch_state.tool_response,
+                    run_meta=batch_state.run_meta,
+                )
+                return _build_non_stream_result(reply, current_record, usage, ledger)
+            raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before followup tool batch")
             batch_outcome = execute_tool_call_batch(
                 followup_tool_calls,
                 bundle=bundle,
@@ -185,18 +228,44 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             if batch_outcome.strict_retry_note:
                 formatter._append_runtime_guidance(messages, batch_outcome.strict_retry_note)
 
-            current_record = batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal()
+            current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
+            if current_record and current_record.reason == "user_interrupted":
+                reply = formatter._build_tool_closeout_reply(
+                    success=False,
+                    action_summary=batch_state.action_summary,
+                    tool_response=batch_state.tool_response,
+                    run_meta=batch_state.run_meta,
+                )
+                return _build_non_stream_result(reply, current_record, usage, ledger)
             if batch_outcome.requires_user_takeover:
                 final_messages = list(messages)
                 formatter._append_runtime_guidance(
                     final_messages,
                     "The task is blocked by login, verification, captcha, or another user-only step. Do not call more tools. Explain clearly that the user needs to complete that step first, then you can continue.",
                 )
+                if tool_runtime_cancel_reason(bundle, skill_context):
+                    reply = formatter._build_tool_closeout_reply(
+                        success=bool(batch_state.tool_success) if batch_state.tool_success is not None else False,
+                        action_summary=batch_state.action_summary,
+                        tool_response=batch_state.tool_response,
+                        run_meta=batch_state.run_meta,
+                    )
+                    return _build_non_stream_result(reply, current_record, usage, ledger)
+                raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before takeover closeout")
                 current_result = formatter._llm_call(cfg, final_messages, temperature=0.7, max_tokens=2000, timeout=25)
                 formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
                 formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))
                 break
 
+            if tool_runtime_cancel_reason(bundle, skill_context):
+                reply = formatter._build_tool_closeout_reply(
+                    success=bool(batch_state.tool_success) if batch_state.tool_success is not None else False,
+                    action_summary=batch_state.action_summary,
+                    tool_response=batch_state.tool_response,
+                    run_meta=batch_state.run_meta,
+                )
+                return _build_non_stream_result(reply, current_record, usage, ledger)
+            raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before followup model call")
             current_result = formatter._llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
             formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
             formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))

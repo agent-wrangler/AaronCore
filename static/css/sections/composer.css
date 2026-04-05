@@ -14,100 +14,124 @@
 
 .repair-bar {
   padding: 0 24px;
-  margin-bottom: 0;
+  margin-bottom: 8px;
 }
 
 .repair-bar-inner {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 14px;
-  border-radius: 10px 10px 0 0;
-  background: rgba(180, 180, 190, 0.10);
-  border: 1px solid rgba(180, 180, 190, 0.18);
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px 9px;
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-soft, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.07));
   border-bottom: none;
-  color: #d1d5db;
-  font-size: 13px;
-  line-height: 1.5;
+  color: var(--text-secondary, #c8c1b4);
+  font-size: 12px;
+  line-height: 1.55;
+  box-shadow: none;
 }
 
 .repair-bar-icon {
   flex-shrink: 0;
-  color: #9ca3af;
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding-top: 1px;
+}
+
+.repair-bar-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-chip, rgba(255,255,255,0.08));
+  background: var(--bg-chip, rgba(255,255,255,0.04));
+  color: var(--text-label, #9f988b);
+  font-size: 10px;
+  line-height: 1;
+  font-family: var(--font-chat-mono), var(--font-chat-user-sans);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .repair-bar-text {
   flex: 1;
   min-width: 0;
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 2px;
+  align-items: start;
 }
 
 .repair-bar-headline {
-  font-weight: 600;
-  color: #e5e7eb;
-  white-space: nowrap;
+  display: block;
+  color: var(--text-primary, #f1ede3);
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: normal;
 }
 
 .repair-bar-detail {
-  color: #9ca3af;
+  display: block;
+  color: var(--text-secondary, #c8c1b4);
   font-size: 12px;
+  line-height: 1.65;
+  font-weight: 300;
 }
 
 .repair-bar-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-label, #9f988b);
+  font-size: 14px;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0;
   line-height: 1;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
 .repair-bar-close:hover {
-  color: #e2e8f0;
+  color: var(--text-primary, #f1ede3);
+  background: var(--bg-chip, rgba(255,255,255,0.04));
+  border-color: var(--border-chip, rgba(255,255,255,0.08));
 }
 
 .repair-bar-progress {
-  height: 2px;
-  background: rgba(180, 180, 190, 0.12);
-  border-radius: 0 0 4px 4px;
+  height: 1px;
+  background: var(--border-soft, rgba(255,255,255,0.07));
+  border-radius: 999px;
   overflow: hidden;
+  margin-top: 6px;
 }
 
 .repair-bar-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6b7280, #818cf8);
-  border-radius: 2px;
+  background: var(--text-label, #9f988b);
+  border-radius: 999px;
   transition: width 0.6s ease;
   width: 0%;
+  opacity: 0.88;
 }
 
-body.light .repair-bar-inner {
-  background: rgba(180, 180, 190, 0.06);
-  border-color: rgba(180, 180, 190, 0.15);
-  color: #374151;
+.repair-bar[data-state="watch"] .repair-bar-chip {
+  color: var(--text-secondary, #c8c1b4);
 }
 
-body.light .repair-bar-headline {
-  color: #312e81;
-}
-
-body.light .repair-bar-detail {
-  color: #6b7280;
-}
-
-body.light .repair-bar-close {
-  color: #94a3b8;
-}
-
-body.light .repair-bar-progress {
-  background: rgba(180, 180, 190, 0.08);
+.repair-bar[data-state="done"] .repair-bar-chip {
+  color: var(--text-primary, #f1ede3);
 }
 
 /* ============================================
@@ -321,14 +345,16 @@ body.light .awareness-ball::after {
   border-radius: 0;
   padding: 14px 20px;
   color: #f1f5f9;
-  font-size: 14px;
-  font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  font-family: var(--font-chat-user-sans);
+  font-weight: 300;
+  font-synthesis: none;
   letter-spacing: 0;
   resize: none;
   min-height: 49px;
   max-height: 40vh;
   overflow-y: auto;
-  line-height: 1.5;
+  line-height: 1.72;
   box-sizing: border-box;
   transition: none;
   box-shadow: none;
@@ -351,7 +377,8 @@ body.light .awareness-ball::after {
 
 .input textarea::placeholder {
   color: rgba(148, 163, 184, 0.5);
-  font-weight: 400;
+  font-family: var(--font-chat-user-sans);
+  font-weight: 300;
 }
 
 /* 输入框内滚动条 — 细、透明、跟随主题 */

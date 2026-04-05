@@ -328,11 +328,9 @@ def load_l4_persona():
 
 def load_l5_knowledge():
     knowledge = load_json(KNOWLEDGE_FILE, [])
-    knowledge_base = load_json(KNOWLEDGE_BASE_FILE, [])
     skills = _get_all_skills() if _nova_core_ready else {}
     return {
         "knowledge": knowledge[-10:],
-        "knowledge_base": knowledge_base[-10:],
         "skills": {k: {"name": v.get("name", k), "keywords": v.get("keywords", [])} for k, v in skills.items()},
     }
 

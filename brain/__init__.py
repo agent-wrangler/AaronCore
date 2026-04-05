@@ -178,6 +178,19 @@ def _llm_call_codex_cli(cfg: dict, messages: list, *, temperature: float = 0.7,
     )
 
 
+def _llm_stream_codex_cli(cfg: dict, messages: list, *, temperature: float = 0.7,
+                          max_tokens: int = 2000, timeout: int = 25,
+                          tools: list | None = None):
+    yield from _codex_cli_runtime.codex_cli_call_stream(
+        cfg,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+        tools=tools,
+    )
+
+
 def _llm_call_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                      max_tokens: int = 2000, timeout: int = 25,
                      tools: list | None = None) -> dict:
@@ -290,7 +303,7 @@ def llm_call_stream(cfg: dict, messages: list, *, temperature: float = 0.7,
     """流式 LLM 调用，yield 每个 delta token (str)。结束后 yield 一个 dict 表示 usage。
     如果 LLM 返回 tool_calls，yield {"_tool_calls": [...]} 信号。"""
     if _is_codex_cli_provider(cfg):
-        result = _llm_call_codex_cli(
+        yield from _llm_stream_codex_cli(
             cfg,
             messages,
             temperature=temperature,
@@ -298,10 +311,6 @@ def llm_call_stream(cfg: dict, messages: list, *, temperature: float = 0.7,
             timeout=timeout,
             tools=tools,
         )
-        content = str(result.get("content", "") or "")
-        if content:
-            yield content
-        yield {"_usage": result.get("usage", {}) if isinstance(result.get("usage"), dict) else {}}
         return
     yield from _stream_runtime.llm_call_stream(
         cfg,

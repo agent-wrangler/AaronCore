@@ -116,6 +116,16 @@ class FeedbackClassifierTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertFalse(self.rules_file.exists())
 
+    def test_record_feedback_rule_skips_system_explanation_requests(self):
+        result = feedback_classifier.record_feedback_rule(
+            "是系统内置的当前时间戳在哪 什么时候加的 我怎么不知道",
+            "这次怎么直接就知道了",
+            "因为当前环境里带了系统时间",
+        )
+
+        self.assertIsNone(result)
+        self.assertFalse(self.rules_file.exists())
+
     def test_search_relevant_rules_relies_on_text_overlap(self):
         item = feedback_classifier.record_feedback_rule(
             "检查下这个路径 只要对话里出现代码就会出现个小游戏到窗口。感觉有问题",
@@ -130,6 +140,25 @@ class FeedbackClassifierTests(unittest.TestCase):
         self.assertEqual(matches[0]["id"], item["id"])
         self.assertGreaterEqual(stored_rules[0]["hit_count"], 1)
 
+    def test_record_feedback_rule_merges_duplicate_rules(self):
+        first = feedback_classifier.record_feedback_rule(
+            "不是 我没说天气 你发天气之前",
+            "帮我看下今天温度",
+            "常州今天 18 到 26 度",
+        )
+        second = feedback_classifier.record_feedback_rule(
+            "不是 我没说天气 你发天气之前",
+            "帮我看下今天温度",
+            "常州今天 18 到 26 度",
+        )
+        stored_rules = feedback_classifier._load_rules()
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(len(stored_rules), 1)
+        self.assertEqual(stored_rules[0]["feedback_count"], 2)
+
     def test_feedback_loop_v2_no_longer_depends_on_negative_keywords(self):
         history = [
             {"role": "user", "content": "帮我写段代码"},
@@ -142,6 +171,25 @@ class FeedbackClassifierTests(unittest.TestCase):
         self.assertIsNotNone(item)
         self.assertEqual(item["scene"], "routing")
         self.assertEqual(item["problem"], "wrong_skill_selected")
+
+    def test_feedback_loop_v2_skips_followup_feedback_threads(self):
+        first_history = [
+            {"role": "user", "content": "还记得你自己说你喜欢的游戏吗"},
+            {"role": "assistant", "content": "我喜欢塔防和解谜"},
+            {"role": "user", "content": "不是这些 之前我们的玩的"},
+        ]
+        first = feedback_loop.l7_record_feedback_v2(first_history[-1]["content"], first_history)
+        self.assertIsNotNone(first)
+
+        followup_history = first_history + [
+            {"role": "assistant", "content": "那我再想想是不是别的游戏"},
+            {"role": "user", "content": "带脑筋两个字的"},
+        ]
+        second = feedback_loop.l7_record_feedback_v2(followup_history[-1]["content"], followup_history)
+        stored_rules = feedback_classifier._load_rules()
+
+        self.assertIsNone(second)
+        self.assertEqual(len(stored_rules), 1)
 
 
 if __name__ == "__main__":

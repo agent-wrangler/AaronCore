@@ -141,6 +141,7 @@ function addMessage(sender,text,type,imageUrl,renderedHtml){
  // 创建气泡
  var bubble=document.createElement('div');
  bubble.className='bubble';
+ if(type!=='user') bubble.classList.add('assistant-reply-markdown');
  if(imageUrl){
   var img=document.createElement('img');
   img.className='bubble-image';
@@ -436,12 +437,21 @@ function _syncProcessDetailDisplay(stepObj){
 function showRepairBar(repair){
  if(!repair || !repair.show) return;
  var bar=document.getElementById('repairBar');
+ var chip=document.getElementById('repairChip');
  var headline=document.getElementById('repairHeadline');
  var detail=document.getElementById('repairDetail');
  var progress=document.getElementById('repairProgress');
  if(!bar||!headline||!detail||!progress) return;
 
  if(bar._repairTimer){ clearInterval(bar._repairTimer); bar._repairTimer=null; }
+ var stage=String(repair.stage||'').trim().toLowerCase();
+ bar.dataset.state=repair.watch ? 'watch' : (stage||'logged');
+ if(chip){
+  var chipText='L7';
+  if(repair.watch) chipText='FIX';
+  if(stage==='done' || Number(repair.progress||0)>=100) chipText='OK';
+  chip.textContent=chipText;
+ }
  headline.textContent=repair.headline||t('repair.recorded');
  detail.textContent=repair.detail||'';
  progress.style.width=(repair.progress||20)+'%';
@@ -457,6 +467,8 @@ function showRepairBar(repair){
    progress.style.width=pct+'%';
    if(polls>=maxPolls){
     clearInterval(bar._repairTimer); bar._repairTimer=null;
+    bar.dataset.state='done';
+    if(chip) chip.textContent='OK';
     progress.style.width='100%';
     detail.textContent=t('repair.done');
     setTimeout(function(){ hideRepairBar(); }, 3000);
@@ -471,6 +483,7 @@ function hideRepairBar(){
  var bar=document.getElementById('repairBar');
  if(!bar) return;
  if(bar._repairTimer){ clearInterval(bar._repairTimer); bar._repairTimer=null; }
+ bar.removeAttribute('data-state');
  bar.style.display='none';
 }
 

@@ -18,6 +18,7 @@ from routes.chat_tool_steps import (
     build_tool_done_trace_detail,
     build_tool_execution_trace_detail,
 )
+from routes.chat_stream_markdown import MarkdownIncrementalStream
 try:
     from routes import companion as _comp
 except Exception:
@@ -735,10 +736,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     async def event_stream():
       try:
         _comp.activity = "thinking"
-
-        # 先把当前用户消息存入持久历史（但不影响 _history_for_context，避免 L1 重复）
-        history.append({"role": "user", "content": msg, "time": datetime.now().isoformat()})
-        S.save_msg_history(history)
+        bundle = {}
 
         # 收集步骤，用于持久化到 msg_history
         _collected_steps = []
@@ -1011,6 +1009,20 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         for evt in pending_awareness:
             yield {"event": "awareness", "data": json.dumps(evt, ensure_ascii=False)}
 
+        _pre_context_started_at = asyncio.get_running_loop().time()
+        yield await _trace(
+            "记忆加载",
+            "正在读取最近对话、记忆和人格状态…",
+            "running",
+            step_key="info:memory_load",
+            phase="info",
+            full_detail="正在读取最近对话、记忆和人格状态…",
+        )
+
+        # 先把当前用户消息存入持久历史（但不影响 _history_for_context，避免 L1 重复）
+        history.append({"role": "user", "content": msg, "time": datetime.now().isoformat()})
+        S.save_msg_history(history)
+
         # ── CoD / tool_call 开关提前判断 ──
         _tool_call_unavailable_reason = _get_tool_call_unavailable_reason()
         _use_tool_call = _tool_call_unavailable_reason is None
@@ -1088,11 +1100,30 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             mem_parts.append(f"\u5524\u9192{len(l2_memories)}\u6761\u6301\u4e45\u8bb0\u5fc6")
         if recall_result:
             mem_parts.append("\u65f6\u95f4\u56de\u5fc6\u5df2\u63a5\u5165")
-        yield await _trace("\u8bb0\u5fc6\u52a0\u8f7d", " / ".join(mem_parts), "done")
+        S.debug_write(
+            "pre_context_timing",
+            {
+                "elapsed_ms": round((asyncio.get_running_loop().time() - _pre_context_started_at) * 1000, 2),
+                "use_cod": _use_cod,
+                "tool_call": _use_tool_call,
+                "l2_memories": len(l2_memories or []),
+                "l3": len(l3 or []),
+                "l8": len(l8 or []),
+            },
+        )
+        yield await _trace(
+            "\u8bb0\u5fc6\u52a0\u8f7d",
+            " / ".join(mem_parts),
+            "done",
+            step_key="info:memory_load",
+            phase="info",
+            full_detail=" / ".join(mem_parts),
+        )
 
         # Step 4: 模型思考
         dialogue_context = S.build_dialogue_context(_history_for_context, msg)
         from brain import get_current_model_name
+        from decision.tool_runtime.runtime_control import create_tool_runtime_control
         bundle = {
             "l1": l1, "l2": l2, "l2_memories": l2_memories,
             "l3": l3, "l4": l4, "l5": l5,
@@ -1102,6 +1133,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             "image": user_images[0] if user_images else None,
             "images": user_images,
             "current_model": get_current_model_name(),
+            "tool_runtime_control": create_tool_runtime_control(),
         }
         if _use_cod:
             bundle["cod_mode"] = True
@@ -1215,6 +1247,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 tools = build_tools_list_cod() if _use_cod else build_tools_list()
                 _comp.activity = "replying"
                 _stream_chunks = []
+                _markdown_stream = MarkdownIncrementalStream()
                 _tool_used = None
                 _tool_success = None
                 _tool_run_meta = {}
@@ -1455,6 +1488,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     _stream_chunks,
                                     _think_carry,
                                 )
+                                _markdown_stream.reset()
                                 yield {
                                     "event": "stream_reset",
                                     "data": json.dumps(
@@ -1504,6 +1538,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     if not _dropped_stream_prefix:
                                         _dropped_stream_prefix = _drop_incomplete_tool_handoff_prefix(_stream_chunks)
                                         if _dropped_stream_prefix:
+                                            _markdown_stream.reset()
                                             yield {
                                                 "event": "stream_reset",
                                                 "data": json.dumps(
@@ -1702,7 +1737,9 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                             if not _visible:
                                 continue
                             _stream_chunks.append(_visible)
-                            yield {"event": "stream", "data": json.dumps({"token": _visible}, ensure_ascii=False)}
+                            _stream_payload = _markdown_stream.feed(_visible)
+                            if _stream_payload:
+                                yield {"event": "stream", "data": json.dumps(_stream_payload, ensure_ascii=False)}
                                 # 超过 7 字符没出现 <think>，直接输出
                             if False:
                                 if _think_buf.strip():
@@ -1726,7 +1763,12 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         if not _tail:
                             continue
                         _stream_chunks.append(_tail)
-                        yield {"event": "stream", "data": json.dumps({"token": _tail}, ensure_ascii=False)}
+                        _stream_payload = _markdown_stream.feed(_tail)
+                        if _stream_payload:
+                            yield {"event": "stream", "data": json.dumps(_stream_payload, ensure_ascii=False)}
+                    _final_stream_payload = _markdown_stream.flush()
+                    if _final_stream_payload:
+                        yield {"event": "stream", "data": json.dumps(_final_stream_payload, ensure_ascii=False)}
                     async for _evt in _emit_thinking_trace(force=True):
                         yield _evt
                     response = "".join(_stream_chunks)
@@ -1920,9 +1962,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     }
                     S.awareness_push(awareness_evt)
                     yield {"event": "awareness", "data": json.dumps(awareness_evt, ensure_ascii=False)}
-                    _l8_cfg = S.load_autolearn_config()
-                    if _l8_cfg.get("enabled", True) and _l8_cfg.get("allow_feedback_relearn", True):
-                        background_tasks.add_task(S.run_l8_feedback_relearn_task, feedback_rule)
                 try:
                     S.l8_touch()
                     l8_config = S.load_autolearn_config()
@@ -2040,10 +2079,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             }
             S.awareness_push(awareness_evt)
             yield {"event": "awareness", "data": json.dumps(awareness_evt, ensure_ascii=False)}
-            # 触发 L8 反馈重学
-            _l8_cfg = S.load_autolearn_config()
-            if _l8_cfg.get("enabled", True) and _l8_cfg.get("allow_feedback_relearn", True):
-                background_tasks.add_task(S.run_l8_feedback_relearn_task, feedback_rule)
         try:
             S.l8_touch()
             l8_config = S.load_autolearn_config()
@@ -2095,6 +2130,16 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         S.debug_write("event_stream_traceback", {"tb": traceback.format_exc()})
         yield {"event": "reply", "data": json.dumps(_build_reply_payload(f"\u5185\u90e8\u9519\u8bef\uff1a{_fatal}"), ensure_ascii=False)}
       except BaseException as _base:
+        try:
+            from decision.tool_runtime.runtime_control import request_tool_runtime_cancel
+
+            request_tool_runtime_cancel(
+                bundle if isinstance(bundle, dict) else None,
+                reason="user_interrupted",
+                detail=f"{type(_base).__name__}: {_base}",
+            )
+        except Exception:
+            pass
         S.debug_write("event_stream_cancelled", {"error": str(_base), "type": type(_base).__name__})
         raise
 

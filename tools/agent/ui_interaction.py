@@ -3,6 +3,7 @@ import os
 
 from core.fs_protocol import build_operation_result
 from core.target_protocol import discover_windows, resolve_target_reference
+from decision.tool_runtime.runtime_control import cooperative_sleep, raise_if_cancelled
 
 try:
     import pyautogui
@@ -35,7 +36,7 @@ def _is_browser_window(title: str) -> bool:
 
 # ── CDP 精准操作（浏览器页面元素）──
 
-def _cdp_find_and_interact(action: str, element_desc: str, input_text: str = '', port: int = 9222) -> dict | None:
+def _cdp_find_and_interact(action: str, element_desc: str, input_text: str = '', port: int = 9222, context: dict | None = None) -> dict | None:
     """通过 CDP 在浏览器页面中查找元素并操作，返回结果 dict 或 None（表示 CDP 不可用）"""
     if not _HAS_PLAYWRIGHT:
         return None
@@ -111,7 +112,7 @@ def _cdp_find_and_interact(action: str, element_desc: str, input_text: str = '',
             )
         elif action == 'type':
             target_el.click(timeout=2000)
-            time.sleep(0.2)
+            cooperative_sleep(0.2, context, detail='ui_interaction cancelled during browser typing')
             target_el.fill(input_text)
             return build_operation_result(
                 f'已通过 CDP 在`{element_desc}`中输入内容',
@@ -120,7 +121,7 @@ def _cdp_find_and_interact(action: str, element_desc: str, input_text: str = '',
             )
         elif action == 'click_and_type':
             target_el.click(timeout=2000)
-            time.sleep(0.2)
+            cooperative_sleep(0.2, context, detail='ui_interaction cancelled during browser submit')
             target_el.fill(input_text)
             # 尝试按回车提交
             target_el.press('Enter')
@@ -148,7 +149,7 @@ def _cdp_find_and_interact(action: str, element_desc: str, input_text: str = '',
 
 # ── Accessibility API 精准操作（桌面应用控件）──
 
-def _a11y_find_and_interact(action: str, element_desc: str, input_text: str = '', window_title: str = '') -> dict | None:
+def _a11y_find_and_interact(action: str, element_desc: str, input_text: str = '', window_title: str = '', context: dict | None = None) -> dict | None:
     """通过 pywinauto Accessibility API 查找桌面应用控件并操作"""
     if not _HAS_PYWINAUTO:
         return None
@@ -178,7 +179,7 @@ def _a11y_find_and_interact(action: str, element_desc: str, input_text: str = ''
 
         if action in ('type', 'click_and_type'):
             target.click_input()
-            time.sleep(0.2)
+            cooperative_sleep(0.2, context, detail='ui_interaction cancelled during desktop typing')
             target.type_keys(input_text, with_spaces=True)
             return build_operation_result(
                 f'已通过 Accessibility API 在`{element_desc}`中输入内容',
@@ -333,6 +334,7 @@ def _active_title() -> str:
 def execute(query, context=None):
     text = str(query or '').strip()
     context = context if isinstance(context, dict) else {}
+    raise_if_cancelled(context, detail='ui_interaction cancelled before start')
     if not _HAS_UI:
         return build_operation_result(
             '当前缺少 UI 交互依赖（pyautogui / pygetwindow）。',
@@ -440,7 +442,7 @@ def execute(query, context=None):
         wins = gw.getWindowsWithTitle(window_title)
         if wins:
             wins[0].activate()
-            time.sleep(0.3)
+            cooperative_sleep(0.3, context, detail='ui_interaction cancelled during window activation')
     except Exception:
         pass
 
@@ -481,11 +483,11 @@ def execute(query, context=None):
             )
         # 优先：浏览器走 CDP
         if _is_browser_window(window_title):
-            cdp_result = _cdp_find_and_interact('click_and_type', text, content)
+            cdp_result = _cdp_find_and_interact('click_and_type', text, content, context=context)
             if cdp_result:
                 return cdp_result
         # 其次：桌面应用走 Accessibility API
-        a11y_result = _a11y_find_and_interact('click_and_type', text, content, window_title)
+        a11y_result = _a11y_find_and_interact('click_and_type', text, content, window_title, context=context)
         if a11y_result:
             return a11y_result
         # 兜底：pyautogui 盲输入
@@ -557,7 +559,7 @@ def execute(query, context=None):
         m = _re.search(r'(\d+)', text)
         seconds = int(m.group(1)) if m else 2
         seconds = min(seconds, 30)
-        time.sleep(seconds)
+        cooperative_sleep(seconds, context, detail='ui_interaction cancelled during wait action')
         return build_operation_result(
             f'已等待 {seconds} 秒。',
             expected_state='wait_completed', observed_state='wait_completed',
@@ -566,11 +568,11 @@ def execute(query, context=None):
 
     # 优先：浏览器走 CDP 精准点击
     if _is_browser_window(window_title):
-        cdp_result = _cdp_find_and_interact('click', text)
+        cdp_result = _cdp_find_and_interact('click', text, context=context)
         if cdp_result:
             return cdp_result
     # 其次：桌面应用走 Accessibility API
-    a11y_result = _a11y_find_and_interact('click', text, '', window_title)
+    a11y_result = _a11y_find_and_interact('click', text, '', window_title, context=context)
     if a11y_result:
         return a11y_result
     # 兜底：pyautogui 盲点击

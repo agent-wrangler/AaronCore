@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.fs_protocol import build_operation_result
 from core.target_protocol import _PINYIN_MAP, resolve_local_app_reference, resolve_target_reference
+from decision.tool_runtime.runtime_control import cooperative_sleep, raise_if_cancelled
 
 try:
     import pygetwindow as gw
@@ -120,7 +121,7 @@ def _launch_probe_schedule() -> list[float]:
     return [0.15, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0, 1.0, 1.25, 1.5, 1.5]
 
 
-def _restore_or_activate_window(title: str) -> str:
+def _restore_or_activate_window(title: str, context: dict | None = None) -> str:
     if not (_HAS_PYGETWINDOW and title):
         return "failed"
     try:
@@ -132,12 +133,12 @@ def _restore_or_activate_window(title: str) -> str:
         if was_minimized:
             try:
                 win.restore()
-                time.sleep(0.2)
+                cooperative_sleep(0.2, context, detail="app_target cancelled during window restore")
             except Exception:
                 pass
         try:
             win.activate()
-            time.sleep(0.3)
+            cooperative_sleep(0.3, context, detail="app_target cancelled during window activation")
         except Exception:
             return "restored" if was_minimized else "failed"
         return "restored" if was_minimized else "focused"
@@ -148,6 +149,7 @@ def _restore_or_activate_window(title: str) -> str:
 def execute(query, context=None):
     raw = str(query or "").strip()
     context = context if isinstance(context, dict) else {}
+    raise_if_cancelled(context, detail="app_target cancelled before start")
 
     is_close = any(
         token in raw
@@ -163,7 +165,7 @@ def execute(query, context=None):
                 wins = gw.getWindowsWithTitle(title) if _HAS_PYGETWINDOW else []
                 if wins:
                     wins[0].close()
-                    time.sleep(0.5)
+                    cooperative_sleep(0.5, context, detail="app_target cancelled during window close verification")
                     still = _find_window([title])
                     if not still:
                         return build_operation_result(
@@ -213,7 +215,7 @@ def execute(query, context=None):
                         capture_output=True,
                         timeout=5,
                     )
-                time.sleep(0.5)
+                cooperative_sleep(0.5, context, detail="app_target cancelled during app close verification")
                 still = _find_window([label]) if label else ""
                 if not still:
                     return build_operation_result(
@@ -299,7 +301,7 @@ def execute(query, context=None):
 
     existing = _find_window(target.get("window_keywords") or [])
     if existing:
-        activation_state = _restore_or_activate_window(existing)
+        activation_state = _restore_or_activate_window(existing, context)
         focused = _find_window(target.get("window_keywords") or [])
         if focused:
             if activation_state == "restored":
@@ -373,7 +375,7 @@ def execute(query, context=None):
         )
 
     for wait_seconds in _launch_probe_schedule():
-        time.sleep(wait_seconds)
+        cooperative_sleep(wait_seconds, context, detail="app_target cancelled during launch verification")
 
         matched = _find_window(target.get("window_keywords") or [])
         if matched:

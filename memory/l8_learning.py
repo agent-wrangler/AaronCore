@@ -12,7 +12,7 @@ from memory.l8 import knowledge_store as _l8_knowledge_store
 from memory.l8 import quality_guard as _l8_quality_guard
 from memory.l8 import web_search as _l8_web_search
 from core.runtime_state.json_store import load_json as _load_json, write_json as _write_json
-from storage.paths import AUTOLEARN_CONFIG_FILE, KNOWLEDGE_BASE_FILE, RUNTIME_STORE_DIR
+from storage.paths import AUTOLEARN_CONFIG_FILE, KNOWLEDGE_BASE_FILE, KNOWLEDGE_FILE, RUNTIME_STORE_DIR
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -336,6 +336,7 @@ def save_learned_knowledge(
         load_json=_load_json,
         write_json=_write_json,
         knowledge_base_file=KNOWLEDGE_BASE_FILE,
+        knowledge_file=KNOWLEDGE_FILE,
         file_lock=_FILE_LOCK,
     )
 

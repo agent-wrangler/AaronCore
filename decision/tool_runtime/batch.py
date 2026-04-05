@@ -18,6 +18,12 @@ from decision.tool_runtime.parallel_runtime import (
     execute_parallel_tool_calls,
     is_parallel_safe_tool,
 )
+from decision.tool_runtime.runtime_control import (
+    build_interrupted_tool_result,
+    tool_runtime_cancel_detail,
+    tool_runtime_cancel_reason,
+    tool_runtime_cancelled,
+)
 
 
 @dataclass
@@ -43,6 +49,7 @@ class ToolCallBatchOutcome:
     events: list[dict] = field(default_factory=list)
     requires_user_takeover: bool = False
     strict_retry_note: str = ""
+    current_record: ToolCallRecord | None = None
 
 
 def create_tool_call_batch_state(tools: list[dict] | None = None) -> ToolCallBatchState:
@@ -236,6 +243,7 @@ def _handle_repeated_invalid_args(
         run_meta={},
         reason="repeated_invalid_args",
     ) or record
+    outcome.current_record = terminal
     outcome.records.append(terminal)
     outcome.tool_messages.append(_record_result_message(tool_call, failure_response))
     _emit_batch_event(
@@ -308,6 +316,73 @@ def close_tool_call_batch_as_synthetic_failure(
     return closed
 
 
+def _close_remaining_prepared_calls(
+    *,
+    outcome: ToolCallBatchOutcome,
+    ledger: ToolCallTurnLedger,
+    state: ToolCallBatchState,
+    tools: list[dict],
+    bundle: dict,
+    prepared_calls: list[tuple[dict, str, dict, str, ToolCallRecord]],
+    start_index: int,
+    reason: str,
+    detail: str = "",
+    round_index: int | None = None,
+    event_callback=None,
+) -> list[ToolCallRecord]:
+    remaining = prepared_calls[start_index:]
+    if not remaining:
+        return []
+
+    closed_records = close_tool_call_batch_as_synthetic_failure(
+        ledger,
+        [item[0] for item in remaining],
+        bundle,
+        reason=reason,
+        detail=detail,
+    )
+    outcome.records.extend(closed_records)
+    outcome.tool_messages.extend(
+        [
+            _record_result_message(tool_call, blocked_record.response)
+            for (tool_call, _tool_name, _tool_args, _preview, _record), blocked_record in zip(remaining, closed_records)
+        ]
+    )
+    for relative_index, (prepared, blocked_record) in enumerate(zip(remaining, closed_records), start=start_index + 1):
+        _tool_call, _tool_name, _tool_args, _preview, _record = prepared
+        blocked_attempt_meta = build_attempt_process_meta(
+            recent_attempts=state.recent_attempts,
+            tool_name=blocked_record.tool_name,
+            round_index=round_index,
+            batch_index=relative_index,
+            batch_size=len(prepared_calls),
+        )
+        _emit_batch_event(
+            outcome,
+            build_tool_call_done_event(
+                blocked_record,
+                process_meta=build_done_process_meta(
+                    record=blocked_record,
+                    attempt_meta=blocked_attempt_meta,
+                    reason=reason,
+                ),
+            ),
+            event_callback=event_callback,
+        )
+    if not outcome.current_record and closed_records:
+        first_tool_args = remaining[0][2]
+        outcome.current_record = closed_records[0]
+        _update_state_after_record(
+            state,
+            tools=tools,
+            bundle=bundle,
+            record=closed_records[0],
+            tool_args=first_tool_args,
+            arg_failure=None,
+        )
+    return closed_records
+
+
 def _apply_exec_result(
     *,
     formatter,
@@ -343,7 +418,10 @@ def _apply_exec_result(
         response=response,
         action_summary=action_summary,
         run_meta=exec_result.get("meta") if isinstance(exec_result.get("meta"), dict) else {},
+        synthetic=bool(exec_result.get("synthetic", False)),
+        reason=str(exec_result.get("reason") or "").strip(),
     ) or record
+    outcome.current_record = terminal
     outcome.records.append(terminal)
     outcome.tool_messages.append(_record_result_message(tool_call, response))
     requires_user_takeover = formatter._tool_requires_user_takeover(exec_result)
@@ -480,10 +558,42 @@ def execute_tool_call_batch(
         for (_tool_call, tool_name, tool_args, _preview, _record) in prepared_calls
     ]
 
+    if tool_runtime_cancelled(skill_context, bundle):
+        _close_remaining_prepared_calls(
+            outcome=outcome,
+            ledger=ledger,
+            state=state,
+            tools=tools,
+            bundle=bundle,
+            prepared_calls=prepared_calls,
+            start_index=0,
+            reason=tool_runtime_cancel_reason(skill_context, bundle) or "user_interrupted",
+            detail=tool_runtime_cancel_detail(skill_context, bundle),
+            round_index=round_index,
+            event_callback=event_callback,
+        )
+        return outcome
+
     index = 0
     while index < len(prepared_calls):
         tool_call, tool_name, tool_args, preview, record = prepared_calls[index]
         plan = call_plans[index]
+
+        if tool_runtime_cancelled(skill_context, bundle):
+            _close_remaining_prepared_calls(
+                outcome=outcome,
+                ledger=ledger,
+                state=state,
+                tools=tools,
+                bundle=bundle,
+                prepared_calls=prepared_calls,
+                start_index=index,
+                reason=tool_runtime_cancel_reason(skill_context, bundle) or "user_interrupted",
+                detail=tool_runtime_cancel_detail(skill_context, bundle),
+                round_index=round_index,
+                event_callback=event_callback,
+            )
+            return outcome
 
         if plan.get("repeated_invalid_args"):
             _handle_repeated_invalid_args(
@@ -527,6 +637,21 @@ def execute_tool_call_batch(
             scan += 1
 
         if len(parallel_group) > 1:
+            if tool_runtime_cancelled(skill_context, bundle):
+                _close_remaining_prepared_calls(
+                    outcome=outcome,
+                    ledger=ledger,
+                    state=state,
+                    tools=tools,
+                    bundle=bundle,
+                    prepared_calls=prepared_calls,
+                    start_index=index,
+                    reason=tool_runtime_cancel_reason(skill_context, bundle) or "user_interrupted",
+                    detail=tool_runtime_cancel_detail(skill_context, bundle),
+                    round_index=round_index,
+                    event_callback=event_callback,
+                )
+                return outcome
             formatter._debug_write(
                 "tool_call_parallel_group",
                 {
@@ -577,8 +702,10 @@ def execute_tool_call_batch(
                     skill_context=skill_context,
                 )
                 results_by_call_id = parallel_result.results_by_call_id
+                interrupted_record = None
             except ParallelToolExecutionError as exc:
                 results_by_call_id = dict(exc.results_by_call_id)
+                interrupted_record = None
                 for spec in parallel_group:
                     exec_result = results_by_call_id.get(spec.record.call_id)
                     if not isinstance(exec_result, dict):
@@ -603,8 +730,28 @@ def execute_tool_call_batch(
                         event_callback=event_callback,
                     ):
                         return outcome
+                    terminal = ledger.get(spec.record.call_id)
+                    if terminal and terminal.reason == "user_interrupted" and interrupted_record is None:
+                        interrupted_record = terminal
+                if interrupted_record:
+                    outcome.current_record = interrupted_record
+                    _close_remaining_prepared_calls(
+                        outcome=outcome,
+                        ledger=ledger,
+                        state=state,
+                        tools=tools,
+                        bundle=bundle,
+                        prepared_calls=prepared_calls,
+                        start_index=scan,
+                        reason="user_interrupted",
+                        detail=tool_runtime_cancel_detail(skill_context, bundle),
+                        round_index=round_index,
+                        event_callback=event_callback,
+                    )
+                    return outcome
                 raise exc.original_exception
 
+            interrupted_record = None
             for spec in parallel_group:
                 exec_result = results_by_call_id.get(spec.record.call_id)
                 if not isinstance(exec_result, dict):
@@ -629,6 +776,25 @@ def execute_tool_call_batch(
                     event_callback=event_callback,
                 ):
                     return outcome
+                terminal = ledger.get(spec.record.call_id)
+                if terminal and terminal.reason == "user_interrupted" and interrupted_record is None:
+                    interrupted_record = terminal
+            if interrupted_record:
+                outcome.current_record = interrupted_record
+                _close_remaining_prepared_calls(
+                    outcome=outcome,
+                    ledger=ledger,
+                    state=state,
+                    tools=tools,
+                    bundle=bundle,
+                    prepared_calls=prepared_calls,
+                    start_index=scan,
+                    reason="user_interrupted",
+                    detail=tool_runtime_cancel_detail(skill_context, bundle),
+                    round_index=round_index,
+                    event_callback=event_callback,
+                )
+                return outcome
             index = scan
             continue
 
@@ -657,7 +823,14 @@ def execute_tool_call_batch(
             },
         )
 
-        exec_result = tool_executor(tool_name, tool_args, skill_context)
+        if tool_runtime_cancelled(skill_context, bundle):
+            exec_result = build_interrupted_tool_result(
+                tool_name,
+                reason=tool_runtime_cancel_reason(skill_context, bundle) or "user_interrupted",
+                detail=tool_runtime_cancel_detail(skill_context, bundle),
+            )
+        else:
+            exec_result = tool_executor(tool_name, tool_args, skill_context)
         if _apply_exec_result(
             formatter=formatter,
             outcome=outcome,
@@ -677,6 +850,23 @@ def execute_tool_call_batch(
             attempt_meta=attempt_meta,
             event_callback=event_callback,
         ):
+            return outcome
+        terminal = ledger.get(record.call_id)
+        if terminal and terminal.reason == "user_interrupted":
+            outcome.current_record = terminal
+            _close_remaining_prepared_calls(
+                outcome=outcome,
+                ledger=ledger,
+                state=state,
+                tools=tools,
+                bundle=bundle,
+                prepared_calls=prepared_calls,
+                start_index=index + 1,
+                reason="user_interrupted",
+                detail=tool_runtime_cancel_detail(skill_context, bundle),
+                round_index=round_index,
+                event_callback=event_callback,
+            )
             return outcome
         index += 1
 

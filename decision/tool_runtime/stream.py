@@ -13,6 +13,12 @@ from decision.tool_runtime.events import (
 )
 from decision.tool_runtime.ledger import ToolCallRecord, ToolCallTurnLedger
 from decision.tool_runtime.process_meta import build_done_process_meta
+from decision.tool_runtime.runtime_control import (
+    ToolRuntimeInterrupted,
+    raise_if_cancelled,
+    tool_runtime_cancel_detail,
+    tool_runtime_cancel_reason,
+)
 from decision.tool_runtime.turn_limits import (
     build_max_turns_closeout_reply,
     build_turn_limit_meta,
@@ -168,6 +174,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
         tool_calls_signal = None
         initial_reasoning_chunks = []
 
+        raise_if_cancelled(bundle, detail="tool_call stream cancelled before initial model call")
         for chunk in formatter._llm_call_stream(
             cfg,
             messages,
@@ -200,6 +207,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 collected_tokens.append(chunk)
                 latest_visible_chunks = list(collected_tokens)
                 yield chunk
+            raise_if_cancelled(bundle, detail="tool_call stream cancelled during initial model call")
 
         tool_calls_signal, _joined, visible_joined = formatter._resolve_stream_tool_calls_signal(
             tool_calls_signal,
@@ -207,6 +215,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
             bundle,
             mode="stream_initial",
         )
+        raise_if_cancelled(bundle, detail="tool_call stream cancelled after initial model call")
         formatter._record_tool_call_usage_stats(cfg, usage)
 
         if not tool_calls_signal:
@@ -236,6 +245,36 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
             return
 
         skill_context = formatter._build_tool_exec_context(bundle)
+        if tool_runtime_cancel_reason(bundle, skill_context):
+            closed_records = close_tool_call_batch_as_synthetic_failure(
+                ledger,
+                tool_calls_signal,
+                bundle,
+                reason="user_interrupted",
+                detail=tool_runtime_cancel_detail(bundle, skill_context),
+            )
+            for closed_record in closed_records:
+                yield build_tool_call_done_event(
+                    closed_record,
+                    process_meta=build_done_process_meta(
+                        record=closed_record,
+                        reason="user_interrupted",
+                    ),
+                )
+            current_record = closed_records[0] if closed_records else None
+            if current_record:
+                fallback = formatter._build_tool_closeout_reply(
+                    success=False,
+                    action_summary=current_record.action_summary,
+                    tool_response=current_record.response,
+                    run_meta=current_record.run_meta,
+                )
+                if fallback:
+                    latest_visible_chunks = [fallback]
+                    yield fallback
+            yield _turn_done(current_record)
+            return
+        raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled before initial tool batch")
         failure_reason = "tool_executor_exception"
         buffered_batch_events = []
         batch_outcome = execute_tool_call_batch(
@@ -262,7 +301,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
 
         recent_attempts = list(batch_state.recent_attempts)
         write_file_arg_retry_budget = 1
-        current_record = batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal()
+        current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
         current_run_meta = batch_state.run_meta
         current_tool_success = batch_state.tool_success
         current_action_summary = batch_state.action_summary
@@ -271,6 +310,19 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
         current_tool_args = dict(batch_state.tool_args)
         followup_tools = list(batch_state.followup_tools or tools)
         requires_user_takeover = batch_outcome.requires_user_takeover
+
+        if current_record and current_record.reason == "user_interrupted":
+            fallback = formatter._build_tool_closeout_reply(
+                success=False,
+                action_summary=current_action_summary,
+                tool_response=current_tool_response,
+                run_meta=current_run_meta,
+            )
+            if fallback:
+                latest_visible_chunks = [fallback]
+                yield fallback
+            yield _turn_done(current_record)
+            return
 
         if requires_user_takeover:
             final_messages = list(messages)
@@ -281,6 +333,19 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
             usage_blocked = {}
             emitted = False
             latest_visible_chunks = []
+            if tool_runtime_cancel_reason(bundle, skill_context):
+                fallback = formatter._build_tool_closeout_reply(
+                    success=bool(current_tool_success) if current_tool_success is not None else False,
+                    action_summary=current_action_summary,
+                    tool_response=current_tool_response,
+                    run_meta=current_run_meta,
+                )
+                if fallback:
+                    latest_visible_chunks = [fallback]
+                    yield fallback
+                yield _turn_done(current_record)
+                return
+            raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled before takeover closeout")
             for chunk in formatter._llm_call_stream(
                 cfg,
                 final_messages,
@@ -295,6 +360,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                     emitted = True
                     latest_visible_chunks.append(chunk)
                     yield chunk
+                raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled during takeover closeout")
             formatter._record_tool_call_usage_stats(cfg, usage_blocked)
             formatter._merge_tool_call_usage_totals(usage, usage_blocked)
             if not emitted:
@@ -328,6 +394,19 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 yield _turn_done(ledger.latest_terminal() or current_record)
                 return
 
+            if tool_runtime_cancel_reason(bundle, skill_context):
+                final_reply = formatter._build_tool_closeout_reply(
+                    success=bool(current_tool_success) if current_tool_success is not None else False,
+                    action_summary=current_action_summary,
+                    tool_response=current_tool_response,
+                    run_meta=current_run_meta,
+                )
+                if final_reply:
+                    latest_visible_chunks = [final_reply]
+                    yield final_reply
+                yield _turn_done(current_record)
+                return
+
             usage_n = {}
             collected_n = []
             tool_calls_n = None
@@ -335,6 +414,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
             round_reasoning_chunks = []
             turns_used += 1
 
+            raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled before followup model call")
             for chunk in formatter._llm_call_stream(
                 cfg,
                 messages,
@@ -366,6 +446,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                         yield chunk
                 else:
                     collected_n.append(chunk)
+                raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled during followup model call")
 
             latest_visible_chunks = list(collected_n)
             formatter._record_tool_call_usage_stats(cfg, usage_n)
@@ -377,6 +458,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 bundle,
                 mode=f"stream_round_{round_index}",
             )
+            raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled after followup model call")
             if not tool_calls_n:
                 if observed_round_tool_calls:
                     closed_records = close_tool_call_batch_as_synthetic_failure(
@@ -446,6 +528,19 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
 
             failure_reason = "tool_executor_exception"
             buffered_batch_events = []
+            if tool_runtime_cancel_reason(bundle, skill_context):
+                final_reply = formatter._build_tool_closeout_reply(
+                    success=bool(current_tool_success) if current_tool_success is not None else False,
+                    action_summary=current_action_summary,
+                    tool_response=current_tool_response,
+                    run_meta=current_run_meta,
+                )
+                if final_reply:
+                    latest_visible_chunks = [final_reply]
+                    yield final_reply
+                yield _turn_done(current_record)
+                return
+            raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled before followup tool batch")
             batch_outcome = execute_tool_call_batch(
                 tool_calls_n,
                 bundle=bundle,
@@ -467,7 +562,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 batch_outcome,
                 reasoning_details=formatter._reasoning_details_from_chunks(round_reasoning_chunks),
             )
-            current_record = batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal()
+            current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
             current_run_meta = batch_state.run_meta
             current_tool_success = batch_state.tool_success
             current_action_summary = batch_state.action_summary
@@ -476,6 +571,19 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
             current_tool_args = dict(batch_state.tool_args)
             followup_tools = list(batch_state.followup_tools or tools)
             recent_attempts = list(batch_state.recent_attempts)
+
+            if current_record and current_record.reason == "user_interrupted":
+                final_reply = formatter._build_tool_closeout_reply(
+                    success=False,
+                    action_summary=current_action_summary,
+                    tool_response=current_tool_response,
+                    run_meta=current_run_meta,
+                )
+                if final_reply:
+                    latest_visible_chunks = [final_reply]
+                    yield final_reply
+                yield _turn_done(current_record)
+                return
 
             if batch_outcome.requires_user_takeover:
                 final_messages = list(messages)
@@ -486,6 +594,19 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 usage_blocked = {}
                 emitted = False
                 latest_visible_chunks = []
+                if tool_runtime_cancel_reason(bundle, skill_context):
+                    final_reply = formatter._build_tool_closeout_reply(
+                        success=bool(current_tool_success) if current_tool_success is not None else False,
+                        action_summary=current_action_summary,
+                        tool_response=current_tool_response,
+                        run_meta=current_run_meta,
+                    )
+                    if final_reply:
+                        latest_visible_chunks = [final_reply]
+                        yield final_reply
+                    yield _turn_done(current_record)
+                    return
+                raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled before takeover closeout")
                 for chunk in formatter._llm_call_stream(
                     cfg,
                     final_messages,
@@ -500,6 +621,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                         emitted = True
                         latest_visible_chunks.append(chunk)
                         yield chunk
+                    raise_if_cancelled(bundle, skill_context, detail="tool_call stream cancelled during takeover closeout")
                 formatter._record_tool_call_usage_stats(cfg, usage_blocked)
                 formatter._merge_tool_call_usage_totals(usage, usage_blocked)
                 if not emitted:

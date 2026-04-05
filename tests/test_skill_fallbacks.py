@@ -730,6 +730,110 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("reason"), "tool_executor_exception")
         self.assertIn("boom", done.get("tool_response", ""))
 
+    def test_unified_reply_with_tools_stream_closes_user_interrupted_without_followup_round(self):
+        stream_call_count = {"value": 0}
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            stream_call_count["value"] += 1
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_interrupt_1",
+                            "type": "function",
+                            "function": {
+                                "name": "sense_environment",
+                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+                return
+
+            raise AssertionError("stream should not request a followup round after user_interrupted")
+
+        def fake_tool_executor(_name, _args, _context):
+            return {
+                "success": False,
+                "response": "sense_environment interrupted",
+                "error": "sense_environment interrupted",
+                "reason": "user_interrupted",
+                "synthetic": True,
+                "meta": {},
+            }
+
+        bundle = {
+            "user_input": "看下当前环境",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(stream_call_count["value"], 1)
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "sense_environment")
+        self.assertEqual(done.get("success"), False)
+        self.assertEqual(done.get("reason"), "user_interrupted")
+
+    def test_unified_reply_with_tools_non_stream_closes_user_interrupted_without_followup_round(self):
+        call_count = {"value": 0}
+
+        def fake_llm_call(_cfg, _messages, **_kwargs):
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_interrupt_non_stream_1",
+                            "type": "function",
+                            "function": {
+                                "name": "sense_environment",
+                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                            },
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+                }
+            raise AssertionError("non-stream should not request a followup round after user_interrupted")
+
+        def fake_tool_executor(_name, _args, _context):
+            return {
+                "success": False,
+                "response": "sense_environment interrupted",
+                "error": "sense_environment interrupted",
+                "reason": "user_interrupted",
+                "synthetic": True,
+                "meta": {},
+            }
+
+        bundle = {
+            "user_input": "看下当前环境",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertEqual(call_count["value"], 1)
+        self.assertEqual(result.get("tool_used"), "sense_environment")
+        self.assertEqual(result.get("success"), False)
+        self.assertEqual(result.get("reason"), "user_interrupted")
+
     def test_unified_reply_with_tools_stream_keeps_visible_intro_before_ask_user(self):
         executed = []
 

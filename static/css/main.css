@@ -1,11 +1,11 @@
 /* NovaCore CSS entrypoint */
 /* Keep this file as the single linked stylesheet; section files hold the real rules. */
-@import url("/static/css/sections/shell.css?v=20260403split2");
-@import url("/static/css/sections/chat.css?v=20260403split2");
-@import url("/static/css/sections/chat-steps.css?v=20260403split2");
-@import url("/static/css/sections/composer.css?v=20260403split2");
-@import url("/static/css/sections/skills.css?v=20260403split2");
-@import url("/static/css/sections/dashboard.css?v=20260403split2");
-@import url("/static/css/sections/workbench.css?v=20260403split2");
-@import url("/static/css/sections/themes.css?v=20260403split2");
+@import url("/static/css/sections/shell.css?v=20260405theme43");
+@import url("/static/css/sections/chat.css?v=20260405theme43");
+@import url("/static/css/sections/chat-steps.css?v=20260405theme43");
+@import url("/static/css/sections/composer.css?v=20260405theme43");
+@import url("/static/css/sections/skills.css?v=20260405theme43");
+@import url("/static/css/sections/dashboard.css?v=20260405theme43");
+@import url("/static/css/sections/workbench.css?v=20260405theme43");
+@import url("/static/css/sections/themes.css?v=20260405theme43");
 

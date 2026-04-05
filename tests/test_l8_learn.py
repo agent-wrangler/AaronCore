@@ -12,11 +12,13 @@ class L8LearnTests(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.state_dir = Path(self._tmpdir.name)
+        self.knowledge_file = self.state_dir / "knowledge.json"
         self.knowledge_base_file = self.state_dir / "knowledge_base.json"
         self.config_file = self.state_dir / "autolearn_config.json"
         self._patcher = patch.multiple(
             l8_learn,
             STATE_DIR=self.state_dir,
+            KNOWLEDGE_FILE=self.knowledge_file,
             KNOWLEDGE_BASE_FILE=self.knowledge_base_file,
             CONFIG_FILE=self.config_file,
         )
@@ -31,6 +33,11 @@ class L8LearnTests(unittest.TestCase):
         if not self.knowledge_base_file.exists():
             return []
         return json.loads(self.knowledge_base_file.read_text(encoding="utf-8"))
+
+    def _read_l5_knowledge(self):
+        if not self.knowledge_file.exists():
+            return []
+        return json.loads(self.knowledge_file.read_text(encoding="utf-8"))
 
     def test_should_trigger_auto_learn_allows_question_like_queries(self):
         allowed, reason = l8_learn.should_trigger_auto_learn("FastAPI 是什么？")
@@ -344,17 +351,18 @@ class L8LearnTests(unittest.TestCase):
         self.assertNotIn("keywords", stored[0])
         self.assertNotIn("trigger", stored[0])
 
-    def test_save_learned_knowledge_defaults_primary_scene_without_keyword_classification(self):
+    def test_save_learned_knowledge_defaults_primary_scene_for_reusable_knowledge(self):
         entry = l8_learn.save_learned_knowledge(
-            "天气怎么查",
-            "这是一个关于天气查询方式的知识总结，包含可复用的方法。",
+            "MCP 是什么？",
+            "MCP 是一种让模型与工具和外部上下文连接的协议。",
             [],
         )
 
+        self.assertEqual(entry["layer"], "L8")
         self.assertEqual(entry["一级场景"], "自主学习")
-        self.assertEqual(entry["二级场景"], "自动学习-天气怎么查")
+        self.assertEqual(entry["二级场景"], "自动学习-MCP 是什么？")
 
-    def test_save_learned_knowledge_uses_route_signal_for_tool_scene(self):
+    def test_save_learned_knowledge_routes_tool_scene_into_l5(self):
         entry = l8_learn.save_learned_knowledge(
             "上海天气",
             "这是一次天气技能返回后的知识记录，包含可复用信息。",
@@ -362,8 +370,60 @@ class L8LearnTests(unittest.TestCase):
             route_result={"mode": "skill", "skill": "weather"},
         )
 
-        self.assertEqual(entry["一级场景"], "工具应用")
-        self.assertEqual(entry["二级场景"], "技能学习-上海天气")
+        stored_l8 = self._read_knowledge_base()
+        stored_l5 = self._read_l5_knowledge()
+
+        self.assertEqual(entry["layer"], "L5")
+        self.assertEqual(stored_l8, [])
+        self.assertEqual(len(stored_l5), 1)
+        self.assertEqual(stored_l5[0]["核心技能"], "weather")
+
+    def test_save_learned_knowledge_routes_method_query_into_existing_l5_hint(self):
+        self.knowledge_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "name": "weather",
+                        "一级场景": "工具应用",
+                        "二级场景": "天气查询",
+                        "核心技能": "weather",
+                        "trigger": ["天气", "气温"],
+                        "应用示例": "查询城市天气",
+                        "使用次数": 2,
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        entry = l8_learn.save_learned_knowledge(
+            "天气怎么查",
+            "这是一个关于天气查询方式的方法总结。",
+            [],
+        )
+
+        stored_l8 = self._read_knowledge_base()
+        stored_l5 = self._read_l5_knowledge()
+
+        self.assertEqual(entry["layer"], "L5")
+        self.assertEqual(stored_l8, [])
+        self.assertEqual(len(stored_l5), 1)
+        self.assertIn("天气怎么查", stored_l5[0]["trigger"])
+        self.assertEqual(stored_l5[0]["使用次数"], 3)
+
+    def test_should_surface_knowledge_entry_rejects_tool_application_items(self):
+        entry = {
+            "source": "bing_rss",
+            "type": "knowledge",
+            "query": "上海天气",
+            "summary": "这是一次天气技能返回后的方法型记录。",
+            "一级场景": "工具应用",
+            "核心技能": "weather",
+        }
+
+        self.assertFalse(l8_learn.should_surface_knowledge_entry(entry))
+        self.assertFalse(l8_learn.should_show_l8_timeline_entry(entry))
 
     def test_save_learned_knowledge_uses_llm_quality_gate_for_self_referential_entries(self):
         def fake_llm(prompt, *args, **kwargs):

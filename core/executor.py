@@ -10,6 +10,12 @@ from core.fs_protocol import (
     verify_post_condition,
 )
 from core.skills import get_skill
+from decision.tool_runtime.runtime_control import (
+    ToolRuntimeInterrupted,
+    build_interrupted_tool_result,
+    cooperative_sleep,
+    raise_if_cancelled,
+)
 
 _PROTOCOL_SKILLS = {'folder_explore', 'open_target', 'save_export', 'file_copy', 'file_move', 'file_delete', 'app_target', 'ui_interaction', 'write_file', 'edit_file', 'search_replace', 'apply_unified_diff'}
 _DIRECT_PROTOCOL_EXECUTORS = {
@@ -184,7 +190,9 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
     direct_protocol_executor = _DIRECT_PROTOCOL_EXECUTORS.get(skill_name)
     if callable(direct_protocol_executor):
         try:
+            raise_if_cancelled(context, detail=f'{skill_name} cancelled before execution')
             result = direct_protocol_executor(context or {}, user_input=user_input)
+            raise_if_cancelled(context, detail=f'{skill_name} cancelled after execution')
             if isinstance(result, dict) and 'success' in result:
                 result.setdefault('skill', skill_name)
                 return result
@@ -194,6 +202,8 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
                 'response': '',
                 'error': f'协议技能 {skill_name} 返回结果无效',
             }
+        except ToolRuntimeInterrupted as exc:
+            return build_interrupted_tool_result(skill_name, reason=exc.reason, detail=exc.detail)
         except Exception as e:
             return {
                 'success': False,
@@ -224,10 +234,12 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
         # 优先尝试传 context，技能可选择接不接
         import inspect
         sig = inspect.signature(exec_func)
+        raise_if_cancelled(context, detail=f'{skill_name} cancelled before execution')
         if len(sig.parameters) >= 2:
             result = exec_func(user_input, context or {})
         else:
             result = exec_func(user_input)
+        raise_if_cancelled(context, detail=f'{skill_name} cancelled after execution')
         response = result if isinstance(result, str) else str(result)
         if isinstance(result, dict):
             meta = {
@@ -243,6 +255,7 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
             if result.get('image_url'):
                 meta['image_url'] = str(result.get('image_url')).strip()
             if skill_name in _PROTOCOL_SKILLS:
+                raise_if_cancelled(context, detail=f'{skill_name} cancelled during verification')
                 post_spec = _derive_protocol_post_check(skill_name, user_input, context)
                 if post_spec:
                     action, target_value, extra = post_spec
@@ -258,12 +271,17 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
                     repaired_input = str(repair.get('rewritten_input') or user_input)
                     sleep_before = float(repair.get('sleep_before') or 0)
                     if sleep_before > 0:
-                        import time
-                        time.sleep(sleep_before)
+                        cooperative_sleep(
+                            sleep_before,
+                            repaired_context or context,
+                            detail=f'{skill_name} cancelled during repair wait',
+                        )
+                    raise_if_cancelled(repaired_context or context, detail=f'{skill_name} cancelled before repaired execution')
                     if len(sig.parameters) >= 2:
                         repaired_result = exec_func(repaired_input, repaired_context or {})
                     else:
                         repaired_result = exec_func(repaired_input)
+                    raise_if_cancelled(repaired_context or context, detail=f'{skill_name} cancelled after repaired execution')
                     if isinstance(repaired_result, dict):
                         repaired_post_spec = _derive_protocol_post_check(skill_name, repaired_input, repaired_context or {})
                         if repaired_post_spec:
@@ -317,6 +335,8 @@ def execute(skill_route: dict, user_input: str, context: dict | None = None) -> 
             'error': None,
             'meta': meta,
         }
+    except ToolRuntimeInterrupted as exc:
+        return build_interrupted_tool_result(skill_name, reason=exc.reason, detail=exc.detail)
     except Exception as e:
         try:
             from core.shared import debug_write

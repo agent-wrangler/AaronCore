@@ -1,6 +1,19 @@
 """Reply hygiene cleanup helpers."""
 
 
+def _strip_decorative_markdown(response: str, *, re_mod) -> str:
+    text = str(response or "")
+    if "**" not in text and "__" not in text:
+        return text
+    if "```" in text:
+        return text
+    if re_mod.search(r"^\s*(?:[-*+]\s+|#{1,6}\s|>\s|\d+[.)]\s+)", text, flags=re_mod.MULTILINE):
+        return text
+    if len([line for line in text.splitlines() if line.strip()]) > 8:
+        return text
+    return text.replace("**", "").replace("__", "")
+
+
 def l1_hygiene_clean(
     response: str,
     history: list,
@@ -14,6 +27,7 @@ def l1_hygiene_clean(
     response = str(response or "").strip()
     response = prefer_tool_grounded_tail(response)
     response, restart_removed = strip_mid_reply_restart(response)
+    response = _strip_decorative_markdown(response, re_mod=re_mod).strip()
 
     if not response or not history:
         return response, restart_removed

@@ -2,11 +2,44 @@ import unittest
 
 from core.decision_runtime.tool_runtime.events import build_tool_turn_done_event
 from core.decision_runtime.tool_runtime.ledger import ToolCallRecord, ToolCallTurnLedger
+from decision.tool_runtime import result_resolution as result_resolution_module
 from decision.tool_runtime.events import build_tool_call_done_event, build_tool_call_executing_event
 from decision.tool_runtime.process_meta import build_attempt_process_meta, build_done_process_meta
 
 
 class ToolCallRuntimeTests(unittest.TestCase):
+    def test_text_compat_tool_inference_is_initial_only(self):
+        compat_tool_call = {
+            "id": "call_open_1",
+            "type": "function",
+            "function": {"name": "open_target", "arguments": '{"target":"https://www.baidu.com"}'},
+        }
+        bundle = {"user_input": "打开百度", "context_data": {}}
+
+        initial = result_resolution_module.resolve_tool_calls_from_result(
+            {"content": "我先帮你打开网页。"},
+            bundle,
+            mode="stream_initial",
+            parse_legacy_tool_call_text=lambda *_args, **_kwargs: None,
+            force_app_tool_call_from_reply=lambda *_args, **_kwargs: None,
+            infer_action_tool_call_from_reply=lambda *_args, **_kwargs: compat_tool_call,
+            infer_directory_resolution_tool_call=lambda *_args, **_kwargs: None,
+            debug_write=lambda *_args, **_kwargs: None,
+        )
+        followup = result_resolution_module.resolve_tool_calls_from_result(
+            {"content": "我继续帮你打开网页。"},
+            bundle,
+            mode="stream_round_1",
+            parse_legacy_tool_call_text=lambda *_args, **_kwargs: compat_tool_call,
+            force_app_tool_call_from_reply=lambda *_args, **_kwargs: compat_tool_call,
+            infer_action_tool_call_from_reply=lambda *_args, **_kwargs: compat_tool_call,
+            infer_directory_resolution_tool_call=lambda *_args, **_kwargs: None,
+            debug_write=lambda *_args, **_kwargs: None,
+        )
+
+        self.assertEqual(initial, [compat_tool_call])
+        self.assertIsNone(followup)
+
     def test_tool_call_events_carry_process_meta_for_fallback_retry(self):
         attempt_meta = build_attempt_process_meta(
             recent_attempts=[{"tool": "run_command", "success": False, "summary": "命令被拦截：不允许命令链或重定向"}],

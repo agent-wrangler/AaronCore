@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html class="theme-light"><head><meta charset="UTF-8"><title>Nova</title>
-<link rel="stylesheet" href="/static/css/main.css?v=20260403split2">
+<link rel="stylesheet" href="/static/css/main.css?v=20260405theme43">
 <script>
 (function(){
  var t = 'light';
@@ -64,6 +64,15 @@
     <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
    </svg>
   </button>
+  <button class="top-btn run-panel-btn" onclick="toggleRunPanel()" id="runPanelBtn" title="Run Panel" aria-pressed="true">
+   <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
+    <path d="M5 6.5h14M5 12h14M5 17.5h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+    <circle cx="7" cy="6.5" r="1.2" fill="currentColor"/>
+    <circle cx="17" cy="12" r="1.2" fill="currentColor"/>
+    <circle cx="11" cy="17.5" r="1.2" fill="currentColor"/>
+   </svg>
+   <span>Run</span>
+  </button>
   <button class="top-btn win-btn" onclick="_winMinimize()" title="Minimize" data-i18n-title="window.minimize">
    <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
   </button>
@@ -106,7 +115,9 @@
  <div class="main">
  <div class="content">
   <style>@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}</style>
-  <button id="scrollToBottomBtn" class="scroll-to-bottom-btn" onclick="scrollToBottom()" title="Scroll to bottom" data-i18n-title="chat.scrollBottom" style="display:none">
+  <div class="chat-shell run-panel-open" id="chatShell">
+   <div class="chat-stage">
+    <button id="scrollToBottomBtn" class="scroll-to-bottom-btn" onclick="scrollToBottom()" title="Scroll to bottom" data-i18n-title="chat.scrollBottom" style="display:none">
    <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
   <div class="chat" id="chat">
@@ -130,13 +141,42 @@
      <div class="welcome-news-list" id="welcomeNewsList" data-i18n="welcome.news.loading">加载中...</div>
     </div>
    </div>
+   </div>
+   <aside class="run-panel" id="runPanel">
+    <div class="run-panel-header">
+     <div class="run-panel-header-main">
+      <div class="run-panel-kicker-row">
+       <div class="run-panel-kicker" id="runPanelKicker">Current Run</div>
+       <div class="run-panel-status-pill state-idle" id="runPanelStatus">绌洪棽</div>
+      </div>
+      <div class="run-panel-task" id="runPanelTask">杩欓噷浼氬疄鏃舵樉绀烘湰杞€濊€冨拰鍔ㄤ綔銆?/div>
+     </div>
+     </div>
+    <div class="run-panel-summary">
+     <div class="run-panel-summary-item">
+      <div class="run-panel-summary-label">杩涘害</div>
+      <div class="run-panel-summary-value" id="runPanelProgress">0 / 0</div>
+     </div>
+     <div class="run-panel-summary-item">
+      <div class="run-panel-summary-label">褰撳墠鍔ㄤ綔</div>
+      <div class="run-panel-summary-value run-panel-summary-text" id="runPanelAction">绛夊緟鏂扮殑鍔ㄤ綔</div>
+     </div>
+     <div class="run-panel-summary-item">
+      <div class="run-panel-summary-label">宸蹭骇鍑?/div>
+      <div class="run-panel-summary-value run-panel-summary-text" id="runPanelOutputs">0 鏂囦欢 路 0 宸ュ叿 路 0 寮傚父</div>
+     </div>
+    </div>
+    <div class="run-panel-stream" id="runPanelStream">
+     <div class="run-panel-empty" id="runPanelEmpty">寮€濮嬩竴杞换鍔″悗锛岃繖閲岀殑 Run Stream 浼氬疄鏃舵樉绀烘€濊€冦€佸姩浣滃拰鎵ц杩囩▼銆?/div>
+    </div>
+   </aside>
   </div>
  </div>
  <div class="input">
   <div class="repair-bar" id="repairBar" style="display:none;">
    <div class="repair-bar-inner">
     <div class="repair-bar-icon">
-     <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.75" fill="currentColor"/></svg>
+     <span class="repair-bar-chip" id="repairChip">L7</span>
     </div>
     <div class="repair-bar-text">
      <span class="repair-bar-headline" id="repairHeadline"></span>
@@ -180,11 +220,11 @@
 <!-- JS modules (ordered) -->
 <script src="/static/js/window-shell.js?v=20260403shell1"></script>
 <script src="/static/js/i18n.js?v=20260410"></script>
-<script src="/static/js/utils.js?v=20260412b"></script>
+<script src="/static/js/utils.js?v=20260412d"></script>
 <script src="/static/js/awareness.js?v=20260321"></script>
 <script src="/static/js/chat/process.js?v=20260403chat1"></script>
-<script src="/static/js/chat/composer.js?v=20260403chat1"></script>
-<script src="/static/js/chat/stream.js?v=20260403chat1"></script>
+<script src="/static/js/chat/composer.js?v=20260405chat2"></script>
+<script src="/static/js/chat/stream.js?v=20260405chat32"></script>
 <script src="/static/js/chat/task-ui.js?v=20260403chat1"></script>
 <script src="/static/js/chat/voice.js?v=20260403chat1"></script>
 <script src="/static/js/memory.js?v=20260409"></script>
@@ -195,7 +235,7 @@
 <script src="/static/js/stats.js?v=20260410"></script>
 <script src="/static/js/app/chrome.js?v=20260403app1"></script>
 <script src="/static/js/app/boot.js?v=20260403app1"></script>
-<script src="/static/js/app/views.js?v=20260403app1"></script>
+<script src="/static/js/app/views.js?v=20260404app2"></script>
 <script src="/static/js/app/skills.js?v=20260403app1"></script>
 <script src="/static/js/app/models.js?v=20260403app1"></script>
 <script src="/static/js/output-init.js?v=20260403shell1"></script>

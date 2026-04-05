@@ -279,7 +279,128 @@ def _extract_routing_constraint(
     return None
 
 
+_SYSTEM_EXPLANATION_HINTS = (
+    "时间戳",
+    "系统内置",
+    "机制",
+    "原理",
+    "路径",
+    "怎么知道",
+    "直接就知道",
+    "为什么知道",
+    "哪来的",
+    "什么时候加",
+    "在哪",
+    "哪里",
+)
+_CORRECTION_HINTS = (
+    "不对",
+    "不是",
+    "错",
+    "跑偏",
+    "答非所问",
+    "误触发",
+    "乱触发",
+    "太空",
+    "空话",
+    "没理解",
+    "没听懂",
+    "总是",
+    "每次",
+    "重复",
+    "中断",
+    "刷屏",
+    "太短",
+    "不用",
+    "不要",
+    "太蠢",
+    "弱智",
+    "莫名其妙",
+    "不对劲",
+)
+_RECENT_RULE_SCAN_LIMIT = 80
+
+
+def _looks_like_system_explanation_request(user_feedback: str) -> bool:
+    raw = str(user_feedback or "").strip()
+    if len(raw) < 4:
+        return False
+    compact = _normalize_match_text(raw)
+    if not compact:
+        return False
+    has_question_form = any(token in raw for token in ("?", "？", "怎么", "为什么", "如何", "在哪", "哪里", "什么时候"))
+    if not has_question_form:
+        return False
+    if any(_normalize_match_text(token) in compact for token in _CORRECTION_HINTS):
+        return False
+    return any(_normalize_match_text(token) in compact for token in _SYSTEM_EXPLANATION_HINTS)
+
+
+def _find_followup_feedback_thread(rules: list[dict], last_question: str) -> dict | None:
+    question = str(last_question or "").strip()
+    if len(_normalize_match_text(question)) < 4:
+        return None
+    for rule in reversed(rules[-_RECENT_RULE_SCAN_LIMIT:]):
+        if not isinstance(rule, dict) or not rule.get("enabled", True):
+            continue
+        previous_feedback = str(rule.get("user_feedback", "")).strip()
+        if not previous_feedback:
+            continue
+        if _text_similarity(question, previous_feedback) >= 0.92:
+            return rule
+    return None
+
+
+def _find_duplicate_rule(rules: list[dict], candidate: dict) -> dict | None:
+    candidate_feedback = str(candidate.get("user_feedback", "")).strip()
+    candidate_question = str(candidate.get("last_question", "")).strip()
+    candidate_fix = str(candidate.get("fix", "")).strip()
+    for rule in reversed(rules[-_RECENT_RULE_SCAN_LIMIT:]):
+        if not isinstance(rule, dict) or not rule.get("enabled", True):
+            continue
+        if str(rule.get("scene", "")) != str(candidate.get("scene", "")):
+            continue
+        if str(rule.get("problem", "")) != str(candidate.get("problem", "")):
+            continue
+        if str(rule.get("type", "")) != str(candidate.get("type", "")):
+            continue
+        feedback_score = _text_similarity(candidate_feedback, str(rule.get("user_feedback", "")))
+        question_score = _text_similarity(candidate_question, str(rule.get("last_question", "")))
+        fix_score = _text_similarity(candidate_fix, str(rule.get("fix", "")))
+        if feedback_score >= 0.92 and (question_score >= 0.55 or fix_score >= 0.75):
+            return rule
+        if feedback_score >= 0.82 and question_score >= 0.82:
+            return rule
+    return None
+
+
+def _merge_feedback_rule(existing: dict, candidate: dict, *, now_iso: str) -> dict:
+    existing_count = int(existing.get("feedback_count") or 1)
+    existing["feedback_count"] = max(existing_count, 1) + 1
+    existing["last_feedback_at"] = now_iso
+    existing["updated_at"] = now_iso
+
+    existing_fix = str(existing.get("fix", "")).strip()
+    candidate_fix = str(candidate.get("fix", "")).strip()
+    if candidate_fix and candidate_fix != "keep_observing_and_refine" and existing_fix in {"", "keep_observing_and_refine"}:
+        for key in ("category", "type", "scene", "problem", "fix", "level"):
+            if key in candidate:
+                existing[key] = candidate[key]
+
+    if candidate.get("constraint") and not existing.get("constraint"):
+        existing["constraint"] = candidate["constraint"]
+
+    return existing
+
+
 def record_feedback_rule(user_feedback: str, last_question: str = "", last_answer: str = "") -> dict | None:
+    if _looks_like_system_explanation_request(user_feedback):
+        _debug_write(
+            "l7_feedback_skip",
+            {"feedback": str(user_feedback or "")[:80], "reason": "system_explanation_request"},
+        )
+        return None
+
     inspected = inspect_feedback(user_feedback, last_question, last_answer)
     if not inspected.get("is_feedback", False):
         _debug_write("l7_feedback_skip", {"feedback": str(user_feedback or "")[:80], "reason": "not_feedback"})
@@ -292,14 +413,29 @@ def record_feedback_rule(user_feedback: str, last_question: str = "", last_answe
 
     constraint = _extract_routing_constraint(user_feedback, last_question, last_answer, rule)
     rules = _load_rules()
+    followup_rule = _find_followup_feedback_thread(rules, last_question)
+    if followup_rule:
+        _debug_write(
+            "l7_feedback_skip",
+            {
+                "feedback": str(user_feedback or "")[:80],
+                "reason": "followup_feedback_thread",
+                "parent_rule_id": followup_rule.get("id"),
+            },
+        )
+        return None
+
+    now_iso = datetime.now().isoformat()
     item = {
         "id": f"rule_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
         "source": "user_feedback",
-        "created_at": datetime.now().isoformat(),
+        "created_at": now_iso,
         "enabled": True,
         "user_feedback": user_feedback,
         "last_question": last_question,
         "last_answer": last_answer,
+        "feedback_count": 1,
+        "last_feedback_at": now_iso,
         "hit_count": 0,
         "fail_count": 0,
         "last_hit_at": None,
@@ -307,6 +443,21 @@ def record_feedback_rule(user_feedback: str, last_question: str = "", last_answe
     }
     if constraint:
         item["constraint"] = constraint
+
+    duplicate_rule = _find_duplicate_rule(rules, item)
+    if duplicate_rule:
+        merged = _merge_feedback_rule(duplicate_rule, item, now_iso=now_iso)
+        _save_rules(rules[-200:])
+        _debug_write(
+            "l7_feedback_merge",
+            {
+                "rule_id": merged.get("id"),
+                "feedback_count": merged.get("feedback_count"),
+                "reason": "duplicate_rule",
+            },
+        )
+        return merged
+
     rules.append(item)
     _save_rules(rules[-200:])
     return item

@@ -11,6 +11,70 @@ html.theme-booting *{
  animation:none !important;
 }
 
+@font-face{
+ font-family:"Inter";
+ src:url("/static/fonts/inter-variable.ttf") format("truetype");
+ font-style:normal;
+ font-weight:100 900;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Source Han Sans UI";
+ src:url("/static/fonts/source-han-sans-cn-300.otf") format("opentype");
+ font-style:normal;
+ font-weight:300;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Source Han Sans UI";
+ src:url("/static/fonts/source-han-sans-cn-400.otf") format("opentype");
+ font-style:normal;
+ font-weight:400;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Noto Sans SC";
+ src:url("/static/fonts/noto-sans-sc-600.ttf") format("truetype");
+ font-style:normal;
+ font-weight:600;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Source Serif 4";
+ src:url("/static/fonts/source-serif-4-400.ttf") format("truetype");
+ font-style:normal;
+ font-weight:400;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Source Serif 4";
+ src:url("/static/fonts/source-serif-4-600.ttf") format("truetype");
+ font-style:normal;
+ font-weight:600;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Noto Serif SC";
+ src:url("/static/fonts/noto-serif-sc-400.ttf") format("truetype");
+ font-style:normal;
+ font-weight:400;
+ font-display:swap;
+}
+
+@font-face{
+ font-family:"Noto Serif SC";
+ src:url("/static/fonts/noto-serif-sc-600.ttf") format("truetype");
+ font-style:normal;
+ font-weight:600;
+ font-display:swap;
+}
+
 /* 旧的 frameless 缩放触发层（当前 Electron 原生缩放为主，保留不显示） */
 .resize-edge,.resize-corner{display:none!important}
 ::-webkit-scrollbar{width:6px}
@@ -23,6 +87,11 @@ html.theme-booting *{
  --bg-sidebar:#161618;
  --bg-main:#1e1e20;
  --bg-chat:#161618;
+ --font-ui:"Inter","Source Han Sans UI","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+ --font-chat-sans:"Inter","Source Han Sans UI","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+ --font-chat-user-sans:"Inter","Source Han Sans UI","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+ --font-chat-reply-serif:"Source Serif 4","Noto Serif SC","Source Han Serif SC","Source Han Serif CN","Songti SC","STSong","SimSun",serif;
+ --font-chat-mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono","Menlo","Consolas","Liberation Mono","Courier New",monospace;
  --bubble-line-height:1.6;
  --surface-ai:rgba(36,36,40,0.92);
  --surface-user:linear-gradient(135deg,#6b7280 0%,#4b5563 100%);
@@ -64,6 +133,7 @@ html.theme-booting *{
 
 body.light{
  --bg-app:#f4f1eb;
+ --bg-chat:#f6f4ef;
  --text-primary:#2f2b25;
  --text-secondary:#6b645a;
  --text-label:#8f867b;
@@ -116,22 +186,23 @@ body.light .sidebar{background:#ffffff;box-shadow:2px 0 18px rgba(22,22,24,0.06)
 body.light .menu{color:#334155}
 body.light .menu:hover{background:#eff6ff;color:#374151}
 body.light .menu.active{background:#e5e7eb;color:#374151}
-body.light .chat{background:#fafbfc}
+body.light .chat{background:var(--bg-chat,#f6f4ef)}
 body.light .bubble{background:transparent;color:#1c1c1e;box-shadow:none;border:none}
 body.light .msg.assistant .bubble{background:transparent;color:#1c1c1e;border:none}
 body.light .msg.user .bubble{background:#efebe5;color:#2f2b25;border:none;border-radius:16px;box-shadow:none}
 body.light .input{background:transparent;border-top:none}
 body.light .input textarea{background:transparent;color:#161618;border:none}
-body.light::-webkit-scrollbar-track{background:#f1f5f9}
-body.light::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
-body.light::-webkit-scrollbar-thumb:hover{background:#94a3b8}
-body.light .chat::-webkit-scrollbar-track{background:#f1f5f9}
-body.light .chat::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
-body.light .chat::-webkit-scrollbar-thumb:hover{background:#94a3b8}
-body.light .chat *::-webkit-scrollbar-track{background:#f1f5f9}
-body.light .chat *::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
-body.light .chat *::-webkit-scrollbar-thumb:hover{background:#94a3b8}
-body{font-family:'Segoe UI','Microsoft YaHei UI','Microsoft YaHei',system-ui,-apple-system,sans-serif;background:var(--bg-app);color:var(--text-main);height:100vh;overflow:hidden;display:flex}
+body.light::-webkit-scrollbar-track{background:var(--bg-soft,#f7f4ee)}
+body.light::-webkit-scrollbar-thumb{background:rgba(111,103,93,0.32);border-radius:3px}
+body.light::-webkit-scrollbar-thumb:hover{background:rgba(111,103,93,0.46)}
+body.light .chat::-webkit-scrollbar-track{background:var(--bg-chat,#f6f4ef)}
+body.light .chat::-webkit-scrollbar-thumb{background:rgba(111,103,93,0.42);border-radius:3px}
+body.light .chat::-webkit-scrollbar-thumb:hover{background:rgba(111,103,93,0.56)}
+body.light .chat *::-webkit-scrollbar-track{background:var(--bg-chat,#f6f4ef)}
+body.light .chat *::-webkit-scrollbar-thumb{background:rgba(111,103,93,0.32);border-radius:3px}
+body.light .chat *::-webkit-scrollbar-thumb:hover{background:rgba(111,103,93,0.46)}
+body{font-family:var(--font-ui);font-synthesis:none;background:var(--bg-app);color:var(--text-main);height:100vh;overflow:hidden;display:flex}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-optical-sizing:auto}
 /* ===== 优雅可拉伸侧边栏 ===== */
 .sidebar{
  width:240px;
@@ -243,7 +314,8 @@ body.light .menu .icon{color:currentColor}
 body.light .menu.active .icon{color:currentColor}
 /* ===== 真正覆盖整个宽度的顶部通栏 ===== */
 body{
- font-family:'Segoe UI','Microsoft YaHei UI','Microsoft YaHei',system-ui,-apple-system,sans-serif;
+ font-family:var(--font-ui);
+ font-synthesis:none;
  background:var(--bg-app);
  color:#e2e8f0;
  height:100vh;

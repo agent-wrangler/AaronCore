@@ -1100,5 +1100,60 @@
     "meta": {
       "index": 3
     }
+  },
+  {
+    "id": "rel_20260404_103",
+    "from_id": "task_20260404_152",
+    "to_id": "task_20260404_153",
+    "type": "parent_of",
+    "created_at": "2026-04-04T16:47:22.477764",
+    "meta": {
+      "index": 1,
+      "plan_item_id": "step_1"
+    }
+  },
+  {
+    "id": "rel_20260404_104",
+    "from_id": "task_20260404_152",
+    "to_id": "task_20260404_154",
+    "type": "parent_of",
+    "created_at": "2026-04-04T16:47:22.528270",
+    "meta": {
+      "index": 2,
+      "plan_item_id": "step_2"
+    }
+  },
+  {
+    "id": "rel_20260404_105",
+    "from_id": "task_20260404_152",
+    "to_id": "task_20260404_155",
+    "type": "parent_of",
+    "created_at": "2026-04-04T16:47:22.571116",
+    "meta": {
+      "index": 3,
+      "plan_item_id": "step_3"
+    }
+  },
+  {
+    "id": "rel_20260404_106",
+    "from_id": "task_20260404_152",
+    "to_id": "task_20260404_156",
+    "type": "parent_of",
+    "created_at": "2026-04-04T16:47:22.615926",
+    "meta": {
+      "index": 4,
+      "plan_item_id": "step_4"
+    }
+  },
+  {
+    "id": "rel_20260404_107",
+    "from_id": "task_20260404_152",
+    "to_id": "task_20260404_157",
+    "type": "parent_of",
+    "created_at": "2026-04-04T16:47:22.700011",
+    "meta": {
+      "index": 5,
+      "plan_item_id": "step_5"
+    }
   }
 ]

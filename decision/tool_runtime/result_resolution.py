@@ -1,6 +1,13 @@
 """Post-LLM tool-call result resolution helpers."""
 
 
+def _allows_action_inference(mode: str) -> bool:
+    normalized = str(mode or "").strip().lower()
+    if not normalized:
+        return True
+    return normalized.endswith("initial")
+
+
 def resolve_tool_calls_from_result(
     result: dict,
     bundle: dict,
@@ -20,30 +27,39 @@ def resolve_tool_calls_from_result(
         return tool_calls
 
     content = result.get("content", "")
-    legacy_tc = parse_legacy_tool_call_text(content, bundle.get("user_input", ""))
-    if legacy_tc:
-        debug_write("legacy_tool_call_compat", {"mode": mode, "name": legacy_tc.get("function", {}).get("name", "")})
-        return [legacy_tc]
+    if _allows_action_inference(mode):
+        legacy_tc = parse_legacy_tool_call_text(content, bundle.get("user_input", ""))
+        if legacy_tc:
+            debug_write(
+                "legacy_tool_call_compat",
+                {"mode": mode, "name": legacy_tc.get("function", {}).get("name", "")},
+            )
+            return [legacy_tc]
 
-    forced_app_tc = force_app_tool_call_from_reply(
-        content,
-        bundle.get("user_input", ""),
-    )
-    if forced_app_tc:
-        debug_write("forced_app_tool_call", {"mode": mode})
-        return [forced_app_tc]
-
-    inferred_tc = infer_action_tool_call_from_reply(
-        content,
-        bundle.get("user_input", ""),
-        bundle.get("context_data"),
-    )
-    if inferred_tc:
-        debug_write(
-            "inferred_action_tool_call",
-            {"mode": mode, "name": inferred_tc.get("function", {}).get("name", "")},
+        forced_app_tc = force_app_tool_call_from_reply(
+            content,
+            bundle.get("user_input", ""),
         )
-        return [inferred_tc]
+        if forced_app_tc:
+            debug_write("forced_app_tool_call", {"mode": mode})
+            return [forced_app_tc]
+    else:
+        debug_write("skip_text_tool_call_compat", {"mode": mode})
+
+    if _allows_action_inference(mode):
+        inferred_tc = infer_action_tool_call_from_reply(
+            content,
+            bundle.get("user_input", ""),
+            bundle.get("context_data"),
+        )
+        if inferred_tc:
+            debug_write(
+                "inferred_action_tool_call",
+                {"mode": mode, "name": inferred_tc.get("function", {}).get("name", "")},
+            )
+            return [inferred_tc]
+    else:
+        debug_write("skip_inferred_action_tool_call", {"mode": mode})
 
     directory_tc = infer_directory_resolution_tool_call(bundle, content)
     if directory_tc:

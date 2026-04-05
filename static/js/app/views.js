@@ -15,7 +15,10 @@ function show(n){
  }
  var activeMenu=document.getElementById('m'+n);
  if(activeMenu) activeMenu.classList.add('active');
- var isLight = document.body.classList.contains('light');
+  if(typeof window._setRunPanelTabState==='function'){
+   window._setRunPanelTabState(n===1);
+  }
+  var isLight = document.body.classList.contains('light');
 
  if(n==1){
   if(typeof window._beginChatViewRestore==='function'){

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from collections.abc import Callable
 from datetime import datetime
@@ -15,6 +16,167 @@ _SCENE_PREFIX_MAP = {
     "\u4eba\u7269\u89d2\u8272": "\u4eba\u8bbe\u8c03\u6574",
     "\u81ea\u4e3b\u5b66\u4e60": "\u81ea\u52a8\u5b66\u4e60",
 }
+_TOOL_APPLICATION_SCENE = "\u5de5\u5177\u5e94\u7528"
+_METHOD_QUERY_MARKERS = (
+    "\u600e\u4e48\u67e5",
+    "\u5982\u4f55\u67e5",
+    "\u600e\u4e48\u7528",
+    "\u5982\u4f55\u7528",
+    "\u600e\u4e48\u8c03\u7528",
+    "\u5982\u4f55\u8c03\u7528",
+    "\u600e\u4e48\u64cd\u4f5c",
+    "\u5982\u4f55\u64cd\u4f5c",
+    "\u600e\u4e48\u95ee",
+    "\u5982\u4f55\u95ee",
+)
+
+
+def _compact_text(text: str) -> str:
+    return re.sub(r"\s+", "", str(text or "")).strip().lower()
+
+
+def looks_like_method_query(query: str) -> bool:
+    raw = _compact_text(query)
+    if not raw:
+        return False
+    return any(marker in raw for marker in _METHOD_QUERY_MARKERS)
+
+
+def _normalized_l5_key(value: object, *, normalize_query: Callable[[str], str]) -> str:
+    return normalize_query(str(value or ""))
+
+
+def _iter_l5_entry_keys(entry: dict) -> list[str]:
+    values: list[str] = []
+    for key in ("\u6838\u5fc3\u6280\u80fd", "name", "\u4e8c\u7ea7\u573a\u666f", "\u4e00\u7ea7\u573a\u666f"):
+        value = str(entry.get(key) or "").strip()
+        if value:
+            values.append(value)
+    triggers = entry.get("trigger")
+    if isinstance(triggers, list):
+        values.extend(str(item or "").strip() for item in triggers if str(item or "").strip())
+    return values
+
+
+def _match_l5_hint_entry(
+    query: str,
+    *,
+    l5_entries: list[dict],
+    route_result: dict | None,
+    normalize_query: Callable[[str], str],
+) -> dict | None:
+    normalized_query = normalize_query(query)
+    if not normalized_query:
+        return None
+
+    route_skill = ""
+    if isinstance(route_result, dict):
+        route_skill = str(route_result.get("skill") or "").strip()
+    if route_skill:
+        normalized_skill = normalize_query(route_skill)
+        for item in l5_entries:
+            if not isinstance(item, dict):
+                continue
+            item_skill = normalize_query(str(item.get("\u6838\u5fc3\u6280\u80fd") or item.get("name") or ""))
+            if item_skill and item_skill == normalized_skill:
+                return item
+
+    if not looks_like_method_query(query):
+        return None
+
+    for item in l5_entries:
+        if not isinstance(item, dict):
+            continue
+        for key in _iter_l5_entry_keys(item):
+            normalized_key = _normalized_l5_key(key, normalize_query=normalize_query)
+            if len(normalized_key) < 2:
+                continue
+            if normalized_key in normalized_query or normalized_query in normalized_key:
+                return item
+    return None
+
+
+def _touch_l5_method_hint(
+    query: str,
+    summary: str,
+    *,
+    matched_entry: dict | None,
+    route_result: dict | None,
+    load_json,
+    write_json,
+    knowledge_file: Path,
+    file_lock,
+    clean_text: Callable[[str, int | None], str],
+    normalize_query: Callable[[str], str],
+) -> dict:
+    now = datetime.now()
+    with file_lock:
+        data = load_json(knowledge_file, [])
+        if not isinstance(data, list):
+            data = []
+
+        target = None
+        if matched_entry is not None:
+            matched_name = normalize_query(str(matched_entry.get("name") or ""))
+            matched_skill = normalize_query(str(matched_entry.get("\u6838\u5fc3\u6280\u80fd") or ""))
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                item_name = normalize_query(str(item.get("name") or ""))
+                item_skill = normalize_query(str(item.get("\u6838\u5fc3\u6280\u80fd") or ""))
+                if (matched_name and item_name == matched_name) or (matched_skill and item_skill == matched_skill):
+                    target = item
+                    break
+        elif isinstance(route_result, dict):
+            route_skill = str(route_result.get("skill") or "").strip()
+            normalized_skill = normalize_query(route_skill)
+            if normalized_skill:
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    item_skill = normalize_query(str(item.get("\u6838\u5fc3\u6280\u80fd") or item.get("name") or ""))
+                    if item_skill and item_skill == normalized_skill:
+                        target = item
+                        break
+
+        if target is None:
+            route_skill = ""
+            if isinstance(route_result, dict):
+                route_skill = str(route_result.get("skill") or "").strip()
+            display_name = clean_text(route_skill or query, 24) or "\u80fd\u529b\u7ebf\u7d22"
+            target = {
+                "source": "l5_method_hint",
+                "name": display_name,
+                "\u4e00\u7ea7\u573a\u666f": _TOOL_APPLICATION_SCENE,
+                "\u4e8c\u7ea7\u573a\u666f": clean_text(query, 16) or "\u65b9\u6cd5\u7ecf\u9a8c",
+                "\u6838\u5fc3\u6280\u80fd": route_skill or display_name,
+                "trigger": [],
+                "\u5e94\u7528\u793a\u4f8b": clean_text(query, 160) or clean_text(summary, 160),
+                "\u4f7f\u7528\u6b21\u6570": 0,
+                "learned_at": now.isoformat(),
+            }
+            data.append(target)
+
+        triggers = target.get("trigger")
+        if not isinstance(triggers, list):
+            triggers = []
+        query_trigger = clean_text(query, 24)
+        existing_trigger_keys = {_normalized_l5_key(item, normalize_query=normalize_query) for item in triggers}
+        normalized_trigger = _normalized_l5_key(query_trigger, normalize_query=normalize_query)
+        if query_trigger and normalized_trigger and normalized_trigger not in existing_trigger_keys:
+            triggers.append(query_trigger)
+        target["trigger"] = triggers[-12:]
+
+        if not str(target.get("\u5e94\u7528\u793a\u4f8b") or "").strip():
+            target["\u5e94\u7528\u793a\u4f8b"] = clean_text(query, 160) or clean_text(summary, 160)
+
+        target["\u6700\u8fd1\u4f7f\u7528\u65f6\u95f4"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        target["\u4f7f\u7528\u6b21\u6570"] = int(target.get("\u4f7f\u7528\u6b21\u6570", 0) or 0) + 1
+        write_json(knowledge_file, data[-500:])
+
+    target["saved"] = True
+    target["layer"] = "L5"
+    return target
 
 
 def classify_l8_entry_kind(entry: dict) -> str:
@@ -39,12 +201,7 @@ def should_surface_knowledge_entry(
         return False
 
     primary_scene = str(entry.get("\u4e00\u7ea7\u573a\u666f") or "").strip()
-    core_skill = str(entry.get("\u6838\u5fc3\u6280\u80fd") or entry.get("name") or "").strip()
-    if (
-        primary_scene == "\u5de5\u5177\u5e94\u7528"
-        and core_skill
-        and not is_registered_skill_name(core_skill)
-    ):
+    if primary_scene == _TOOL_APPLICATION_SCENE:
         return False
 
     entry_type = str(entry.get("type") or entry.get("source") or "").strip()
@@ -60,6 +217,8 @@ def should_show_l8_timeline_entry(
     classify_entry_kind: Callable[[dict], str],
 ) -> bool:
     if not entry_has_reusable_knowledge(entry):
+        return False
+    if str(entry.get("\u4e00\u7ea7\u573a\u666f") or "").strip() == _TOOL_APPLICATION_SCENE:
         return False
     if classify_entry_kind(entry) == "feedback_relearn":
         return False
@@ -214,6 +373,7 @@ def save_learned_knowledge(
     load_json,
     write_json,
     knowledge_base_file: Path,
+    knowledge_file: Path,
     file_lock,
 ) -> dict:
     summary = strip_think_content(summary)
@@ -226,6 +386,28 @@ def save_learned_knowledge(
     normalized_query = normalize_query(query)
     extra = sanitize_extra_fields(extra_fields)
     primary_scene = infer_primary_scene(query, feedback_scene=feedback_scene, route_result=route_result)
+    l5_entries = load_json(knowledge_file, [])
+    if not isinstance(l5_entries, list):
+        l5_entries = []
+    matched_l5_entry = _match_l5_hint_entry(
+        query,
+        l5_entries=l5_entries,
+        route_result=route_result,
+        normalize_query=normalize_query,
+    )
+    if primary_scene == _TOOL_APPLICATION_SCENE or matched_l5_entry is not None:
+        return _touch_l5_method_hint(
+            query,
+            summary,
+            matched_entry=matched_l5_entry,
+            route_result=route_result,
+            load_json=load_json,
+            write_json=write_json,
+            knowledge_file=knowledge_file,
+            file_lock=file_lock,
+            clean_text=clean_text,
+            normalize_query=normalize_query,
+        )
     scene_prefix = _SCENE_PREFIX_MAP.get(primary_scene, "\u81ea\u52a8\u5b66\u4e60")
 
     with file_lock:
@@ -272,4 +454,6 @@ def save_learned_knowledge(
         existing.pop("keywords", None)
         existing.pop("trigger", None)
         write_json(knowledge_base_file, data[-500:])
+        existing["saved"] = True
+        existing["layer"] = "L8"
         return existing

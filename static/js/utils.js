@@ -1,6 +1,6 @@
 var chatHistory='';
 var CHAT_HISTORY_MAX=200;
-var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412b';
+var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412d';
 var CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
 var voiceEnabled=false;
 function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
@@ -53,7 +53,7 @@ function renderAssistantBubbleHtml(text, renderedHtml){
     }
     if(html) return html;
   }
-  return formatBubbleText(text);
+  return renderAssistantPlainTextHtml(text);
 }
 
 function normalizeRenderedAssistantHtml(html){
@@ -62,10 +62,39 @@ function normalizeRenderedAssistantHtml(html){
   return text.replace(/<hr\b[^>]*\/?>/gi, '<p>---</p>');
 }
 
+function renderAssistantPlainTextHtml(text){
+  var raw=String(text||'').replace(/\r/g,'').trim();
+  if(!raw) return '<div class="bubble-spacer"></div>';
+  var parts=raw.split(/\n\s*\n+/);
+  var html=[];
+  for(var i=0;i<parts.length;i++){
+    var part=String(parts[i]||'').trim();
+    if(!part) continue;
+    html.push('<p>'+escapeHtml(part).replace(/\n/g,'<br>')+'</p>');
+  }
+  return html.length ? html.join('') : '<div class="bubble-spacer"></div>';
+}
+
 function formatMarkdownInline(text){
   var s=escapeHtml(text);
   s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  return s;
+}
+
+function stripMarkdownForStreamingText(text){
+  var s=String(text||'').replace(/\r/g,'');
+  if(!s) return '';
+  s=s.replace(/^#{1,6}\s+/gm,'');
+  s=s.replace(/^\s*>\s?/gm,'');
+  s=s.replace(/^\s*[-*+]\s+/gm,'• ');
+  s=s.replace(/^\s*\d+[.)]\s+/gm,'');
+  s=s.replace(/```[\w-]*\n?/g,'');
+  s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'$1');
+  s=s.replace(/\*\*/g,'');
+  s=s.replace(/__/g,'');
+  s=s.replace(/~~/g,'');
+  s=s.replace(/`/g,'');
   return s;
 }
 

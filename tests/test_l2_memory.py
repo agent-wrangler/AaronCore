@@ -401,6 +401,30 @@ class L2MemoryTests(unittest.TestCase):
             self.assertIn("_changelog", stored)
             self.assertEqual(len(stored["_changelog"]), 1)
 
+    def test_to_l4_stores_explicit_call_me_rule(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4("叫我主人", "rule")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored["interaction_rules"], ["叫我主人"])
+
+    def test_to_l4_stores_explicit_confirmation_rule(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4("请先问我再执行", "rule")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored["interaction_rules"], ["请先问我再执行"])
+
     def test_to_l4_skips_architecture_discussion_misclassified_as_rule(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -419,6 +443,18 @@ class L2MemoryTests(unittest.TestCase):
             stored = json.loads(persona_file.read_text(encoding="utf-8"))
             self.assertEqual(stored, {})
 
+    def test_to_l4_skips_low_precision_rule_without_llm_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4("请先把流程想完整", "rule")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored, {})
+
     def test_to_l4_stores_explicit_preference_statement(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -432,6 +468,18 @@ class L2MemoryTests(unittest.TestCase):
             self.assertIn("user_profile", stored)
             self.assertIn("preference", stored["user_profile"])
             self.assertIn("自然", stored["user_profile"]["preference"])
+
+    def test_to_l4_skips_low_precision_preference_without_llm_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4("希望你以后做事更完整一点", "preference")
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored, {})
 
     def test_to_l4_skips_architecture_discussion_misclassified_as_preference(self):
         with tempfile.TemporaryDirectory() as tmpdir:

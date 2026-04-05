@@ -1,5 +1,11 @@
 """Dispatch helpers for post-LLM tool execution."""
 
+from decision.tool_runtime.runtime_control import (
+    ToolRuntimeInterrupted,
+    build_interrupted_tool_result,
+    raise_if_cancelled,
+)
+
 
 def execute_tool_call_legacy(
     name: str,
@@ -81,8 +87,18 @@ def execute_tool_call(
     debug_write,
 ) -> dict:
     try:
+        raise_if_cancelled(context, detail=f"{name} cancelled before execution")
         return normalize_tool_adapter_result(
             execute_tool_call_legacy(name, arguments, context),
+            name=name,
+        )
+    except ToolRuntimeInterrupted as exc:
+        debug_write(
+            "tool_call_interrupted",
+            {"name": name, "reason": exc.reason, "detail": exc.detail},
+        )
+        return normalize_tool_adapter_result(
+            build_interrupted_tool_result(name, reason=exc.reason, detail=exc.detail),
             name=name,
         )
     except Exception as exc:

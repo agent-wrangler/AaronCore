@@ -49,6 +49,9 @@ def build_tool_exec_context(
     task_plan = resolve_active_task_plan(bundle)
     if task_plan:
         skill_context["task_plan"] = task_plan
+    runtime_control = bundle.get("tool_runtime_control")
+    if runtime_control is not None:
+        skill_context["tool_runtime_control"] = runtime_control
     return skill_context
 
 

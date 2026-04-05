@@ -12,6 +12,7 @@ except ImportError:
     _HAS_SCREEN = False
 
 from core.fs_protocol import build_operation_result, record_saved_artifact
+from decision.tool_runtime.runtime_control import cooperative_sleep, raise_if_cancelled
 
 SCREENSHOT_DIR = Path.home() / 'Desktop' / 'Nova截图'
 
@@ -40,7 +41,7 @@ def capture_full_screen() -> dict:
     )
 
 
-def capture_window(title_hint: str = '') -> dict:
+def capture_window(title_hint: str = '', context: dict | None = None) -> dict:
     if not _HAS_SCREEN:
         return build_operation_result(
             '缺少截图依赖。',
@@ -72,7 +73,7 @@ def capture_window(title_hint: str = '') -> dict:
             return capture_full_screen()
         win = wins[0]
         win.activate()
-        time.sleep(0.3)
+        cooperative_sleep(0.3, context, detail="screen_capture cancelled during window activation")
         left, top, width, height = win.left, win.top, win.width, win.height
         if width <= 0 or height <= 0:
             return capture_full_screen()
@@ -161,6 +162,7 @@ def observe_screen() -> dict:
 def execute(query, context=None):
     text = str(query or '').strip()
     context = context if isinstance(context, dict) else {}
+    raise_if_cancelled(context, detail="screen_capture cancelled before start")
 
     if any(w in text for w in ('全屏截图', '截全屏', '截屏', 'screenshot')):
         return capture_full_screen()
@@ -168,8 +170,8 @@ def execute(query, context=None):
         hint = text
         for w in ('窗口截图', '截窗口', '截取窗口', '截图', '截取', '的'):
             hint = hint.replace(w, '')
-        return capture_window(hint.strip())
+        return capture_window(hint.strip(), context)
     if any(w in text for w in ('屏幕状态', '屏幕信息', '当前屏幕', '观察屏幕')):
         return observe_screen()
 
-    return capture_window(text)
+    return capture_window(text, context)

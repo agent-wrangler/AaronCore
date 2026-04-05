@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from core.fs_protocol import build_operation_result, normalize_user_special_path
+from decision.tool_runtime.runtime_control import cooperative_sleep, raise_if_cancelled
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 USER_HOME = Path.home()
@@ -555,7 +556,7 @@ def _launch_background_command(
             repair_notes=repair_notes,
         )
 
-    time.sleep(startup_wait)
+    cooperative_sleep(startup_wait, context, detail="run_command cancelled during background startup wait")
     if process.poll() is None:
         detail_parts = [f"pid={process.pid}", f"startup_wait={startup_wait}s", f"workdir={workdir}"]
         if repair_notes:
@@ -964,6 +965,7 @@ def _build_failure_detailed(
 
 def execute(query, context=None):
     context = context if isinstance(context, dict) else {}
+    raise_if_cancelled(context, detail="run_command cancelled before start")
     command = str(context.get("command") or context.get("cmd") or query or "").strip()
     description = str(context.get("description") or "").strip()
     workdir = _resolve_workdir(context)
@@ -1033,6 +1035,7 @@ def execute(query, context=None):
     verification_mode = "artifact_exists" if expected_artifacts else "exit_code"
 
     try:
+        raise_if_cancelled(context, detail="run_command cancelled before subprocess.run")
         completed = subprocess.run(
             repaired_argv,
             cwd=str(workdir),
@@ -1043,6 +1046,7 @@ def execute(query, context=None):
             timeout=timeout_sec,
             shell=False,
         )
+        raise_if_cancelled(context, detail="run_command cancelled after subprocess.run")
     except subprocess.TimeoutExpired as exc:
         output_tail = _summarize_output(exc.stdout or "", exc.stderr or "")
         detail_parts = [f"timeout={timeout_sec}s"]

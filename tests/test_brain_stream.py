@@ -78,3 +78,20 @@ class BrainStreamTests(unittest.TestCase):
 
         self.assertTrue(any(isinstance(chunk, str) and "本地磁盘" in chunk for chunk in chunks))
         self.assertEqual(chunks[-1].get("_usage", {}).get("completion_tokens"), 7)
+
+    def test_codex_cli_stream_uses_incremental_transport(self):
+        cfg = {"model": "gpt-5.4-mini", "transport": "codex_cli", "base_url": "codex://local"}
+        messages = [{"role": "user", "content": "hello"}]
+
+        with patch.object(
+            brain_module._codex_cli_runtime,
+            "codex_cli_call_stream",
+            return_value=iter(["Hel", "lo", {"_usage": {"completion_tokens": 2}}]),
+        ), patch.object(
+            brain_module._codex_cli_runtime,
+            "codex_cli_call",
+            side_effect=AssertionError("llm_call_stream should not use the blocking codex exec path"),
+        ):
+            chunks = list(brain_module.llm_call_stream(cfg, messages))
+
+        self.assertEqual(chunks, ["Hel", "lo", {"_usage": {"completion_tokens": 2}}])
