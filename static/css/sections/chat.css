@@ -389,6 +389,7 @@ body.light .welcome-news-item:hover { color: #111; }
 
 .msg.assistant .assistant-reply-markdown strong {
   font-weight: 600;
+  color: inherit;
 }
 
 .msg.assistant .assistant-reply-markdown ul,
@@ -435,11 +436,7 @@ body.light .welcome-news-item:hover { color: #111; }
 }
 
 body.light .msg.assistant .assistant-reply-markdown {
-  color: #2f2a24;
-}
-
-body.light .msg.assistant .assistant-reply-markdown strong {
-  color: #1f1a15;
+  color: #171310;
 }
 
 body.light .msg.assistant .assistant-reply-markdown a {
@@ -463,10 +460,6 @@ body.light .msg.assistant .assistant-reply-markdown pre {
 
 body.dark .msg.assistant .assistant-reply-markdown {
   color: #f7f1e8;
-}
-
-body.dark .msg.assistant .assistant-reply-markdown strong {
-  color: #faf3ea;
 }
 
 body.dark .msg.assistant .assistant-reply-markdown a {
@@ -610,7 +603,7 @@ body.light .bubble blockquote {
   padding: 10px 14px;
   border-radius: 14px 4px 14px 14px;
   font-family: var(--font-chat-user-sans);
-  font-size: 15.25px;
+  font-size: 16px;
   line-height: 1.72;
   font-weight: 300;
   letter-spacing: 0;
@@ -679,13 +672,13 @@ body.light .msg-meta {
 
 body.light .msg.assistant .bubble {
   background: transparent;
-  color: #1c1c1e;
+  color: #171310;
   border: none;
 }
 
 body.light .msg.user .bubble {
   background: #efebe5;
-  color: #2f2b25;
+  color: #171310;
   border: none;
   border-radius: 16px;
   box-shadow: none;

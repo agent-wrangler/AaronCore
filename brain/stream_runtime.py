@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import queue
+import threading
+import time
 
 
 def llm_call_stream(
@@ -37,6 +40,195 @@ def llm_call_stream(
     )
 
 
+def _coerce_usage_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _coerce_tool_calls(value) -> list | None:
+    return value if isinstance(value, list) and value else None
+
+
+def _stream_recovery_chunk_size(cfg: dict, *, default: int = 48) -> int:
+    raw_value = cfg.get("stream_recovery_chunk_size")
+    if raw_value in (None, ""):
+        return default
+    try:
+        chunk_size = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return max(8, chunk_size)
+
+
+def _stream_idle_timeout_seconds(cfg: dict, *, default: float = 90.0) -> float:
+    raw_value = cfg.get("stream_idle_timeout_seconds", cfg.get("stream_idle_timeout"))
+    if raw_value in (None, ""):
+        return default
+    try:
+        idle_timeout = float(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return idle_timeout if idle_timeout > 0 else default
+
+
+def _iter_lines_with_idle_watchdog(resp, *, idle_timeout_s: float):
+    if idle_timeout_s <= 0:
+        yield from resp.iter_lines(decode_unicode=True)
+        return
+
+    line_queue: queue.Queue = queue.Queue()
+    sentinel = object()
+
+    def _reader():
+        try:
+            for item in resp.iter_lines(decode_unicode=True):
+                line_queue.put(("line", item))
+        except BaseException as exc:  # pragma: no cover - exercised via queue handoff
+            line_queue.put(("error", exc))
+        finally:
+            line_queue.put(("done", sentinel))
+
+    threading.Thread(target=_reader, daemon=True).start()
+    last_line_at = time.monotonic()
+    while True:
+        remaining = idle_timeout_s - (time.monotonic() - last_line_at)
+        if remaining <= 0:
+            try:
+                close_fn = getattr(resp, "close", None)
+                if callable(close_fn):
+                    close_fn()
+            except Exception:
+                pass
+            raise TimeoutError(f"stream idle timeout after {idle_timeout_s:.1f}s")
+        try:
+            kind, payload = line_queue.get(timeout=min(0.25, remaining))
+        except queue.Empty:
+            continue
+        if kind == "line":
+            last_line_at = time.monotonic()
+            yield payload
+            continue
+        if kind == "error":
+            raise payload
+        return
+
+
+def _debug_stream_recovery(stage: str, data: dict):
+    try:
+        from core.shared import debug_write
+
+        debug_write(stage, data)
+    except Exception:
+        pass
+
+
+def _split_stream_recovery_text(text: str, *, chunk_size: int):
+    visible = str(text or "")
+    if not visible:
+        return []
+    chunks: list[str] = []
+    index = 0
+    while index < len(visible):
+        end = min(index + chunk_size, len(visible))
+        if end < len(visible):
+            preferred_end = -1
+            for marker in ("\n\n", "\n", "。", "！", "？", ". ", "! ", "? ", "；", "; ", "，", ", ", " "):
+                hit = visible.rfind(marker, index, end)
+                if hit > index + max(6, chunk_size // 3):
+                    preferred_end = max(preferred_end, hit + len(marker))
+            if preferred_end > index:
+                end = preferred_end
+        chunks.append(visible[index:end])
+        index = end
+    return chunks
+
+
+def _yield_stream_recovery_from_blocking_call(
+    *,
+    cfg: dict,
+    messages: list,
+    temperature: float,
+    max_tokens: int,
+    timeout: int,
+    tools: list | None,
+    llm_call_fn,
+    usage: dict,
+    emitted_visible: bool,
+    emitted_tool_calls: bool,
+    reset_reason: str,
+    provider: str,
+    debug_payload: dict | None = None,
+):
+    if emitted_tool_calls or llm_call_fn is None:
+        return False
+
+    payload = {
+        "provider": provider,
+        "model": cfg.get("model", ""),
+        "base_url": cfg.get("base_url", ""),
+        "reset_reason": reset_reason,
+        "emitted_visible": emitted_visible,
+        "emitted_tool_calls": emitted_tool_calls,
+    }
+    if isinstance(debug_payload, dict):
+        payload.update(debug_payload)
+    _debug_stream_recovery("llm_stream_fallback_start", payload)
+
+    retry_result = llm_call_fn(
+        cfg,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+        tools=tools,
+    )
+    retry_content = ""
+    retry_usage = {}
+    retry_tool_calls = None
+    retry_error = ""
+    retry_chunks = []
+    if isinstance(retry_result, dict):
+        retry_content = str(retry_result.get("content", "") or "")
+        retry_usage = _coerce_usage_dict(retry_result.get("usage"))
+        retry_tool_calls = _coerce_tool_calls(retry_result.get("tool_calls"))
+        retry_error = str(retry_result.get("error", "") or "")
+        retry_chunks = _split_stream_recovery_text(
+            retry_content,
+            chunk_size=_stream_recovery_chunk_size(cfg),
+        )
+
+    if not retry_chunks and not retry_tool_calls:
+        _debug_stream_recovery(
+            "llm_stream_fallback_empty",
+            {
+                **payload,
+                "error": retry_error,
+            },
+        )
+        return False
+
+    if emitted_visible:
+        yield {
+            "_stream_reset": {
+                "reason": reset_reason,
+            }
+        }
+    if retry_tool_calls:
+        yield {"_tool_calls": retry_tool_calls}
+    for chunk in retry_chunks:
+        yield chunk
+    yield {"_usage": retry_usage or usage}
+    _debug_stream_recovery(
+        "llm_stream_fallback_success",
+        {
+            **payload,
+            "fallback_content_len": len(retry_content),
+            "fallback_tool_calls": len(retry_tool_calls or []),
+            "streamed_chunk_count": len(retry_chunks),
+        },
+    )
+    return True
+
+
 def stream_openai(
     cfg: dict,
     messages: list,
@@ -55,14 +247,17 @@ def stream_openai(
     normalize_reasoning_details_fn,
     llm_call_openai_fn,
 ):
+    response_meta = {}
+    emitted_visible = False
+    emitted_tool_calls = False
+    usage = {}
+    req_cfg = cfg
     try:
         messages = normalize_openai_messages_fn(messages)
         base_url = build_openai_base_url_fn(cfg.get("base_url", ""), cfg)
-        emitted_visible = False
-        emitted_tool_calls = False
-        response_meta = {}
         reasoning_buffers = {}
         content_buffer = ""
+        idle_timeout_s = _stream_idle_timeout_seconds(cfg)
 
         def extract_reasoning_text(delta: dict) -> str:
             if not isinstance(delta, dict):
@@ -151,7 +346,6 @@ def stream_openai(
                 stream=True,
             )
 
-        req_cfg = cfg
         resp = send(req_cfg)
         response_meta = extract_network_meta_fn(resp)
         if resp.status_code != 200:
@@ -161,6 +355,27 @@ def stream_openai(
                 resp = send(req_cfg)
                 response_meta = extract_network_meta_fn(resp)
         if resp.status_code != 200:
+            recovered = yield from _yield_stream_recovery_from_blocking_call(
+                cfg=req_cfg,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                tools=tools,
+                llm_call_fn=llm_call_openai_fn,
+                usage=usage,
+                emitted_visible=emitted_visible,
+                emitted_tool_calls=emitted_tool_calls,
+                reset_reason="stream_http_error_fallback",
+                provider="openai",
+                debug_payload={
+                    "status": resp.status_code,
+                    "body_preview": str(getattr(resp, "text", "") or "")[:200],
+                    "network_meta": response_meta,
+                },
+            )
+            if recovered:
+                return
             try:
                 from core.shared import debug_write
 
@@ -187,9 +402,9 @@ def stream_openai(
                 pass
             return
 
-        usage = {}
         tool_call_accum = {}
-        for line in resp.iter_lines(decode_unicode=True):
+        saw_done = False
+        for line in _iter_lines_with_idle_watchdog(resp, idle_timeout_s=idle_timeout_s):
             if not line:
                 continue
             line = line.strip()
@@ -197,6 +412,7 @@ def stream_openai(
                 continue
             payload = line[5:].strip()
             if payload == "[DONE]":
+                saw_done = True
                 break
             try:
                 chunk = json.loads(payload)
@@ -241,6 +457,27 @@ def stream_openai(
         if tool_call_accum:
             emitted_tool_calls = True
             yield {"_tool_calls": [tool_call_accum[i] for i in sorted(tool_call_accum.keys())]}
+            tool_call_accum = {}
+
+        if not saw_done and not emitted_tool_calls:
+            recovered = yield from _yield_stream_recovery_from_blocking_call(
+                cfg=req_cfg,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                tools=tools,
+                llm_call_fn=llm_call_openai_fn,
+                usage=usage,
+                emitted_visible=emitted_visible,
+                emitted_tool_calls=emitted_tool_calls,
+                reset_reason="stream_incomplete_fallback",
+                provider="openai",
+                debug_payload={"network_meta": response_meta},
+            )
+            if recovered:
+                return
+
         if not emitted_visible and not emitted_tool_calls:
             try:
                 from core.shared import debug_write
@@ -264,25 +501,50 @@ def stream_openai(
                 )
             except Exception:
                 pass
-            retry_result = llm_call_openai_fn(
-                req_cfg,
-                messages,
+            recovered = yield from _yield_stream_recovery_from_blocking_call(
+                cfg=req_cfg,
+                messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 timeout=timeout,
                 tools=tools,
+                llm_call_fn=llm_call_openai_fn,
+                usage=usage,
+                emitted_visible=emitted_visible,
+                emitted_tool_calls=emitted_tool_calls,
+                reset_reason="stream_empty_completion_fallback",
+                provider="openai",
+                debug_payload={"network_meta": response_meta},
             )
-            retry_tool_calls = retry_result.get("tool_calls") if isinstance(retry_result.get("tool_calls"), list) else None
-            retry_content = str(retry_result.get("content", "") or "")
-            retry_usage = retry_result.get("usage", {}) if isinstance(retry_result.get("usage"), dict) else {}
-            if retry_tool_calls:
-                yield {"_tool_calls": retry_tool_calls}
-            if retry_content:
-                yield retry_content
-            yield {"_usage": retry_usage or usage}
-            return
+            if recovered:
+                return
         yield {"_usage": usage}
     except Exception as exc:
+        pending_tool_calls = locals().get("tool_call_accum")
+        if isinstance(pending_tool_calls, dict) and pending_tool_calls and not emitted_tool_calls:
+            yield {"_tool_calls": [pending_tool_calls[i] for i in sorted(pending_tool_calls.keys())]}
+            return
+        recovered = yield from _yield_stream_recovery_from_blocking_call(
+            cfg=req_cfg,
+            messages=messages if isinstance(locals().get("messages"), list) else messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            tools=tools,
+            llm_call_fn=llm_call_openai_fn,
+            usage=usage,
+            emitted_visible=emitted_visible,
+            emitted_tool_calls=emitted_tool_calls,
+            reset_reason="stream_exception_fallback",
+            provider="openai",
+            debug_payload={
+                "error": str(exc),
+                "type": type(exc).__name__,
+                "network_meta": response_meta if isinstance(response_meta, dict) else {},
+            },
+        )
+        if recovered:
+            return
         try:
             from core.shared import debug_write
 
@@ -314,7 +576,13 @@ def stream_anthropic(
     convert_messages_for_anthropic_tools_fn,
     convert_tools_for_anthropic_fn,
     post_llm_request_fn,
+    llm_call_anthropic_fn,
+    extract_network_meta_fn,
 ):
+    response_meta = {}
+    emitted_visible = False
+    emitted_tool_calls = False
+    usage = {}
     url = build_anthropic_url_fn(cfg["base_url"])
     system_text, chat_msgs = split_system_and_messages_fn(messages)
     anthropic_msgs = convert_messages_for_anthropic_tools_fn(chat_msgs)
@@ -336,6 +604,7 @@ def stream_anthropic(
         body["tools"] = anthropic_tools
 
     try:
+        idle_timeout_s = _stream_idle_timeout_seconds(cfg)
         resp = post_llm_request_fn(
             url,
             headers={
@@ -347,13 +616,35 @@ def stream_anthropic(
             timeout=(10, 90),
             stream=True,
         )
+        response_meta = extract_network_meta_fn(resp)
         if resp.status_code != 200:
+            recovered = yield from _yield_stream_recovery_from_blocking_call(
+                cfg=cfg,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                tools=tools,
+                llm_call_fn=llm_call_anthropic_fn,
+                usage=usage,
+                emitted_visible=emitted_visible,
+                emitted_tool_calls=emitted_tool_calls,
+                reset_reason="stream_http_error_fallback",
+                provider="anthropic",
+                debug_payload={
+                    "status": resp.status_code,
+                    "body_preview": str(getattr(resp, "text", "") or "")[:200],
+                    "network_meta": response_meta,
+                },
+            )
+            if recovered:
+                return
             return
 
-        usage = {}
         block_types = {}
         tool_blocks = {}
-        for line in resp.iter_lines(decode_unicode=True):
+        saw_message_stop = False
+        for line in _iter_lines_with_idle_watchdog(resp, idle_timeout_s=idle_timeout_s):
             if not line:
                 continue
             line = line.strip()
@@ -395,6 +686,7 @@ def stream_anthropic(
                     if block_type == "text":
                         token = delta.get("text", "") or delta.get("partial_json", "")
                         if token:
+                            emitted_visible = True
                             yield token
                     if block_type == "tool_use" and delta_type == "input_json_delta":
                         if idx not in tool_blocks:
@@ -416,13 +708,80 @@ def stream_anthropic(
                     raw_usage = msg.get("usage", {})
                     if raw_usage:
                         usage["prompt_tokens"] = raw_usage.get("input_tokens", 0)
+                elif event_type == "message_stop":
+                    saw_message_stop = True
             except (json.JSONDecodeError, KeyError):
                 continue
 
         if tool_blocks:
+            emitted_tool_calls = True
             yield {"_tool_calls": [tool_blocks[i] for i in sorted(tool_blocks.keys())]}
+            tool_blocks = {}
+
+        if not saw_message_stop and not emitted_tool_calls:
+            recovered = yield from _yield_stream_recovery_from_blocking_call(
+                cfg=cfg,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                tools=tools,
+                llm_call_fn=llm_call_anthropic_fn,
+                usage=usage,
+                emitted_visible=emitted_visible,
+                emitted_tool_calls=emitted_tool_calls,
+                reset_reason="stream_incomplete_fallback",
+                provider="anthropic",
+                debug_payload={"network_meta": response_meta},
+            )
+            if recovered:
+                return
+
+        if not emitted_visible and not emitted_tool_calls:
+            recovered = yield from _yield_stream_recovery_from_blocking_call(
+                cfg=cfg,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                tools=tools,
+                llm_call_fn=llm_call_anthropic_fn,
+                usage=usage,
+                emitted_visible=emitted_visible,
+                emitted_tool_calls=emitted_tool_calls,
+                reset_reason="stream_empty_completion_fallback",
+                provider="anthropic",
+                debug_payload={"network_meta": response_meta},
+            )
+            if recovered:
+                return
         yield {"_usage": usage}
     except Exception as exc:
+        pending_tool_blocks = locals().get("tool_blocks")
+        if isinstance(pending_tool_blocks, dict) and pending_tool_blocks and not emitted_tool_calls:
+            yield {"_tool_calls": [pending_tool_blocks[i] for i in sorted(pending_tool_blocks.keys())]}
+            return
+        recovered = yield from _yield_stream_recovery_from_blocking_call(
+            cfg=cfg,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            tools=tools,
+            llm_call_fn=llm_call_anthropic_fn,
+            usage=usage,
+            emitted_visible=emitted_visible,
+            emitted_tool_calls=emitted_tool_calls,
+            reset_reason="stream_exception_fallback",
+            provider="anthropic",
+            debug_payload={
+                "error": str(exc),
+                "type": type(exc).__name__,
+                "network_meta": response_meta,
+            },
+        )
+        if recovered:
+            return
         try:
             from core.shared import debug_write
 

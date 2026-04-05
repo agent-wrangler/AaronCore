@@ -41,6 +41,16 @@ class RecentMessagesTests(unittest.TestCase):
         self.assertLess(len(recent), len(history))
         self.assertEqual(recent[-1], history[-1])
 
+    def test_get_recent_messages_with_budget_can_keep_more_than_six_messages(self):
+        history = [{"role": "user" if idx % 2 == 0 else "assistant", "content": "a" * 40} for idx in range(12)]
+
+        recent = state_loader_module.get_recent_messages(history, limit=None, max_tokens=400)
+
+        self.assertEqual(len(recent), len(history))
+        self.assertGreater(len(recent), 6)
+        self.assertEqual(recent[0], history[0])
+        self.assertEqual(recent[-1], history[-1])
+
     def test_build_l1_messages_uses_all_budget_trimmed_history_by_default(self):
         history = []
         for idx in range(25):

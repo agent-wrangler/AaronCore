@@ -1,6 +1,6 @@
 import unittest
 
-from decision.tool_runtime.memory_tools import format_recall
+from decision.tool_runtime.memory_tools import execute_memory_tool, format_recall
 
 
 class MemoryToolRuntimeTests(unittest.TestCase):
@@ -25,6 +25,45 @@ class MemoryToolRuntimeTests(unittest.TestCase):
         result = format_recall(["bad-entry"], ["\u4e00\u6761\u957f\u671f\u8bb0\u5fc6"])
 
         self.assertIn("\u4e00\u6761\u957f\u671f\u8bb0\u5fc6", result)
+
+    def test_execute_memory_tool_returns_runtime_meta_for_recall_and_knowledge(self):
+        recall = execute_memory_tool(
+            "recall_memory",
+            {"query": "state_data"},
+            debug_write=lambda *_args, **_kwargs: None,
+            l2_search_relevant=lambda *_args, **_kwargs: [{"user_text": "q", "ai_text": "a"}],
+            load_l3_long_term=lambda **_kwargs: ["l3"],
+            find_relevant_knowledge=lambda *_args, **_kwargs: [],
+            execute_web_search=lambda *_args, **_kwargs: {},
+            execute_self_fix=lambda *_args, **_kwargs: {},
+            execute_read_file=lambda *_args, **_kwargs: {},
+            execute_list_files_v3=lambda *_args, **_kwargs: {},
+            execute_discover_tools=lambda *_args, **_kwargs: {},
+            execute_sense_environment=lambda *_args, **_kwargs: {},
+        )
+        knowledge = execute_memory_tool(
+            "query_knowledge",
+            {"topic": "stats"},
+            debug_write=lambda *_args, **_kwargs: None,
+            l2_search_relevant=lambda *_args, **_kwargs: [],
+            load_l3_long_term=lambda **_kwargs: [],
+            find_relevant_knowledge=lambda *_args, **_kwargs: [{"name": "stats", "summary": "ok"}],
+            execute_web_search=lambda *_args, **_kwargs: {},
+            execute_self_fix=lambda *_args, **_kwargs: {},
+            execute_read_file=lambda *_args, **_kwargs: {},
+            execute_list_files_v3=lambda *_args, **_kwargs: {},
+            execute_discover_tools=lambda *_args, **_kwargs: {},
+            execute_sense_environment=lambda *_args, **_kwargs: {},
+        )
+
+        self.assertEqual(
+            recall["meta"]["memory_stats"],
+            {"l2_searches": 1, "l2_hits": 1, "l3_queries": 1, "l3_hits": 1},
+        )
+        self.assertEqual(
+            knowledge["meta"]["memory_stats"],
+            {"l8_searches": 1, "l8_hits": 1},
+        )
 
 
 if __name__ == "__main__":

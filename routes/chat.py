@@ -16,6 +16,7 @@ from core.runtime_state.state_loader import (
 from routes.chat_tool_steps import (
     build_tool_done_label,
     build_tool_done_trace_detail,
+    build_tool_execution_trace_label,
     build_tool_execution_trace_detail,
 )
 from routes.chat_stream_markdown import MarkdownIncrementalStream
@@ -112,6 +113,38 @@ def _extract_task_plan_from_meta(meta: dict | None) -> dict | None:
     return task_plan
 
 
+def _record_tool_call_memory_stats(
+    tool_used: str,
+    run_meta: dict | None = None,
+    tool_success: bool | None = None,
+) -> None:
+    tool_name = str(tool_used or "").strip()
+    if tool_name not in {"recall_memory", "query_knowledge"}:
+        return
+
+    meta = run_meta if isinstance(run_meta, dict) else {}
+    memory_stats = meta.get("memory_stats") if isinstance(meta.get("memory_stats"), dict) else {}
+    if tool_success is False and not memory_stats:
+        return
+
+    payload = {"count_query": False}
+    if tool_name == "recall_memory":
+        payload["l2_searches"] = max(int(memory_stats.get("l2_searches", 1)), 0)
+        payload["l2_hits"] = max(int(memory_stats.get("l2_hits", 0)), 0)
+        payload["l3_queries"] = max(int(memory_stats.get("l3_queries", 1)), 0)
+        payload["l3_hits"] = max(int(memory_stats.get("l3_hits", 0)), 0)
+    else:
+        payload["l8_searches"] = max(int(memory_stats.get("l8_searches", 1)), 0)
+        payload["l8_hits"] = max(int(memory_stats.get("l8_hits", 0)), 0)
+
+    try:
+        from core.runtime_state.state_loader import record_memory_stats
+
+        record_memory_stats(**payload)
+    except Exception:
+        pass
+
+
 def _is_task_plan_terminal(plan: dict | None) -> bool:
     plan = plan if isinstance(plan, dict) else {}
     items = plan.get("items") if isinstance(plan.get("items"), list) else []
@@ -183,7 +216,7 @@ def _block_task_plan_after_failure(
 
 
 def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
-    meta_fields = (
+    string_meta_fields = (
         "step_key",
         "phase",
         "reason_kind",
@@ -193,7 +226,16 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
         "expected_output",
         "next_user_need",
         "tool_name",
+        "parallel_group_id",
     )
+    int_meta_fields = (
+        "parallel_size",
+        "parallel_index",
+        "parallel_completed_count",
+        "parallel_success_count",
+        "parallel_failure_count",
+    )
+    list_meta_fields = ("parallel_tools",)
 
     def _is_thinking_label(value: str) -> bool:
         text = str(value or "").strip().lower()
@@ -217,14 +259,32 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
             "detail": detail,
             "status": "error" if status == "error" else "done",
         }
-        for field in meta_fields:
+        for field in string_meta_fields:
             value = str(item.get(field) or "").strip()
             if value:
                 row[field] = value
+        for field in int_meta_fields:
+            try:
+                value = int(item.get(field) or 0)
+            except (TypeError, ValueError):
+                value = 0
+            if value > 0:
+                row[field] = value
+        for field in list_meta_fields:
+            values = [
+                str(entry or "").strip()
+                for entry in (item.get(field) or [])
+                if str(entry or "").strip()
+            ]
+            if values:
+                row[field] = values
+        if rows and row.get("step_key") and row.get("step_key") == rows[-1].get("step_key"):
+            rows[-1].update(row)
+            continue
         if rows and _is_thinking_label(label) and _is_thinking_label(rows[-1].get("label")):
             rows[-1]["detail"] = detail or rows[-1].get("detail", "")
             rows[-1]["status"] = row["status"]
-            for field in meta_fields:
+            for field in string_meta_fields + int_meta_fields + list_meta_fields:
                 if row.get(field):
                     rows[-1][field] = row[field]
             continue
@@ -232,6 +292,14 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
             continue
         rows.append(row)
     return rows
+
+
+def _trim_collected_steps_for_stream_reset(steps: list | None, *, keep_prefix_count: int = 0) -> list[dict]:
+    normalized = _normalize_persisted_process_steps(steps)
+    keep_count = max(0, int(keep_prefix_count))
+    if keep_count <= 0:
+        return []
+    return normalized[: min(len(normalized), keep_count)]
 
 
 def _ensure_tool_call_failure_reply(
@@ -749,6 +817,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         _step_key_counts: dict[str, int] = {}
         _active_tool_step_key = ""
         _active_tool_name = ""
+        _stream_attempt_step_keep_count = 0
 
         def _clean_step_text(value: object) -> str:
             return str(value or "").strip()
@@ -826,6 +895,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             expected_output: str = "",
             next_user_need: str = "",
             tool_name: str = "",
+            parallel_group_id: str = "",
+            parallel_index: int = 0,
+            parallel_size: int = 0,
+            parallel_completed_count: int = 0,
+            parallel_success_count: int = 0,
+            parallel_failure_count: int = 0,
+            parallel_tools: list[str] | None = None,
         ) -> dict:
             clean_label = _clean_step_text(label)
             clean_detail = _clean_step_text(detail)
@@ -840,13 +916,41 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             clean_expected_output = _clean_step_text(expected_output)
             clean_next_user_need = _clean_step_text(next_user_need)
             clean_reason_kind = _clean_step_text(reason_kind)
+            clean_parallel_group_id = _clean_step_text(parallel_group_id)
+            try:
+                clean_parallel_index = max(0, int(parallel_index or 0))
+            except (TypeError, ValueError):
+                clean_parallel_index = 0
+            try:
+                clean_parallel_size = max(0, int(parallel_size or 0))
+            except (TypeError, ValueError):
+                clean_parallel_size = 0
+            try:
+                clean_parallel_completed_count = max(0, int(parallel_completed_count or 0))
+            except (TypeError, ValueError):
+                clean_parallel_completed_count = 0
+            try:
+                clean_parallel_success_count = max(0, int(parallel_success_count or 0))
+            except (TypeError, ValueError):
+                clean_parallel_success_count = 0
+            try:
+                clean_parallel_failure_count = max(0, int(parallel_failure_count or 0))
+            except (TypeError, ValueError):
+                clean_parallel_failure_count = 0
+            clean_parallel_tools = [
+                _clean_step_text(name)
+                for name in (parallel_tools or [])
+                if _clean_step_text(name)
+            ]
             if not clean_step_key:
                 if clean_phase == "thinking":
                     clean_step_key = "thinking:decision"
                 elif clean_phase == "waiting":
                     clean_step_key = _last_progress_step_key or "thinking:decision"
                 elif clean_phase == "tool":
-                    if clean_status == "running" or not _active_tool_step_key:
+                    if clean_parallel_group_id and clean_parallel_size > 1:
+                        clean_step_key = clean_parallel_group_id
+                    elif clean_status == "running" or not _active_tool_step_key:
                         clean_step_key = _next_step_key("tool", clean_tool_name or clean_label or "tool")
                     else:
                         clean_step_key = _active_tool_step_key
@@ -868,10 +972,23 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 "expected_output": clean_expected_output,
                 "next_user_need": clean_next_user_need,
                 "tool_name": clean_tool_name,
+                "parallel_group_id": clean_parallel_group_id,
             }
             for field, value in optional_fields.items():
                 if value:
                     payload[field] = value
+            if clean_parallel_index > 0:
+                payload["parallel_index"] = clean_parallel_index
+            if clean_parallel_size > 0:
+                payload["parallel_size"] = clean_parallel_size
+            if clean_parallel_completed_count > 0:
+                payload["parallel_completed_count"] = clean_parallel_completed_count
+            if clean_parallel_success_count > 0:
+                payload["parallel_success_count"] = clean_parallel_success_count
+            if clean_parallel_failure_count > 0:
+                payload["parallel_failure_count"] = clean_parallel_failure_count
+            if clean_parallel_tools:
+                payload["parallel_tools"] = clean_parallel_tools
             return payload
 
         async def _trace(
@@ -889,6 +1006,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             expected_output: str = "",
             next_user_need: str = "",
             tool_name: str = "",
+            parallel_group_id: str = "",
+            parallel_index: int = 0,
+            parallel_size: int = 0,
+            parallel_completed_count: int = 0,
+            parallel_success_count: int = 0,
+            parallel_failure_count: int = 0,
+            parallel_tools: list[str] | None = None,
         ):
             nonlocal _last_progress_label, _last_progress_detail, _last_progress_step_key, _last_progress_status, _last_progress_at, _last_wait_event_at, _active_tool_step_key, _active_tool_name
             payload = _build_step_payload(
@@ -905,6 +1029,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 expected_output=expected_output,
                 next_user_need=next_user_need,
                 tool_name=tool_name,
+                parallel_group_id=parallel_group_id,
+                parallel_index=parallel_index,
+                parallel_size=parallel_size,
+                parallel_completed_count=parallel_completed_count,
+                parallel_success_count=parallel_success_count,
+                parallel_failure_count=parallel_failure_count,
+                parallel_tools=parallel_tools,
             )
             _collected_steps.append(dict(payload))
             _last_progress_status = payload.get("status", "")
@@ -1029,7 +1160,14 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         _use_cod = _use_tool_call and _get_cod_enabled()
 
         # Step 1: 记忆加载
-        l1 = S.get_recent_messages(_history_for_context, max_tokens=_L1_RECENT_TOKEN_BUDGET)
+        # L1 recent dialogue should be budget-driven instead of stopping at the
+        # helper's default six-message cap. Keep the existing token budget and
+        # let the history store trim by budget from the newest messages.
+        l1 = S.get_recent_messages(
+            _history_for_context,
+            limit=None,
+            max_tokens=_L1_RECENT_TOKEN_BUDGET,
+        )
         l2 = S.extract_session_context(_history_for_context, msg)
         _use_light_chat_bundle = not _use_tool_call
         l2_memories = [] if (_use_cod or _use_light_chat_bundle) else S.l2_search_relevant(msg)
@@ -1272,6 +1410,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _thinking_handoff_note = ""
                 _thinking_expected_output = _build_expected_output(phase="thinking")
                 _thinking_next_user_need = _build_next_user_need(expected_output=_thinking_expected_output)
+                _stream_attempt_step_keep_count = len(_collected_steps)
                 # 立即发出思考卡片，不等 LLM 首 token
                 yield await _trace(
                     "\u6a21\u578b\u601d\u8003",
@@ -1488,6 +1627,31 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     _stream_chunks,
                                     _think_carry,
                                 )
+                                _collected_steps = _trim_collected_steps_for_stream_reset(
+                                    _collected_steps,
+                                    keep_prefix_count=_stream_attempt_step_keep_count,
+                                )
+                                _last_progress_label = ""
+                                _last_progress_detail = ""
+                                _last_progress_step_key = ""
+                                _last_progress_status = ""
+                                _step_key_counts = {}
+                                _active_tool_step_key = ""
+                                _active_tool_name = ""
+                                _thinking_trace_text = ""
+                                _thinking_trace_emitted = ""
+                                _last_thinking_emit_at = 0.0
+                                _trace_thinking_sent = False
+                                _thinking_reason_kind = "decision"
+                                _thinking_goal = ""
+                                _thinking_decision_note = _default_think_detail
+                                _thinking_handoff_note = ""
+                                _thinking_expected_output = _build_expected_output(phase="thinking")
+                                _thinking_next_user_need = _build_next_user_need(
+                                    expected_output=_thinking_expected_output,
+                                )
+                                _tool_trace_started = False
+                                _tool_inflight_name = ""
                                 _markdown_stream.reset()
                                 yield {
                                     "event": "stream_reset",
@@ -1510,6 +1674,32 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                 tc_name = tc_info.get("name", "")
                                 tc_preview = str(tc_info.get("preview") or "").strip()
                                 tc_process_meta = tc_info.get("process_meta") if isinstance(tc_info.get("process_meta"), dict) else {}
+                                _parallel_group_id = str(tc_process_meta.get("parallel_group_id") or "").strip()
+                                try:
+                                    _parallel_index = max(0, int(tc_process_meta.get("parallel_index") or 0))
+                                except (TypeError, ValueError):
+                                    _parallel_index = 0
+                                try:
+                                    _parallel_size = max(0, int(tc_process_meta.get("parallel_size") or 0))
+                                except (TypeError, ValueError):
+                                    _parallel_size = 0
+                                try:
+                                    _parallel_completed_count = max(0, int(tc_process_meta.get("parallel_completed_count") or 0))
+                                except (TypeError, ValueError):
+                                    _parallel_completed_count = 0
+                                try:
+                                    _parallel_success_count = max(0, int(tc_process_meta.get("parallel_success_count") or 0))
+                                except (TypeError, ValueError):
+                                    _parallel_success_count = 0
+                                try:
+                                    _parallel_failure_count = max(0, int(tc_process_meta.get("parallel_failure_count") or 0))
+                                except (TypeError, ValueError):
+                                    _parallel_failure_count = 0
+                                _parallel_tools = [
+                                    str(name or "").strip()
+                                    for name in (tc_process_meta.get("parallel_tools") or [])
+                                    if str(name or "").strip()
+                                ]
                                 _MEMORY_TOOL_NAMES = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
                                 _tool_skill_display = _MEMORY_TOOL_NAMES.get(tc_name) or S.get_skill_display_name(tc_name)
                                 if tc_name == "web_search":
@@ -1561,6 +1751,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         _trace_label = "\u68c0\u7d22\u8bb0\u5fc6"
                                     else:
                                         _trace_label = "\u8c03\u7528\u6280\u80fd"
+                                    _trace_label = build_tool_execution_trace_label(
+                                        _trace_label,
+                                        process_meta=tc_process_meta,
+                                    )
                                     _reason_note = _build_tool_reason_note(tc_name, tc_preview, skill_display)
                                     if _reason_note:
                                         _update_thinking_meta(
@@ -1601,6 +1795,10 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         next_user_need=_tool_next_user_need,
                                         reason_kind="tool_execution",
                                         full_detail=_trace_detail,
+                                        parallel_group_id=_parallel_group_id,
+                                        parallel_index=_parallel_index,
+                                        parallel_size=_parallel_size,
+                                        parallel_tools=_parallel_tools,
                                     )
                                 elif tc_info.get("done"):
                                     if tc_info.get("synthetic") and not _dropped_stream_prefix and _stream_chunks:
@@ -1633,6 +1831,15 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     _MEMORY_TOOL_NAMES2 = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
                                     _dn = _MEMORY_TOOL_NAMES2.get(tc_name) or ("联网搜索" if tc_name == "web_search" else S.get_skill_display_name(tc_name))
                                     _is_mem2 = tc_name in _MEMORY_TOOL_NAMES2
+                                    _parallel_group_active = bool(
+                                        _parallel_group_id and _parallel_size > 1 and _parallel_completed_count < _parallel_size
+                                    )
+                                    _parallel_group_failed = bool(
+                                        _parallel_group_id
+                                        and _parallel_size > 1
+                                        and _parallel_completed_count >= _parallel_size
+                                        and _parallel_failure_count > 0
+                                    )
                                     if tc_info.get("success"):
                                         if tc_name == "web_search":
                                             _done_label = "\u641c\u7d22\u5b8c\u6210"
@@ -1640,6 +1847,11 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             _done_label = "\u8bb0\u5fc6\u5c31\u7eea"
                                         else:
                                             _done_label = "\u6280\u80fd\u5b8c\u6210"
+                                        _done_label = build_tool_done_label(
+                                            _done_label,
+                                            success=True,
+                                            process_meta=tc_process_meta,
+                                        )
                                         _done_detail = build_tool_done_trace_detail(
                                             tool_name=tc_name,
                                             preview=tc_preview,
@@ -1651,8 +1863,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         yield await _trace(
                                             _done_label,
                                             _done_detail,
-                                            "done",
-                                            step_key=_active_tool_step_key,
+                                            "running" if _parallel_group_active else ("error" if _parallel_group_failed else "done"),
+                                            step_key="" if (_parallel_group_id and _parallel_size > 1) else _active_tool_step_key,
                                             phase="tool",
                                             tool_name=tc_name,
                                             goal=tc_preview,
@@ -1660,6 +1872,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             next_user_need=_tool_next_user_need,
                                             reason_kind="tool_result",
                                             full_detail=_done_detail,
+                                            parallel_group_id=_parallel_group_id,
+                                            parallel_index=_parallel_index,
+                                            parallel_size=_parallel_size,
+                                            parallel_completed_count=_parallel_completed_count,
+                                            parallel_success_count=_parallel_success_count,
+                                            parallel_failure_count=_parallel_failure_count,
+                                            parallel_tools=_parallel_tools,
                                         )
                                     else:
                                         if tc_name == "web_search":
@@ -1684,8 +1903,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         yield await _trace(
                                             _fail_label,
                                             _fail_detail,
-                                            "error",
-                                            step_key=_active_tool_step_key,
+                                            "running" if _parallel_group_active else "error",
+                                            step_key="" if (_parallel_group_id and _parallel_size > 1) else _active_tool_step_key,
                                             phase="tool",
                                             tool_name=tc_name,
                                             goal=tc_preview,
@@ -1693,6 +1912,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             next_user_need=_tool_next_user_need,
                                             reason_kind="tool_result",
                                             full_detail=_fail_detail,
+                                            parallel_group_id=_parallel_group_id,
+                                            parallel_index=_parallel_index,
+                                            parallel_size=_parallel_size,
+                                            parallel_completed_count=_parallel_completed_count,
+                                            parallel_success_count=_parallel_success_count,
+                                            parallel_failure_count=_parallel_failure_count,
+                                            parallel_tools=_parallel_tools,
                                         )
                             elif _item.get("_done"):
                                 async for _evt in _emit_thinking_trace(force=True):
@@ -1854,6 +2080,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     )
                 except Exception:
                     pass
+                _record_tool_call_memory_stats(_tool_used, _tool_run_meta, _tool_success)
 
                 # 跳到最终回复处理（不走下面的正常路径）
                 # 清理 think 标签 + markdown

@@ -121,6 +121,25 @@ function _setProcessDetailContent(detailEl, detail){
  detailEl.textContent=text;
 }
 
+function _normalizePositiveStepCount(value){
+ var parsed=parseInt(value, 10);
+ return isFinite(parsed) && parsed>0 ? parsed : 0;
+}
+
+function _normalizeStepNameList(value){
+ var source=Array.isArray(value) ? value : [];
+ var seen={};
+ var list=[];
+ for(var i=0;i<source.length;i++){
+  var text=String(source[i]||'').trim();
+  var key=text.toLowerCase();
+  if(!text || seen[key]) continue;
+  seen[key]=true;
+  list.push(text);
+ }
+ return list;
+}
+
 function _processLabelAlias(rawLabel){
  var text=String(rawLabel||'').trim();
  if(!text) return null;
@@ -140,6 +159,7 @@ function _processLabelAlias(rawLabel){
 function _toolLabelFallback(rawLabel){
  var text=String(rawLabel||'').trim();
  if(!text) return '';
+ if(text==='PARALLEL CALL' || text==='PARALLEL RUN' || text==='PARALLEL DONE' || text==='PARALLEL RESULT') return 'parallel_tools';
  if(text==='联网搜索' || text==='搜索完成' || text==='搜索失败') return 'web_search';
  if(text==='检索记忆' || text==='检索失败' || text==='记忆就绪') return 'recall_memory';
  if(text==='调用技能' || text==='技能完成' || text==='技能失败') return 'tool';

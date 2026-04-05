@@ -32,15 +32,25 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
     recent_progress = _short_text((working_state or {}).get("recent_progress"), 120)
     summary = _short_text((working_state or {}).get("summary"), 160)
 
-    intent = "task_continue" if working_state else ""
+    intent = ""
     user_state = ""
+    session_state = ""
+    continuation_hint = ""
+    current_focus = current_step or goal
+    resume_point = current_step or recent_progress or goal
     if working_state:
         if blocker:
-            user_state = f"blocked on {blocker}"
+            session_state = "open task context; last attempt blocked"
         elif current_step:
-            user_state = f"working on {current_step}"
-        elif goal:
-            user_state = f"continuing {goal}"
+            session_state = "open task context; last step paused"
+        else:
+            session_state = "open task context available"
+        continuation_hint = "continue only if the current user input clearly refers to this task"
+        user_state = (
+            f"{session_state}; {continuation_hint}"
+            if session_state and continuation_hint
+            else (session_state or continuation_hint)
+        )
 
     return {
         "topics": _build_topics(working_state),
@@ -51,6 +61,10 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
         "attitude": "",
         "intent": intent,
         "user_state": user_state,
+        "session_state": session_state,
+        "continuation_hint": continuation_hint,
+        "current_focus": current_focus,
+        "resume_point": resume_point,
         "working_state": working_state,
         "working_summary": summary or recent_progress or blocker,
     }

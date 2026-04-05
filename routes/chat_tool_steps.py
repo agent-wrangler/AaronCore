@@ -25,6 +25,40 @@ def _append_unique(parts: list[str], value: object) -> None:
     parts.append(text)
 
 
+def _parallel_group_enabled(process_meta: dict | None) -> bool:
+    meta = process_meta if isinstance(process_meta, dict) else {}
+    return bool(_clean_text(meta.get("parallel_group_id"))) and int(meta.get("parallel_size") or 0) > 1
+
+
+def _parallel_tool_names(process_meta: dict | None, *, fallback_tool: str = "") -> list[str]:
+    meta = process_meta if isinstance(process_meta, dict) else {}
+    names = [
+        _clean_text(name)
+        for name in (meta.get("parallel_tools") or [])
+        if _clean_text(name)
+    ]
+    if not names and fallback_tool:
+        names = [_clean_text(fallback_tool)]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        lowered = name.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        deduped.append(name)
+    return deduped
+
+
+def _parallel_tool_names_text(process_meta: dict | None, *, fallback_tool: str = "") -> str:
+    names = _parallel_tool_names(process_meta, fallback_tool=fallback_tool)
+    if not names:
+        return ""
+    if len(names) <= 4:
+        return ", ".join(names)
+    return ", ".join(names[:4]) + f" (+{len(names) - 4} more)"
+
+
 def _parallel_text(process_meta: dict | None) -> str:
     meta = process_meta if isinstance(process_meta, dict) else {}
     parallel_size = int(meta.get("parallel_size") or 0)
@@ -32,8 +66,14 @@ def _parallel_text(process_meta: dict | None) -> str:
     if parallel_size <= 1:
         return ""
     if parallel_index > 0:
-        return f"并行批次 {parallel_index}/{parallel_size}"
-    return f"并行批次 {parallel_size} 个动作"
+        return f"parallel batch {parallel_index}/{parallel_size}"
+    return f"parallel batch {parallel_size} actions"
+
+
+def build_tool_execution_trace_label(default_label: str, *, process_meta: dict | None = None) -> str:
+    if _parallel_group_enabled(process_meta):
+        return "PARALLEL CALL"
+    return _clean_text(default_label) or "调用技能"
 
 
 def build_tool_execution_trace_detail(
@@ -46,6 +86,12 @@ def build_tool_execution_trace_detail(
     meta = process_meta if isinstance(process_meta, dict) else {}
     parts: list[str] = []
     base_name = _clean_text(tool_name) or _clean_text(skill_display)
+    if _parallel_group_enabled(meta):
+        parallel_size = int(meta.get("parallel_size") or 0)
+        names_text = _parallel_tool_names_text(meta, fallback_tool=base_name)
+        if names_text:
+            return f"这一批同时起跑 {parallel_size} 个工具: {names_text}"
+        return f"这一批同时起跑 {parallel_size} 个工具"
     _append_unique(parts, base_name)
 
     attempt_kind = _clean_text(meta.get("attempt_kind"))
@@ -59,14 +105,23 @@ def build_tool_execution_trace_detail(
 
     _append_unique(parts, _parallel_text(meta))
     if preview:
-        _append_unique(parts, f"目标：{preview}")
+        _append_unique(parts, f"目标: {preview}")
     return " · ".join(parts) or f"正在{_clean_text(skill_display) or '执行技能'}..."
 
 
 def build_tool_done_label(default_label: str, *, success: bool, process_meta: dict | None = None) -> str:
+    meta = process_meta if isinstance(process_meta, dict) else {}
+    if _parallel_group_enabled(meta):
+        parallel_size = int(meta.get("parallel_size") or 0)
+        completed = int(meta.get("parallel_completed_count") or 0)
+        failure_count = int(meta.get("parallel_failure_count") or 0)
+        if completed < parallel_size:
+            return "PARALLEL RUN"
+        if failure_count > 0 or not success:
+            return "PARALLEL RESULT"
+        return "PARALLEL DONE"
     if success:
         return default_label
-    meta = process_meta if isinstance(process_meta, dict) else {}
     outcome_kind = _clean_text(meta.get("outcome_kind"))
     attempt_kind = _clean_text(meta.get("attempt_kind"))
     if outcome_kind == "blocked":
@@ -94,6 +149,35 @@ def build_tool_done_trace_detail(
     meta = process_meta if isinstance(process_meta, dict) else {}
     parts: list[str] = []
     base_name = _clean_text(tool_name)
+    if _parallel_group_enabled(meta):
+        parallel_size = int(meta.get("parallel_size") or 0)
+        completed = max(0, int(meta.get("parallel_completed_count") or 0))
+        success_count = max(0, int(meta.get("parallel_success_count") or 0))
+        failure_count = max(0, int(meta.get("parallel_failure_count") or 0))
+        if completed <= 0:
+            completed = 1
+        pending_count = max(0, parallel_size - completed)
+        names_text = _parallel_tool_names_text(meta, fallback_tool=base_name)
+        if completed < parallel_size:
+            parts.append(f"{parallel_size} 个工具同时在跑，已收回 {completed}/{parallel_size}")
+            if success_count > 0:
+                parts.append(f"成功 {success_count} 个")
+            if failure_count > 0:
+                parts.append(f"失败 {failure_count} 个")
+            if pending_count > 0:
+                parts.append(f"还在跑 {pending_count} 个")
+        else:
+            parts.append(f"{parallel_size} 个工具已经收口")
+            if success_count > 0:
+                parts.append(f"成功 {success_count} 个")
+            if failure_count > 0:
+                parts.append(f"失败 {failure_count} 个")
+            elif success_count == parallel_size:
+                parts.append("都已完成")
+        if names_text:
+            parts.append(f"这一批: {names_text}")
+        return " · ".join(parts)
+
     _append_unique(parts, base_name)
 
     attempt_kind = _clean_text(meta.get("attempt_kind"))
@@ -130,6 +214,6 @@ def build_tool_done_trace_detail(
 
     _append_unique(parts, _parallel_text(meta))
     if preview and not summary:
-        _append_unique(parts, f"目标：{preview}")
+        _append_unique(parts, f"目标: {preview}")
     _append_unique(parts, summary)
     return " · ".join(parts)

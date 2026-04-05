@@ -77,7 +77,8 @@ function renderAssistantPlainTextHtml(text){
 
 function formatMarkdownInline(text){
   var s=escapeHtml(text);
-  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/\*\*(.+?)\*\*/g,'$1');
+  s=s.replace(/__(.+?)__/g,'$1');
   s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
   return s;
 }

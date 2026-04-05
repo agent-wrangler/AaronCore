@@ -1,0 +1,38 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="28" y1="16" x2="222" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A1822"/>
+      <stop offset="1" stop-color="#081015"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="84" y1="188" x2="184" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4FFF9"/>
+      <stop offset="0.6" stop-color="#D7FBFF"/>
+      <stop offset="1" stop-color="#9BE8FF"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 128) rotate(90) scale(22)">
+      <stop stop-color="#F6FFF1"/>
+      <stop offset="0.55" stop-color="#DFFF8E"/>
+      <stop offset="1" stop-color="#B7FF6A"/>
+    </radialGradient>
+    <filter id="glow" x="0" y="0" width="256" height="256" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feBlend in="SourceGraphic" in2="blur" mode="screen"/>
+    </filter>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <rect x="20" y="20" width="216" height="216" rx="46" stroke="#67E8F9" stroke-opacity="0.26" stroke-width="2"/>
+  <path d="M36 88H74" stroke="#67E8F9" stroke-opacity="0.22" stroke-width="2"/>
+  <path d="M182 208H220" stroke="#B7FF6A" stroke-opacity="0.22" stroke-width="2"/>
+  <path d="M54 208H98" stroke="#67E8F9" stroke-opacity="0.12" stroke-width="2"/>
+
+  <g filter="url(#glow)">
+    <path d="M78 188L128 72L178 188" stroke="url(#beam)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M98 146H158" stroke="#ECFDFF" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="128" cy="128" r="16" fill="url(#core)"/>
+    <circle cx="128" cy="128" r="35" stroke="#67E8F9" stroke-opacity="0.34" stroke-width="2"/>
+    <path d="M171 75C193 87 208 109 211 134C213 147 211 159 206 170" stroke="#67E8F9" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="206" cy="170" r="9" fill="#B7FF6A"/>
+    <circle cx="171" cy="75" r="7" fill="#67E8F9"/>
+  </g>
+</svg>

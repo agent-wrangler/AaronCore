@@ -47,7 +47,8 @@ class ReplyHygieneTests(unittest.TestCase):
 
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0]["role"], "assistant")
-        self.assertIn("**问题总结**", messages[0]["content"])
+        self.assertIn("问题总结：", messages[0]["content"])
+        self.assertNotIn("**问题总结**", messages[0]["content"])
         self.assertNotIn("重新整理一下", messages[0]["content"])
 
     def test_clean_visible_reply_text_prefers_grounded_tool_tail(self):
@@ -105,6 +106,20 @@ class ReplyHygieneTests(unittest.TestCase):
         finally:
             reply_formatter_module._nova_core_ready = original_ready
             reply_formatter_module._get_all_skills = original_get_all_skills
+
+    def test_clean_visible_reply_text_strips_inline_bold_markers(self):
+        reply = "Plain **important** note."
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertEqual(cleaned, "Plain important note.")
+
+    def test_clean_visible_reply_text_keeps_code_span_markers(self):
+        reply = "Use `**/*.py` and **carefully**."
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertEqual(cleaned, "Use `**/*.py` and carefully.")
 
 
 if __name__ == "__main__":

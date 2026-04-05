@@ -33,6 +33,22 @@ class SkillFallbackTests(unittest.TestCase):
             ],
         )
 
+    def test_trim_collected_steps_for_stream_reset_keeps_only_stable_prefix(self):
+        steps = [
+            {"label": "记忆加载", "detail": "上下文载入完成", "status": "done", "phase": "info"},
+            {"label": "模型思考", "detail": "我先看一下", "status": "done", "phase": "thinking"},
+            {"label": "调用技能", "detail": "folder_explore", "status": "done", "phase": "tool"},
+        ]
+
+        trimmed = chat_module._trim_collected_steps_for_stream_reset(steps, keep_prefix_count=1)
+
+        self.assertEqual(
+            trimmed,
+            [
+                {"label": "记忆加载", "detail": "上下文载入完成", "status": "done", "phase": "info"},
+            ],
+        )
+
     def test_block_task_plan_after_failure_marks_current_item_blocked(self):
         plan = {
             "goal": "改进 NovaNotes 前端",
@@ -313,6 +329,64 @@ class RunEventMappingTests(unittest.TestCase):
                 {"label": "技能失败", "detail": "write_file · 目标：index.html", "status": "error"},
             ],
         )
+    def test_normalize_persisted_process_steps_merges_parallel_group_updates(self):
+        steps = [
+            {
+                "label": "并行调用",
+                "detail": "这一批同时起跑 2 个工具：folder_explore、search_text",
+                "status": "done",
+                "step_key": "parallel:1:1:call_parallel_fast",
+                "phase": "tool",
+                "parallel_group_id": "parallel:1:1:call_parallel_fast",
+                "parallel_size": 2,
+                "parallel_tools": ["folder_explore", "search_text"],
+            },
+            {
+                "label": "并行执行中",
+                "detail": "2 个工具同时在跑，已收回 1/2",
+                "status": "running",
+                "step_key": "parallel:1:1:call_parallel_fast",
+                "phase": "tool",
+                "parallel_group_id": "parallel:1:1:call_parallel_fast",
+                "parallel_size": 2,
+                "parallel_completed_count": 1,
+                "parallel_success_count": 1,
+                "parallel_tools": ["folder_explore", "search_text"],
+            },
+            {
+                "label": "并行完成",
+                "detail": "2 个工具已经收口",
+                "status": "done",
+                "step_key": "parallel:1:1:call_parallel_fast",
+                "phase": "tool",
+                "parallel_group_id": "parallel:1:1:call_parallel_fast",
+                "parallel_size": 2,
+                "parallel_completed_count": 2,
+                "parallel_success_count": 2,
+                "parallel_tools": ["folder_explore", "search_text"],
+            },
+        ]
+
+        normalized = chat_module._normalize_persisted_process_steps(steps)
+
+        self.assertEqual(
+            normalized,
+            [
+                {
+                    "label": "并行完成",
+                    "detail": "2 个工具已经收口",
+                    "status": "done",
+                    "step_key": "parallel:1:1:call_parallel_fast",
+                    "phase": "tool",
+                    "parallel_group_id": "parallel:1:1:call_parallel_fast",
+                    "parallel_size": 2,
+                    "parallel_completed_count": 2,
+                    "parallel_success_count": 2,
+                    "parallel_tools": ["folder_explore", "search_text"],
+                }
+            ],
+        )
+
     def test_tool_preamble_detector_distinguishes_lead_in_from_answer_payload(self):
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("我先梳理一下技术方案 👇"))
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("好嘞！这个需求很明确～\n我先梳理一下技术方案 👇"))
@@ -2905,6 +2979,129 @@ class StructuredToolHandoffRegressionTests(unittest.TestCase):
         self.assertEqual(done.get("_done"), True)
         self.assertEqual(done.get("tool_used"), "read_file")
         self.assertEqual(done.get("success"), True)
+
+    def test_finalize_tool_reply_strips_trailing_handoff_after_grounded_answer(self):
+        reply = reply_formatter_module._finalize_tool_reply(
+            "问题已经定位到 `settings.js` 的旧监听器覆盖。\n\n"
+            "把初始化顺序改成先注册 store，再挂 click handler，就能避免重复触发。\n\n"
+            "让我继续把剩下的交互链路也过一遍。",
+            success=True,
+            action_summary="已定位旧监听器覆盖问题",
+            tool_response="已定位旧监听器覆盖问题",
+            run_meta={"action": {"display_hint": "已定位旧监听器覆盖问题"}},
+        )
+
+        self.assertIn("问题已经定位到 `settings.js` 的旧监听器覆盖", reply)
+        self.assertIn("先注册 store", reply)
+        self.assertNotIn("让我继续把剩下的交互链路也过一遍", reply)
+
+    def test_finalize_tool_reply_replaces_structured_handoff_only_reply_with_closeout(self):
+        reply = reply_formatter_module._finalize_tool_reply(
+            "1. 先确认目录\n2. 再比对配置\n让我继续检查剩余文件。",
+            success=True,
+            action_summary="已完成目录和配置检查",
+            tool_response="目录和配置已检查",
+            run_meta={"action": {"display_hint": "已完成目录和配置检查"}},
+        )
+
+        self.assertIn("这一步已经完成", reply)
+        self.assertIn("已完成目录和配置检查", reply)
+        self.assertNotIn("让我继续检查剩余文件", reply)
+
+    def test_stream_success_reply_strips_trailing_handoff_tail(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_fix_trace_1",
+                            "type": "function",
+                            "function": {
+                                "name": "read_file",
+                                "arguments": json.dumps(
+                                    {"file_path": "notes_app/settings.js"},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield (
+                "问题已经定位到按钮重复绑定。\n\n"
+                "把旧的全局 click handler 改成局部委托，就不会再重复触发。\n\n"
+                "让我继续把剩下的文件也看一遍。"
+            )
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(_name, _args, _context):
+            return {
+                "success": True,
+                "response": "Found duplicated click handlers.",
+                "meta": {
+                    "action": {
+                        "action_kind": "read_file",
+                        "target_kind": "file",
+                        "target": "notes_app/settings.js",
+                        "outcome": "inspected",
+                        "display_hint": "已定位按钮重复绑定",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "看下为什么按钮会重复触发",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        visible_text = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+        self.assertIn("问题已经定位到按钮重复绑定", visible_text)
+        self.assertIn("局部委托", visible_text)
+        self.assertNotIn("让我继续把剩下的文件也看一遍", visible_text)
+        self.assertEqual(chunks[-1].get("success"), True)
+
+
+    def test_unified_reply_with_tools_stream_forwards_stream_reset_signal(self):
+        def fake_stream(_cfg, _messages, **_kwargs):
+            yield "half reply"
+            yield {"_stream_reset": {"reason": "stream_exception_fallback"}}
+            yield "final reply"
+            yield {"_usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+
+        bundle = {
+            "user_input": "continue",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], lambda *_args: {}))
+
+        reset_index = next(
+            i for i, chunk in enumerate(chunks) if isinstance(chunk, dict) and chunk.get("_stream_reset")
+        )
+
+        self.assertEqual(chunks[0], "half reply")
+        self.assertEqual(chunks[reset_index].get("_stream_reset", {}).get("reason"), "stream_exception_fallback")
+        self.assertEqual(chunks[reset_index + 1], "final reply")
+        self.assertEqual(chunks[-1].get("_done"), True)
 
 
 class TargetProtocolPathResolutionTests(unittest.TestCase):

@@ -2,8 +2,8 @@
   "name": "novacore-desktop-runtime-35",
   "version": "1.0.0",
   "private": true,
-  "description": "Desktop packaging wrapper for NovaCore",
-  "author": "NovaCore",
+  "description": "Desktop packaging wrapper for AaronCore",
+  "author": "AaronCore",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "com.novacore.desktop",
-    "productName": "NovaCore",
+    "productName": "AaronCore",
     "icon": "../static/icon/nova.ico",
     "asar": true,
     "npmRebuild": false,

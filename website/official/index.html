@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Local-First Agent Runtime</title>
+  <meta name="description" content="AaronCore is a local-first desktop agent runtime built around execution, tool calls, layered memory, and a clear release surface.">
+  <meta name="theme-color" content="#071015">
+  <meta property="og:title" content="AaronCore | Local-First Agent Runtime">
+  <meta property="og:description" content="A local-first desktop agent runtime with tool-call execution, layered memory, and a clean release surface.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="./assets/aaroncore-mark.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="AaronCore home">
+      <span class="brand-mark">
+        <img src="./assets/aaroncore-mark.svg" alt="AaronCore mark">
+      </span>
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline">Official release surface</span>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="#capabilities">Runtime</a>
+      <a href="#stack">Topology</a>
+      <a href="#download">Download</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <div class="top-status">
+      <span class="status-ping"></span>
+      <span data-site-field="launchState">Official site first</span>
+    </div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="hero">
+      <div class="hero-copy reveal">
+        <div class="eyebrow-row">
+          <span class="eyebrow">Local-First Agent Runtime</span>
+          <span class="eyebrow ghost">Desktop Execution</span>
+          <span class="eyebrow ghost">Tool-Call Surface</span>
+        </div>
+
+        <h1>
+          A Control Core
+          <span>For Local Agents</span>
+        </h1>
+
+        <p class="hero-lede">
+          AaronCore is not a soft SaaS wrapper around chat. It is a local runtime built for execution, tool calls,
+          layered memory, and work that actually continues. The website should feel like the outer shell of that system,
+          not a generic product brochure.
+        </p>
+
+        <div class="hero-actions">
+          <a class="button button-primary" href="#download" id="heroDownloadLink">Download Pending</a>
+          <a class="button button-secondary" href="#capabilities">Inspect Runtime</a>
+        </div>
+
+        <div class="facts-grid">
+          <article class="fact-card">
+            <span class="fact-label">Primary Domain</span>
+            <strong data-site-field="primaryDomain">aaroncore.com</strong>
+          </article>
+          <article class="fact-card">
+            <span class="fact-label">Contact Mail</span>
+            <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
+          </article>
+          <article class="fact-card">
+            <span class="fact-label">Release State</span>
+            <strong data-site-field="launchState">Official site first</strong>
+          </article>
+        </div>
+
+        <div class="command-card">
+          <div class="command-head">
+            <span class="command-title">runtime.boot</span>
+            <span class="command-badge">spec locked</span>
+          </div>
+          <div class="command-body">
+            <div><span class="prompt">&gt;</span> domain.target = <span data-site-field="primaryDomain">aaroncore.com</span></div>
+            <div><span class="prompt">&gt;</span> contact.mail = <span data-site-field="contactEmail">hi@aaroncore.com</span></div>
+            <div><span class="prompt">&gt;</span> launch.state = <span data-site-field="launchState">Official site first</span></div>
+            <div><span class="prompt">&gt;</span> public.download = pending_build</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-board reveal">
+        <div class="board-shell">
+          <div class="board-head">
+            <div class="board-dots">
+              <span class="dot red"></span>
+              <span class="dot amber"></span>
+              <span class="dot green"></span>
+            </div>
+            <span class="board-address">aaroncore://runtime-surface</span>
+            <span class="board-mode">agent core</span>
+          </div>
+
+          <div class="board-grid">
+            <div class="engine-bay">
+              <div class="bay-grid"></div>
+              <div class="bay-orbit orbit-a"></div>
+              <div class="bay-orbit orbit-b"></div>
+              <div class="bay-orbit orbit-c"></div>
+              <img class="engine-mark" src="./assets/aaroncore-ref-v4-engine.svg" alt="AaronCore engine concept">
+
+              <div class="bay-stat stat-a">
+                <span class="stat-label">Loop</span>
+                <strong>Observe / Decide / Call / Verify</strong>
+              </div>
+              <div class="bay-stat stat-b">
+                <span class="stat-label">Memory</span>
+                <strong>Layered and stateful</strong>
+              </div>
+              <div class="bay-stat stat-c">
+                <span class="stat-label">Surface</span>
+                <strong>Desktop-first runtime</strong>
+              </div>
+            </div>
+
+            <div class="board-stack">
+              <article class="ops-card">
+                <div class="ops-head">
+                  <span>Execution Chain</span>
+                  <span class="ops-state">armed</span>
+                </div>
+                <ul class="step-list">
+                  <li>
+                    <span>01</span>
+                    <div>
+                      <strong>Observe</strong>
+                      <p>input, files, context, runtime state</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span>02</span>
+                    <div>
+                      <strong>Decide</strong>
+                      <p>pick the next action, not just the next sentence</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span>03</span>
+                    <div>
+                      <strong>Call</strong>
+                      <p>shell, files, tools, verification surfaces</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span>04</span>
+                    <div>
+                      <strong>Continue</strong>
+                      <p>keep the chain moving until the work is actually done</p>
+                    </div>
+                  </li>
+                </ul>
+              </article>
+
+              <article class="ops-card">
+                <div class="ops-head">
+                  <span>Memory Stack</span>
+                  <span class="ops-state">L1-L8</span>
+                </div>
+                <div class="memory-bars">
+                  <div class="memory-bar h-1"><span>L1</span></div>
+                  <div class="memory-bar h-2"><span>L2</span></div>
+                  <div class="memory-bar h-3"><span>L3</span></div>
+                  <div class="memory-bar h-4"><span>L4</span></div>
+                  <div class="memory-bar h-5"><span>L5</span></div>
+                  <div class="memory-bar h-6"><span>L6</span></div>
+                  <div class="memory-bar h-7"><span>L7</span></div>
+                  <div class="memory-bar h-8"><span>L8</span></div>
+                </div>
+              </article>
+
+              <article class="ops-card">
+                <div class="ops-head">
+                  <span>Tool Surface</span>
+                  <span class="ops-state">local</span>
+                </div>
+                <div class="tool-grid">
+                  <span>shell</span>
+                  <span>files</span>
+                  <span>patch</span>
+                  <span>tests</span>
+                  <span>state</span>
+                  <span>logs</span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="signal-strip reveal" aria-label="Runtime signals">
+      <div class="signal-track">
+        <span>local execution</span>
+        <span>tool-call chain</span>
+        <span>layered memory</span>
+        <span>desktop runtime</span>
+        <span>release surface</span>
+        <span>download channel</span>
+        <span>local execution</span>
+        <span>tool-call chain</span>
+        <span>layered memory</span>
+        <span>desktop runtime</span>
+        <span>release surface</span>
+        <span>download channel</span>
+      </div>
+    </section>
+
+    <section class="section" id="capabilities">
+      <div class="section-heading reveal">
+        <span class="section-tag">Runtime</span>
+        <h2>Built like a control room, not a brochure</h2>
+        <p>
+          The visual language should come from the project itself: execution loops, memory depth, tool surfaces,
+          launch state, and a shell that feels intentional enough to become the official home of the product.
+        </p>
+      </div>
+
+      <div class="trait-grid">
+        <article class="trait-card trait-wide reveal">
+          <span class="card-kicker">Execution First</span>
+          <h3>The point is to do the work, not decorate the interface</h3>
+          <p>
+            AaronCore is strongest when it feels like a real runtime. The site now pushes that character forward with
+            operational panels, active states, and a tighter command-surface mood.
+          </p>
+          <div class="chip-row">
+            <span>filesystem</span>
+            <span>shell</span>
+            <span>apply patch</span>
+            <span>verification</span>
+            <span>release notes</span>
+          </div>
+        </article>
+
+        <article class="trait-card reveal">
+          <span class="card-kicker">Memory Fabric</span>
+          <h3>State lives deeper than chat history</h3>
+          <p>
+            The layout hints at layered memory and continuation rather than a single prompt-response loop.
+          </p>
+        </article>
+
+        <article class="trait-card reveal">
+          <span class="card-kicker">Tool Chain</span>
+          <h3>One system, many actions</h3>
+          <p>
+            The interface leans into the idea of a tool-call chain that keeps moving until the task is complete.
+          </p>
+        </article>
+
+        <article class="trait-card reveal">
+          <span class="card-kicker">Release Shell</span>
+          <h3>Brand, download, and updates in one surface</h3>
+          <p>
+            The website is already structured to become the public download channel the moment a real build is attached.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="stack">
+      <div class="section-heading reveal">
+        <span class="section-tag">Topology</span>
+        <h2>The site is the shell. The app is the engine.</h2>
+        <p>
+          This keeps the public-facing entry surface clean while the desktop product continues to own the actual agent loop,
+          the memory system, the execution chain, and the local-first experience.
+        </p>
+      </div>
+
+      <div class="topology-grid">
+        <article class="map-card reveal">
+          <div class="map-node">
+            <span class="node-index">01</span>
+            <div>
+              <strong>Official Surface</strong>
+              <p>brand, launch message, download state</p>
+            </div>
+          </div>
+          <div class="map-node">
+            <span class="node-index">02</span>
+            <div>
+              <strong>Desktop Runtime</strong>
+              <p>execution, tools, memory, state continuity</p>
+            </div>
+          </div>
+          <div class="map-node">
+            <span class="node-index">03</span>
+            <div>
+              <strong>Release Channel</strong>
+              <p>installers, versions, changelog, public updates</p>
+            </div>
+          </div>
+          <div class="map-node">
+            <span class="node-index">04</span>
+            <div>
+              <strong>Future App Route</strong>
+              <p>web surface later if you want app.aaroncore.com</p>
+            </div>
+          </div>
+        </article>
+
+        <div class="notes-grid">
+          <article class="note-card reveal">
+            <span class="card-kicker">No Generic SaaS Tone</span>
+            <p>The visual system is colder, sharper, and more operational than a typical AI launch page.</p>
+          </article>
+          <article class="note-card reveal">
+            <span class="card-kicker">Project-Aligned</span>
+            <p>The hero is built around runtime, memory, tool calls, and continuation instead of empty AI promises.</p>
+          </article>
+          <article class="note-card reveal">
+            <span class="card-kicker">Ready To Ship</span>
+            <p>The structure already holds domain, mailbox, release status, and the future download handoff.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="launch-shell reveal">
+        <div class="launch-copy">
+          <span class="section-tag">Download</span>
+          <h2>Ready to flip into a public release surface</h2>
+          <p>
+            The release area is no longer just a button at the bottom. It now feels like part of the runtime shell,
+            so the page can shift from brand presence to public download channel without another redesign.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary disabled" id="downloadBtn" href="#download" aria-disabled="true">Download Pending</a>
+            <span class="download-note" id="downloadNote">Public build is not attached yet.</span>
+          </div>
+        </div>
+
+        <div class="launch-board">
+          <div class="os-row">
+            <span class="os-chip">Windows planned</span>
+            <span class="os-chip">macOS planned</span>
+            <span class="os-chip">Linux planned</span>
+          </div>
+
+          <article class="launch-card">
+            <span class="fact-label">Release Target</span>
+            <strong data-release-field="version">Beta pending</strong>
+            <p data-site-field="releaseRoute">aaroncore.com / future download channel</p>
+          </article>
+
+          <article class="launch-card">
+            <span class="fact-label">Primary Mailbox</span>
+            <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
+            <p data-site-field="mailboxStatusLine">Mailbox status: setup pending.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="contact">
+      <div class="section-heading reveal">
+        <span class="section-tag">Contact</span>
+        <h2>The public details are locked. DNS can come later.</h2>
+        <p>
+          The site now treats domain, mailbox, and release route as first-class pieces of the interface. That means the visual
+          layer can keep improving while Tencent Cloud DNS and mailbox records are wired up afterward.
+        </p>
+      </div>
+
+      <div class="contact-grid">
+        <article class="contact-card reveal">
+          <span class="card-kicker">Domain</span>
+          <strong data-site-field="primaryDomain">aaroncore.com</strong>
+          <p>The root domain can stay the official homepage and later carry the real download route.</p>
+        </article>
+        <article class="contact-card reveal">
+          <span class="card-kicker">Mailbox</span>
+          <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
+          <p data-site-field="mailboxStatusLine">Mailbox status: setup pending.</p>
+        </article>
+        <article class="contact-card reveal">
+          <span class="card-kicker">Route</span>
+          <strong data-site-field="releaseRoute">aaroncore.com / future download channel</strong>
+          <p>The website can own launch and downloads first. App routing can split later if needed.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-mark.svg" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+        <span data-site-field="footerTagline">Official home for releases, notes, and downloads.</span>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Domain</span>
+        <strong data-site-field="primaryDomain">aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Mail</span>
+        <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Year</span>
+        <strong id="yearSlot"></strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>

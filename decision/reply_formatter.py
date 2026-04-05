@@ -704,7 +704,10 @@ def _finalize_tool_reply(
         run_meta=run_meta,
         clean_visible_reply_text=_clean_visible_reply_text,
         looks_like_tool_preamble=_looks_like_tool_preamble,
+        looks_like_structured_tool_handoff=_looks_like_structured_tool_handoff,
+        looks_like_trailing_tool_handoff=_looks_like_trailing_tool_handoff,
         build_tool_closeout_reply=_build_tool_closeout_reply,
+        re_mod=_re,
     )
 
 def _looks_like_tool_preamble(text: str) -> bool:
@@ -808,6 +811,7 @@ def _has_only_preamble_text(chunks: list, *, current_tool_success: bool) -> bool
         chunks,
         clean_visible_reply_text=_clean_visible_reply_text,
         looks_like_tool_preamble=_looks_like_tool_preamble,
+        looks_like_structured_tool_handoff=_looks_like_structured_tool_handoff,
     )
 
 

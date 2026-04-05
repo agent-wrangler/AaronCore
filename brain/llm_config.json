@@ -32,7 +32,8 @@
       "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
       "model": "MiniMax-M2.7",
-      "vision": false
+      "vision": false,
+      "transport": "openai_api"
     },
     "MiniMax-M2.7-highspeed": {
       "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",

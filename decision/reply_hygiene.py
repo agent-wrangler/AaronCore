@@ -1,17 +1,29 @@
 """Reply hygiene cleanup helpers."""
 
 
-def _strip_decorative_markdown(response: str, *, re_mod) -> str:
+def strip_chat_emphasis_markdown(response: str, *, re_mod) -> str:
     text = str(response or "")
     if "**" not in text and "__" not in text:
         return text
-    if "```" in text:
-        return text
-    if re_mod.search(r"^\s*(?:[-*+]\s+|#{1,6}\s|>\s|\d+[.)]\s+)", text, flags=re_mod.MULTILINE):
-        return text
-    if len([line for line in text.splitlines() if line.strip()]) > 8:
-        return text
-    return text.replace("**", "").replace("__", "")
+
+    protected_segments: list[str] = []
+
+    def _protect(match):
+        protected_segments.append(match.group(0))
+        return f"\u0000MDPROTECT{len(protected_segments) - 1}\u0000"
+
+    protected = re_mod.sub(r"```.*?```|`[^`\n]*`", _protect, text, flags=re_mod.S)
+    protected = re_mod.sub(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", r"\1", protected)
+    protected = re_mod.sub(r"__(?=\S)(.+?)(?<=\S)__", r"\1", protected)
+    protected = protected.replace("**", "").replace("__", "")
+
+    for index, original in enumerate(protected_segments):
+        protected = protected.replace(f"\u0000MDPROTECT{index}\u0000", original)
+    return protected
+
+
+def _strip_decorative_markdown(response: str, *, re_mod) -> str:
+    return strip_chat_emphasis_markdown(response, re_mod=re_mod)
 
 
 def l1_hygiene_clean(

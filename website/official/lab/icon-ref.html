@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore Reference Concept</title>
+  <style>
+    :root {
+      --bg: #64686f;
+      --panel: #5d6268;
+      --text: #f4f6f8;
+      --muted: rgba(244, 246, 248, 0.72);
+      --dark: #162440;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Space Grotesk", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+    .eyebrow {
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .layout {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+    .hero,
+    .note {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      min-height: 480px;
+      padding: 28px;
+    }
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .hero img {
+      width: 320px;
+      max-width: 100%;
+      height: auto;
+    }
+    .wordmark {
+      font-size: clamp(44px, 6vw, 64px);
+      font-weight: 600;
+      letter-spacing: -0.04em;
+    }
+    .wordmark span {
+      color: #d5dce7;
+      font-weight: 300;
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: 34px;
+      letter-spacing: -0.04em;
+    }
+    p {
+      margin: 0 0 14px;
+      line-height: 1.8;
+      color: var(--muted);
+    }
+    .label {
+      margin-top: 22px;
+      padding: 14px 16px;
+      background: rgba(0,0,0,0.14);
+      color: #edf3ff;
+      border-left: 4px solid #7ca3ff;
+    }
+    .pick {
+      margin-top: 18px;
+      font-family: Consolas, monospace;
+      color: #dbe6ff;
+    }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .hero, .note { min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">AaronCore / Reference Concept v4</div>
+    <div class="layout">
+      <section class="hero">
+        <img src="../assets/aaroncore-ref-v4-engine.svg" alt="AaronCore reference mark v4">
+        <div class="wordmark">Aaron<span>Core</span></div>
+      </section>
+      <aside class="note">
+        <h1>Layered Engine Core</h1>
+        <p>这版我把“底座立起来”了，不再是俯视摊开的盘，而是一个前向立起的核心舱和能量底座。中间保留引擎叶片，但上面的平面小点已经全部去掉。</p>
+        <p>现在它更像一个真正站起来的本地 agent engine，有核心舱、外环、支撑壳体和竖直输出基座，整体会比上一版更像装置，而不是图案。</p>
+        <div class="label">如果这个立起底座的方向对了，我下一步就开始正式做品牌收口版。</div>
+        <div class="pick">如果你要继续这个方向，直接回我：继续这个立式引擎版</div>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

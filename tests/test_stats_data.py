@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 from core.runtime_state import state_loader
@@ -119,3 +120,49 @@ def test_load_stats_data_auto_migrates_legacy_stats_file(tmp_path, monkeypatch):
     assert stats["by_model"]["deepseek-chat"]["cache_read"] == 10
     assert stats["stats_schema_version"] == 2
     assert '"cache_write": 40' in primary_stats.read_text(encoding="utf-8")
+
+
+def test_get_stats_uses_l5_and_l8_store_counts(tmp_path, monkeypatch):
+    (tmp_path / "long_term.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "persona.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "knowledge.json").write_text(
+        json.dumps(
+            [
+                {"name": "weather", "source": "manual"},
+                {"name": "trace", "source": "l6_success_path"},
+                {"name": "skip", "source": "l2_demand"},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "knowledge_base.json").write_text(
+        json.dumps(
+            [
+                {"name": "k1", "summary": "one"},
+                {"name": "k2", "summary": "two"},
+                {"name": "k3", "summary": "three"},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(data, "should_show_l8_timeline_entry", lambda item: True)
+    monkeypatch.setattr(data, "get_model_price", lambda _model: {"input": 2, "output": 4})
+    monkeypatch.setattr(data, "MODEL_PRICES", {})
+    monkeypatch.setattr(
+        data,
+        "S",
+        SimpleNamespace(
+            load_stats_data=lambda: {"memory": {}, "model": "deepseek-chat"},
+            PRIMARY_STATE_DIR=tmp_path,
+            is_legacy_l3_skill_log=lambda _item: False,
+        ),
+    )
+
+    result = asyncio.run(data.get_stats())
+    memory = result["stats"]["memory"]
+
+    assert memory["real_l5_count"] == 2
+    assert memory["real_l8_count"] == 3

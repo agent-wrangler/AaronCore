@@ -1,0 +1,84 @@
+<svg width="360" height="260" viewBox="0 0 360 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgShell" x1="116" y1="26" x2="246" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3C5BC0"/>
+      <stop offset="0.48" stop-color="#243D8D"/>
+      <stop offset="1" stop-color="#101933"/>
+    </linearGradient>
+    <linearGradient id="bgShellDark" x1="180" y1="74" x2="180" y2="244" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A3172"/>
+      <stop offset="1" stop-color="#09101F"/>
+    </linearGradient>
+    <linearGradient id="rimFace" x1="96" y1="58" x2="264" y2="164" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6A8FFF"/>
+      <stop offset="1" stop-color="#27448F"/>
+    </linearGradient>
+    <linearGradient id="rimWall" x1="180" y1="82" x2="180" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A3578"/>
+      <stop offset="1" stop-color="#0A142C"/>
+    </linearGradient>
+    <radialGradient id="engineCore" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(180 108) rotate(90) scale(32 32)">
+      <stop stop-color="#B6EEFF"/>
+      <stop offset="0.42" stop-color="#67C8FF"/>
+      <stop offset="1" stop-color="#203E86"/>
+    </radialGradient>
+    <linearGradient id="blade" x1="149" y1="79" x2="213" y2="140" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DEF6FF"/>
+      <stop offset="1" stop-color="#5A9DFF"/>
+    </linearGradient>
+    <linearGradient id="pedestalTop" x1="132" y1="154" x2="228" y2="202" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2B4A9A"/>
+      <stop offset="1" stop-color="#16285D"/>
+    </linearGradient>
+    <linearGradient id="pedestalFront" x1="180" y1="176" x2="180" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D356F"/>
+      <stop offset="1" stop-color="#0A1122"/>
+    </linearGradient>
+    <linearGradient id="pedestalCore" x1="180" y1="176" x2="180" y2="228" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A7E9FF"/>
+      <stop offset="1" stop-color="#4A9DFF"/>
+    </linearGradient>
+    <filter id="drop" x="74" y="22" width="212" height="226" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#030713" flood-opacity="0.42"/>
+    </filter>
+    <filter id="soft" x="138" y="66" width="84" height="84" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#drop)">
+    <path d="M120 48L160 30H200L240 48V154L212 176H148L120 154V48Z" fill="url(#bgShellDark)"/>
+    <path d="M120 48L160 30H200L240 48L212 66H148L120 48Z" fill="url(#bgShell)"/>
+
+    <path d="M96 104C96 76.3858 133.608 54 180 54C226.392 54 264 76.3858 264 104V122C264 149.614 226.392 172 180 172C133.608 172 96 149.614 96 122V104Z" fill="url(#rimWall)"/>
+    <ellipse cx="180" cy="104" rx="84" ry="50" fill="url(#rimFace)"/>
+    <ellipse cx="180" cy="98" rx="66" ry="36" fill="#274287"/>
+    <path d="M114 98C114 78.1177 143.549 62 180 62C216.451 62 246 78.1177 246 98V112C246 131.882 216.451 148 180 148C143.549 148 114 131.882 114 112V98Z" fill="#142755"/>
+    <ellipse cx="180" cy="98" rx="66" ry="36" fill="#355FBE"/>
+
+    <ellipse cx="180" cy="98" rx="28" ry="18" fill="#234596"/>
+    <g filter="url(#soft)">
+      <ellipse cx="180" cy="98" rx="22" ry="14" fill="url(#engineCore)"/>
+    </g>
+    <ellipse cx="176" cy="92" rx="7" ry="5" fill="#E8FBFF" fill-opacity="0.9"/>
+
+    <path d="M180 76L191 96L180 116L169 96L180 76Z" fill="url(#blade)"/>
+    <path d="M210 92L198 107H179L190 92H210Z" fill="url(#blade)"/>
+    <path d="M150 92H170L181 107H162L150 92Z" fill="url(#blade)"/>
+    <path d="M193 122L181 136H179L191 122H193Z" fill="url(#blade)" fill-opacity="0.92"/>
+    <path d="M167 122L179 136H181L169 122H167Z" fill="url(#blade)" fill-opacity="0.92"/>
+
+    <path d="M144 156H216L232 176H128L144 156Z" fill="url(#pedestalTop)"/>
+    <path d="M128 176H232V214L206 236H154L128 214V176Z" fill="url(#pedestalFront)"/>
+    <path d="M164 176H196V222H164V176Z" fill="url(#pedestalCore)"/>
+    <path d="M154 236H206" stroke="#0D1731" stroke-width="8" stroke-linecap="round"/>
+
+    <path d="M138 186H156" stroke="#D8F7FF" stroke-opacity="0.22" stroke-width="4" stroke-linecap="round"/>
+    <path d="M204 186H222" stroke="#D8F7FF" stroke-opacity="0.22" stroke-width="4" stroke-linecap="round"/>
+    <path d="M172 196H188" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="4" stroke-linecap="round"/>
+
+    <path d="M126 78C141 67 159 61 180 61C201 61 219 67 234 78" stroke="#C6D9FF" stroke-opacity="0.24" stroke-width="3" stroke-linecap="round"/>
+    <path d="M131 42H229" stroke="#B2C8FF" stroke-opacity="0.16" stroke-width="3" stroke-linecap="round"/>
+    <path d="M96 104C96 76.3858 133.608 54 180 54C226.392 54 264 76.3858 264 104" stroke="#88A9FF" stroke-opacity="0.24" stroke-width="3"/>
+  </g>
+</svg>

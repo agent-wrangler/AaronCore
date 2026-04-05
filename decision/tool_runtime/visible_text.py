@@ -1,5 +1,7 @@
 """Visible-reply text cleanup helpers for post-tool rendering."""
 
+from decision import reply_hygiene as _reply_hygiene
+
 
 def prefer_post_think_answer_tail(text: str, *, re_mod) -> str:
     raw = str(text or "").strip()
@@ -167,5 +169,6 @@ def clean_visible_reply_text(
     cleaned = strip_legacy_tool_markup(cleaned)
     cleaned = prefer_tool_grounded_tail(cleaned)
     cleaned, _ = strip_mid_reply_restart(cleaned)
+    cleaned = _reply_hygiene.strip_chat_emphasis_markdown(cleaned, re_mod=re_mod)
     cleaned = re_mod.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()

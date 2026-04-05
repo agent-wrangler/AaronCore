@@ -25,6 +25,10 @@ from decision.tool_runtime.runtime_control import (
     tool_runtime_cancelled,
 )
 
+_DEFAULT_TOOL_RESULT_CONTEXT_MAX_CHARS = 2400
+_DEFAULT_TOOL_BATCH_CONTEXT_BUDGET_CHARS = 7200
+_MIN_TOOL_RESULT_CONTEXT_NOTE_CHARS = 120
+
 
 @dataclass
 class ToolCallBatchState:
@@ -64,6 +68,135 @@ def _record_result_message(tool_call: dict, response: str) -> dict:
     }
 
 
+def _resolve_context_char_budget(
+    bundle: dict | None,
+    *,
+    keys: tuple[str, ...],
+    default: int,
+) -> int:
+    raw_candidates: list[object] = []
+    if isinstance(bundle, dict):
+        for key in keys:
+            raw_candidates.append(bundle.get(key))
+        runtime_options = bundle.get("runtime_options")
+        if isinstance(runtime_options, dict):
+            for key in keys:
+                raw_candidates.append(runtime_options.get(key))
+        tool_runtime = bundle.get("tool_runtime")
+        if isinstance(tool_runtime, dict):
+            for key in keys:
+                raw_candidates.append(tool_runtime.get(key))
+
+    for raw_value in raw_candidates:
+        try:
+            parsed = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return parsed
+    return default
+
+
+def _compact_tool_message_content(
+    formatter,
+    content: str,
+    *,
+    action_summary: str = "",
+    max_chars: int,
+) -> str:
+    text = str(content or "").strip()
+    if not text:
+        return ""
+
+    limit = max(1, int(max_chars))
+    if len(text) <= limit:
+        return text
+
+    summary = str(action_summary or "").strip() or formatter._summarize_tool_response_text(text)
+    prefix = "[tool result truncated for context]"
+    if summary:
+        prefix = f"{prefix}\nsummary: {summary}"
+
+    if len(prefix) >= limit:
+        return prefix[:limit].rstrip()
+
+    remaining = limit - len(prefix) - 2
+    if remaining <= 0:
+        return prefix[:limit].rstrip()
+
+    if remaining <= 32:
+        excerpt = text[:remaining].rstrip()
+        return f"{prefix}\n\n{excerpt}".strip()[:limit]
+
+    tail_budget = min(max(remaining // 4, 16), 160)
+    head_budget = max(remaining - tail_budget - 5, 24)
+    if head_budget + tail_budget + 5 > remaining:
+        tail_budget = max(16, remaining - head_budget - 5)
+    head = text[:head_budget].rstrip()
+    tail = text[-tail_budget:].lstrip() if tail_budget > 0 else ""
+    clipped = f"{prefix}\n\n{head}"
+    if tail:
+        clipped = f"{clipped}\n...\n{tail}"
+    return clipped[:limit].rstrip()
+
+
+def _budget_tool_messages_for_context(
+    formatter,
+    tool_messages: list[dict],
+    *,
+    records: list[ToolCallRecord],
+    bundle: dict | None = None,
+) -> list[dict]:
+    if not tool_messages:
+        return []
+
+    per_tool_limit = _resolve_context_char_budget(
+        bundle,
+        keys=("tool_result_max_chars", "toolResultMaxChars"),
+        default=_DEFAULT_TOOL_RESULT_CONTEXT_MAX_CHARS,
+    )
+    batch_budget = _resolve_context_char_budget(
+        bundle,
+        keys=("tool_batch_result_budget_chars", "toolBatchResultBudgetChars"),
+        default=_DEFAULT_TOOL_BATCH_CONTEXT_BUDGET_CHARS,
+    )
+    remaining_budget = max(1, int(batch_budget))
+    record_by_call_id = {
+        str(record.call_id or "").strip(): record
+        for record in records or []
+        if isinstance(record, ToolCallRecord)
+    }
+
+    budgeted: list[dict] = []
+    for message in tool_messages:
+        if not isinstance(message, dict) or message.get("role") != "tool":
+            budgeted.append(dict(message) if isinstance(message, dict) else message)
+            continue
+
+        call_id = str(message.get("tool_call_id") or "").strip()
+        record = record_by_call_id.get(call_id)
+        effective_limit = (
+            min(per_tool_limit, remaining_budget)
+            if remaining_budget > 0
+            else _MIN_TOOL_RESULT_CONTEXT_NOTE_CHARS
+        )
+        compacted = _compact_tool_message_content(
+            formatter,
+            str(message.get("content") or ""),
+            action_summary=getattr(record, "action_summary", ""),
+            max_chars=effective_limit,
+        )
+        budgeted.append(
+            {
+                **message,
+                "content": compacted,
+            }
+        )
+        remaining_budget = max(0, remaining_budget - len(compacted))
+
+    return budgeted
+
+
 def _append_recent_attempt(
     state: ToolCallBatchState,
     *,
@@ -99,6 +232,49 @@ def _append_shadow_recent_attempt(
     )
 
 
+def _sanitize_parallel_group_fragment(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "group"
+    cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in text)
+    cleaned = cleaned.strip("_")
+    return cleaned[:48] or "group"
+
+
+def _build_parallel_group_id(
+    *,
+    round_index: int | None,
+    batch_start_index: int,
+    parallel_group: list[ParallelCallSpec],
+) -> str:
+    round_part = max(1, int(round_index or 0) + 1)
+    batch_part = max(1, int(batch_start_index or 0) + 1)
+    first_call_id = ""
+    if parallel_group:
+        first_call_id = str(getattr(parallel_group[0].record, "call_id", "") or "").strip()
+    return f"parallel:{round_part}:{batch_part}:{_sanitize_parallel_group_fragment(first_call_id)}"
+
+
+def _build_parallel_progress_meta(
+    attempt_meta: dict | None,
+    *,
+    completed_count: int,
+    success_count: int,
+    failure_count: int,
+) -> dict:
+    meta = dict(attempt_meta or {})
+    if int(meta.get("parallel_size") or 0) <= 1:
+        return meta
+    meta.update(
+        {
+            "parallel_completed_count": max(0, int(completed_count or 0)),
+            "parallel_success_count": max(0, int(success_count or 0)),
+            "parallel_failure_count": max(0, int(failure_count or 0)),
+        }
+    )
+    return meta
+
+
 def _update_state_after_record(
     state: ToolCallBatchState,
     *,
@@ -131,6 +307,7 @@ def append_tool_batch_to_messages(
     outcome: ToolCallBatchOutcome,
     *,
     reasoning_details=None,
+    bundle: dict | None = None,
 ) -> None:
     from decision import reply_formatter as formatter
 
@@ -142,7 +319,14 @@ def append_tool_batch_to_messages(
                 reasoning_details=reasoning_details,
             )
         )
-    messages.extend(outcome.tool_messages)
+    messages.extend(
+        _budget_tool_messages_for_context(
+            formatter,
+            outcome.tool_messages,
+            records=outcome.records,
+            bundle=bundle,
+        )
+    )
     for note in outcome.guidance_notes:
         formatter._append_runtime_guidance(messages, note)
 
@@ -517,6 +701,37 @@ def _apply_exec_result(
     return False
 
 
+def _ordered_parallel_specs(
+    parallel_group: list[ParallelCallSpec],
+    completion_order: list[str] | None,
+) -> list[ParallelCallSpec]:
+    if not parallel_group:
+        return []
+
+    by_call_id = {
+        str(getattr(spec.record, "call_id", "") or "").strip(): spec
+        for spec in parallel_group
+    }
+    ordered: list[ParallelCallSpec] = []
+    seen: set[str] = set()
+
+    for call_id in completion_order or []:
+        normalized = str(call_id or "").strip()
+        spec = by_call_id.get(normalized)
+        if spec is None or normalized in seen:
+            continue
+        ordered.append(spec)
+        seen.add(normalized)
+
+    for spec in parallel_group:
+        normalized = str(getattr(spec.record, "call_id", "") or "").strip()
+        if normalized in seen:
+            continue
+        ordered.append(spec)
+
+    return ordered
+
+
 def execute_tool_call_batch(
     tool_calls: list[dict] | None,
     *,
@@ -664,6 +879,11 @@ def execute_tool_call_batch(
                 },
             )
             parallel_tools = [spec.tool_name for spec in parallel_group]
+            parallel_group_id = _build_parallel_group_id(
+                round_index=round_index,
+                batch_start_index=index,
+                parallel_group=parallel_group,
+            )
             attempt_meta_by_call_id: dict[str, dict] = {}
             for parallel_pos, spec in enumerate(parallel_group, start=1):
                 attempt_meta = build_attempt_process_meta(
@@ -674,6 +894,7 @@ def execute_tool_call_batch(
                     batch_size=len(prepared_calls),
                     parallel_index=parallel_pos,
                     parallel_size=len(parallel_group),
+                    parallel_group_id=parallel_group_id,
                     parallel_tools=parallel_tools,
                 )
                 attempt_meta_by_call_id[spec.record.call_id] = attempt_meta
@@ -706,10 +927,19 @@ def execute_tool_call_batch(
             except ParallelToolExecutionError as exc:
                 results_by_call_id = dict(exc.results_by_call_id)
                 interrupted_record = None
-                for spec in parallel_group:
+                ordered_specs = _ordered_parallel_specs(parallel_group, exc.completion_order)
+                completed_count = 0
+                success_count = 0
+                failure_count = 0
+                for spec in ordered_specs:
                     exec_result = results_by_call_id.get(spec.record.call_id)
                     if not isinstance(exec_result, dict):
                         continue
+                    completed_count += 1
+                    if bool(exec_result.get("success", False)):
+                        success_count += 1
+                    else:
+                        failure_count += 1
                     if _apply_exec_result(
                         formatter=formatter,
                         outcome=outcome,
@@ -726,7 +956,12 @@ def execute_tool_call_batch(
                         plan=call_plans[spec.index],
                         exec_result=exec_result,
                         round_index=round_index,
-                        attempt_meta=attempt_meta_by_call_id.get(spec.record.call_id),
+                        attempt_meta=_build_parallel_progress_meta(
+                            attempt_meta_by_call_id.get(spec.record.call_id),
+                            completed_count=completed_count,
+                            success_count=success_count,
+                            failure_count=failure_count,
+                        ),
                         event_callback=event_callback,
                     ):
                         return outcome
@@ -752,10 +987,19 @@ def execute_tool_call_batch(
                 raise exc.original_exception
 
             interrupted_record = None
-            for spec in parallel_group:
+            ordered_specs = _ordered_parallel_specs(parallel_group, parallel_result.completion_order)
+            completed_count = 0
+            success_count = 0
+            failure_count = 0
+            for spec in ordered_specs:
                 exec_result = results_by_call_id.get(spec.record.call_id)
                 if not isinstance(exec_result, dict):
                     continue
+                completed_count += 1
+                if bool(exec_result.get("success", False)):
+                    success_count += 1
+                else:
+                    failure_count += 1
                 if _apply_exec_result(
                     formatter=formatter,
                     outcome=outcome,
@@ -772,7 +1016,12 @@ def execute_tool_call_batch(
                     plan=call_plans[spec.index],
                     exec_result=exec_result,
                     round_index=round_index,
-                    attempt_meta=attempt_meta_by_call_id.get(spec.record.call_id),
+                    attempt_meta=_build_parallel_progress_meta(
+                        attempt_meta_by_call_id.get(spec.record.call_id),
+                        completed_count=completed_count,
+                        success_count=success_count,
+                        failure_count=failure_count,
+                    ),
                     event_callback=event_callback,
                 ):
                     return outcome

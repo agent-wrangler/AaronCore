@@ -593,6 +593,8 @@ def _llm_stream_anthropic(cfg: dict, messages: list, *, temperature: float = 0.7
         convert_messages_for_anthropic_tools_fn=_convert_messages_for_anthropic_tools,
         convert_tools_for_anthropic_fn=_convert_tools_for_anthropic,
         post_llm_request_fn=_post_llm_request,
+        llm_call_anthropic_fn=_llm_call_anthropic,
+        extract_network_meta_fn=_extract_network_meta,
     )
     return
     """Anthropic 流式调用"""

@@ -1,4 +1,5 @@
 import json
+import time
 import unittest
 from unittest.mock import patch
 
@@ -10,10 +11,18 @@ class _FakeStreamResponse:
         self._lines = list(lines or [])
         self.status_code = status_code
         self.text = text
+        self.closed = False
 
     def iter_lines(self, decode_unicode=True):
         for line in self._lines:
+            if self.closed:
+                return
+            if isinstance(line, BaseException):
+                raise line
             yield line
+
+    def close(self):
+        self.closed = True
 
 
 class _FakeJsonResponse:
@@ -24,6 +33,27 @@ class _FakeJsonResponse:
 
     def json(self):
         return self._payload
+
+
+class _SlowStreamResponse:
+    def __init__(self, *, delay_s: float, lines=None, status_code=200, text=""):
+        self.delay_s = delay_s
+        self._lines = list(lines or [])
+        self.status_code = status_code
+        self.text = text
+        self.closed = False
+
+    def iter_lines(self, decode_unicode=True):
+        time.sleep(self.delay_s)
+        if self.closed:
+            return
+        for line in self._lines:
+            if self.closed:
+                return
+            yield line
+
+    def close(self):
+        self.closed = True
 
 
 class BrainStreamTests(unittest.TestCase):
@@ -78,6 +108,172 @@ class BrainStreamTests(unittest.TestCase):
 
         self.assertTrue(any(isinstance(chunk, str) and "本地磁盘" in chunk for chunk in chunks))
         self.assertEqual(chunks[-1].get("_usage", {}).get("completion_tokens"), 7)
+
+    def test_openai_empty_completion_recovery_stays_stream_shaped(self):
+        cfg = {"model": "test-model", "base_url": "https://example.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "store locally"}]
+        recovered_text = (
+            "Recovered locally. "
+            "Recovered locally. "
+            "Recovered locally. "
+            "Recovered locally."
+        )
+
+        stream_resp = _FakeStreamResponse(lines=["data: [DONE]"])
+        retry_resp = _FakeJsonResponse(
+            {
+                "choices": [{"message": {"content": recovered_text}}],
+                "usage": {"prompt_tokens": 9, "completion_tokens": 7},
+            }
+        )
+
+        with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+            chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+
+        visible = [chunk for chunk in chunks if isinstance(chunk, str)]
+
+        self.assertGreater(len(visible), 1)
+        self.assertEqual("".join(visible), recovered_text)
+        self.assertFalse(any(isinstance(chunk, dict) and chunk.get("_stream_reset") for chunk in chunks))
+        self.assertEqual(chunks[-1].get("_usage", {}).get("completion_tokens"), 7)
+
+    def test_stream_idle_watchdog_times_out_when_provider_goes_silent(self):
+        resp = _SlowStreamResponse(delay_s=0.06, lines=["data: [DONE]"])
+
+        with self.assertRaises(TimeoutError):
+            list(brain_module._stream_runtime._iter_lines_with_idle_watchdog(resp, idle_timeout_s=0.02))
+
+    def test_openai_stream_resets_partial_visible_text_before_stream_recovery(self):
+        cfg = {"model": "test-model", "base_url": "https://example.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "hello"}]
+        recovered_text = "Recovered answer. Recovered answer. Recovered answer. Recovered answer."
+
+        stream_resp = _FakeStreamResponse(
+            lines=[
+                'data: {"choices":[{"delta":{"content":"Half answer. "}}]}',
+                RuntimeError("stream exploded"),
+            ]
+        )
+        retry_resp = _FakeJsonResponse(
+            {
+                "choices": [{"message": {"content": recovered_text}}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+            }
+        )
+
+        with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+            chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+
+        reset_index = next(
+            i for i, chunk in enumerate(chunks) if isinstance(chunk, dict) and chunk.get("_stream_reset")
+        )
+        streamed_tail = [
+            chunk
+            for chunk in chunks[reset_index + 1 :]
+            if isinstance(chunk, str)
+        ]
+
+        self.assertEqual(chunks[0], "Half answer. ")
+        self.assertEqual(chunks[reset_index].get("_stream_reset", {}).get("reason"), "stream_exception_fallback")
+        self.assertGreater(len(streamed_tail), 1)
+        self.assertEqual("".join(streamed_tail), recovered_text)
+        self.assertEqual(chunks[-1].get("_usage", {}).get("completion_tokens"), 2)
+
+    def test_openai_incomplete_stream_preserves_accumulated_tool_batch_before_recovery(self):
+        cfg = {"model": "test-model", "base_url": "https://example.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "inspect both"}]
+
+        stream_resp = _FakeStreamResponse(
+            lines=[
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"folder_explore","arguments":"{\\"query\\":\\"src\\"}"}}]}}]}',
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"search_text","arguments":"{\\"query\\":\\"TODO\\"}"}}]}}]}',
+            ]
+        )
+
+        with patch.object(brain_module, "_post_with_network_strategy", return_value=stream_resp):
+            chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+
+        tool_calls = next(chunk["_tool_calls"] for chunk in chunks if isinstance(chunk, dict) and chunk.get("_tool_calls"))
+
+        self.assertEqual([item["function"]["name"] for item in tool_calls], ["folder_explore", "search_text"])
+        self.assertFalse(any(isinstance(chunk, dict) and chunk.get("_stream_reset") for chunk in chunks))
+
+    def test_anthropic_incomplete_stream_preserves_accumulated_tool_batch_before_recovery(self):
+        cfg = {"model": "claude-test", "base_url": "https://api.anthropic.com", "api_key": "test"}
+        messages = [{"role": "user", "content": "inspect both"}]
+
+        stream_resp = _FakeStreamResponse(
+            lines=[
+                'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call_1","name":"folder_explore","input":{"query":"src"}}}',
+                'data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call_2","name":"search_text","input":{"query":"TODO"}}}',
+            ]
+        )
+
+        with patch.object(brain_module, "_post_with_network_strategy", return_value=stream_resp):
+            chunks = list(brain_module._llm_stream_anthropic(cfg, messages, tools=[]))
+
+        tool_calls = next(chunk["_tool_calls"] for chunk in chunks if isinstance(chunk, dict) and chunk.get("_tool_calls"))
+
+        self.assertEqual([item["function"]["name"] for item in tool_calls], ["folder_explore", "search_text"])
+        self.assertFalse(any(isinstance(chunk, dict) and chunk.get("_stream_reset") for chunk in chunks))
+
+    def test_openai_stream_resets_partial_visible_text_when_stream_ends_without_done(self):
+        cfg = {"model": "test-model", "base_url": "https://example.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "hello"}]
+
+        stream_resp = _FakeStreamResponse(
+            lines=[
+                'data: {"choices":[{"delta":{"content":"Half answer. "}}]}',
+            ]
+        )
+        retry_resp = _FakeJsonResponse(
+            {
+                "choices": [{"message": {"content": "Recovered after EOF."}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+            }
+        )
+
+        with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+            chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+
+        reset_index = next(
+            i for i, chunk in enumerate(chunks) if isinstance(chunk, dict) and chunk.get("_stream_reset")
+        )
+
+        self.assertEqual(chunks[0], "Half answer. ")
+        self.assertEqual(chunks[reset_index].get("_stream_reset", {}).get("reason"), "stream_incomplete_fallback")
+        self.assertEqual(chunks[reset_index + 1], "Recovered after EOF.")
+        self.assertEqual(chunks[-1].get("_usage", {}).get("completion_tokens"), 2)
+
+    def test_anthropic_stream_resets_partial_visible_text_before_stream_recovery(self):
+        cfg = {"model": "claude-test", "base_url": "https://api.anthropic.com", "api_key": "test"}
+        messages = [{"role": "user", "content": "hello"}]
+
+        stream_resp = _FakeStreamResponse(
+            lines=[
+                'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Half anthropic. "}}',
+                RuntimeError("anthropic stream exploded"),
+            ]
+        )
+        retry_resp = _FakeJsonResponse(
+            {
+                "content": [{"type": "text", "text": "Recovered anthropic."}],
+                "usage": {"input_tokens": 6, "output_tokens": 3},
+            }
+        )
+
+        with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+            chunks = list(brain_module._llm_stream_anthropic(cfg, messages, tools=[]))
+
+        reset_index = next(
+            i for i, chunk in enumerate(chunks) if isinstance(chunk, dict) and chunk.get("_stream_reset")
+        )
+
+        self.assertEqual(chunks[0], "Half anthropic. ")
+        self.assertEqual(chunks[reset_index].get("_stream_reset", {}).get("reason"), "stream_exception_fallback")
+        self.assertEqual(chunks[reset_index + 1], "Recovered anthropic.")
+        self.assertEqual(chunks[-1].get("_usage", {}).get("completion_tokens"), 3)
 
     def test_codex_cli_stream_uses_incremental_transport(self):
         cfg = {"model": "gpt-5.4-mini", "transport": "codex_cli", "base_url": "codex://local"}

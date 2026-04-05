@@ -1,0 +1,86 @@
+<svg width="360" height="260" viewBox="0 0 360 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="engineCoreGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(180 124) rotate(90) scale(34 34)">
+      <stop stop-color="#A5EBFF"/>
+      <stop offset="0.42" stop-color="#5EC4FF"/>
+      <stop offset="1" stop-color="#213D85"/>
+    </radialGradient>
+    <linearGradient id="engineOuterTop" x1="88" y1="58" x2="274" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4863C5"/>
+      <stop offset="0.55" stop-color="#27439C"/>
+      <stop offset="1" stop-color="#17275F"/>
+    </linearGradient>
+    <linearGradient id="engineOuterWall" x1="180" y1="92" x2="180" y2="198" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#243F8D"/>
+      <stop offset="1" stop-color="#0A1335"/>
+    </linearGradient>
+    <linearGradient id="engineMidTop" x1="104" y1="72" x2="256" y2="178" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#407CF4"/>
+      <stop offset="1" stop-color="#21408A"/>
+    </linearGradient>
+    <linearGradient id="engineMidWall" x1="180" y1="102" x2="180" y2="184" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B367C"/>
+      <stop offset="1" stop-color="#091430"/>
+    </linearGradient>
+    <linearGradient id="engineInnerTop" x1="124" y1="86" x2="238" y2="164" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#689BFF"/>
+      <stop offset="1" stop-color="#2B51A8"/>
+    </linearGradient>
+    <linearGradient id="engineInnerWall" x1="180" y1="108" x2="180" y2="172" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1C3878"/>
+      <stop offset="1" stop-color="#0A1430"/>
+    </linearGradient>
+    <linearGradient id="bladeFill" x1="148" y1="92" x2="211" y2="156" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C7F2FF"/>
+      <stop offset="1" stop-color="#4E89F2"/>
+    </linearGradient>
+    <filter id="engineGlow" x="112" y="54" width="136" height="140" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="engineShadow" x="52" y="44" width="256" height="180" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#040812" flood-opacity="0.46"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#engineShadow)">
+    <ellipse cx="180" cy="126" rx="98" ry="60" fill="#081025" fill-opacity="0.72"/>
+
+    <path d="M82 126C82 92.863 125.876 66 180 66C234.124 66 278 92.863 278 126V152C278 185.137 234.124 212 180 212C125.876 212 82 185.137 82 152V126Z" fill="url(#engineOuterWall)"/>
+    <ellipse cx="180" cy="126" rx="98" ry="60" fill="url(#engineOuterTop)"/>
+    <ellipse cx="180" cy="119" rx="86" ry="48" fill="#223A7B"/>
+
+    <path d="M94 119C94 92.49 132.503 71 180 71C227.497 71 266 92.49 266 119V140C266 166.51 227.497 188 180 188C132.503 188 94 166.51 94 140V119Z" fill="url(#engineMidWall)"/>
+    <ellipse cx="180" cy="119" rx="86" ry="48" fill="url(#engineMidTop)"/>
+    <ellipse cx="180" cy="114" rx="60" ry="32" fill="#2D57B2"/>
+
+    <path d="M120 114C120 96.327 146.863 82 180 82C213.137 82 240 96.327 240 114V130C240 147.673 213.137 162 180 162C146.863 162 120 147.673 120 130V114Z" fill="url(#engineInnerWall)"/>
+    <ellipse cx="180" cy="114" rx="60" ry="32" fill="url(#engineInnerTop)"/>
+
+    <path d="M180 90L192 111L180 132L168 111L180 90Z" fill="url(#bladeFill)"/>
+    <path d="M214 107L200 123L178 123L192 107L214 107Z" fill="url(#bladeFill)"/>
+    <path d="M146 107L168 107L182 123L160 123L146 107Z" fill="url(#bladeFill)"/>
+    <path d="M196 139L183 155L180 155L193 139L196 139Z" fill="url(#bladeFill)" fill-opacity="0.9"/>
+    <path d="M164 139L177 155L180 155L167 139L164 139Z" fill="url(#bladeFill)" fill-opacity="0.9"/>
+
+    <ellipse cx="180" cy="114" rx="26" ry="18" fill="#21449B"/>
+    <g filter="url(#engineGlow)">
+      <ellipse cx="180" cy="114" rx="22" ry="15" fill="url(#engineCoreGlow)"/>
+    </g>
+    <ellipse cx="176" cy="108" rx="7" ry="5" fill="#E6FAFF" fill-opacity="0.88"/>
+
+    <path d="M111 101L126 111L111 121L96 111L111 101Z" fill="#1A2D67"/>
+    <path d="M249 101L264 111L249 121L234 111L249 101Z" fill="#1A2D67"/>
+    <path d="M180 175L194 184L180 193L166 184L180 175Z" fill="#223F81"/>
+
+    <circle cx="111" cy="111" r="6" fill="#7AD7FF"/>
+    <circle cx="249" cy="111" r="6" fill="#7AD7FF"/>
+    <circle cx="180" cy="184" r="6" fill="#B7FF6A"/>
+
+    <path d="M108 93C126 77 151 66 180 66C209 66 234 77 252 93" stroke="#A8C6FF" stroke-opacity="0.32" stroke-width="4" stroke-linecap="round"/>
+    <path d="M122 104C138 92 157 84 180 84C203 84 222 92 238 104" stroke="#D2E0FF" stroke-opacity="0.2" stroke-width="3" stroke-linecap="round"/>
+
+    <ellipse cx="180" cy="126" rx="98" ry="60" stroke="#5E80E6" stroke-opacity="0.46" stroke-width="4"/>
+    <ellipse cx="180" cy="119" rx="86" ry="48" stroke="#7FA6FF" stroke-opacity="0.3" stroke-width="3"/>
+    <ellipse cx="180" cy="114" rx="60" ry="32" stroke="#A1BDFF" stroke-opacity="0.22" stroke-width="2"/>
+  </g>
+</svg>

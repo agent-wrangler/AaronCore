@@ -403,6 +403,9 @@ var _runNumber=_nextRunPanelConsoleCounter();
 var _runStartedAt=Date.now();
 var _runFinishedAt=0;
 var _runElapsedTimer=0;
+var _runPanelAutoFollow=true;
+var _runPanelScrollFollowBound=false;
+var _runPanelFollowRAF=0;
 
   var replyText='';
   var replyImage='';
@@ -555,13 +558,57 @@ function _getRunPanelStepBadge(stepObj){
  return '[WAIT]';
 }
 
+function _isRunPanelNearBottom(threshold){
+ if(!_runPanelEls || !_runPanelEls.stream) return true;
+ var host=_runPanelEls.stream;
+ var gap=host.scrollHeight-host.scrollTop-host.clientHeight;
+ return gap < (typeof threshold==='number' ? threshold : 72);
+}
+
+function _syncRunPanelAutoFollow(){
+ _runPanelAutoFollow=_isRunPanelNearBottom(72);
+}
+
+function _attachRunPanelScrollFollow(){
+ if(!_runPanelEls || !_runPanelEls.stream || _runPanelScrollFollowBound) return;
+ _runPanelEls.stream.addEventListener('scroll', _syncRunPanelAutoFollow, {passive:true});
+ _runPanelScrollFollowBound=true;
+ _syncRunPanelAutoFollow();
+}
+
+function _detachRunPanelScrollFollow(){
+ if(_runPanelEls && _runPanelEls.stream && _runPanelScrollFollowBound){
+  _runPanelEls.stream.removeEventListener('scroll', _syncRunPanelAutoFollow);
+ }
+ _runPanelScrollFollowBound=false;
+}
+
+function _queueRunPanelFollow(force){
+ if(!_runPanelEls || !_runPanelEls.stream) return;
+ if(!force && !_runPanelAutoFollow) return;
+ if(_runPanelFollowRAF){
+  cancelAnimationFrame(_runPanelFollowRAF);
+ }
+ _runPanelFollowRAF=requestAnimationFrame(function(){
+  _runPanelFollowRAF=0;
+  requestAnimationFrame(function(){
+   if(!_runPanelEls || !_runPanelEls.stream) return;
+   if(!force && !_runPanelAutoFollow) return;
+   var host=_runPanelEls.stream;
+   host.scrollTop=host.scrollHeight;
+  });
+ });
+}
+
 function _ensureRunPanelEntries(){
  if(!_runPanelEls || !_runPanelEls.stream) return;
+ var shouldFollow=_runPanelAutoFollow;
  var steps=pendingState.steps||[];
  _runPanelEls.stream.setAttribute('data-step-count', String(steps.length));
  if(!steps.length){
   _runPanelEls.stream.innerHTML='<div class="run-panel-empty" id="runPanelEmpty">'+_escapeRunPanelText(_runPanelCopy.empty)+'</div>';
   _runPanelEls.empty=document.getElementById('runPanelEmpty');
+  _queueRunPanelFollow(shouldFollow);
   return;
  }
  var html='';
@@ -595,7 +642,7 @@ function _ensureRunPanelEntries(){
  _runPanelEls.stream.innerHTML=html;
  _runPanelEls.stream.setAttribute('data-rendered-count', String(renderedCount));
  _runPanelEls.empty=_runPanelEls.stream.querySelector('#runPanelEmpty');
- _runPanelEls.stream.scrollTop=_runPanelEls.stream.scrollHeight;
+ _queueRunPanelFollow(shouldFollow);
 }
 
 function _startRunElapsedClock(){
@@ -613,7 +660,14 @@ function _stopRunElapsedClock(){
  }
 }
 
-function _syncRunPanelHeader(){
+function _collectStepToolNames(step){
+ var names=(typeof _normalizeStepNameList==='function') ? _normalizeStepNameList(step&&step.parallelTools) : [];
+ if(names.length) return names;
+ var primary=String((step&&(step.toolName||step.toolKey))||'').trim();
+ return primary ? [primary] : [];
+}
+
+  function _syncRunPanelHeader(){
   if(!_runPanelEls) return;
   var steps=pendingState.steps||[];
   var runningStep=null;
@@ -626,8 +680,11 @@ function _syncRunPanelHeader(){
    if(!step) continue;
    if(step.status==='running') runningStep=step;
    if(step.status==='error') errorCount++;
-   var toolKey=String(step.toolName||step.toolKey||'').trim();
-   if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
+    var toolNames=_collectStepToolNames(step);
+    for(var ti=0;ti<toolNames.length;ti++){
+     var toolKey=String(toolNames[ti]||'').trim();
+     if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
+    }
    var fileSources=[
     step.label,
     step.displayLabel,
@@ -701,12 +758,15 @@ function _syncRunPanelHeader(){
    var toolMap={};
    var fileMap={};
    for(var i=0;i<steps.length;i++){
-    var step=steps[i];
-    if(!step) continue;
-    if(step.status==='running') runningStep=step;
-    if(step.status==='error') errorCount++;
-    var toolKey=String(step.toolName||step.toolKey||'').trim();
-    if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
+   var step=steps[i];
+   if(!step) continue;
+   if(step.status==='running') runningStep=step;
+   if(step.status==='error') errorCount++;
+    var toolNames=_collectStepToolNames(step);
+    for(var ti=0;ti<toolNames.length;ti++){
+     var toolKey=String(toolNames[ti]||'').trim();
+     if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
+    }
     var fileSources=[
      step.label,
      step.displayLabel,
@@ -780,8 +840,11 @@ function _syncRunPanelHeader(){
     if(!step) continue;
     if(step.status==='running') runningStep=step;
     if(step.status==='error') errorCount++;
-    var toolKey=String(step.toolName||step.toolKey||'').trim();
-    if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
+    var toolNames=_collectStepToolNames(step);
+    for(var ti=0;ti<toolNames.length;ti++){
+     var toolKey=String(toolNames[ti]||'').trim();
+     if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
+    }
     var fileSources=[
      step.label,
      step.displayLabel,
@@ -864,6 +927,8 @@ function _syncRunPanelEntry(stepObj){
 
 function _resetRunPanelForCurrentRun(){
  if(!_runPanelEls) return;
+ _attachRunPanelScrollFollow();
+ _runPanelAutoFollow=true;
  if(_runPanelEls.stream) _runPanelEls.stream.innerHTML='';
  if(_runPanelEls.empty){
   _runPanelEls.empty.style.display='';
@@ -871,6 +936,7 @@ function _resetRunPanelForCurrentRun(){
  }
   _setRunPanelEmptyState('idle');
   _runFinishedAt=0;
+ _queueRunPanelFollow(true);
  _startRunElapsedClock();
  _syncRunPanelHeader();
 }
@@ -1022,18 +1088,19 @@ function _ensureTraceDetached(){
   };
  }
 
- function _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state){
+function _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state){
   var summaryParts=[];
   var fullParts=[];
   var lead=_stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull) || _stepMetaText(card&&card.goal) || _stepMetaText(card&&card.handoff_note) || _stepMetaText(card&&card.expected_output);
   var goal=_stepMetaText(card&&card.goal);
   var expected=_stepMetaText(card&&card.expected_output);
+  var parallelSize=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_size) : 0;
   _appendUniqueStepMeta(summaryParts, lead, '');
   _appendUniqueStepMeta(fullParts, lead, '');
-  if(String(state||'')==='running' && goal){
+  if(parallelSize<=1 && String(state||'')==='running' && goal){
    _appendUniqueStepMeta(fullParts, goal, '目标：');
   }
-  if(String(state||'')==='running' && expected){
+  if(parallelSize<=1 && String(state||'')==='running' && expected){
    _appendUniqueStepMeta(fullParts, expected, '预期：');
   }
   return {
@@ -1051,7 +1118,7 @@ function _ensureTraceDetached(){
   };
  }
 
- function _normalizeStepCard(card){
+function _normalizeStepCard(card){
   var rawLabel=String((card&&card.label)||'').trim();
   var rawStatus=String((card&&card.status)||'running');
   var state=(rawStatus==='error'?'error':(rawStatus==='running'?'running':'done'));
@@ -1059,24 +1126,34 @@ function _ensureTraceDetached(){
   var rawFullDetail=String((card&&((card.full_detail&&String(card.full_detail).trim())||card.detail))||'').trim();
   var summaryDetail=rawSummaryDetail;
   var fullDetail=rawFullDetail;
+  var explicitPhase=String((card&&card.phase)||'').trim().toLowerCase();
+  var parallelGroupId=String((card&&card.parallel_group_id)||'').trim();
+  var parallelIndex=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_index) : 0;
+  var parallelSize=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_size) : 0;
+  var parallelCompletedCount=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_completed_count) : 0;
+  var parallelSuccessCount=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_success_count) : 0;
+  var parallelFailureCount=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_failure_count) : 0;
+  var parallelTools=(typeof _normalizeStepNameList==='function') ? _normalizeStepNameList(card&&card.parallel_tools) : [];
+  var toolName=String((card&&card.tool_name)||'').trim();
   var phase='info';
   var displayLabel=rawLabel||t('chat.process');
   var toolKey='';
   var toolFallback=_toolLabelFallback(rawLabel);
-  if(_looksLikeThinkingLabel(rawLabel)){
+  var isParallelTool=!!(parallelGroupId && parallelSize>1);
+  if(explicitPhase==='thinking' || (!explicitPhase && _looksLikeThinkingLabel(rawLabel))){
    phase='thinking';
    displayLabel='Thinking';
-  }else if(_looksLikeMemoryLoadLabel(rawLabel)){
+  }else if((explicitPhase==='info' || !explicitPhase) && _looksLikeMemoryLoadLabel(rawLabel)){
    displayLabel='memory_load';
-  }else if(toolFallback){
+  }else if(explicitPhase==='tool' || toolFallback){
     phase='tool';
-    toolKey=_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)||toolFallback;
-    displayLabel=toolKey||toolFallback||'tool';
+    toolKey=toolName||_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)||toolFallback||(parallelTools[0]||'');
+    displayLabel=isParallelTool ? (rawLabel||'并行调用') : (toolKey||toolFallback||rawLabel||'tool');
     fullDetail=_extractToolDetail(rawFullDetail)||rawFullDetail||rawSummaryDetail;
     summaryDetail=_extractToolDetail(rawSummaryDetail)||fullDetail||rawSummaryDetail;
-    fullDetail=_simplifyToolDetail(fullDetail, toolKey, state);
-    summaryDetail=_simplifyToolDetail(summaryDetail, toolKey, state);
-  }else if(/\u7b49\u5f85|waiting/i.test(rawLabel)){
+    fullDetail=_simplifyToolDetail(fullDetail, isParallelTool ? '' : toolKey, state);
+    summaryDetail=_simplifyToolDetail(summaryDetail, isParallelTool ? '' : toolKey, state);
+  }else if(explicitPhase==='waiting' || /\u7b49\u5f85|waiting/i.test(rawLabel)){
     phase='waiting';
     displayLabel='waiting';
   }else{
@@ -1090,7 +1167,6 @@ function _ensureTraceDetached(){
   var handoffNote=String((card&&card.handoff_note)||'').trim();
   var expectedOutput=String((card&&card.expected_output)||'').trim();
   var nextUserNeed=String((card&&card.next_user_need)||'').trim();
-  var toolName=String((card&&card.tool_name)||'').trim();
   var structuredDetail=_buildStructuredProcessDetail(card, phase, state, summaryDetail, fullDetail);
   summaryDetail=structuredDetail.summary;
   fullDetail=structuredDetail.full;
@@ -1115,9 +1191,16 @@ function _ensureTraceDetached(){
    handoffNote:handoffNote,
    expectedOutput:expectedOutput,
    nextUserNeed:nextUserNeed,
-   toolName:toolName
+   toolName:toolName,
+   parallelGroupId:parallelGroupId,
+   parallelIndex:parallelIndex,
+   parallelSize:parallelSize,
+   parallelCompletedCount:parallelCompletedCount,
+   parallelSuccessCount:parallelSuccessCount,
+   parallelFailureCount:parallelFailureCount,
+   parallelTools:parallelTools
   };
- }
+}
 
  function _buildActivitySummary(meta){
   if(!meta) return '';
@@ -1253,10 +1336,17 @@ function _ensureTraceDetached(){
   stepObj.reasonKind=meta.reasonKind;
   stepObj.goal=meta.goal;
   stepObj.decisionNote=meta.decisionNote;
-  stepObj.handoffNote=meta.handoffNote;
-  stepObj.expectedOutput=meta.expectedOutput;
-  stepObj.nextUserNeed=meta.nextUserNeed;
-  stepObj.toolName=meta.toolName;
+ stepObj.handoffNote=meta.handoffNote;
+ stepObj.expectedOutput=meta.expectedOutput;
+ stepObj.nextUserNeed=meta.nextUserNeed;
+ stepObj.toolName=meta.toolName;
+  stepObj.parallelGroupId=meta.parallelGroupId;
+  stepObj.parallelIndex=meta.parallelIndex;
+  stepObj.parallelSize=meta.parallelSize;
+  stepObj.parallelCompletedCount=meta.parallelCompletedCount;
+  stepObj.parallelSuccessCount=meta.parallelSuccessCount;
+  stepObj.parallelFailureCount=meta.parallelFailureCount;
+  stepObj.parallelTools=meta.parallelTools;
   stepObj.displayLabel=meta.displayLabel;
   if(stepObj.labelEl) stepObj.labelEl.textContent=meta.displayLabel||t('chat.process');
   if(stepObj.kind==='process') _syncProcessPhase(stepObj);
@@ -1277,7 +1367,14 @@ function _ensureTraceDetached(){
    handoff_note:meta.handoffNote,
    expected_output:meta.expectedOutput,
    next_user_need:meta.nextUserNeed,
-   tool_name:meta.toolName
+   tool_name:meta.toolName,
+   parallel_group_id:meta.parallelGroupId,
+   parallel_index:meta.parallelIndex,
+   parallel_size:meta.parallelSize,
+   parallel_completed_count:meta.parallelCompletedCount,
+   parallel_success_count:meta.parallelSuccessCount,
+   parallel_failure_count:meta.parallelFailureCount,
+   parallel_tools:meta.parallelTools
   });
   step.label=meta.rawLabel;
   step.displayLabel=meta.displayLabel;
@@ -1293,9 +1390,16 @@ function _ensureTraceDetached(){
   step.expectedOutput=meta.expectedOutput;
   step.nextUserNeed=meta.nextUserNeed;
   step.toolName=meta.toolName;
+  step.parallelGroupId=meta.parallelGroupId;
+  step.parallelIndex=meta.parallelIndex;
+  step.parallelSize=meta.parallelSize;
+  step.parallelCompletedCount=meta.parallelCompletedCount;
+  step.parallelSuccessCount=meta.parallelSuccessCount;
+  step.parallelFailureCount=meta.parallelFailureCount;
+  step.parallelTools=meta.parallelTools;
   chat.insertBefore(step.root, pendingState.root);
   return step;
- }
+}
 
  function _canMergeStep(existing, meta){
   if(!existing || !meta) return false;
@@ -1402,7 +1506,7 @@ function _renderPendingPlan(plan){
   _stickChatToBottom();
  }
 
- function _collapseSteps(){
+function _collapseSteps(){
   var steps=pendingState.steps;
   if(steps.length===0){
    _syncTrackerChrome();
@@ -1413,6 +1517,38 @@ function _renderPendingPlan(plan){
   }
   pendingState.userToggledSteps=false;
   _setTrackerExpanded(_hasErroredSteps(), false);
+ }
+
+ function _tombstoneAbandonedStreamAttempt(){
+  var kept=[];
+  for(var i=0;i<pendingState.steps.length;i++){
+   var step=pendingState.steps[i];
+   var phase=String((step&&step.phase)||'').toLowerCase();
+   if(phase==='thinking' || phase==='tool' || phase==='waiting'){
+    if(step && step.root && step.root.parentNode){
+     step.root.parentNode.removeChild(step.root);
+    }
+    continue;
+   }
+   kept.push(step);
+  }
+  pendingState.steps=kept;
+  if(kept.length){
+   var last=kept[kept.length-1];
+   pendingState.activitySummary=_buildActivitySummary({
+    displayLabel:last.displayLabel||last.label||t('chat.process'),
+    summaryDetail:last.summaryDetail||'',
+    fullDetail:last.fullDetail||'',
+    phase:last.phase||'info'
+   });
+  }else{
+   pendingState.activitySummary='';
+   pendingState.userToggledSteps=false;
+   _setRunPanelEmptyState('quiet');
+  }
+  _ensureRunPanelEntries();
+  _syncRunPanelHeader();
+  _syncTrackerChrome();
  }
 
  function _initStreamBubble(){
@@ -1568,7 +1704,8 @@ function _streamLineHtml(line){
     html=formatMarkdownInline(text);
   }else{
     html=escapeHtml(text);
-    html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    html=html.replace(/\*\*(.+?)\*\*/g,'$1');
+    html=html.replace(/__(.+?)__/g,'$1');
     html=html.replace(/`([^`]+)`/g,'<code>$1</code>');
   }
   return '<p>'+html+'</p>';
@@ -1950,6 +2087,7 @@ function _resetActiveStreamRender(){
    cancelAnimationFrame(_scrollRAF);
    _scrollRAF=0;
   }
+  _removeTrailingStreamParts(0);
   _streamBubble=null;
   _streamBlocksEl=null;
   _streamLineEl=null;
@@ -1959,6 +2097,7 @@ function _resetActiveStreamRender(){
   _streamTokenCount=0;
   _streamStarted=false;
   _suppressTypingCursor=false;
+  _thinkingContent='';
   if(pendingState.contentArea){
    pendingState.contentArea.innerHTML='';
    pendingState.contentArea.style.display='none';
@@ -2046,7 +2185,14 @@ function _finalizeStream(fullText){
       handoff_note:s.handoffNote||'',
       expected_output:s.expectedOutput||'',
       next_user_need:s.nextUserNeed||'',
-      tool_name:s.toolName||''
+      tool_name:s.toolName||'',
+      parallel_group_id:s.parallelGroupId||'',
+      parallel_index:s.parallelIndex||0,
+      parallel_size:s.parallelSize||0,
+      parallel_completed_count:s.parallelCompletedCount||0,
+      parallel_success_count:s.parallelSuccessCount||0,
+      parallel_failure_count:s.parallelFailureCount||0,
+      parallel_tools:Array.isArray(s.parallelTools)?s.parallelTools:[]
      };
     });
     // 只保留最近 200 条
@@ -2157,7 +2303,15 @@ function _renderReplyViaStream(text){
            }
           }
           if(_runningStep){
-           if(_waitLabel && _runningStep.label!==_waitLabel && (!_waitStepKey || _runningStep.stepKey!==_waitStepKey)){
+           var _preserveThinkingStep=(_runningStep.phase==='thinking');
+           if(_preserveThinkingStep){
+            if(parsed.step_key) _runningStep.stepKey=parsed.step_key;
+            if(_waitDetail){
+             _syncRunPanelEntry(_runningStep);
+             _syncRunPanelHeader();
+             _stickChatToBottom();
+            }
+           }else if(_waitLabel && _runningStep.label!==_waitLabel && (!_waitStepKey || _runningStep.stepKey!==_waitStepKey)){
             addStep({
              label:_waitLabel,
              detail:_waitDetail||_waitLabel,
@@ -2219,6 +2373,7 @@ function _renderReplyViaStream(text){
        }
        }else if(currentEvent==='stream_reset'){
         _resetActiveStreamRender();
+        _tombstoneAbandonedStreamAttempt();
       }else if(currentEvent==='repair'){
        repairData=parsed;
       }else if(currentEvent==='awareness'){

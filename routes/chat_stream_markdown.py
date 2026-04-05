@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import re
 
 from core.markdown_render import render_markdown_html
+from decision.reply_hygiene import strip_chat_emphasis_markdown
 
 
 _BLOCK_START_RE = re.compile(r"^(?:#{1,6}\s|[-*+]\s+|\d+[.)]\s+|>\s?)")
@@ -12,15 +13,7 @@ _COMPLEX_BLOCK_RE = re.compile(r"^\s*(?:[-*+]\s+|#{1,6}\s|>\s|\d+[.)]\s+)", re.M
 
 def _sanitize_stream_render_text(text: str) -> str:
     source = str(text or "")
-    if "**" not in source and "__" not in source:
-        return source
-    if "```" in source:
-        return source
-    if _COMPLEX_BLOCK_RE.search(source):
-        return source
-    if len([line for line in source.splitlines() if line.strip()]) > 8:
-        return source
-    return source.replace("**", "").replace("__", "")
+    return strip_chat_emphasis_markdown(source, re_mod=re)
 
 
 def find_markdown_commit_boundary(text: str) -> int:

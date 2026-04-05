@@ -35,6 +35,7 @@ def build_attempt_process_meta(
     batch_size: int,
     parallel_index: int = 0,
     parallel_size: int = 0,
+    parallel_group_id: str = "",
     parallel_tools: list[str] | None = None,
 ) -> dict:
     attempts = [item for item in (recent_attempts or []) if isinstance(item, dict)]
@@ -62,6 +63,7 @@ def build_attempt_process_meta(
         "batch_size": int(batch_size or 0),
         "parallel_index": int(parallel_index or 0),
         "parallel_size": int(parallel_size or 0),
+        "parallel_group_id": _clean_text(parallel_group_id),
         "parallel_tools": [str(name or "").strip() for name in (parallel_tools or []) if str(name or "").strip()],
         "previous_tool": previous_tool,
         "previous_success": previous_success,

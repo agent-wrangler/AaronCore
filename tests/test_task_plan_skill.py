@@ -227,9 +227,12 @@ class TaskPlanSkillTests(unittest.TestCase):
 
         session_context = session_context_module.extract_session_context([], "continue NovaNotes")
 
-        self.assertEqual(session_context.get("intent"), "task_continue")
+        self.assertEqual(session_context.get("intent"), "")
         self.assertIn("continue NovaNotes", session_context.get("topics") or [])
-        self.assertIn("working on Patch lower layers", session_context.get("user_state") or "")
+        self.assertIn("open task context", session_context.get("user_state") or "")
+        self.assertIn("continue only if the current user input clearly refers to this task", session_context.get("user_state") or "")
+        self.assertEqual(session_context.get("current_focus"), "Patch lower layers")
+        self.assertEqual(session_context.get("resume_point"), "Patch lower layers")
         self.assertEqual((session_context.get("working_state") or {}).get("current_step"), "Patch lower layers")
 
     def test_mid_sentence_continue_phrase_does_not_resume_unrelated_task_plan(self):

@@ -567,7 +567,7 @@ async def home():
             return Response(content=html, media_type="text/html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         except Exception:
             pass
-    return Response(content="<html><head><meta charset='UTF-8'><title>NovaCore</title></head><body><h1>NovaCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>", media_type="text/html", headers={"Cache-Control": "no-cache"})
+    return Response(content="<html><head><meta charset='UTF-8'><title>AaronCore</title></head><body><h1>AaronCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>", media_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/runtime_graph_view", response_class=HTMLResponse)
@@ -600,5 +600,5 @@ async def get_restored_output_js():
 
 if __name__ == "__main__":
     import uvicorn
-    print("NovaCore: http://localhost:8090")
+    print("AaronCore: http://localhost:8090")
     uvicorn.run(app, host="0.0.0.0", port=8090)

@@ -1307,14 +1307,23 @@ async def get_stats():
     except Exception:
         mem["real_l3_count"] = mem.get("l3_count", 0)
     try:
-        from capability_registry import get_all_skills
-        mem["real_l5_count"] = len(get_all_skills())
+        l5_raw = json.loads((S.PRIMARY_STATE_DIR / "knowledge.json").read_text("utf-8"))
+        visible_l5 = [
+            item for item in l5_raw
+            if isinstance(item, dict) and str(item.get("source") or "").strip() != "l2_demand"
+        ] if isinstance(l5_raw, list) else []
+        mem["real_l5_count"] = len(visible_l5)
     except Exception:
-        try:
-            kb = json.loads((S.PRIMARY_STATE_DIR / "knowledge.json").read_text("utf-8"))
-            mem["real_l5_count"] = len(kb) if isinstance(kb, list) else 0
-        except Exception:
-            mem["real_l5_count"] = mem.get("l5_count", 0)
+        mem["real_l5_count"] = mem.get("l5_count", 0)
+    try:
+        l8_raw = json.loads((S.PRIMARY_STATE_DIR / "knowledge_base.json").read_text("utf-8"))
+        visible_l8 = [
+            item for item in l8_raw
+            if isinstance(item, dict) and should_show_l8_timeline_entry(item)
+        ] if isinstance(l8_raw, list) else []
+        mem["real_l8_count"] = len(visible_l8)
+    except Exception:
+        mem["real_l8_count"] = mem.get("l8_count", 0)
     try:
         persona = json.loads((S.PRIMARY_STATE_DIR / "persona.json").read_text("utf-8"))
         if not isinstance(persona, dict):
@@ -1416,7 +1425,7 @@ async def get_nova_name():
     if persona_path.exists():
         try:
             persona = json.loads(persona_path.read_text(encoding="utf-8"))
-            return {"name": persona.get("nova_name", "NovaCore")}
+            return {"name": persona.get("nova_name", "AaronCore")}
         except Exception:
             pass
-    return {"name": "NovaCore"}
+    return {"name": "AaronCore"}

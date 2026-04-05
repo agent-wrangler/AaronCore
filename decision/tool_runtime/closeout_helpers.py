@@ -97,10 +97,30 @@ def finalize_tool_reply(
     run_meta: dict | None = None,
     clean_visible_reply_text,
     looks_like_tool_preamble,
+    looks_like_structured_tool_handoff,
+    looks_like_trailing_tool_handoff,
     build_tool_closeout_reply,
+    re_mod,
 ) -> str:
     cleaned = clean_visible_reply_text(raw_reply)
-    if cleaned and not looks_like_tool_preamble(cleaned):
+    if cleaned and looks_like_structured_tool_handoff(cleaned):
+        return build_tool_closeout_reply(
+            success=success,
+            action_summary=action_summary,
+            tool_response=tool_response,
+            run_meta=run_meta,
+        )
+    cleaned = strip_trailing_tool_handoff(
+        cleaned,
+        clean_visible_reply_text=clean_visible_reply_text,
+        looks_like_tool_preamble=looks_like_tool_preamble,
+        looks_like_structured_tool_handoff=looks_like_structured_tool_handoff,
+        looks_like_trailing_tool_handoff=looks_like_trailing_tool_handoff,
+        re_mod=re_mod,
+    )
+    if cleaned and not (
+        looks_like_tool_preamble(cleaned) or looks_like_structured_tool_handoff(cleaned)
+    ):
         return cleaned
     return build_tool_closeout_reply(
         success=success,
@@ -115,6 +135,7 @@ def has_only_preamble_text(
     *,
     clean_visible_reply_text,
     looks_like_tool_preamble,
+    looks_like_structured_tool_handoff,
 ) -> bool:
     visible = []
     for chunk in chunks or []:
@@ -125,4 +146,54 @@ def has_only_preamble_text(
             visible.append(cleaned)
     if not visible:
         return True
-    return all(looks_like_tool_preamble(text) for text in visible)
+    joined = clean_visible_reply_text("\n\n".join(visible))
+    if joined and (
+        looks_like_tool_preamble(joined) or looks_like_structured_tool_handoff(joined)
+    ):
+        return True
+    return all(
+        looks_like_tool_preamble(text) or looks_like_structured_tool_handoff(text)
+        for text in visible
+    )
+
+
+def strip_trailing_tool_handoff(
+    text: str,
+    *,
+    clean_visible_reply_text,
+    looks_like_tool_preamble,
+    looks_like_structured_tool_handoff,
+    looks_like_trailing_tool_handoff,
+    re_mod,
+) -> str:
+    cleaned = clean_visible_reply_text(text)
+    if not cleaned or not looks_like_trailing_tool_handoff(cleaned):
+        return cleaned
+
+    paragraphs = [part.strip() for part in re_mod.split(r"\n\s*\n", cleaned) if part.strip()]
+    lines = [line.strip() for line in cleaned.replace("\r", "\n").splitlines() if line.strip()]
+    candidates: list[tuple[str, str]] = []
+
+    if len(paragraphs) >= 2:
+        candidates.append(("\n\n".join(paragraphs[:-1]).strip(), paragraphs[-1].strip()))
+    if len(lines) >= 2:
+        candidates.append(("\n".join(lines[:-1]).strip(), lines[-1].strip()))
+    if len(lines) >= 3:
+        candidates.append(("\n".join(lines[:-2]).strip(), "\n".join(lines[-2:]).strip()))
+
+    for remaining, tail in candidates:
+        if not remaining or not tail:
+            continue
+        if not (
+            looks_like_tool_preamble(tail)
+            or looks_like_structured_tool_handoff(tail)
+        ):
+            continue
+        stripped = clean_visible_reply_text(remaining)
+        if not stripped:
+            continue
+        if looks_like_tool_preamble(stripped) or looks_like_structured_tool_handoff(stripped):
+            continue
+        return stripped
+
+    return cleaned

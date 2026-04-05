@@ -62,6 +62,15 @@ def format_knowledge(hits) -> str:
     return "\n".join(lines)
 
 
+def _build_memory_stats_meta(**stats) -> dict:
+    return {
+        "memory_stats": {
+            key: max(int(value), 0)
+            for key, value in stats.items()
+        }
+    }
+
+
 def execute_memory_tool(
     name: str,
     arguments: dict,
@@ -84,13 +93,29 @@ def execute_memory_tool(
         l3 = load_l3_long_term(limit=5)
         response = format_recall(l2, l3)
         debug_write("memory_tool_result", {"name": name, "l2_hits": len(l2), "l3_hits": len(l3)})
-        return {"success": True, "response": response}
+        return {
+            "success": True,
+            "response": response,
+            "meta": _build_memory_stats_meta(
+                l2_searches=1,
+                l2_hits=1 if l2 else 0,
+                l3_queries=1,
+                l3_hits=1 if l3 else 0,
+            ),
+        }
     if name == "query_knowledge":
         topic = str(arguments.get("topic", "")).strip()
         hits = find_relevant_knowledge(topic, limit=3, touch=True)
         response = format_knowledge(hits)
         debug_write("memory_tool_result", {"name": name, "hits": len(hits)})
-        return {"success": True, "response": response}
+        return {
+            "success": True,
+            "response": response,
+            "meta": _build_memory_stats_meta(
+                l8_searches=1,
+                l8_hits=1 if hits else 0,
+            ),
+        }
     if name == "web_search":
         query = str(arguments.get("query", "")).strip()
         if not query:

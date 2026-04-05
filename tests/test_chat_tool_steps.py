@@ -4,6 +4,7 @@ from routes.chat_tool_steps import (
     build_tool_done_label,
     build_tool_done_trace_detail,
     build_tool_execution_trace_detail,
+    build_tool_execution_trace_label,
 )
 
 
@@ -23,8 +24,8 @@ class ChatToolStepTests(unittest.TestCase):
 
         self.assertIn("search_text", detail)
         self.assertIn("run_command", detail)
-        self.assertIn("并行批次 1/2", detail)
-        self.assertIn("目标：router.py 里的 route 关键字", detail)
+        self.assertIn("parallel batch 1/2", detail)
+        self.assertIn("目标: router.py 里的 route 关键字", detail)
 
     def test_done_detail_and_label_surface_blocked_and_runtime_failure(self):
         blocked_label = build_tool_done_label(
@@ -79,6 +80,55 @@ class ChatToolStepTests(unittest.TestCase):
 
         self.assertIn("参数还不完整", retry_detail)
         self.assertIn("切换路径后完成", fallback_success)
+
+    def test_parallel_group_helpers_surface_single_batch_progress(self):
+        group_meta = {
+            "parallel_group_id": "parallel:1:1:call_parallel_fast",
+            "parallel_size": 2,
+            "parallel_completed_count": 1,
+            "parallel_success_count": 1,
+            "parallel_failure_count": 0,
+            "parallel_tools": ["folder_explore", "search_text"],
+        }
+
+        self.assertEqual(
+            build_tool_execution_trace_label("调用技能", process_meta=group_meta),
+            "PARALLEL CALL",
+        )
+        self.assertIn(
+            "这一批同时起跑 2 个工具",
+            build_tool_execution_trace_detail(
+                tool_name="folder_explore",
+                preview="",
+                skill_display="调用技能",
+                process_meta=group_meta,
+            ),
+        )
+        self.assertEqual(
+            build_tool_done_label("技能完成", success=True, process_meta=group_meta),
+            "PARALLEL RUN",
+        )
+        self.assertIn(
+            "已收回 1/2",
+            build_tool_done_trace_detail(
+                tool_name="search_text",
+                preview="",
+                success=True,
+                action_summary="",
+                response="",
+                process_meta=group_meta,
+            ),
+        )
+
+        final_meta = {
+            **group_meta,
+            "parallel_completed_count": 2,
+            "parallel_success_count": 2,
+        }
+        self.assertEqual(
+            build_tool_done_label("技能完成", success=True, process_meta=final_meta),
+            "PARALLEL DONE",
+        )
 
 
 if __name__ == "__main__":

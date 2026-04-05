@@ -322,7 +322,7 @@ def _build_native_skill_fallback_markdown(skill_id: str, entry: dict | None = No
             lines.append(f"- `{label}`" + (f": {desc}" if desc else ""))
 
     if len(lines) == 1:
-        lines.extend(["", "This skill is available in NovaCore."])
+        lines.extend(["", "This skill is available in AaronCore."])
     return "\n".join(lines).strip()
 
 

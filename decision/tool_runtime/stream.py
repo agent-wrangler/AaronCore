@@ -196,6 +196,11 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                         ]
                 elif chunk.get("_usage"):
                     usage = chunk["_usage"]
+                elif chunk.get("_stream_reset"):
+                    collected_tokens = []
+                    latest_visible_chunks = []
+                    initial_reasoning_chunks = []
+                    yield chunk
                 elif chunk.get("_thinking"):
                     yield chunk
                 elif "_thinking_content" in chunk:
@@ -297,6 +302,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
             messages,
             batch_outcome,
             reasoning_details=formatter._reasoning_details_from_chunks(initial_reasoning_chunks),
+            bundle=bundle,
         )
 
         recent_attempts = list(batch_state.recent_attempts)
@@ -356,6 +362,10 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 if isinstance(chunk, dict):
                     if chunk.get("_usage"):
                         usage_blocked = chunk["_usage"]
+                    elif chunk.get("_stream_reset"):
+                        emitted = False
+                        latest_visible_chunks = []
+                        yield chunk
                 else:
                     emitted = True
                     latest_visible_chunks.append(chunk)
@@ -437,6 +447,11 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                             latest_observed_tool_calls = list(observed_round_tool_calls)
                     elif chunk.get("_usage"):
                         usage_n = chunk["_usage"]
+                    elif chunk.get("_stream_reset"):
+                        collected_n = []
+                        latest_visible_chunks = []
+                        round_reasoning_chunks = []
+                        yield chunk
                     elif chunk.get("_thinking"):
                         yield chunk
                     elif "_thinking_content" in chunk:
@@ -561,6 +576,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 messages,
                 batch_outcome,
                 reasoning_details=formatter._reasoning_details_from_chunks(round_reasoning_chunks),
+                bundle=bundle,
             )
             current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
             current_run_meta = batch_state.run_meta
@@ -617,6 +633,10 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                     if isinstance(chunk, dict):
                         if chunk.get("_usage"):
                             usage_blocked = chunk["_usage"]
+                        elif chunk.get("_stream_reset"):
+                            emitted = False
+                            latest_visible_chunks = []
+                            yield chunk
                     else:
                         emitted = True
                         latest_visible_chunks.append(chunk)

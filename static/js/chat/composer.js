@@ -534,6 +534,13 @@ function createProcessMessage(card){
   expectedOutput:String((card&&card.expected_output)||'').trim(),
   nextUserNeed:String((card&&card.next_user_need)||'').trim(),
   toolName:String((card&&card.tool_name)||'').trim(),
+  parallelGroupId:String((card&&card.parallel_group_id)||'').trim(),
+  parallelIndex:typeof _normalizePositiveStepCount==='function' ? _normalizePositiveStepCount(card&&card.parallel_index) : 0,
+  parallelSize:typeof _normalizePositiveStepCount==='function' ? _normalizePositiveStepCount(card&&card.parallel_size) : 0,
+  parallelCompletedCount:typeof _normalizePositiveStepCount==='function' ? _normalizePositiveStepCount(card&&card.parallel_completed_count) : 0,
+  parallelSuccessCount:typeof _normalizePositiveStepCount==='function' ? _normalizePositiveStepCount(card&&card.parallel_success_count) : 0,
+  parallelFailureCount:typeof _normalizePositiveStepCount==='function' ? _normalizePositiveStepCount(card&&card.parallel_failure_count) : 0,
+  parallelTools:typeof _normalizeStepNameList==='function' ? _normalizeStepNameList(card&&card.parallel_tools) : [],
   startedAt:Date.now(),
   expanded:false,
   expandable:false

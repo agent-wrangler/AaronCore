@@ -202,6 +202,76 @@ class ToolCallTurnBatchTests(unittest.TestCase):
         self.assertTrue(result.get("batch_mode"))
         self.assertEqual(result.get("reply"), "Done.")
 
+    def test_unified_reply_with_tools_budgets_tool_result_context_per_tool_and_per_batch(self):
+        seen_messages = []
+        call_count = {"value": 0}
+
+        def fake_llm_call(_cfg, messages, **_kwargs):
+            seen_messages.append(messages)
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_budget_1",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "alpha"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_budget_2",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "beta"}, ensure_ascii=False),
+                            },
+                        },
+                    ],
+                    "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+                }
+            return {
+                "content": "Done.",
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+            }
+
+        def fake_tool_executor(name, _args, _context):
+            return {
+                "success": True,
+                "response": f"{name} result " + ("X" * 180),
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "看两个很长的工具结果",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+            "tool_runtime": {
+                "tool_result_max_chars": 150,
+                "tool_batch_result_budget_chars": 240,
+            },
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        tool_messages = [
+            message
+            for message in seen_messages[1]
+            if isinstance(message, dict) and message.get("role") == "tool"
+        ]
+        self.assertEqual(len(tool_messages), 2)
+        self.assertTrue(all(len(str(message.get("content") or "")) <= 150 for message in tool_messages))
+        self.assertTrue(sum(len(str(message.get("content") or "")) for message in tool_messages) <= 240)
+        self.assertTrue(
+            all("[tool result truncated for context]" in str(message.get("content") or "") for message in tool_messages)
+        )
+
     def test_unified_reply_with_tools_stream_executes_multiple_tool_calls_in_same_turn(self):
         seen_messages = []
         executed = []
@@ -266,6 +336,12 @@ class ToolCallTurnBatchTests(unittest.TestCase):
         ]
         self.assertEqual(len(executing_events), 2)
         self.assertEqual(executing_events[0].get("_tool_call", {}).get("process_meta", {}).get("parallel_size"), 2)
+        executing_group_ids = {
+            event.get("_tool_call", {}).get("process_meta", {}).get("parallel_group_id")
+            for event in executing_events
+        }
+        self.assertEqual(len(executing_group_ids), 1)
+        self.assertTrue(next(iter(executing_group_ids)))
         assistant_messages = [
             message
             for message in seen_messages[1]
@@ -278,6 +354,75 @@ class ToolCallTurnBatchTests(unittest.TestCase):
         self.assertEqual(done.get("action_count"), 2)
         self.assertTrue(done.get("batch_mode"))
         self.assertEqual(done.get("tool_used"), "search_text")
+
+    def test_unified_reply_with_tools_stream_replays_parallel_done_events_by_completion_order(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(message, dict) and message.get("role") == "tool" for message in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_parallel_slow",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "slow"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_parallel_fast",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "fast"}, ensure_ascii=False),
+                            },
+                        },
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 2}}
+                return
+
+            yield "Done."
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, _args, _context):
+            if name == "folder_explore":
+                time.sleep(0.05)
+            else:
+                time.sleep(0.01)
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "并行读两个目标",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": "", "usage": {}}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        done_events = [
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("done")
+        ]
+        self.assertEqual(
+            [event.get("_tool_call", {}).get("process_meta", {}).get("parallel_completed_count") for event in done_events[:2]],
+            [1, 2],
+        )
+        self.assertEqual(
+            [event.get("_tool_call", {}).get("name") for event in done_events[:2]],
+            ["search_text", "folder_explore"],
+        )
 
     def test_unified_reply_with_tools_stream_marks_failed_tool_switch_as_fallback(self):
         executed = []
@@ -416,6 +561,111 @@ class ToolCallTurnBatchTests(unittest.TestCase):
         self.assertEqual(done.get("max_turns"), 3)
         self.assertTrue(done.get("turn_limit_reached"))
         self.assertEqual(done.get("turn_reason"), "max_turns_reached")
+
+    def test_unified_reply_with_tools_honors_explicit_max_turns(self):
+        executed = []
+        llm_call_index = {"value": 0}
+
+        def fake_llm_call(_cfg, _messages, **_kwargs):
+            current = llm_call_index["value"]
+            llm_call_index["value"] += 1
+            return {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": f"call_non_stream_limit_{current}",
+                        "type": "function",
+                        "function": {
+                            "name": "search_text",
+                            "arguments": json.dumps({"query": f"round-{current}"}, ensure_ascii=False),
+                        },
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": f"{name} ok {args.get('query')}",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "一直查代码直到我叫停",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+            "max_turns": 3,
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertEqual(len(executed), 3)
+        self.assertIn("已达到当前工具往返轮次上限（3 轮）", result.get("reply", ""))
+        self.assertEqual(result.get("turns_used"), 3)
+        self.assertEqual(result.get("max_turns"), 3)
+        self.assertTrue(result.get("turn_limit_reached"))
+        self.assertEqual(result.get("turn_reason"), "max_turns_reached")
+
+    def test_unified_reply_with_tools_is_not_capped_at_three_followup_rounds(self):
+        executed = []
+        llm_call_index = {"value": 0}
+
+        def fake_llm_call(_cfg, _messages, **_kwargs):
+            current = llm_call_index["value"]
+            llm_call_index["value"] += 1
+            if current <= 4:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": f"call_non_stream_round_{current}",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": f"round-{current}"}, ensure_ascii=False),
+                            },
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                }
+
+            return {
+                "content": "Done after many rounds.",
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": f"{name} ok {args.get('query')}",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "连续查很多轮代码",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+            "max_turns": 6,
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
+
+        self.assertEqual(len(executed), 5)
+        self.assertEqual(result.get("reply"), "Done after many rounds.")
+        self.assertEqual(result.get("turns_used"), 6)
+        self.assertEqual(result.get("max_turns"), 6)
+        self.assertFalse(result.get("turn_limit_reached"))
 
     def test_unified_reply_with_tools_stream_is_not_capped_at_forty_followup_rounds(self):
         executed = []

@@ -12,11 +12,23 @@ from decision.tool_runtime.runtime_control import (
     raise_if_cancelled,
     tool_runtime_cancel_reason,
 )
+from decision.tool_runtime.turn_limits import (
+    build_max_turns_closeout_reply,
+    build_turn_limit_meta,
+    resolve_max_turns,
+)
 
 
-def _build_non_stream_result(reply: str, terminal_record, usage: dict, ledger: ToolCallTurnLedger) -> dict:
+def _build_non_stream_result(
+    reply: str,
+    terminal_record,
+    usage: dict,
+    ledger: ToolCallTurnLedger,
+    *,
+    turn_meta: dict | None = None,
+) -> dict:
     terminal_records = ledger.terminal_records()
-    return {
+    result = {
         "reply": reply,
         "tool_used": terminal_record.tool_name if terminal_record else None,
         "usage": usage,
@@ -41,11 +53,55 @@ def _build_non_stream_result(reply: str, terminal_record, usage: dict, ledger: T
             for record in terminal_records
         ],
     }
+    if isinstance(turn_meta, dict):
+        result.update(turn_meta)
+    return result
 
 
 def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor) -> dict:
     from brain import LLM_CONFIG
     from decision import reply_formatter as formatter
+
+    max_turns = resolve_max_turns(bundle)
+    turns_used = 0
+    turn_limit_reached = False
+    turn_reason = ""
+
+    def _turn_meta() -> dict:
+        return build_turn_limit_meta(
+            turns_used=turns_used,
+            max_turns=max_turns,
+            turn_limit_reached=turn_limit_reached,
+            turn_reason=turn_reason,
+        )
+
+    def _result(reply: str, terminal_record) -> dict:
+        return _build_non_stream_result(
+            reply,
+            terminal_record,
+            usage,
+            ledger,
+            turn_meta=_turn_meta(),
+        )
+
+    def _max_turns_closeout(*, terminal_record, success: bool | None) -> dict:
+        nonlocal turn_limit_reached, turn_reason
+        turn_limit_reached = True
+        turn_reason = "max_turns_reached"
+        formatter._debug_write(
+            "tool_call_max_turns_reached",
+            {"max_turns": max_turns, "turns_used": turns_used},
+        )
+        reply = build_max_turns_closeout_reply(
+            formatter,
+            max_turns=max_turns,
+            turns_used=turns_used,
+            success=success,
+            action_summary=batch_state.action_summary,
+            tool_response=batch_state.tool_response,
+            run_meta=batch_state.run_meta,
+        )
+        return _result(reply, terminal_record)
 
     if not formatter._llm_call:
         return {
@@ -61,6 +117,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             "action_count": 0,
             "batch_mode": False,
             "tool_results": [],
+            **_turn_meta(),
         }
 
     cfg = LLM_CONFIG
@@ -87,6 +144,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
         formatter._debug_write("tool_call_request", {"tools_count": len(tools), "msg_len": len(user_prompt)})
 
         raise_if_cancelled(bundle, detail="tool_call non-stream cancelled before initial model call")
+        turns_used += 1
         result = formatter._llm_call(cfg, messages, tools=tools, temperature=0.7, max_tokens=2000, timeout=30)
         usage = result.get("usage", {})
         formatter._record_tool_call_usage_stats(cfg, usage)
@@ -95,20 +153,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
         if not tool_calls:
             reply = result.get("content", "")
             formatter._debug_write("tool_call_direct_reply", {"reply_len": len(reply)})
-            return {
-                "reply": reply,
-                "tool_used": None,
-                "usage": usage,
-                "success": None,
-                "tool_response": "",
-                "call_id": "",
-                "synthetic": False,
-                "reason": "",
-                "tools_used": [],
-                "action_count": 0,
-                "batch_mode": False,
-                "tool_results": [],
-            }
+            return _result(reply, None)
 
         skill_context = formatter._build_tool_exec_context(bundle)
         raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before initial tool batch")
@@ -127,6 +172,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             messages,
             batch_outcome,
             reasoning_details=result.get("reasoning_details"),
+            bundle=bundle,
         )
         if batch_outcome.strict_retry_note:
             formatter._append_runtime_guidance(messages, batch_outcome.strict_retry_note)
@@ -141,7 +187,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 tool_response=batch_state.tool_response,
                 run_meta=batch_state.run_meta,
             )
-            return _build_non_stream_result(reply, current_record, usage, ledger)
+            return _result(reply, current_record)
 
         if batch_outcome.requires_user_takeover:
             final_messages = list(messages)
@@ -156,7 +202,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                     tool_response=batch_state.tool_response,
                     run_meta=batch_state.run_meta,
                 )
-                return _build_non_stream_result(reply, current_record, usage, ledger)
+                return _result(reply, current_record)
             raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before takeover closeout")
             current_result = formatter._llm_call(cfg, final_messages, temperature=0.7, max_tokens=2000, timeout=25)
             formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
@@ -176,7 +222,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                     tool_response=batch_state.tool_response,
                     run_meta=batch_state.run_meta,
                 )
-            return _build_non_stream_result(reply, terminal_record, usage, ledger)
+            return _result(reply, terminal_record)
 
         if tool_runtime_cancel_reason(bundle, skill_context):
             reply = formatter._build_tool_closeout_reply(
@@ -185,17 +231,24 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 tool_response=batch_state.tool_response,
                 run_meta=batch_state.run_meta,
             )
-            return _build_non_stream_result(reply, current_record, usage, ledger)
+            return _result(reply, current_record)
+        if turns_used >= max_turns:
+            return _max_turns_closeout(
+                terminal_record=ledger.latest_terminal() or current_record,
+                success=batch_state.tool_success,
+            )
         raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before followup model call")
+        turns_used += 1
         current_result = formatter._llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
         formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
         formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))
 
-        for round_idx in range(3):
+        round_idx = 1
+        while True:
             followup_tool_calls = formatter._resolve_tool_calls_from_result(
                 current_result,
                 bundle,
-                mode=f"non_stream_followup_{round_idx + 1}",
+                mode=f"non_stream_followup_{round_idx}",
             )
             if not followup_tool_calls:
                 break
@@ -207,7 +260,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                     tool_response=batch_state.tool_response,
                     run_meta=batch_state.run_meta,
                 )
-                return _build_non_stream_result(reply, current_record, usage, ledger)
+                return _result(reply, current_record)
             raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before followup tool batch")
             batch_outcome = execute_tool_call_batch(
                 followup_tool_calls,
@@ -218,12 +271,13 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 ledger=ledger,
                 state=batch_state,
                 mode="non_stream",
-                round_index=round_idx + 1,
+                round_index=round_idx,
             )
             append_tool_batch_to_messages(
                 messages,
                 batch_outcome,
                 reasoning_details=current_result.get("reasoning_details"),
+                bundle=bundle,
             )
             if batch_outcome.strict_retry_note:
                 formatter._append_runtime_guidance(messages, batch_outcome.strict_retry_note)
@@ -236,7 +290,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                     tool_response=batch_state.tool_response,
                     run_meta=batch_state.run_meta,
                 )
-                return _build_non_stream_result(reply, current_record, usage, ledger)
+                return _result(reply, current_record)
             if batch_outcome.requires_user_takeover:
                 final_messages = list(messages)
                 formatter._append_runtime_guidance(
@@ -250,7 +304,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                         tool_response=batch_state.tool_response,
                         run_meta=batch_state.run_meta,
                     )
-                    return _build_non_stream_result(reply, current_record, usage, ledger)
+                    return _result(reply, current_record)
                 raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before takeover closeout")
                 current_result = formatter._llm_call(cfg, final_messages, temperature=0.7, max_tokens=2000, timeout=25)
                 formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
@@ -264,11 +318,18 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                     tool_response=batch_state.tool_response,
                     run_meta=batch_state.run_meta,
                 )
-                return _build_non_stream_result(reply, current_record, usage, ledger)
+                return _result(reply, current_record)
+            if turns_used >= max_turns:
+                return _max_turns_closeout(
+                    terminal_record=ledger.latest_terminal() or current_record,
+                    success=batch_state.tool_success,
+                )
             raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before followup model call")
+            turns_used += 1
             current_result = formatter._llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
             formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
             formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))
+            round_idx += 1
 
         terminal_record = ledger.latest_terminal() or current_record
         reply = formatter._finalize_tool_reply(
@@ -293,7 +354,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             "tool_call_final_reply",
             {"tool": terminal_record.tool_name if terminal_record else "", "reply_len": len(reply)},
         )
-        return _build_non_stream_result(reply, terminal_record, usage, ledger)
+        return _result(reply, terminal_record)
     except Exception as exc:
         detail = f"工具链中断：{type(exc).__name__}: {exc}"
         terminal_record = None
@@ -329,5 +390,5 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 "tool_call_final_reply_fallback",
                 {"tool": terminal_record.tool_name, "fallback_len": len(reply)},
             )
-            return _build_non_stream_result(reply, terminal_record, usage, ledger)
+            return _result(reply, terminal_record)
         raise

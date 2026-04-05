@@ -140,7 +140,7 @@ def _find_hwnd():
     global _hwnd
     if _hwnd and user32.IsWindow(_hwnd):
         return _hwnd
-    for title in ["", "Nova"]:
+    for title in ["", "AaronCore", "Aaron", "Nova"]:
         hwnd = user32.FindWindowW(None, title)
         if hwnd:
             _hwnd = hwnd
@@ -221,7 +221,7 @@ _sh = user32.GetSystemMetrics(1)
 _ww, _wh = 1100, 900
 
 window = webview.create_window(
-    'Nova', 'http://localhost:8090/',
+    'AaronCore', 'http://localhost:8090/',
     width=_ww, height=_wh,
     x=(_sw-_ww)//2, y=(_sh-_wh)//2,
     frameless=True, easy_drag=False,

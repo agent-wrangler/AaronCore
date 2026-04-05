@@ -80,5 +80,16 @@ class ChatStreamMarkdownTests(unittest.TestCase):
         self.assertNotIn("<strong>", payload["append"][0]["html"])
 
 
+    def test_list_html_keeps_structure_but_drops_bold_markers(self):
+        stream = MarkdownIncrementalStream()
+        payload = stream.feed("- **One**\n- **Two**\n")
+        self.assertEqual("", payload["tail"])
+        self.assertEqual(1, len(payload["append"]))
+        self.assertIn("<ul>", payload["append"][0]["html"])
+        self.assertIn("<li>One</li>", payload["append"][0]["html"])
+        self.assertIn("<li>Two</li>", payload["append"][0]["html"])
+        self.assertNotIn("<strong>", payload["append"][0]["html"])
+
+
 if __name__ == "__main__":
     unittest.main()
