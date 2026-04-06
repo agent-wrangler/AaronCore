@@ -128,6 +128,15 @@ function _alertModelSwitchFailure(detail){
   alert(text);
  }catch(_err){}
 }
+function _emitSidebarModelSwitchNote(fromLabel, toLabel){
+ if(window._currentTab!==1) return;
+ if(typeof addChatEventNote!=='function') return;
+ var previous=String(fromLabel||'').trim();
+ var next=String(toLabel||'').trim();
+ if(!next || previous===next) return;
+ var text=previous ? (previous+' → '+next) : next;
+ addChatEventNote('model-switch', 'MODEL SWITCH', text);
+}
 function _sidebarSwitchModel(mid){
  // 即时关闭 dropdown
  var dd=document.getElementById('modelDropdown');
@@ -157,6 +166,7 @@ function _sidebarSwitchModel(mid){
    console.log('[models][sidebar] switch ok', mid);
    _resetModelSwitchButtons();
    if(typeof updateImageBtnState==='function') updateImageBtnState();
+   _emitSidebarModelSwitchNote(previousLabel, (_m&&(_m.display_name||_m.model))?(_m.display_name||_m.model):mid);
    if(typeof _settingsCurrentModel!=='undefined'){
     _settingsCurrentModel=mid;
     setTimeout(function(){if(typeof loadSettingsModels==='function') loadSettingsModels();},300);

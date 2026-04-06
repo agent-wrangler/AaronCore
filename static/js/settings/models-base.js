@@ -314,21 +314,94 @@ function loadSettingsModels(){
   _settingsModels=d.models||{};
   _settingsCurrentModel=d.current||'';
   _settingsCatalog=c.catalog||{};
-  var nameCounts=_buildModelNameCounts(_settingsModels);
+  var unlockedModels=_buildUnlockedSettingsModels(_settingsModels, _settingsCatalog, _settingsCurrentModel);
+  var nameCounts=_buildModelNameCounts(unlockedModels);
   // 同步侧边栏
   window._novaModels={};
-  Object.keys(_settingsModels).forEach(function(k){
-   var cfg=_settingsModels[k]||{};
-   window._novaModels[k]={model:cfg.model||k,display_name:_getModelDisplayName(k, cfg, _settingsModels, nameCounts),vision:!!cfg.vision,base_url:cfg.base_url||'',transport:cfg.transport||''};
+  Object.keys(unlockedModels).forEach(function(k){
+   var cfg=unlockedModels[k]||{};
+   window._novaModels[k]={model:cfg.model||k,display_name:_getModelDisplayName(k, cfg, unlockedModels, nameCounts),vision:!!cfg.vision,base_url:cfg.base_url||'',transport:cfg.transport||'',derived:!!cfg.derived,source_model:cfg.source_model||''};
   });
   window._novaCurrentModel=_settingsCurrentModel;
   window._novaCatalog=_settingsCatalog;
   var el=document.getElementById('modelName');
-  var _curCfg=_settingsModels[_settingsCurrentModel];
-  if(el) el.textContent=_curCfg?_getModelDisplayName(_settingsCurrentModel, _curCfg, _settingsModels, nameCounts):(_settingsCurrentModel||t('unknown'));
+  var _curCfg=unlockedModels[_settingsCurrentModel]||_settingsModels[_settingsCurrentModel];
+  if(el) el.textContent=_curCfg?_getModelDisplayName(_settingsCurrentModel, _curCfg, unlockedModels, nameCounts):(_settingsCurrentModel||t('unknown'));
   if(typeof updateImageBtnState==='function') updateImageBtnState();
  renderSettingsPage(document.body.classList.contains('light'));
  }).catch(function(){});
+}
+
+function _isVisibleSettingsModel(cfg){
+ cfg=cfg||{};
+ if(_getModelTransport(cfg)!=='openai_api') return false;
+ var baseUrl=String(cfg.base_url||'').trim().toLowerCase();
+ var apiKey=String(cfg.api_key||'').trim().toLowerCase();
+ if(!baseUrl||!apiKey) return false;
+ if(baseUrl.indexOf('codex://')===0) return false;
+ if(baseUrl.indexOf('xxx')!==-1||apiKey.indexOf('xxx')!==-1) return false;
+ return true;
+}
+
+function _getVisibleSettingsModels(models){
+ var visible={};
+ Object.keys(models||{}).forEach(function(mid){
+  var cfg=models[mid]||{};
+  if(_isVisibleSettingsModel(cfg)) visible[mid]=cfg;
+ });
+ return visible;
+}
+
+function _pickVisibleProviderDonor(providerKey, visibleModels, currentModel, catalog){
+ if(currentModel&&visibleModels[currentModel]&&_classifyModelToProvider(currentModel, visibleModels[currentModel], catalog)===providerKey){
+  return {id:currentModel,cfg:visibleModels[currentModel]};
+ }
+ var keys=Object.keys(visibleModels||{});
+ for(var i=0;i<keys.length;i++){
+  var mid=keys[i];
+  var cfg=visibleModels[mid]||{};
+  if(_classifyModelToProvider(mid, cfg, catalog)===providerKey){
+   return {id:mid,cfg:cfg};
+  }
+ }
+ return null;
+}
+
+function _buildUnlockedSettingsModels(models, catalog, currentModel){
+ var visibleModels=_getVisibleSettingsModels(models||{});
+ var unlocked={};
+ var existingKeys={};
+
+ Object.keys(visibleModels).forEach(function(mid){
+  var cfg=visibleModels[mid]||{};
+  unlocked[mid]=cfg;
+  existingKeys[String(mid||'').toLowerCase()]=true;
+  existingKeys[String((cfg.model||mid)||'').toLowerCase()]=true;
+ });
+
+ Object.keys(catalog||{}).forEach(function(providerKey){
+  var donor=_pickVisibleProviderDonor(providerKey, visibleModels, currentModel, catalog);
+  if(!donor) return;
+  var catalogModels=((catalog[providerKey]||{}).models)||[];
+  catalogModels.forEach(function(entry){
+   var modelId=String((entry&&entry.id)||'').trim();
+   if(!modelId) return;
+   var key=modelId.toLowerCase();
+   if(existingKeys[key]) return;
+   unlocked[modelId]={
+    model:modelId,
+    vision:!!donor.cfg.vision,
+    transport:'openai_api',
+    base_url:donor.cfg.base_url||'',
+    api_key:donor.cfg.api_key||'',
+    derived:true,
+    source_model:donor.id,
+    provider_key:providerKey
+   };
+  });
+ });
+
+ return unlocked;
 }
 
 function _getModelTransport(cfg){
@@ -448,15 +521,25 @@ function _modelDialogDelete(mid){
  }).catch(function(){alert(t('settings.models.delete.fail'));});
 }
 
-function saveModelConfig(mid,cfg){
+function saveModelConfig(mid,cfg,handlers){
+ handlers=handlers||{};
  fetch('/models/config',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify({id:mid,config:cfg})
  }).then(function(r){return r.json();}).then(function(d){
-  if(d.ok) loadSettingsModels();
-  else alert(d.error||'\u4fdd\u5b58\u5931\u8d25');
- }).catch(function(){alert('\u4fdd\u5b58\u5931\u8d25');});
+  if(d.ok){
+   if(typeof handlers.onSuccess==='function') handlers.onSuccess(d);
+   loadSettingsModels();
+   return;
+  }
+  var msg=(d&&d.error)?d.error:'\u4fdd\u5b58\u5931\u8d25';
+  if(typeof handlers.onError==='function') handlers.onError(msg,d||{});
+  else alert(msg);
+ }).catch(function(){
+  if(typeof handlers.onError==='function') handlers.onError('\u4fdd\u5b58\u5931\u8d25',{});
+  else alert('\u4fdd\u5b58\u5931\u8d25');
+ });
 }
 
 function openCatalogModelDialog(modelId, providerKey){
@@ -545,27 +628,146 @@ function openModelDialog(editId, draftSeed){
  if(first)setTimeout(function(){first.focus();},50);
 }
 
-function _modelDialogSave(editId){
+function _collectModelDialogPayload(editId){
  var isEdit=!!editId;
+ var theme=getSettingsTheme(document.body.classList.contains('light'));
  var mid=isEdit?editId:(document.getElementById('mdlId').value||'').trim();
- if(!mid){document.getElementById('mdlId').style.borderColor='#ef4444';return;}
+ if(!mid){document.getElementById('mdlId').style.borderColor=theme.dangerText;return null;}
  var modelName=(document.getElementById('mdlName').value||'').trim()||mid;
- var transport=String((document.getElementById('mdlTransport').value||'openai_api')).trim();
- var vision=document.getElementById('mdlVision').checked;
- var cfg={model:modelName,vision:vision,transport:transport};
- if(transport==='codex_cli'){
-  cfg.base_url='codex://local';
- }else{
-  var baseUrl=(document.getElementById('mdlUrl').value||'').trim();
-  if(!baseUrl){document.getElementById('mdlUrl').style.borderColor='#ef4444';return;}
-  var apiKey=(document.getElementById('mdlKey').value||'').trim();
-  if(!isEdit&&!apiKey){document.getElementById('mdlKey').style.borderColor='#ef4444';return;}
-  cfg.base_url=baseUrl;
-  if(apiKey) cfg.api_key=apiKey;
-  else if(isEdit&&_settingsModels[editId]) cfg.api_key=_settingsModels[editId].api_key;
+ var baseUrl=(document.getElementById('mdlUrl').value||'').trim();
+ if(!baseUrl){document.getElementById('mdlUrl').style.borderColor=theme.dangerText;return null;}
+ var apiKey=(document.getElementById('mdlKey').value||'').trim();
+ if(!apiKey&&isEdit&&_settingsModels[editId]) apiKey=String(_settingsModels[editId].api_key||'').trim();
+ if(!apiKey){document.getElementById('mdlKey').style.borderColor=theme.dangerText;return null;}
+ var previousVision=isEdit&&_settingsModels[editId]?!!_settingsModels[editId].vision:false;
+ return {
+  mid:mid,
+  cfg:{
+   model:modelName,
+   vision:previousVision,
+   transport:'openai_api',
+   base_url:baseUrl,
+   api_key:apiKey
+  }
+ };
+}
+
+function _setModelDialogStatus(kind, message){
+ var box=document.getElementById('mdlTestStatus');
+ if(!box) return;
+ var theme=getSettingsTheme(document.body.classList.contains('light'));
+ var text=String(message||'').trim();
+ if(!text){
+  box.style.display='none';
+  box.textContent='';
+  return;
  }
- saveModelConfig(mid,cfg);
- var dlg=document.getElementById('modelDialog');
- if(dlg)dlg.remove();
+ box.style.display='block';
+ box.textContent=text;
+ box.style.background=theme.actionSecondary;
+ box.style.border='1px solid '+theme.border;
+ box.style.color=kind==='error'?theme.dangerText:(kind==='success'?theme.successText:theme.text);
+}
+
+function _setSettingsModelFeedback(kind, message){
+ if(!window.settingsPanelState) return;
+ settingsPanelState.notice='';
+ settingsPanelState.error='';
+ if(kind==='error') settingsPanelState.error=String(message||'').trim();
+ else settingsPanelState.notice=String(message||'').trim();
+ renderSettingsPage(document.body.classList.contains('light'));
+}
+
+function testModelConfig(mid, cfg, handlers){
+ handlers=handlers||{};
+ var payload={};
+ if(mid) payload.id=mid;
+ if(cfg&&typeof cfg==='object') payload.config=cfg;
+ return fetch('/models/test',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(payload)
+ }).then(function(r){return r.json();}).then(function(d){
+  if(d&&d.ok){
+   if(typeof handlers.onSuccess==='function') handlers.onSuccess(d);
+   return d;
+  }
+  var msg=(d&&d.error)?d.error:'Model test failed';
+  if(typeof handlers.onError==='function') handlers.onError(msg,d||{});
+  throw new Error(msg);
+ }).catch(function(err){
+  var msg=(err&&err.message)?err.message:'Model test failed';
+  if(typeof handlers.onError==='function') handlers.onError(msg,{});
+  throw err;
+ }).finally(function(){
+  if(typeof handlers.onFinally==='function') handlers.onFinally();
+ });
+}
+
+function testConfiguredModel(mid, trigger){
+ var btn=trigger||null;
+ var originalText=btn?btn.textContent:'';
+ if(btn){
+  btn.disabled=true;
+  btn.style.opacity='0.65';
+  btn.textContent='Testing...';
+ }
+ testModelConfig(mid,null,{
+  onSuccess:function(){
+   _setSettingsModelFeedback('notice','Model connection OK');
+  },
+  onError:function(message){
+   _setSettingsModelFeedback('error',message||'Model test failed');
+  },
+  onFinally:function(){
+   if(!btn) return;
+   btn.disabled=false;
+   btn.style.opacity='';
+   btn.textContent=originalText||'Test';
+  }
+ }).catch(function(){});
+}
+
+function _modelDialogTest(editId){
+ var payload=_collectModelDialogPayload(editId);
+ if(!payload) return;
+ var btn=document.getElementById('mdlTestBtn');
+ var originalText=btn?btn.textContent:'';
+ if(btn){
+  btn.disabled=true;
+  btn.style.opacity='0.65';
+  btn.textContent='Testing...';
+ }
+ _setModelDialogStatus('info','Checking model connection...');
+ testModelConfig(payload.mid,payload.cfg,{
+  onSuccess:function(){
+   _setModelDialogStatus('success','Connection OK');
+  },
+  onError:function(message){
+   _setModelDialogStatus('error',message||'Model test failed');
+  },
+  onFinally:function(){
+   if(!btn) return;
+   btn.disabled=false;
+   btn.style.opacity='';
+   btn.textContent=originalText||'Test';
+  }
+ }).catch(function(){});
+}
+
+function _modelDialogSave(editId){
+ var payload=_collectModelDialogPayload(editId);
+ if(!payload) return;
+ _setModelDialogStatus('info','Saving model...');
+ saveModelConfig(payload.mid,payload.cfg,{
+  onSuccess:function(){
+   var dlg=document.getElementById('modelDialog');
+   if(dlg)dlg.remove();
+   _setSettingsModelFeedback('notice','Model saved');
+  },
+  onError:function(message){
+   _setModelDialogStatus('error',message||'Save failed');
+  }
+ });
 }
 

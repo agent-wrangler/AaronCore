@@ -1,9 +1,95 @@
 var chatHistory='';
 var CHAT_HISTORY_MAX=200;
+var CHAT_HISTORY_BOOT_TURNS=15;
+var CHAT_HISTORY_SNAPSHOT_KEY='nova_chat_history';
+var CHAT_HISTORY_SESSION_SNAPSHOT_KEY='nova_chat_history_session';
 var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412d';
 var CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
+var CHAT_HISTORY_SESSION_RENDER_VERSION_KEY='nova_chat_history_session_render_version';
 var voiceEnabled=false;
 function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+
+function _chatHistoryStorage(scope){
+ return scope==='session' ? window.sessionStorage : window.localStorage;
+}
+
+function _chatHistorySnapshotKey(scope){
+ return scope==='session' ? CHAT_HISTORY_SESSION_SNAPSHOT_KEY : CHAT_HISTORY_SNAPSHOT_KEY;
+}
+
+function _chatHistoryVersionKey(scope){
+ return scope==='session' ? CHAT_HISTORY_SESSION_RENDER_VERSION_KEY : CHAT_HISTORY_RENDER_VERSION_KEY;
+}
+
+function _readChatHistorySnapshot(scope){
+ try{
+  return _chatHistoryStorage(scope).getItem(_chatHistorySnapshotKey(scope))||'';
+ }catch(e){
+  return '';
+ }
+}
+
+function _writeChatHistorySnapshot(scope, html){
+ try{
+  var storage=_chatHistoryStorage(scope);
+  storage.setItem(_chatHistorySnapshotKey(scope), html);
+  storage.setItem(_chatHistoryVersionKey(scope), CHAT_HISTORY_RENDER_VERSION);
+ }catch(e){}
+}
+
+function _removeChatHistorySnapshot(scope){
+ try{
+  var storage=_chatHistoryStorage(scope);
+  storage.removeItem(_chatHistorySnapshotKey(scope));
+  storage.removeItem(_chatHistoryVersionKey(scope));
+ }catch(e){}
+}
+
+function _isHistoryTurnNode(node){
+ if(!node || !node.classList || !node.classList.contains('msg')) return false;
+ if(node.classList.contains('user')) return true;
+ if(!node.classList.contains('assistant')) return false;
+ return !node.classList.contains('process-msg')
+  && !node.classList.contains('reply-part-msg')
+  && !node.classList.contains('thinking-msg')
+  && !node.classList.contains('thinking-trace-msg');
+}
+
+function trimChatHistoryHtml(sourceHtml, maxMessages){
+ var html=String(sourceHtml||'');
+ if(!html.trim()) return '';
+ var limit=Math.max(1, Number(maxMessages)||CHAT_HISTORY_MAX);
+ var tmp=document.createElement('div');
+ tmp.innerHTML=html;
+ var msgs=tmp.querySelectorAll('.msg');
+ if(msgs.length<=limit) return tmp.innerHTML;
+ var remove=msgs.length-limit;
+ for(var i=0;i<remove;i++){
+  if(msgs[i] && msgs[i].parentNode) msgs[i].parentNode.removeChild(msgs[i]);
+ }
+ return tmp.innerHTML;
+}
+
+function buildRecentChatHistorySnapshot(sourceHtml, maxTurns){
+ var html=trimChatHistoryHtml(sourceHtml, CHAT_HISTORY_MAX);
+ if(!html.trim()) return '';
+ var limit=Math.max(1, Number(maxTurns)||CHAT_HISTORY_BOOT_TURNS);
+ var tmp=document.createElement('div');
+ tmp.innerHTML=html;
+ var children=Array.prototype.slice.call(tmp.children||[]);
+ var turnIndexes=[];
+ for(var i=0;i<children.length;i++){
+  if(_isHistoryTurnNode(children[i])) turnIndexes.push(i);
+ }
+ if(turnIndexes.length<=limit) return tmp.innerHTML;
+ var keepFromTurnPos=turnIndexes.length-limit;
+ var previousTurnIndex=keepFromTurnPos>0 ? turnIndexes[keepFromTurnPos-1] : -1;
+ var startIndex=Math.max(0, previousTurnIndex+1);
+ for(var j=0;j<startIndex;j++){
+  if(children[j] && children[j].parentNode===tmp) tmp.removeChild(children[j]);
+ }
+ return tmp.innerHTML;
+}
 
 function trimChatHistory(){
  var tmp=document.createElement('div');
@@ -21,28 +107,54 @@ function trimChatHistory(){
  }
 }
 
-function hasCompatibleChatHistorySnapshot(){
+function hasCompatibleChatHistorySnapshot(scope){
+ var target=scope==='session' ? 'session' : 'persistent';
  try{
-  return localStorage.getItem(CHAT_HISTORY_RENDER_VERSION_KEY)===CHAT_HISTORY_RENDER_VERSION;
+  return _chatHistoryStorage(target).getItem(_chatHistoryVersionKey(target))===CHAT_HISTORY_RENDER_VERSION;
  }catch(e){
   return false;
  }
 }
 
-function clearChatHistorySnapshot(){
+function getStoredChatHistorySnapshot(options){
+ options=options||{};
+ var preferSession=options.preferSession!==false;
+ var recentTurns=Math.max(1, Number(options.recentTurns)||CHAT_HISTORY_BOOT_TURNS);
+ var scopes=preferSession ? ['session','persistent'] : ['persistent','session'];
+ for(var i=0;i<scopes.length;i++){
+  var scope=scopes[i];
+  if(!hasCompatibleChatHistorySnapshot(scope)){
+   _removeChatHistorySnapshot(scope);
+   continue;
+  }
+  var snapshot=_readChatHistorySnapshot(scope);
+  if(!snapshot.trim()) continue;
+  if(scope==='persistent'){
+   snapshot=buildRecentChatHistorySnapshot(snapshot, recentTurns);
+  }
+  if(snapshot.trim()){
+   return {html:snapshot, scope:scope};
+  }
+ }
+ return {html:'', scope:''};
+}
+
+function clearChatHistorySnapshot(scope){
  chatHistory='';
- try{
-  localStorage.removeItem('nova_chat_history');
-  localStorage.removeItem(CHAT_HISTORY_RENDER_VERSION_KEY);
- }catch(e){}
+ if(scope==='session' || scope==='persistent'){
+  _removeChatHistorySnapshot(scope);
+  return;
+ }
+ _removeChatHistorySnapshot('persistent');
+ _removeChatHistorySnapshot('session');
 }
 
 function persistChatHistorySnapshot(){
  trimChatHistory();
- try{
-  localStorage.setItem('nova_chat_history',chatHistory);
-  localStorage.setItem(CHAT_HISTORY_RENDER_VERSION_KEY,CHAT_HISTORY_RENDER_VERSION);
- }catch(e){}
+ var fullSnapshot=String(chatHistory||'');
+ var recentSnapshot=buildRecentChatHistorySnapshot(fullSnapshot, CHAT_HISTORY_BOOT_TURNS);
+ _writeChatHistorySnapshot('session', fullSnapshot);
+ _writeChatHistorySnapshot('persistent', recentSnapshot);
 }
 
 function renderAssistantBubbleHtml(text, renderedHtml){

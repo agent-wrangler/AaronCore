@@ -7,6 +7,12 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
+def _provider_catalog() -> dict:
+    from routes.chat_model_switch import PROVIDER_CATALOG
+
+    return PROVIDER_CATALOG
+
+
 def _normalize_model_config(cfg: dict, *, fallback_model: str = "") -> dict:
     normalized = dict(cfg or {})
     transport = str(normalized.get("transport") or "").strip().lower()
@@ -24,6 +30,8 @@ def _normalize_model_config(cfg: dict, *, fallback_model: str = "") -> dict:
         normalized["auth_mode"] = "codex_cli"
         normalized.pop("api_key", None)
         normalized["base_url"] = "codex://local"
+    else:
+        normalized.pop("auth_mode", None)
     return normalized
 
 
@@ -48,46 +56,197 @@ def _find_duplicate_model_id(models_config: dict, *, model_name: str, exclude_id
     return ""
 
 
+def _looks_like_placeholder(value: str) -> bool:
+    text = str(value or "").strip().lower()
+    if not text:
+        return True
+    placeholder_tokens = (
+        "xxx",
+        "your-api-key",
+        "your_api_key",
+        "your key",
+        "please fill",
+        "placeholder",
+        "example.com",
+    )
+    return any(token in text for token in placeholder_tokens)
+
+
+def _validate_api_model_config(cfg: dict) -> str:
+    normalized = _normalize_model_config(cfg, fallback_model=str((cfg or {}).get("model") or ""))
+    transport = str(normalized.get("transport") or "openai_api").strip().lower()
+    if transport != "openai_api":
+        return "Only API-backed models are supported in model management."
+
+    base_url = str(normalized.get("base_url") or "").strip().rstrip("/")
+    api_key = str(normalized.get("api_key") or "").strip()
+    if not base_url or _looks_like_placeholder(base_url):
+        return "Please fill in a valid Base URL."
+    if not api_key or _looks_like_placeholder(api_key):
+        return "Please fill in a valid API Key."
+    return ""
+
+
+def _is_visible_api_model(cfg: dict) -> bool:
+    return _validate_api_model_config(cfg) == ""
+
+
+def _classify_provider(model_id: str, cfg: dict, catalog: dict) -> str | None:
+    model_id_l = str(model_id or "").strip().lower()
+    model_name_l = str((cfg or {}).get("model") or "").strip().lower()
+    base_url_l = str((cfg or {}).get("base_url") or "").strip().lower()
+
+    for provider_key, provider_info in catalog.items():
+        catalog_ids = {str(mid).strip().lower() for mid, _desc in provider_info.get("models", [])}
+        if model_id_l in catalog_ids or model_name_l in catalog_ids:
+            return provider_key
+        if provider_key in model_id_l or provider_key in model_name_l:
+            return provider_key
+        for alias in provider_info.get("aliases", []):
+            alias_l = str(alias).strip().lower()
+            if alias_l and (alias_l in model_id_l or alias_l in model_name_l):
+                return provider_key
+
+    for provider_key, provider_info in catalog.items():
+        url_hint = str(provider_info.get("url_hint") or "").strip().lower()
+        if url_hint and url_hint in base_url_l:
+            return provider_key
+    return None
+
+
+def _build_derived_model_config(model_id: str, donor_id: str, donor_cfg: dict, provider_key: str) -> dict:
+    return {
+        "model": model_id,
+        "vision": bool(donor_cfg.get("vision", False)),
+        "transport": "openai_api",
+        "base_url": donor_cfg.get("base_url", ""),
+        "api_key": donor_cfg.get("api_key", ""),
+        "derived": True,
+        "source_model": donor_id,
+        "provider_key": provider_key,
+    }
+
+
+def _find_provider_donor(models_config: dict, target_model: str) -> tuple[str | None, str | None, dict | None]:
+    catalog = _provider_catalog()
+    provider_key = _classify_provider(target_model, {"model": target_model}, catalog)
+    if not provider_key:
+        return None, None, None
+
+    for donor_id, raw_cfg in models_config.items():
+        cfg = _normalize_model_config(raw_cfg, fallback_model=donor_id)
+        if not _is_visible_api_model(cfg):
+            continue
+        if _classify_provider(donor_id, cfg, catalog) == provider_key:
+            return provider_key, donor_id, cfg
+    return provider_key, None, None
+
+
+def _maybe_derive_model_config(models_config: dict, model_id: str) -> tuple[dict | None, str | None]:
+    provider_key, donor_id, donor_cfg = _find_provider_donor(models_config, model_id)
+    if not donor_cfg or not donor_id:
+        return None, provider_key
+    return _build_derived_model_config(model_id, donor_id, donor_cfg, provider_key or ""), provider_key
+
+
+def _probe_api_model(cfg: dict, *, timeout: int = 8) -> tuple[bool, str]:
+    import brain
+
+    normalized = _normalize_model_config(cfg, fallback_model=str((cfg or {}).get("model") or ""))
+    validation_error = _validate_api_model_config(normalized)
+    if validation_error:
+        return False, validation_error
+
+    try:
+        result = brain.llm_call(
+            normalized,
+            [{"role": "user", "content": "Reply with exactly: pong"}],
+            max_tokens=8,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        return False, f"Unable to reach the model API: {exc}"
+
+    detail = str(result.get("error") or "").strip()
+    if detail:
+        return False, f"Model API returned an error: {detail}"
+    return True, "Connection OK"
+
+
+def _build_visible_model_summary(brain_module) -> dict:
+    catalog = _provider_catalog()
+    models = {}
+    provider_donors = {}
+    existing_catalog_keys = set()
+
+    for model_id, raw_cfg in brain_module.MODELS_CONFIG.items():
+        cfg = _normalize_model_config(raw_cfg, fallback_model=model_id)
+        if not _is_visible_api_model(cfg):
+            continue
+
+        models[model_id] = {
+            "model": cfg.get("model", model_id),
+            "vision": cfg.get("vision", False),
+            "base_url": cfg.get("base_url", ""),
+            "transport": cfg.get("transport", "openai_api"),
+        }
+        existing_catalog_keys.add(str(model_id).strip().lower())
+        existing_catalog_keys.add(str(cfg.get("model", model_id)).strip().lower())
+
+        provider_key = _classify_provider(model_id, cfg, catalog)
+        if provider_key and provider_key not in provider_donors:
+            provider_donors[provider_key] = (model_id, cfg)
+
+    for provider_key, (donor_id, donor_cfg) in provider_donors.items():
+        for catalog_model_id, _desc in catalog.get(provider_key, {}).get("models", []):
+            catalog_key = str(catalog_model_id).strip().lower()
+            if not catalog_key or catalog_key in existing_catalog_keys:
+                continue
+            models[catalog_model_id] = {
+                "model": catalog_model_id,
+                "vision": donor_cfg.get("vision", False),
+                "base_url": donor_cfg.get("base_url", ""),
+                "transport": "openai_api",
+                "derived": True,
+                "provider_key": provider_key,
+                "source_model": donor_id,
+            }
+
+    return {"models": models, "current": brain_module._current_default}
+
+
 @router.get("/models")
 async def list_models():
-    from brain import get_models
+    import brain
 
-    return get_models()
+    return _build_visible_model_summary(brain)
 
 
 @router.post("/model/{name}")
 async def switch_model(name: str):
     import brain
-    from brain import llm_call, validate_codex_cli_login
+    from brain import validate_codex_cli_login
 
-    if name not in brain.MODELS_CONFIG:
-        return {"ok": False, "error": f"model '{name}' not found"}
+    created_derived = False
+    if name in brain.MODELS_CONFIG:
+        cfg = _normalize_model_config(brain.MODELS_CONFIG[name], fallback_model=name)
+    else:
+        cfg, provider_key = _maybe_derive_model_config(brain.MODELS_CONFIG, name)
+        if not cfg:
+            if provider_key:
+                return {"ok": False, "error": f"Provider '{provider_key}' is not configured yet."}
+            return {"ok": False, "error": f"model '{name}' not found"}
+        created_derived = True
 
-    cfg = _normalize_model_config(brain.MODELS_CONFIG[name], fallback_model=name)
     transport = str(cfg.get("transport") or "openai_api").strip().lower()
-    base_url = str(cfg.get("base_url", "")).strip().rstrip("/")
-    api_key = str(cfg.get("api_key", "")).strip()
-
     if transport == "codex_cli":
         ok, detail = validate_codex_cli_login(timeout=8)
         if not ok:
             return {"ok": False, "error": detail}
     else:
-        if not base_url or not api_key or "xxx" in base_url or "xxx" in api_key:
-            return {
-                "ok": False,
-                "error": "该模型的 API 配置不完整，请先编辑填写 base_url 和 api_key",
-            }
-        try:
-            result = llm_call(cfg, [{"role": "user", "content": "hi"}], max_tokens=5, timeout=8)
-            if result.get("error"):
-                detail = result["error"]
-                msg = "API 返回错误"
-                if detail:
-                    msg += f"：{detail}"
-                return {"ok": False, "error": msg}
-        except Exception:
-            return {"ok": False, "error": "无法连接到该模型的 API，请检查 base_url 和网络"}
+        ok, detail = _probe_api_model(cfg, timeout=8)
+        if not ok:
+            return {"ok": False, "error": detail}
 
     brain.MODELS_CONFIG[name] = cfg
     try:
@@ -97,8 +256,34 @@ async def switch_model(name: str):
 
     ok = brain.set_default_model(name)
     if ok:
-        return {"ok": True, "current": name}
+        return {"ok": True, "current": name, "derived": created_derived}
     return {"ok": False, "error": "switch failed"}
+
+
+@router.post("/models/test")
+async def test_model_config(request: dict):
+    import brain
+
+    model_id = str(request.get("id") or "").strip()
+    config = request.get("config")
+
+    if isinstance(config, dict) and config:
+        cfg = _normalize_model_config(config, fallback_model=model_id)
+    elif model_id and model_id in brain.MODELS_CONFIG:
+        cfg = _normalize_model_config(brain.MODELS_CONFIG[model_id], fallback_model=model_id)
+    elif model_id:
+        cfg, provider_key = _maybe_derive_model_config(brain.MODELS_CONFIG, model_id)
+        if not cfg:
+            if provider_key:
+                return {"ok": False, "error": f"Provider '{provider_key}' is not configured yet."}
+            return {"ok": False, "error": "missing id or config"}
+    else:
+        return {"ok": False, "error": "missing id or config"}
+
+    ok, detail = _probe_api_model(cfg, timeout=8)
+    if ok:
+        return {"ok": True, "detail": detail}
+    return {"ok": False, "error": detail}
 
 
 @router.get("/models/config")
@@ -111,19 +296,15 @@ async def get_models_config():
 
 @router.get("/models/catalog")
 async def get_models_catalog():
-    from brain import MODELS_CONFIG, _current_default, validate_codex_cli_login
-    from routes.chat import _PROVIDER_CATALOG
+    from brain import MODELS_CONFIG, _current_default
 
-    codex_ready, _ = validate_codex_cli_login(timeout=5)
     catalog = {}
-    for pkey, pinfo in _PROVIDER_CATALOG.items():
-        catalog[pkey] = {
-            "aliases": pinfo["aliases"],
-            "url_hint": pinfo["url_hint"],
-            "models": [{"id": mid, "desc": desc} for mid, desc in pinfo["models"]],
+    for provider_key, provider_info in _provider_catalog().items():
+        catalog[provider_key] = {
+            "aliases": provider_info["aliases"],
+            "url_hint": provider_info["url_hint"],
+            "models": [{"id": mid, "desc": desc} for mid, desc in provider_info["models"]],
         }
-        if pkey == "openai":
-            catalog[pkey]["subscription_ready"] = bool(codex_ready)
     models = {mid: _normalize_model_config(cfg, fallback_model=mid) for mid, cfg in MODELS_CONFIG.items()}
     return {"catalog": catalog, "models": models, "current": _current_default}
 
@@ -138,6 +319,10 @@ async def save_model_config(request: dict):
         return {"ok": False, "error": "missing id or config"}
 
     normalized = _normalize_model_config(cfg, fallback_model=mid)
+    validation_error = _validate_api_model_config(normalized)
+    if validation_error:
+        return {"ok": False, "error": validation_error}
+
     duplicate_id = _find_duplicate_model_id(
         brain.MODELS_CONFIG,
         model_name=normalized.get("model", mid),
@@ -146,13 +331,8 @@ async def save_model_config(request: dict):
     if duplicate_id:
         return {
             "ok": False,
-            "error": f"model '{normalized.get('model', mid)}' already exists as '{duplicate_id}'. Edit that model to switch its connection instead of creating a duplicate.",
+            "error": f"model '{normalized.get('model', mid)}' already exists as '{duplicate_id}'. Edit that model instead of creating a duplicate.",
         }
-    if normalized.get("transport") != "codex_cli":
-        if not str(normalized.get("base_url") or "").strip():
-            return {"ok": False, "error": "missing base_url"}
-        if not str(normalized.get("api_key") or "").strip():
-            return {"ok": False, "error": "missing api_key"}
 
     brain.MODELS_CONFIG[mid] = normalized
     try:
@@ -172,7 +352,7 @@ async def delete_model_config(request: dict):
     if not mid:
         return {"ok": False, "error": "missing id"}
     if mid == brain._current_default:
-        return {"ok": False, "error": "不能删除当前使用中的模型"}
+        return {"ok": False, "error": "cannot delete the currently active model"}
     if mid not in brain.MODELS_CONFIG:
         return {"ok": False, "error": "model not found"}
     del brain.MODELS_CONFIG[mid]

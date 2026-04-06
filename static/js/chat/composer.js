@@ -203,6 +203,50 @@ function addMessage(sender,text,type,imageUrl,renderedHtml){
  }
 }
 
+function addChatEventNote(kind, label, text, detail){
+ var chat=document.getElementById('chat');
+ if(!chat) return null;
+ var row=document.createElement('div');
+ row.className='chat-event-note';
+ if(kind) row.classList.add('chat-event-note-'+String(kind).trim().toLowerCase());
+ row.setAttribute('data-note-kind', String(kind||'info').trim().toLowerCase());
+
+ var line=document.createElement('div');
+ line.className='chat-event-note-line';
+
+ var chip=document.createElement('span');
+ chip.className='chat-event-note-chip';
+ chip.textContent=String(label||'EVENT').trim()||'EVENT';
+
+ var main=document.createElement('span');
+ main.className='chat-event-note-text';
+ main.textContent=String(text||'').trim();
+
+ var time=document.createElement('span');
+ time.className='chat-event-note-time';
+ time.textContent=T();
+
+ line.appendChild(chip);
+ if(main.textContent){
+  line.appendChild(main);
+ }
+ line.appendChild(time);
+ row.appendChild(line);
+
+ var detailText=String(detail||'').trim();
+ if(detailText){
+  var detailEl=document.createElement('div');
+  detailEl.className='chat-event-note-detail';
+  detailEl.textContent=detailText;
+  row.appendChild(detailEl);
+ }
+
+ chat.appendChild(row);
+ _stickChatToBottom({threshold:220});
+ _snapshotChatHistory();
+ return row;
+}
+
 function _snapshotChatHistory(){
  var chat=document.getElementById('chat');
  if(!chat) return;

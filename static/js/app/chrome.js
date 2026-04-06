@@ -44,11 +44,16 @@ function _applyTheme(theme, options){
  return target;
 }
 
+function _themeNeedsViewRerender(tab){
+ var safeTab=Number(tab||0);
+ return safeTab===5;
+}
+
 function toggleTheme(){
  var body=document.body;
  _applyTheme(body.classList.contains('dark')?'light':'dark');
  var currentTab=window._currentTab||1;
- if(currentTab!==1){
+ if(currentTab!==1 && _themeNeedsViewRerender(currentTab)){
   setTimeout(function(){
    if(typeof show==='function' && window._currentTab===currentTab){
     show(currentTab);

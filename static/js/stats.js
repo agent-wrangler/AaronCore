@@ -157,11 +157,11 @@ function buildCostModule(s,pr,costYuan){
   h+='<div class="stats-module"><div class="stats-cost-grid">';
   h+='<div class="stats-cost-main">';
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.input')+'</span><span style="font-weight:600;">\u00a5'+costNew.toFixed(3)+'</span></div>';
-  h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.cache')+'</span><span style="font-weight:600;color:#818d99;">\u00a5'+costCache.toFixed(4)+'</span></div>';
+  h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.cache')+'</span><span style="font-weight:600;color:var(--tone-steel);">\u00a5'+costCache.toFixed(4)+'</span></div>';
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.output')+'</span><span style="font-weight:600;">\u00a5'+costOut.toFixed(4)+'</span></div>';
-  h+='<div class="stats-kv-mini" style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.04);"><span class="stats-kv-label">'+t('dash.cost.total')+'</span><span style="font-weight:700;color:#7a876d;">\u00a5'+costYuan.toFixed(2)+'</span></div>';
+  h+='<div class="stats-kv-mini" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--divider-panel);"><span class="stats-kv-label">'+t('dash.cost.total')+'</span><span style="font-weight:700;color:var(--tone-sage);">\u00a5'+costYuan.toFixed(2)+'</span></div>';
   if(saved>0){
-    h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.saved')+'</span><span style="font-weight:600;color:#7a876d;">\u00a5'+saved.toFixed(4)+'</span></div>';
+    h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.saved')+'</span><span style="font-weight:600;color:var(--tone-sage);">\u00a5'+saved.toFixed(4)+'</span></div>';
   }
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.avg')+'</span><span style="font-weight:600;">\u00a5'+avgCost.toFixed(4)+'</span></div>';
   h+='</div>';
@@ -172,7 +172,7 @@ function buildCostModule(s,pr,costYuan){
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.inputTokens')+'</span><span>'+fmtN(inp)+' tokens</span></div>';
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.cacheTokens')+'</span><span>'+fmtN(cr)+' tokens</span></div>';
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.outputTokens')+'</span><span>'+fmtN(out)+' tokens</span></div>';
-  h+='<div class="stats-kv-mini" style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.04);"><span class="stats-kv-label">'+t('dash.cost.avgInput')+'</span><span>'+fmtN(avgInp)+' tokens</span></div>';
+  h+='<div class="stats-kv-mini" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--divider-panel);"><span class="stats-kv-label">'+t('dash.cost.avgInput')+'</span><span>'+fmtN(avgInp)+' tokens</span></div>';
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">'+t('dash.cost.avgOutput')+'</span><span>'+fmtN(avgOut)+' tokens</span></div>';
   h+='</div>';
   h+='</div></div>';
@@ -224,7 +224,7 @@ function buildModelModule(s){
   var totalT=0;
   keys.forEach(function(k){ totalT+=(bm[k].input||0)+(bm[k].output||0); });
   keys.sort(function(a,b){ return ((bm[b].input||0)+(bm[b].output||0))-((bm[a].input||0)+(bm[a].output||0)); });
-  var colors=['#7a876d','#818d99','#b09568','#8d7f92','#a6776e'];
+  var colors=['var(--tone-sage)','var(--tone-steel)','var(--tone-amber)','var(--tone-mauve)','var(--tone-danger)'];
 
   keys.forEach(function(k,idx){
     var m=bm[k],inp=m.input||0,out=m.output||0,req=m.requests||0,tk=inp+out;
@@ -388,7 +388,7 @@ function buildMemoryModuleLegacy(s){
   });
   h+='</div>';
 
-  h+='<div style="font-size:11px;color:#94a3b8;margin:14px 0 8px;">'+dashText('层级明细','Layer Detail')+'</div>';
+  h+='<div style="font-size:11px;color:var(--text-label);margin:14px 0 8px;">'+dashText('层级明细','Layer Detail')+'</div>';
   h+='<div class="stats-cost-grid">';
   h+='<div class="stats-cost-main">';
   h+='<div class="stats-kv-mini"><span class="stats-kv-label">L1 · '+t('dash.mem.L1')+'</span><span>'+fmtN(mem.l1_count||0)+'</span></div>';
@@ -419,7 +419,7 @@ function buildMemoryModuleLegacy(s){
     var flashPct=Math.round(flashC/totalC*100);
     var tracePct=100-flashPct;
     var modeLabel=flashPct>=80?t('dash.cod.mode.flash'):flashPct>=60?t('dash.cod.mode.warm'):tracePct>=60?t('dash.cod.mode.trace'):t('dash.cod.mode.balanced');
-    var modeLabelColor=flashPct>=60?'#b19667':'#7f8e99';
+    var modeLabelColor=flashPct>=60?'var(--tone-amber)':'var(--tone-steel)';
     var r=44,cx=60,cy=60,circ=2*Math.PI*r;
     var flashDash=circ*(flashPct/100);
     var traceDash=circ*(tracePct/100);
@@ -428,15 +428,15 @@ function buildMemoryModuleLegacy(s){
     h+='<div class="stats-cod-ring-wrap">';
     h+='<svg width="120" height="120" viewBox="0 0 120 120">';
     h+='<defs><filter id="codGlow"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
-    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="11"/>';
-    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#b19667" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+flashDash+' '+circ+'" transform="rotate(-90 '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
-    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#7f8e99" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+traceDash+' '+circ+'" transform="rotate('+((-90)+flashPct*3.6)+' '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
+    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" style="stroke:var(--divider-panel)" stroke-width="11"/>';
+    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" style="stroke:var(--tone-amber)" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+flashDash+' '+circ+'" transform="rotate(-90 '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
+    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" style="stroke:var(--tone-steel)" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+traceDash+' '+circ+'" transform="rotate('+((-90)+flashPct*3.6)+' '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
     h+='<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" fill="'+modeLabelColor+'" font-size="13" font-weight="600" font-family="inherit">'+modeLabel+'</text>';
-    h+='<text x="'+cx+'" y="'+(cy+18)+'" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8.5" font-family="inherit" letter-spacing="0.3">'+t('dash.cod.auto')+'</text>';
+    h+='<text x="'+cx+'" y="'+(cy+18)+'" text-anchor="middle" style="fill:var(--text-label)" font-size="8.5" font-family="inherit" letter-spacing="0.3">'+t('dash.cod.auto')+'</text>';
     h+='</svg></div>';
     h+='<div class="stats-cod-data">';
-    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:#b19667;box-shadow:0 0 4px rgba(177,150,103,0.35);"></span><span class="stats-cod-row-label">'+t('dash.cod.flash')+'<span class="stats-cod-row-desc">'+t('dash.cod.flash.desc')+'</span></span><span class="stats-cod-row-val" style="color:#b19667;">'+flashPct+'%</span><span class="stats-cod-row-sub">'+flashC+'</span></div>';
-    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:#7f8e99;box-shadow:0 0 4px rgba(127,142,153,0.35);"></span><span class="stats-cod-row-label">'+t('dash.cod.trace')+'<span class="stats-cod-row-desc">'+t('dash.cod.trace.desc')+'</span></span><span class="stats-cod-row-val" style="color:#7f8e99;">'+tracePct+'%</span><span class="stats-cod-row-sub">'+traceC+'</span></div>';
+    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:var(--tone-amber);"></span><span class="stats-cod-row-label">'+t('dash.cod.flash')+'<span class="stats-cod-row-desc">'+t('dash.cod.flash.desc')+'</span></span><span class="stats-cod-row-val" style="color:var(--tone-amber);">'+flashPct+'%</span><span class="stats-cod-row-sub">'+flashC+'</span></div>';
+    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:var(--tone-steel);"></span><span class="stats-cod-row-label">'+t('dash.cod.trace')+'<span class="stats-cod-row-desc">'+t('dash.cod.trace.desc')+'</span></span><span class="stats-cod-row-val" style="color:var(--tone-steel);">'+tracePct+'%</span><span class="stats-cod-row-sub">'+traceC+'</span></div>';
     h+='</div></div>';
     h+='<div class="stats-cod-footer">'+t('dash.cod.footer')+'</div>';
   }
@@ -603,7 +603,7 @@ function buildMemoryModule(s){
     var flashPct=Math.round(flashC/totalC*100);
     var tracePct=100-flashPct;
     var modeLabel=flashPct>=80?t('dash.cod.mode.flash'):flashPct>=60?t('dash.cod.mode.warm'):tracePct>=60?t('dash.cod.mode.trace'):t('dash.cod.mode.balanced');
-    var modeLabelColor=flashPct>=60?'#b19667':'#7f8e99';
+    var modeLabelColor=flashPct>=60?'var(--tone-amber)':'var(--tone-steel)';
     var r=44,cx=60,cy=60,circ=2*Math.PI*r;
     var flashDash=circ*(flashPct/100);
     var traceDash=circ*(tracePct/100);
@@ -612,15 +612,15 @@ function buildMemoryModule(s){
     h+='<div class="stats-cod-ring-wrap">';
     h+='<svg width="120" height="120" viewBox="0 0 120 120">';
     h+='<defs><filter id="codGlow"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
-    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="11"/>';
-    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#b19667" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+flashDash+' '+circ+'" transform="rotate(-90 '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
-    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#7f8e99" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+traceDash+' '+circ+'" transform="rotate('+((-90)+flashPct*3.6)+' '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
+    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" style="stroke:var(--divider-panel)" stroke-width="11"/>';
+    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" style="stroke:var(--tone-amber)" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+flashDash+' '+circ+'" transform="rotate(-90 '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
+    h+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" style="stroke:var(--tone-steel)" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+traceDash+' '+circ+'" transform="rotate('+((-90)+flashPct*3.6)+' '+cx+' '+cy+')" opacity="'+ringOpacity+'" filter="url(#codGlow)"/>';
     h+='<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" fill="'+modeLabelColor+'" font-size="13" font-weight="600" font-family="inherit">'+modeLabel+'</text>';
-    h+='<text x="'+cx+'" y="'+(cy+18)+'" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8.5" font-family="inherit" letter-spacing="0.3">'+t('dash.cod.auto')+'</text>';
+    h+='<text x="'+cx+'" y="'+(cy+18)+'" text-anchor="middle" style="fill:var(--text-label)" font-size="8.5" font-family="inherit" letter-spacing="0.3">'+t('dash.cod.auto')+'</text>';
     h+='</svg></div>';
     h+='<div class="stats-cod-data">';
-    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:#b19667;box-shadow:0 0 4px rgba(177,150,103,0.35);"></span><span class="stats-cod-row-label">'+t('dash.cod.flash')+'<span class="stats-cod-row-desc">'+t('dash.cod.flash.desc')+'</span></span><span class="stats-cod-row-val" style="color:#b19667;">'+flashPct+'%</span><span class="stats-cod-row-sub">'+flashC+'</span></div>';
-    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:#7f8e99;box-shadow:0 0 4px rgba(127,142,153,0.35);"></span><span class="stats-cod-row-label">'+t('dash.cod.trace')+'<span class="stats-cod-row-desc">'+t('dash.cod.trace.desc')+'</span></span><span class="stats-cod-row-val" style="color:#7f8e99;">'+tracePct+'%</span><span class="stats-cod-row-sub">'+traceC+'</span></div>';
+    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:var(--tone-amber);"></span><span class="stats-cod-row-label">'+t('dash.cod.flash')+'<span class="stats-cod-row-desc">'+t('dash.cod.flash.desc')+'</span></span><span class="stats-cod-row-val" style="color:var(--tone-amber);">'+flashPct+'%</span><span class="stats-cod-row-sub">'+flashC+'</span></div>';
+    h+='<div class="stats-cod-row"><span class="stats-cod-dot" style="background:var(--tone-steel);"></span><span class="stats-cod-row-label">'+t('dash.cod.trace')+'<span class="stats-cod-row-desc">'+t('dash.cod.trace.desc')+'</span></span><span class="stats-cod-row-val" style="color:var(--tone-steel);">'+tracePct+'%</span><span class="stats-cod-row-sub">'+traceC+'</span></div>';
     h+='</div></div>';
     h+='<div class="stats-cod-footer">'+t('dash.cod.footer')+'</div>';
   }
@@ -667,7 +667,7 @@ function buildTrendModule(s){
   var h='<div class="stats-section"><div class="stats-section-title" style="justify-content:space-between;">';
   h+='<span>'+t('dash.trend.title')+'</span><div style="display:flex;gap:4px;">';
   [{k:'tokens',n:t('dash.trend.tokens')},{k:'requests',n:t('dash.trend.requests')}].forEach(function(d,i){
-    h+='<span class="stats-trend-tab'+(i===0?' stats-highlight':'')+'" data-dim="'+d.k+'" onclick="switchTrendDim(\''+d.k+'\')" style="cursor:pointer;font-size:11px;padding:2px 8px;border-radius:6px;'+(i===0?'background:rgba(106,170,136,0.12);':'')+'">'+d.n+'</span>';
+    h+='<span class="stats-trend-tab'+(i===0?' stats-highlight':'')+'" data-dim="'+d.k+'" onclick="switchTrendDim(\''+d.k+'\')" style="cursor:pointer;font-size:11px;padding:2px 8px;border-radius:6px;'+(i===0?'background:var(--tone-sage-soft);':'')+'">'+d.n+'</span>';
   });
   h+='</div></div>';
   h+='<div id="statsTrendChart">'+renderTrendBars(byDay,dayKeys,'tokens')+'</div>';
@@ -715,7 +715,7 @@ function switchTrendDim(dim){
   tabs.forEach(function(tab){
     if(tab.getAttribute('data-dim')===dim){
       tab.classList.add('stats-highlight');
-      tab.style.background='rgba(122,140,109,0.12)';
+      tab.style.background='var(--tone-sage-soft)';
     }else{
       tab.classList.remove('stats-highlight');
       tab.style.background='';

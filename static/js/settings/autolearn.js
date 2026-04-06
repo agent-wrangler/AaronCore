@@ -51,132 +51,76 @@ function clampSettingNumber(value,min,max,fallback){
 }
 
 function getSettingsTheme(isLight){
- return isLight?{
-  cardBg:'var(--bg-card)',
-  cardBgActive:'linear-gradient(135deg,#f7f4ef,#f2ede6)',
-  border:'rgba(148,163,184,0.22)',
-  borderStrong:'rgba(120,120,130,0.24)',
-  text:'#1c1c1e',
-  sub:'#64748b',
-  mutedBg:'rgba(226,232,240,0.9)',
-  mutedText:'#334155',
-  actionPrimary:'linear-gradient(135deg,#6f685e,#8a8174)',
-  actionPrimaryText:'#fff',
-  actionSecondary:'rgba(226,232,240,0.9)',
-  actionSecondaryText:'#334155',
-  stateOnBg:'rgba(100,100,110,0.12)',
-  stateOnText:'#374151',
-  stateOffBg:'rgba(148,163,184,0.12)',
-  stateOffText:'#475569',
-  accentBg:'rgba(100,100,110,0.12)',
-  accentText:'#374151',
-  okBg:'rgba(121,140,109,0.14)',
-  okText:'#68795f',
-  warnBg:'rgba(177,145,89,0.15)',
-  warnText:'#8f6d3f',
-  dangerBg:'rgba(171,113,99,0.14)',
-  dangerText:'#8b5e55',
-  mutedPillBg:'rgba(125,118,108,0.12)',
-  mutedPillText:'#6a6258',
-  pathBg:'rgba(125,118,108,0.1)',
-  pathText:'#5f584f',
-  headerBg:'rgba(122,116,107,0.06)',
-  currentRowBg:'rgba(122,116,107,0.08)',
-  currentRowBorder:'rgba(122,116,107,0.22)',
-  softRowBg:'#f7f4ef',
-  softDashedBg:'rgba(122,116,107,0.04)',
-  softDashedBorder:'rgba(122,116,107,0.18)',
-  successBg:'rgba(122,140,109,0.12)',
-  successText:'#6f7e63',
-  inactiveTagBg:'rgba(148,163,184,0.1)',
-  inactiveTagText:'#64748b',
-  actionBorder:'rgba(122,116,107,0.24)',
-  actionText:'#6a6258',
-  dialogBg:'#fbfaf7',
-  dialogInputBg:'#f5f1ea',
-  dialogOverlay:'rgba(0,0,0,0.5)',
-  spinner:'#7c3aed',
-  toggleOn:'#7a876d',
-  toggleOff:'#d8d0c7',
-  currentCheck:'#6f7e63',
-  dangerLine:'#b91c1c',
-  dangerSoftBorder:'rgba(171,113,99,0.22)',
-  dangerSoftText:'#9a665d'
- }:{
-  cardBg:'rgba(46,43,38,0.95)',
-  cardBgActive:'linear-gradient(135deg,rgba(58,54,48,0.94),rgba(47,44,39,0.98))',
-  border:'rgba(228,220,204,0.07)',
-  borderStrong:'rgba(228,220,204,0.1)',
-  text:'#efe8db',
-  sub:'#978f82',
-  mutedBg:'rgba(255,255,255,0.04)',
-  mutedText:'#e4dccf',
-  actionPrimary:'linear-gradient(135deg,#9e907c,#7e725f)',
-  actionPrimaryText:'#fffaf2',
-  actionSecondary:'rgba(255,255,255,0.04)',
-  actionSecondaryText:'#e4dccf',
-  stateOnBg:'rgba(123,133,103,0.12)',
-  stateOnText:'#bcc5af',
-  stateOffBg:'rgba(255,255,255,0.06)',
-  stateOffText:'#c7beaf',
-  accentBg:'rgba(167,148,108,0.12)',
-  accentText:'#d8ccb4',
-  okBg:'rgba(123,133,103,0.14)',
-  okText:'#bcc5af',
-  warnBg:'rgba(171,148,103,0.14)',
-  warnText:'#d5c091',
-  dangerBg:'rgba(171,113,99,0.16)',
-  dangerText:'#d7aca4',
-  mutedPillBg:'rgba(255,255,255,0.06)',
-  mutedPillText:'#c7beaf',
-  pathBg:'rgba(255,255,255,0.04)',
-  pathText:'#d1c8ba',
-  headerBg:'rgba(255,255,255,0.03)',
-  currentRowBg:'rgba(167,148,108,0.08)',
-  currentRowBorder:'rgba(167,148,108,0.22)',
-  softRowBg:'rgba(255,255,255,0.025)',
-  softDashedBg:'rgba(255,255,255,0.02)',
-  softDashedBorder:'rgba(228,220,204,0.08)',
-  successBg:'rgba(123,133,103,0.12)',
-  successText:'#bcc5af',
-  inactiveTagBg:'rgba(255,255,255,0.05)',
-  inactiveTagText:'#a49c8e',
-  actionBorder:'rgba(167,148,108,0.22)',
-  actionText:'#d8ccb4',
-  dialogBg:'rgba(38,36,32,0.98)',
-  dialogInputBg:'rgba(255,255,255,0.04)',
-  dialogOverlay:'rgba(15,14,12,0.58)',
-  spinner:'#b49e85',
-  toggleOn:'#8d9979',
-  toggleOff:'#5a554c',
-  currentCheck:'#bcc5af',
-  dangerLine:'#d7aca4',
-  dangerSoftBorder:'rgba(171,113,99,0.22)',
-  dangerSoftText:'#d7aca4'
+ return {
+  cardBg:'var(--surface-panel)',
+  cardBgActive:'var(--surface-panel-strong)',
+  border:'var(--border-panel)',
+  borderStrong:'var(--border-panel-strong)',
+  text:'var(--text-primary)',
+  sub:'var(--text-label)',
+  mutedBg:'var(--surface-panel-soft)',
+  mutedText:'var(--text-secondary)',
+  actionPrimary:'linear-gradient(135deg,var(--tone-amber),var(--tone-amber-strong))',
+  actionPrimaryText:'var(--bg-main)',
+  actionSecondary:'var(--surface-panel-soft)',
+  actionSecondaryText:'var(--text-secondary)',
+  stateOnBg:'var(--tone-sage-soft)',
+  stateOnText:'var(--tone-sage)',
+  stateOffBg:'var(--surface-panel-soft)',
+  stateOffText:'var(--text-secondary)',
+  accentBg:'var(--tone-steel-soft)',
+  accentText:'var(--tone-steel)',
+  okBg:'var(--tone-sage-soft)',
+  okText:'var(--tone-sage)',
+  warnBg:'var(--tone-amber-soft)',
+  warnText:'var(--tone-amber)',
+  dangerBg:'var(--tone-danger-soft)',
+  dangerText:'var(--tone-danger)',
+  mutedPillBg:'var(--surface-panel-soft)',
+  mutedPillText:'var(--text-secondary)',
+  pathBg:'var(--surface-panel-soft)',
+  pathText:'var(--text-secondary)',
+  headerBg:'var(--surface-panel-soft)',
+  currentRowBg:'var(--tone-amber-soft)',
+  currentRowBorder:'var(--tone-amber-border)',
+  softRowBg:'var(--surface-panel-soft)',
+  softDashedBg:'var(--surface-panel-soft)',
+  softDashedBorder:'var(--border-panel)',
+  successBg:'var(--tone-sage-soft)',
+  successText:'var(--tone-sage)',
+  inactiveTagBg:'var(--surface-panel-soft)',
+  inactiveTagText:'var(--text-label)',
+  actionBorder:'var(--tone-amber-border)',
+  actionText:'var(--text-secondary)',
+  dialogBg:'var(--surface-panel-strong)',
+  dialogInputBg:'var(--surface-panel-soft)',
+  dialogOverlay:isLight?'rgba(34,29,24,0.18)':'rgba(15,14,12,0.58)',
+  spinner:'var(--tone-amber)',
+  toggleOn:'var(--tone-sage)',
+  toggleOff:'var(--border-panel-strong)',
+  currentCheck:'var(--tone-sage)',
+  dangerLine:'var(--tone-danger)',
+  dangerSoftBorder:'var(--tone-danger-border)',
+  dangerSoftText:'var(--tone-danger)'
  };
 }
 
 function renderSettingsToggleCard(title, desc, key, value, isLight){
- var cardBg=isLight?'var(--bg-card)':'rgba(36,36,40,0.95)';
- var borderColor=value
-  ? (isLight?'rgba(120,120,130,0.24)':'rgba(150,150,160,0.28)')
-  : (isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
- var titleColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var stateBg=value
-  ? (isLight?'rgba(100,100,110,0.12)':'rgba(120,120,130,0.18)')
-  : (isLight?'rgba(148,163,184,0.12)':'rgba(148,163,184,0.12)');
- var stateColor=value?(isLight?'#374151':'#c7d2fe'):(isLight?'#475569':'#cbd5e1');
- var actionBg=value
-  ? (isLight?'linear-gradient(135deg,#6f685e,#8a8174)':'linear-gradient(135deg,#6b7280,#8b5cf6)')
-  : (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)');
- var actionColor=value?'#fff':(isLight?'#334155':'#e2e8f0');
- return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:'+(isLight?'0 8px 24px rgba(34,29,24,0.05)':'0 10px 28px rgba(0,0,0,0.14)')+';">'
+ var theme=getSettingsTheme(isLight);
+ var cardBg=theme.cardBg;
+ var borderColor=value?theme.borderStrong:theme.border;
+ var titleColor=theme.text;
+ var subColor=theme.sub;
+ var stateBg=value?theme.stateOnBg:theme.stateOffBg;
+ var stateColor=value?theme.stateOnText:theme.stateOffText;
+ var actionBg=value?theme.actionPrimary:theme.actionSecondary;
+ var actionColor=value?theme.actionPrimaryText:theme.actionSecondaryText;
+ return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:var(--shadow-card);">'
   +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
   +'<div style="min-width:0;"><div style="font-size:15px;font-weight:700;color:'+titleColor+';margin-bottom:4px;">'+escapeHtml(title)+'</div><div style="font-size:12px;line-height:1.7;color:'+subColor+';">'+escapeHtml(desc)+'</div></div>'
   +'<span style="flex-shrink:0;padding:6px 10px;border-radius:999px;background:'+stateBg+';color:'+stateColor+';font-size:12px;font-weight:700;">'+(value?'已开启':'已关闭')+'</span>'
   +'</div>'
-  +'<button type="button" data-settings-action="toggle" data-settings-key="'+escapeHtml(key)+'" style="margin-top:auto;padding:10px 12px;border:none;border-radius:12px;background:'+actionBg+';color:'+actionColor+';font-size:13px;font-weight:700;cursor:pointer;box-shadow:'+(value?'0 8px 20px rgba(120,120,130,0.18)':'none')+';">'+(value?'保持开启':'现在开启')+'</button>'
+  +'<button type="button" data-settings-action="toggle" data-settings-key="'+escapeHtml(key)+'" style="margin-top:auto;padding:10px 12px;border:none;border-radius:12px;background:'+actionBg+';color:'+actionColor+';font-size:13px;font-weight:700;cursor:pointer;box-shadow:'+(value?'var(--shadow-card)':'none')+';">'+(value?'保持开启':'现在开启')+'</button>'
   +'</div>';
 }
 
@@ -202,20 +146,15 @@ function currentAutolearnPreset(config){
 }
 
 function renderAutolearnPresetCard(key, preset, currentKey, isLight){
+ var theme=getSettingsTheme(isLight);
  var active=key===currentKey;
- var cardBg=active
-  ? (isLight?'linear-gradient(135deg,#f7f4ef,#f2ede6)':'linear-gradient(135deg,rgba(100,100,110,0.18),rgba(28,28,30,0.92))')
-  : (isLight?'var(--bg-card)':'rgba(36,36,40,0.92)');
- var borderColor=active
-  ? (isLight?'rgba(120,120,130,0.22)':'rgba(150,150,160,0.28)')
-  : (isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
- var textColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var btnBg=active
-  ? (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)')
-  : 'linear-gradient(135deg,#6f685e,#8a8174)';
- var btnColor=active?(isLight?'#334155':'#e2e8f0'):'#fff';
- return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:'+(isLight?'0 8px 24px rgba(34,29,24,0.05)':'0 10px 28px rgba(0,0,0,0.14)')+';">'
+ var cardBg=active?theme.cardBgActive:theme.cardBg;
+ var borderColor=active?theme.borderStrong:theme.border;
+ var textColor=theme.text;
+ var subColor=theme.sub;
+ var btnBg=active?theme.actionSecondary:theme.actionPrimary;
+ var btnColor=active?theme.actionSecondaryText:theme.actionPrimaryText;
+ return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow-card);">'
   +'<div style="font-size:16px;font-weight:800;color:'+textColor+';">'+escapeHtml(preset.label)+'</div>'
   +'<div style="font-size:12px;line-height:1.7;color:'+subColor+';flex:1;">'+escapeHtml(preset.desc)+'</div>'
   +'<button type="button" data-settings-action="preset" data-settings-key="'+escapeHtml(key)+'" style="padding:10px 12px;border:none;border-radius:12px;background:'+btnBg+';color:'+btnColor+';font-size:13px;font-weight:700;cursor:pointer;">'+(active?'保持这一档':'切到这一档')+'</button>'
@@ -246,21 +185,21 @@ function formatSettingsTimestamp(value){
 }
 
 function renderSettingsActionButton(label, action, key, isLight, emphasis, disabled){
+ var theme=getSettingsTheme(isLight);
  var primary=emphasis==='primary';
- var bg=disabled
-  ? (isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)')
-  : (primary?'linear-gradient(135deg,#6f685e,#8a8174)':(isLight?'rgba(226,232,240,0.9)':'rgba(15,23,42,0.48)'));
- var color=disabled?'#94a3b8':(primary?'#fff':(isLight?'#334155':'#e2e8f0'));
+ var bg=disabled?theme.actionSecondary:(primary?theme.actionPrimary:theme.actionSecondary);
+ var color=disabled?theme.sub:(primary?theme.actionPrimaryText:theme.actionSecondaryText);
  return '<button type="button" data-settings-action="'+action+'"'+(key?' data-settings-key="'+escapeHtml(key)+'"':'')+' style="position:relative;z-index:1;padding:10px 12px;border:none;border-radius:12px;background:'+bg+';color:'+color+';font-size:13px;font-weight:700;cursor:'+(disabled?'default':'pointer')+';'+(disabled?'opacity:0.68;pointer-events:none;':'')+'">'+escapeHtml(label)+'</button>';
 }
 
 function renderSettingsMetaPill(label, tone, isLight){
+ var theme=getSettingsTheme(isLight);
  var palette={
-  accent:isLight?['rgba(100,100,110,0.12)','#374151']:['rgba(120,120,130,0.18)','#c7d2fe'],
-  ok:isLight?['rgba(121,140,109,0.14)','#68795f']:['rgba(16,185,129,0.18)','#86efac'],
-  warn:isLight?['rgba(177,145,89,0.15)','#8f6d3f']:['rgba(245,158,11,0.16)','#fde68a'],
-  danger:isLight?['rgba(171,113,99,0.14)','#8b5e55']:['rgba(239,68,68,0.18)','#fca5a5'],
-  muted:isLight?['rgba(125,118,108,0.12)','#6a6258']:['rgba(148,163,184,0.14)','#cbd5e1']
+  accent:[theme.accentBg,theme.accentText],
+  ok:[theme.okBg,theme.okText],
+  warn:[theme.warnBg,theme.warnText],
+  danger:[theme.dangerBg,theme.dangerText],
+  muted:[theme.mutedPillBg,theme.mutedPillText]
  };
  var picked=palette[tone]||palette.muted;
  return '<span style="padding:6px 10px;border-radius:999px;background:'+picked[0]+';color:'+picked[1]+';font-size:12px;font-weight:700;">'+escapeHtml(label)+'</span>';
@@ -321,18 +260,19 @@ function summarizeSelfRepairValidation(report){
 }
 
 function renderRepairPathList(paths, isLight, emptyText){
+ var theme=getSettingsTheme(isLight);
  var list=(Array.isArray(paths)?paths:[]).map(function(item){ return String(item||'').trim(); }).filter(Boolean).slice(0,6);
- var subColor=isLight?'#64748b':'#94a3b8';
+ var subColor=theme.sub;
  if(!list.length) return '<div style="font-size:12px;color:'+subColor+';">'+escapeHtml(emptyText||'暂时没有')+'</div>';
- var bg=isLight?'rgba(125,118,108,0.1)':'rgba(15,23,42,0.48)';
- var color=isLight?'#5f584f':'#cbd5e1';
+ var bg=theme.pathBg;
+ var color=theme.pathText;
  return '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+list.map(function(path){
   return '<span style="padding:6px 10px;border-radius:999px;background:'+bg+';color:'+color+';font-size:12px;font-family:Consolas,monospace;">'+escapeHtml(path)+'</span>';
  }).join('')+'</div>';
 }
 
 function renderRepairDetailRow(label, bodyHtml, isLight){
- var subColor=isLight?'#64748b':'#94a3b8';
+ var subColor=getSettingsTheme(isLight).sub;
  return '<div><div style="font-size:12px;color:'+subColor+';margin-bottom:6px;">'+escapeHtml(label)+'</div>'+bodyHtml+'</div>';
 }
 
@@ -387,10 +327,11 @@ function renderSelfRepairReportCard(report, isLight, active){
  var apply=safe.apply_result&&typeof safe.apply_result==='object'?safe.apply_result:{};
  var statusMeta=selfRepairReportStatusMeta(safe);
  var riskMeta=selfRepairRiskMeta(safe);
- var textColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var borderColor=active?(isLight?'rgba(120,120,130,0.22)':'rgba(150,150,160,0.28)'):(isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)');
- var cardBg=active?(isLight?'linear-gradient(135deg,#f7f4ef,#f2ede6)':'linear-gradient(135deg,rgba(100,100,110,0.18),rgba(28,28,30,0.92))'):(isLight?'var(--bg-card)':'rgba(36,36,40,0.92)');
+ var theme=getSettingsTheme(isLight);
+ var textColor=theme.text;
+ var subColor=theme.sub;
+ var borderColor=active?theme.borderStrong:theme.border;
+ var cardBg=active?theme.cardBgActive:theme.cardBg;
  var summary=cleanInlineText(safe.summary||safe.problem||'',220)||'这条修复提案还没有生成摘要。';
  var diagnosis=cleanInlineText(safe.diagnosis||safe.fix||'',240);
  var question=cleanInlineText(safe.last_question||'',140);
@@ -409,7 +350,7 @@ function renderSelfRepairReportCard(report, isLight, active){
  var canPreview=applyStatus!=='applied'&&applyStatus!=='applied_without_validation'&&previewStatus!=='preview_ready';
  var canApply=previewStatus==='preview_ready'&&applyStatus!=='applied'&&applyStatus!=='applied_without_validation';
  var html='';
- html+='<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:18px;padding:16px;box-shadow:'+(active?(isLight?'0 10px 30px rgba(34,29,24,0.06)':'0 12px 30px rgba(0,0,0,0.18)'):(isLight?'0 8px 24px rgba(34,29,24,0.05)':'0 10px 24px rgba(0,0,0,0.12)'))+';">';
+ html+='<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:18px;padding:16px;box-shadow:var(--shadow-card);">';
  html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
  html+='<div style="min-width:0;flex:1 1 420px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+renderSettingsMetaPill(statusMeta.label,statusMeta.tone,isLight)+renderSettingsMetaPill(riskMeta.label,riskMeta.tone,isLight)+'</div><div style="font-size:16px;font-weight:800;color:'+textColor+';line-height:1.5;margin-top:10px;">'+escapeHtml(summary)+'</div></div>';
  html+='<div style="font-size:12px;color:'+subColor+';white-space:nowrap;">'+escapeHtml(formatSettingsTimestamp(safe.updated_at||safe.created_at))+'</div></div>';
@@ -442,10 +383,11 @@ function renderSelfRepairReportCard(report, isLight, active){
 }
 
 function renderSelfRepairReviewSection(config, status, reports, isLight){
- var textColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var cardBg=isLight?'var(--bg-card)':'rgba(36,36,40,0.95)';
- var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
+ var theme=getSettingsTheme(isLight);
+ var textColor=theme.text;
+ var subColor=theme.sub;
+ var cardBg=theme.cardBg;
+ var borderColor=theme.border;
  var safeReports=Array.isArray(reports)?reports:[];
  var list=safeReports.slice(0,10);
  var activeId=settingsPanelState.activeRepairId||((list[0]&&list[0].id)||'');
@@ -533,16 +475,17 @@ document.addEventListener('change',function(event){
 function renderSettingsPage(isLight){
  var box=document.getElementById('settingsBox');
  if(!box) return;
+ var theme=getSettingsTheme(isLight);
  var config=mergeAutolearnConfig(settingsPanelState.config||{});
  var selfRepairStatus=settingsPanelState.selfRepairStatus||{};
  var selfRepairReports=Array.isArray(settingsPanelState.selfRepairReports)?settingsPanelState.selfRepairReports:[];
  var l7s=settingsPanelState.l7Stats||{};
  var notice=settingsPanelState.error||settingsPanelState.notice||'';
- var noticeColor=settingsPanelState.error?'#ef4444':(isLight?'#374151':'#c7d2fe');
- var cardBg=isLight?'var(--bg-card)':'rgba(36,36,40,0.95)';
- var textColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var borderColor=isLight?'rgba(148,163,184,0.22)':'rgba(255,255,255,0.06)';
+ var noticeColor=settingsPanelState.error?theme.dangerText:theme.accentText;
+ var cardBg=theme.cardBg;
+ var textColor=theme.text;
+ var subColor=theme.sub;
+ var borderColor=theme.border;
  var html='';
 
  // ── 语言切换 ──
@@ -550,24 +493,24 @@ function renderSettingsPage(isLight){
  html+='<div style="margin-bottom:14px;background:'+cardBg+';border:1px solid '+borderColor+';padding:14px 18px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;">';
  html+='<span style="font-size:14px;font-weight:600;color:'+textColor+';">'+t('settings.lang')+'</span>';
  html+='<div style="display:flex;gap:6px;">';
- html+='<button onclick="setLang(\'zh\')" style="padding:6px 14px;border-radius:8px;border:1px solid '+borderColor+';background:'+(_isZh?'linear-gradient(135deg,#6f685e,#8a8174)':cardBg)+';color:'+(_isZh?'#fff':textColor)+';font-size:13px;font-weight:600;cursor:pointer;">'+t('settings.lang.zh')+'</button>';
- html+='<button onclick="setLang(\'en\')" style="padding:6px 14px;border-radius:8px;border:1px solid '+borderColor+';background:'+(!_isZh?'linear-gradient(135deg,#6f685e,#8a8174)':cardBg)+';color:'+(!_isZh?'#fff':textColor)+';font-size:13px;font-weight:600;cursor:pointer;">'+t('settings.lang.en')+'</button>';
+ html+='<button onclick="setLang(\'zh\')" style="padding:6px 14px;border-radius:8px;border:1px solid '+borderColor+';background:'+(_isZh?theme.actionPrimary:cardBg)+';color:'+(_isZh?theme.actionPrimaryText:textColor)+';font-size:13px;font-weight:600;cursor:pointer;">'+t('settings.lang.zh')+'</button>';
+ html+='<button onclick="setLang(\'en\')" style="padding:6px 14px;border-radius:8px;border:1px solid '+borderColor+';background:'+(!_isZh?theme.actionPrimary:cardBg)+';color:'+(!_isZh?theme.actionPrimaryText:textColor)+';font-size:13px;font-weight:600;cursor:pointer;">'+t('settings.lang.en')+'</button>';
  html+='</div></div>';
 
  // ── 区块1：状态总览（4个数字）──
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">';
  html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.correction')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.l7_rule_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
- html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.behavior')+'</div><div style="font-size:22px;font-weight:800;color:'+(l7s.l7_constraint_count?'#6f7e63':textColor)+';">'+(l7s.l7_constraint_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
+ html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.behavior')+'</div><div style="font-size:22px;font-weight:800;color:'+(l7s.l7_constraint_count?theme.successText:textColor)+';">'+(l7s.l7_constraint_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
  html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.knowledge')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.l8_knowledge_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
  html+='</div>';
 
  // ── 区块2：持续进化 ──
  var _evo=config.enabled;
  if(!document.getElementById('nova-spin-style')){var _ss=document.createElement('style');_ss.id='nova-spin-style';_ss.textContent='@keyframes nova-spin{to{transform:rotate(360deg)}}';document.head.appendChild(_ss);}
- var _dotHtml=_evo?'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2.5px solid '+(isLight?'#7c3aed':'#a78bfa')+';border-top-color:transparent;animation:nova-spin 1s linear infinite;vertical-align:middle;margin-right:10px;"></span>':'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+(isLight?'#cbd5e1':'#475569')+';vertical-align:middle;margin-right:10px;"></span>';
+ var _dotHtml=_evo?'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2.5px solid '+theme.spinner+';border-top-color:transparent;animation:nova-spin 1s linear infinite;vertical-align:middle;margin-right:10px;"></span>':'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+theme.stateOffText+';vertical-align:middle;margin-right:10px;"></span>';
  html+='<div style="margin-top:14px;background:'+cardBg+';border:1px solid '+borderColor+';padding:18px 20px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;">';
  html+='<div><div style="display:flex;align-items:center;"><span style="font-size:16px;font-weight:700;color:'+textColor+';">'+_dotHtml+(_evo?t('settings.evolving'):t('settings.paused'))+'</span></div><div style="font-size:12px;color:'+subColor+';margin-top:6px;">'+(_evo?t('settings.evolve.desc.on'):t('settings.evolve.desc.off'))+'</div></div>';
- html+='<div data-settings-action="toggle" data-settings-key="enabled" style="flex-shrink:0;width:44px;height:24px;border-radius:12px;background:'+(_evo?(isLight?'#7a876d':'#34d399'):(isLight?'#d8d0c7':'#475569'))+';cursor:pointer;position:relative;transition:background 0.2s;"><span style="position:absolute;top:2px;'+(_evo?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.2s;"></span></div>';
+ html+='<div data-settings-action="toggle" data-settings-key="enabled" style="flex-shrink:0;width:44px;height:24px;border-radius:12px;background:'+(_evo?theme.toggleOn:theme.toggleOff)+';cursor:pointer;position:relative;transition:background 0.2s;"><span style="position:absolute;top:2px;'+(_evo?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.2s;"></span></div>';
  html+='</div>';
 
  // ── 区块3：模型管理 ──

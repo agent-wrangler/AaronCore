@@ -227,17 +227,18 @@ var _chatAutoStickToBottom=true;
  function _restoreTimelineSnapshot(){
   var chat=document.getElementById('chat');
   if(!chat) return false;
-  if(typeof hasCompatibleChatHistorySnapshot==='function' && !hasCompatibleChatHistorySnapshot()){
-   if(typeof clearChatHistorySnapshot==='function'){
-    clearChatHistorySnapshot();
-   }
-   return false;
-  }
   var snapshot='';
-  try{
-   snapshot=localStorage.getItem('nova_chat_history')||'';
-  }catch(e){
-   snapshot='';
+  if(typeof getStoredChatHistorySnapshot==='function'){
+   snapshot=(getStoredChatHistorySnapshot({
+    preferSession:true,
+    recentTurns:CHAT_HISTORY_BOOT_TURNS
+   })||{}).html||'';
+  }else{
+   try{
+    snapshot=localStorage.getItem('nova_chat_history')||'';
+   }catch(e){
+    snapshot='';
+   }
   }
   if(!snapshot.trim()) return false;
   chat.innerHTML=snapshot;
@@ -256,7 +257,7 @@ var _chatAutoStickToBottom=true;
  function _reloadChatFromServer(keepScroll){
   var chat=document.getElementById('chat');
   if(!chat) return;
-  fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(function(d){
+  fetch('/history?limit='+CHAT_HISTORY_BOOT_TURNS+'&offset=0').then(function(r){return r.json()}).then(function(d){
    if(window._currentTab!==1&&window._currentTab!==undefined) return;
    var items=d.history||[];
    window._historyHasMore=d.has_more||false;
@@ -280,6 +281,9 @@ var _chatAutoStickToBottom=true;
    }
    chat.innerHTML='';
    chatHistory='';
+   if(typeof persistChatHistorySnapshot==='function'){
+    persistChatHistorySnapshot();
+   }
   }).catch(function(e){
    console.warn('[Nova] reload chat from server failed', e);
   });
@@ -691,7 +695,7 @@ window._reloadChatFromServer=_reloadChatFromServer;
   }
  });
 
-fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(function(d){
+fetch('/history?limit='+CHAT_HISTORY_BOOT_TURNS+'&offset=0').then(function(r){return r.json()}).then(function(d){
   var items=d.history||[];
   window._historyHasMore=d.has_more||false;
   var chat=document.getElementById('chat');
@@ -699,6 +703,11 @@ fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(func
   window._historyOffset=Math.max(items.length, renderedTurns);
   if(items.length===0){
    if(_restoredTimelineSnapshot){
+    chat.innerHTML='';
+    chatHistory='';
+    if(typeof persistChatHistorySnapshot==='function'){
+     persistChatHistorySnapshot();
+    }
     _rebindStepToggles(chat);
    }
    return;

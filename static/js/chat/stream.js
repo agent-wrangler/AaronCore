@@ -4,6 +4,7 @@
 var _runPanelStoreKey='nova_run_panel_open';
 var _runPanelUserOpen=true;
 var _runPanelTabVisible=true;
+var _pendingModelSwitchNote=null;
 
 function _normalizeRunPanelDom(){
  var host=document.getElementById('runPanel');
@@ -321,6 +322,39 @@ function _formatRunPanelConsoleHeader(runNumber, startedAt){
  return '[RUN #'+_formatRunPanelConsoleSeq(runNumber)+' | '+_formatRunPanelConsoleTimestamp(startedAt)+']';
 }
 
+function _queueModelSwitchNote(payload){
+ if(!payload) return;
+ var nextName=String(payload.model_name||payload.model||'').trim();
+ if(!nextName) return;
+ var labelEl=document.getElementById('modelName');
+ var previousName=String(payload.previous_model_name||'').trim();
+ if(!previousName && labelEl){
+  previousName=String(labelEl.textContent||'').trim();
+ }
+ if(!previousName){
+  previousName=String(window._novaCurrentModel||'').trim();
+ }
+ if(previousName===nextName){
+  previousName=String(payload.previous_model||'').trim();
+ }
+ _pendingModelSwitchNote={
+  from:previousName,
+  to:nextName,
+  toId:String(payload.model||'').trim()
+ };
+}
+
+function _flushPendingModelSwitchNote(){
+ if(!_pendingModelSwitchNote || typeof addChatEventNote!=='function') return;
+ var note=_pendingModelSwitchNote;
+ _pendingModelSwitchNote=null;
+ var text=note.from && note.from!==note.to
+  ? (note.from+' → '+note.to)
+  : (note.to||note.toId||'');
+ if(!text) return;
+ addChatEventNote('model-switch', 'MODEL SWITCH', text);
+}
+
 function _formatRunPanelConsoleStatus(statusKey, progressCurrent, totalSteps){
  var marker='IDLE';
  var label='READY';
@@ -414,6 +448,7 @@ var _runPanelEls=_getRunPanelEls();
 var _runPromptText=String(text||'').replace(/\s+/g,' ').trim();
 var _runNumber=_nextRunPanelConsoleCounter();
 var _runStartedAt=Date.now();
+_pendingModelSwitchNote=null;
 var _runFinishedAt=0;
 var _runElapsedTimer=0;
 var _runPanelAutoFollow=true;
@@ -2394,6 +2429,10 @@ function _renderReplyViaStream(text){
        }else if(currentEvent==='model_changed'){
         var newModel=parsed.model||'';
         var newName=parsed.model_name||newModel;
+        _queueModelSwitchNote({
+         model:newModel,
+         model_name:newName
+        });
         if(newModel){
          window._novaCurrentModel=newModel;
          var el=document.getElementById('modelName');
@@ -2422,6 +2461,7 @@ if(_streamStarted && finalText){
    _setRunPanelEmptyState('quiet');
    finalizePendingAssistantMessage(pendingState, t('chat.error.retry'));
   }
+  _flushPendingModelSwitchNote();
   if(repairData && repairData.show){ showRepairBar(repairData); }
   _completeTaskProgress();
   AwarenessManager.startPolling();
@@ -2441,6 +2481,7 @@ if(_streamStarted && finalText){
    _setRunPanelEmptyState('error');
    finalizePendingAssistantMessage(pendingState, t('chat.error.noconnect'));
   }
+  _pendingModelSwitchNote=null;
  }
  _stopRunElapsedClock();
  _syncRunPanelHeader();

@@ -18,8 +18,8 @@ var _memFilteredItems = [];
 function _memRenderPage() {
   var labelColor = "var(--text-label)";
   var textColor = "var(--text-primary)";
-  var cardBg = "var(--bg-card)";
-  var borderColor = "var(--border-card)";
+  var cardBg = "var(--surface-panel)";
+  var borderColor = "var(--border-panel)";
 
   var total = _memFilteredItems.length;
   var totalPages = Math.max(1, Math.ceil(total / MEM_PAGE_SIZE));

@@ -1,11 +1,11 @@
 /* NovaCore CSS entrypoint */
 /* Keep this file as the single linked stylesheet; section files hold the real rules. */
-@import url("/static/css/sections/shell.css?v=20260405theme50");
-@import url("/static/css/sections/chat.css?v=20260405theme50");
+@import url("/static/css/sections/shell.css?v=20260406theme65");
+@import url("/static/css/sections/chat.css?v=20260406theme56");
 @import url("/static/css/sections/chat-steps.css?v=20260405theme50");
 @import url("/static/css/sections/composer.css?v=20260405theme50");
-@import url("/static/css/sections/skills.css?v=20260405theme50");
-@import url("/static/css/sections/dashboard.css?v=20260405theme50");
+@import url("/static/css/sections/skills.css?v=20260406theme65");
+@import url("/static/css/sections/dashboard.css?v=20260406theme65");
 @import url("/static/css/sections/workbench.css?v=20260406theme53");
-@import url("/static/css/sections/themes.css?v=20260405theme50");
+@import url("/static/css/sections/themes.css?v=20260406theme65");
 
