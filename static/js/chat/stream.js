@@ -13,11 +13,16 @@ function _normalizeRunPanelDom(){
   +'<div class="run-panel-header-main">'
   +'<div class="run-panel-kicker-row">'
   +'<div class="run-panel-kicker" id="runPanelKicker">Current Run</div>'
-  +'<div class="run-panel-status-pill state-idle" id="runPanelStatus">Idle · 0 / 0</div>'
+  +'<div class="run-panel-status-pill state-idle" id="runPanelStatus">Idle ? 0 / 0</div>'
   +'</div>'
-  +'<div class="run-panel-task" id="runPanelTask">Elapsed · 00:00</div>'
-  +'<div class="run-panel-meta" id="runPanelMeta">0 files · 0 tools · 0 errors</div>'
+  +'<div class="run-panel-task" id="runPanelTask">Elapsed ? 00:00</div>'
+  +'<div class="run-panel-meta" id="runPanelMeta">0 files ? 0 tools ? 0 errors</div>'
   +'</div>'
+  +'<button class="run-panel-close" id="runPanelCloseBtn" type="button" onclick="toggleRunPanel(false)" title="Hide run panel" aria-label="Hide run panel">'
+  +'<svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">'
+  +'<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+  +'</svg>'
+  +'</button>'
   +'</div>'
   +'<div class="run-panel-summary" aria-hidden="true">'
   +'<div class="run-panel-summary-item">'
@@ -30,7 +35,7 @@ function _normalizeRunPanelDom(){
   +'</div>'
   +'<div class="run-panel-summary-item">'
   +'<div class="run-panel-summary-label">Outputs</div>'
-  +'<div class="run-panel-summary-value run-panel-summary-text" id="runPanelOutputs">0 files · 0 tools · 0 errors</div>'
+  +'<div class="run-panel-summary-value run-panel-summary-text" id="runPanelOutputs">0 files ? 0 tools ? 0 errors</div>'
   +'</div>'
   +'</div>'
   +'<div class="run-panel-stream" id="runPanelStream">'
@@ -77,6 +82,7 @@ function _getRunPanelEls(){
   stage:document.getElementById('mainStage'),
   host:document.getElementById('runPanel'),
   btn:document.getElementById('runPanelBtn'),
+  inlineToggle:document.getElementById('runPanelInlineToggle'),
   kicker:document.getElementById('runPanelKicker'),
   closeBtn:document.getElementById('runPanelCloseBtn'),
   status:document.getElementById('runPanelStatus'),
@@ -187,6 +193,13 @@ function _applyRunPanelUiState(){
   els.btn.classList.toggle('is-active', open);
   els.btn.setAttribute('aria-pressed', open ? 'true' : 'false');
   els.btn.title=open ? _runPanelCopy.hide : _runPanelCopy.show;
+ }
+ if(els.inlineToggle){
+  var showInline=_runPanelTabVisible && !open;
+  els.inlineToggle.classList.toggle('is-visible', showInline);
+  els.inlineToggle.setAttribute('aria-hidden', showInline ? 'false' : 'true');
+  els.inlineToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  els.inlineToggle.title=_runPanelCopy.show;
  }
  if(els.closeBtn) els.closeBtn.title=_runPanelCopy.hide;
 }
