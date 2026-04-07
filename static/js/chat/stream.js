@@ -2,8 +2,12 @@
 // Source: chat.js lines 712-1968
 
 var _runPanelStoreKey='nova_run_panel_open';
+var _runPanelWidthKey='nova_run_panel_width';
 var _runPanelUserOpen=true;
 var _runPanelTabVisible=true;
+var _runPanelBusy=false;
+var _runPanelWidth=null;
+var _runPanelResizeBound=false;
 var _pendingModelSwitchNote=null;
 
 function _normalizeRunPanelDom(){
@@ -50,12 +54,19 @@ function _mountRunPanelLayout(){
  if(!main || !shell) return;
  var content=main.querySelector('.content');
  var host=document.getElementById('runPanel');
+ var resizer=document.getElementById('runPanelResizer');
  var input=document.querySelector('.main > .input');
  var stageWrap=document.getElementById('mainStage');
  if(!stageWrap){
   stageWrap=document.createElement('div');
   stageWrap.id='mainStage';
   stageWrap.className='main-stage';
+ }
+ if(!resizer){
+  resizer=document.createElement('div');
+  resizer.id='runPanelResizer';
+  resizer.className='run-panel-resizer';
+  resizer.setAttribute('aria-hidden','true');
  }
  if(stageWrap.parentNode!==main){
   main.insertBefore(stageWrap, main.firstChild||null);
@@ -66,10 +77,16 @@ function _mountRunPanelLayout(){
  if(input && input.parentNode!==stageWrap){
   stageWrap.appendChild(input);
  }
+ if(resizer.parentNode!==main){
+  main.appendChild(resizer);
+ }
  if(host && host.parentNode!==main){
   main.appendChild(host);
  }else if(host && main.lastElementChild!==host){
   main.appendChild(host);
+ }
+ if(host && resizer && resizer.nextElementSibling!==host){
+  main.insertBefore(resizer, host);
  }
 }
 
@@ -82,6 +99,7 @@ function _getRunPanelEls(){
   shell:shell,
   stage:document.getElementById('mainStage'),
   host:document.getElementById('runPanel'),
+  resizer:document.getElementById('runPanelResizer'),
   btn:document.getElementById('runPanelBtn'),
   inlineToggle:document.getElementById('runPanelInlineToggle'),
   kicker:document.getElementById('runPanelKicker'),
@@ -162,6 +180,106 @@ function _writeRunPanelPref(open){
  }catch(e){}
 }
 
+function _readRunPanelWidth(){
+ try{
+  var raw=parseInt(localStorage.getItem(_runPanelWidthKey)||'', 10);
+  return isFinite(raw) && raw>0 ? raw : null;
+ }catch(e){
+  return null;
+ }
+}
+
+function _writeRunPanelWidth(width){
+ try{
+  localStorage.setItem(_runPanelWidthKey, String(Math.round(width||0)));
+ }catch(e){}
+}
+
+function _getRunPanelWidthBounds(mainWidth){
+ var min=300;
+ var max=Math.min(620, Math.max(360, (Number(mainWidth)||0)-420));
+ if(max<min) max=min;
+ return { min:min, max:max };
+}
+
+function _applyRunPanelWidth(width){
+ var els=_getRunPanelEls();
+ if(!els || !els.main) return null;
+ if(window.innerWidth<=760){
+  els.main.style.removeProperty('--run-panel-width');
+  return null;
+ }
+ var bounds=_getRunPanelWidthBounds(els.main.clientWidth||window.innerWidth);
+ var next=Number(width);
+ if(!isFinite(next) || next<=0){
+  next=_runPanelWidth||_readRunPanelWidth()||390;
+ }
+ next=Math.max(bounds.min, Math.min(bounds.max, next));
+ _runPanelWidth=next;
+ els.main.style.setProperty('--run-panel-width', next+'px');
+ return next;
+}
+
+function _initRunPanelResize(){
+ var els=_getRunPanelEls();
+ if(!els || !els.main || !els.resizer || !els.host || _runPanelResizeBound) return;
+ var isResizing=false;
+ var startX=0;
+ var startWidth=0;
+ function getClientX(e){
+  return e && (typeof e.clientX==='number' ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX));
+ }
+ function startResize(e){
+  if(window.innerWidth<=760 || !_runPanelUserOpen || !_runPanelTabVisible) return;
+  var clientX=getClientX(e);
+  if(typeof clientX!=='number') return;
+  isResizing=true;
+  startX=clientX;
+  startWidth=_applyRunPanelWidth()||els.host.getBoundingClientRect().width;
+  document.body.classList.add('is-resizing-run-panel');
+  document.body.style.userSelect='none';
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', stopResize);
+  document.addEventListener('touchmove', onResize, {passive:false});
+  document.addEventListener('touchend', stopResize);
+  e.preventDefault();
+ }
+ function onResize(e){
+  if(!isResizing) return;
+  var clientX=getClientX(e);
+  if(typeof clientX!=='number') return;
+  var next=startWidth+(startX-clientX);
+  var applied=_applyRunPanelWidth(next);
+  if(applied) _runPanelWidth=applied;
+  if(e.cancelable) e.preventDefault();
+ }
+ function stopResize(){
+  if(!isResizing) return;
+  isResizing=false;
+  document.body.classList.remove('is-resizing-run-panel');
+  document.body.style.userSelect='';
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.removeEventListener('touchmove', onResize);
+  document.removeEventListener('touchend', stopResize);
+  if(_runPanelWidth) _writeRunPanelWidth(_runPanelWidth);
+ }
+ els.resizer.addEventListener('mousedown', startResize);
+ els.resizer.addEventListener('touchstart', startResize, {passive:false});
+ window.addEventListener('resize', function(){
+  _applyRunPanelWidth(_runPanelWidth||_readRunPanelWidth()||390);
+ });
+ _runPanelResizeBound=true;
+}
+
+function _setRunPanelBusyState(isBusy){
+ _runPanelBusy=!!isBusy;
+ var els=_getRunPanelEls();
+ if(!els) return;
+ if(els.btn) els.btn.classList.toggle('is-busy', _runPanelBusy);
+ if(els.inlineToggle) els.inlineToggle.classList.toggle('is-busy', _runPanelBusy);
+}
+
 function _applyRunPanelUiState(){
  var els=_getRunPanelEls();
  if(!els || !els.shell || !els.main) return;
@@ -192,17 +310,20 @@ function _applyRunPanelUiState(){
  if(els.btn){
   els.btn.style.display=_runPanelTabVisible ? '' : 'none';
   els.btn.classList.toggle('is-active', open);
+  els.btn.classList.toggle('is-busy', _runPanelBusy);
   els.btn.setAttribute('aria-pressed', open ? 'true' : 'false');
   els.btn.title=open ? _runPanelCopy.hide : _runPanelCopy.show;
  }
  if(els.inlineToggle){
   var showInline=_runPanelTabVisible && !open;
   els.inlineToggle.classList.toggle('is-visible', showInline);
+  els.inlineToggle.classList.toggle('is-busy', _runPanelBusy);
   els.inlineToggle.setAttribute('aria-hidden', showInline ? 'false' : 'true');
   els.inlineToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   els.inlineToggle.title=_runPanelCopy.show;
  }
  if(els.closeBtn) els.closeBtn.title=_runPanelCopy.hide;
+ _applyRunPanelWidth(_runPanelWidth||_readRunPanelWidth()||390);
 }
 
 function toggleRunPanel(forceOpen){
@@ -225,6 +346,7 @@ window._setRunPanelTabState=_setRunPanelTabState;
  _runPanelUserOpen=_readRunPanelPref();
  _normalizeRunPanelDom();
  _mountRunPanelLayout();
+ _initRunPanelResize();
  var els=_getRunPanelEls();
  if(els){
   _ensureRunPanelMetaLine(els);
@@ -928,11 +1050,12 @@ function _collectStepToolNames(step){
     || '',
     120
    );
-   if(!currentAction){
+  if(!currentAction){
     if(_streamStarted && !replyText) currentAction='\u6b63\u5728\u8f93\u51fa\u56de\u590d';
     else if(steps.length) currentAction='\u7b49\u5f85\u4e0b\u4e00\u4e2a\u52a8\u4f5c';
     else currentAction=_runPanelCopy.actionIdle;
    }
+  _setRunPanelBusyState(statusKey==='thinking');
   if(_runPanelEls.status){
     _runPanelEls.status.textContent=_formatRunPanelConsoleStatus(statusKey, progressCurrent, totalSteps);
     _runPanelEls.status.className='run-panel-status-pill state-'+statusKey;
@@ -1114,12 +1237,22 @@ function _ensureTraceDetached(){
  function _buildThinkingProcessDetail(card, fallbackSummary, fallbackFull){
   var summaryParts=[];
   var fullParts=[];
-  var lead=_stepMetaText((card&&card.decision_note)||'') || _stepMetaText((card&&card.handoff_note)||'') || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull);
+  var emittedSummary=_stepMetaText(fallbackSummary);
+  var emittedFull=_stepMetaText(fallbackFull);
+  var lead=emittedFull || emittedSummary || _stepMetaText((card&&card.decision_note)||'') || _stepMetaText((card&&card.handoff_note)||'');
+  var decisionNote=_stepMetaText(card&&card.decision_note);
+  var handoffNote=_stepMetaText(card&&card.handoff_note);
   var goal=_stepMetaText(card&&card.goal);
   var expected=_stepMetaText(card&&card.expected_output);
   var nextNeed=_stepMetaText(card&&card.next_user_need);
   _appendUniqueStepMeta(summaryParts, lead, '');
   _appendUniqueStepMeta(fullParts, lead, '');
+  if(decisionNote && !_stepMetaContains(lead, decisionNote)){
+   _appendUniqueStepMeta(fullParts, decisionNote, '判断基线：');
+  }
+  if(handoffNote && !_stepMetaContains(lead, handoffNote)){
+   _appendUniqueStepMeta(fullParts, handoffNote, '接手方式：');
+  }
   if(goal){
    _appendUniqueStepMeta(summaryParts, goal, '先确认：');
    _appendUniqueStepMeta(fullParts, goal, '先确认：');
@@ -1257,6 +1390,65 @@ function _normalizeStepCard(card){
   if(meta.phase==='thinking') return detail;
   if(detail.indexOf(meta.displayLabel)===0) return detail;
   return meta.displayLabel+' \u00b7 '+detail;
+ }
+
+ function _stepLikeField(stepLike, snakeKey, camelKey){
+  if(!stepLike) return '';
+  var camelValue=stepLike[camelKey];
+  if(camelValue!==undefined && camelValue!==null) return camelValue;
+  var snakeValue=stepLike[snakeKey];
+  return snakeValue!==undefined && snakeValue!==null ? snakeValue : '';
+ }
+
+ function _isLowSignalStreamWaitingStep(stepLike){
+  if(!stepLike) return false;
+  if(!(_streamStarted || _streamText || replyText)) return false;
+  var phase=String(_stepLikeField(stepLike, 'phase', 'phase')||'').trim().toLowerCase();
+  if(phase!=='waiting') return false;
+ var toolName=String(_stepLikeField(stepLike, 'tool_name', 'toolName')||'').trim();
+  if(toolName) return false;
+  var stepKey=String(_stepLikeField(stepLike, 'step_key', 'stepKey')||'').trim();
+  if(stepKey && stepKey.indexOf('thinking:decision')!==0) return false;
+  var reasonKind=String(_stepLikeField(stepLike, 'reason_kind', 'reasonKind')||'').trim();
+  var goal=String(_stepLikeField(stepLike, 'goal', 'goal')||'').trim();
+  var decisionNote=String(_stepLikeField(stepLike, 'decision_note', 'decisionNote')||'').trim();
+  var handoffNote=String(_stepLikeField(stepLike, 'handoff_note', 'handoffNote')||'').trim();
+  var expectedOutput=String(_stepLikeField(stepLike, 'expected_output', 'expectedOutput')||'').trim();
+  var nextUserNeed=String(_stepLikeField(stepLike, 'next_user_need', 'nextUserNeed')||'').trim();
+  return !(reasonKind || goal || decisionNote || handoffNote || expectedOutput || nextUserNeed);
+ }
+
+ function _pruneLowSignalStreamWaitingSteps(){
+  if(!pendingState || !pendingState.steps || !pendingState.steps.length) return;
+  var kept=[];
+  var removed=false;
+  for(var i=0;i<pendingState.steps.length;i++){
+   var step=pendingState.steps[i];
+   if(_isLowSignalStreamWaitingStep(step)){
+    removed=true;
+    if(step && step.root && step.root.parentNode){
+     step.root.parentNode.removeChild(step.root);
+    }
+    continue;
+   }
+   kept.push(step);
+  }
+  if(!removed) return;
+  pendingState.steps=kept;
+  if(kept.length){
+   var last=kept[kept.length-1];
+   pendingState.activitySummary=_buildActivitySummary({
+    displayLabel:last.displayLabel||last.label||t('chat.process'),
+    summaryDetail:last.summaryDetail||'',
+    fullDetail:last.fullDetail||'',
+    phase:last.phase||'info'
+   });
+  }else{
+   pendingState.activitySummary='';
+   _setRunPanelEmptyState('quiet');
+  }
+  _ensureRunPanelEntries();
+  _syncRunPanelHeader();
  }
 
  function _stepIconState(phase, status){
@@ -1453,6 +1645,7 @@ function _normalizeStepCard(card){
   if(!existing || !meta) return false;
   if(existing.stepKey && meta.stepKey && existing.stepKey===meta.stepKey) return true;
   if(existing.phase==='thinking' && meta.phase==='thinking'){
+   if(existing.stepKey && meta.stepKey && existing.stepKey!==meta.stepKey) return false;
    var existingThinking=String(existing.fullDetail||existing.summaryDetail||'').trim();
    var nextThinking=String(meta.fullDetail||meta.summaryDetail||'').trim();
    if(existingThinking && nextThinking && (_stepMetaContains(existingThinking, nextThinking) || _stepMetaContains(nextThinking, existingThinking))){
@@ -1540,7 +1733,16 @@ function _renderPendingPlan(plan){
 
   if(mergeTarget){
    _applyStepMeta(mergeTarget, meta);
-   _setStepStatus(mergeTarget, meta.status);
+   var preserveDoneThinking=(
+    _streamStarted
+    && mergeTarget.phase==='thinking'
+    && meta.phase==='thinking'
+    && mergeTarget.status==='done'
+    && !!mergeTarget.stepKey
+    && !!meta.stepKey
+    && mergeTarget.stepKey===meta.stepKey
+   );
+   _setStepStatus(mergeTarget, preserveDoneThinking ? 'done' : meta.status);
   }else{
    if(last && last.status==='running' && !_canMergeStep(last, meta)){
     _setStepStatus(last,'done');
@@ -1616,7 +1818,7 @@ function _collapseSteps(){
   contentArea.style.display='';
   contentArea.innerHTML='';
   var bubble=document.createElement('div');
-  bubble.className='bubble assistant-reply-markdown';
+  bubble.className='bubble assistant-reply-plain';
   bubble.style.display='none';
   var blocksEl=document.createElement('div');
   blocksEl.className='stream-blocks';
@@ -1645,6 +1847,7 @@ function _collapseSteps(){
   _streamText='';
   _streamLiveText='';
   _streamStarted=true;
+  _pruneLowSignalStreamWaitingSteps();
   _suppressTypingCursor=false;
   _streamTokenCount=0;
   _attachStreamScrollFollow();
@@ -2058,6 +2261,14 @@ function _syncStructuredStreamTail(tailText){
 
 function _applyMarkdownIncrementalStream(payload){
   if(!_streamStarted) _initStreamBubble();
+  if(_streamBubble && typeof applyAssistantBubbleRenderMode==='function'){
+   applyAssistantBubbleRenderMode(
+    _streamBubble,
+    String((payload&&payload.full_text)||''),
+    String((payload&&payload.tail_html)||''),
+    'markdown'
+   );
+  }
   _streamProtocol='markdown_incremental';
   _streamText=String((payload&&payload.full_text)||'');
   _appendIncrementalMarkdownBlocks(payload&&payload.append);
@@ -2119,6 +2330,9 @@ function _progressiveRender(){
 
 function _appendStreamToken(token){
   if(!_streamStarted) _initStreamBubble();
+  if(_streamBubble && typeof applyAssistantBubbleRenderMode==='function'){
+   applyAssistantBubbleRenderMode(_streamBubble, _streamText+String(token||''), '', 'plain');
+  }
   if(!_streamProtocol) _streamProtocol='text';
   _streamText+=String(token||'');
   _scheduleProgressiveRender(36);
@@ -2162,13 +2376,20 @@ function _finalizeStream(fullText){
   _clearStructuredTailTimer();
   var finalText=String(fullText||'');
   var finalRenderText=String(finalText||_streamText||'');
+  var finalMode=(typeof applyAssistantBubbleRenderMode==='function')
+   ? applyAssistantBubbleRenderMode(
+    _streamBubble,
+    finalRenderText,
+    '',
+    _streamProtocol==='markdown_incremental' ? 'markdown' : ''
+   )
+   : (_streamProtocol==='markdown_incremental' ? 'markdown' : 'plain');
   _ensureStreamBubbleVisible();
   if(_streamProtocol!=='markdown_incremental' && _streamLineEl){
-   _streamLineEl.innerHTML='';
-   _streamLineEl.textContent=typeof stripMarkdownForStreamingText==='function'
-    ? stripMarkdownForStreamingText(finalRenderText)
-    : finalRenderText;
-   _streamLineEl.style.display=finalRenderText ? 'block' : 'none';
+    _streamLineEl.innerHTML=(typeof renderAssistantReplyHtml==='function')
+     ? renderAssistantReplyHtml(finalRenderText, '', finalMode)
+     : renderAssistantBubbleHtml(finalRenderText, '');
+    _streamLineEl.style.display=finalRenderText ? 'block' : 'none';
   }
   _streamLiveText='';
   // 如果有附带图片，追加到气泡末尾
@@ -2387,21 +2608,25 @@ function _renderReplyViaStream(text){
             _stickChatToBottom();
            }
           }else if(_waitLabel || _waitDetail){
-           addStep({
-            label:_waitLabel||t('chat.process'),
-            detail:_waitDetail||_waitLabel,
-            status:'running',
-            full_detail:_waitDetail||_waitLabel,
-            step_key:_waitStepKey,
-            phase:parsed.phase||'waiting',
-            reason_kind:parsed.reason_kind||'',
-            goal:parsed.goal||'',
-            decision_note:parsed.decision_note||'',
-            handoff_note:parsed.handoff_note||'',
-            expected_output:parsed.expected_output||'',
-            next_user_need:parsed.next_user_need||'',
-            tool_name:parsed.tool_name||''
-           });
+           if(_isLowSignalStreamWaitingStep(parsed)){
+            _syncRunPanelHeader();
+           }else{
+            addStep({
+             label:_waitLabel||t('chat.process'),
+             detail:_waitDetail||_waitLabel,
+             status:'running',
+             full_detail:_waitDetail||_waitLabel,
+             step_key:_waitStepKey,
+             phase:parsed.phase||'waiting',
+             reason_kind:parsed.reason_kind||'',
+             goal:parsed.goal||'',
+             decision_note:parsed.decision_note||'',
+             handoff_note:parsed.handoff_note||'',
+             expected_output:parsed.expected_output||'',
+             next_user_need:parsed.next_user_need||'',
+             tool_name:parsed.tool_name||''
+            });
+           }
           }
          }
        }else if(currentEvent==='thinking'){

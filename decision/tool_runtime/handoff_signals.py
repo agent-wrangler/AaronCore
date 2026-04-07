@@ -1,5 +1,80 @@
 """Post-LLM tool handoff and mixed-output compatibility signals."""
 
+from decision.tool_runtime.parallel_runtime import get_tool_parallel_profile
+
+
+def _prefers_explicit_tool_call(tool_name: str) -> bool:
+    name = str(tool_name or "").strip()
+    if not name:
+        return False
+    profile = get_tool_parallel_profile(name)
+    effect_level = str(profile.get("effect_level") or "").strip().lower()
+    operation_kind = str(profile.get("operation_kind") or "").strip().lower()
+    if effect_level not in {"read_only", "external_lookup"}:
+        return False
+    return operation_kind in {"inspect", "query"}
+
+
+def _allows_phrase_handoff_assist(tool_name: str) -> bool:
+    name = str(tool_name or "").strip()
+    if not name:
+        return False
+    if name == "ask_user":
+        return True
+    profile = get_tool_parallel_profile(name)
+    operation_kind = str(profile.get("operation_kind") or "").strip().lower()
+    effect_level = str(profile.get("effect_level") or "").strip().lower()
+    if effect_level in {"local_write", "local_side_effect"}:
+        return False
+    return operation_kind in {"inspect", "query", "plan"}
+
+
+def _split_visible_sentences(text: str, *, re_mod) -> list[str]:
+    return [part.strip() for part in re_mod.split(r"[。！？?]\s*|\n+", str(text or "")) if part.strip()]
+
+
+def _contains_any_token(text: str, tokens: tuple[str, ...]) -> bool:
+    raw = str(text or "")
+    return any(token in raw for token in tokens)
+
+
+def _looks_like_answer_payload(
+    text: str,
+    *,
+    clean_visible_reply_text,
+    re_mod,
+) -> bool:
+    visible = clean_visible_reply_text(text)
+    if not visible:
+        return False
+    if "```" in visible:
+        return True
+
+    lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
+    if any(line.startswith("|") and line.endswith("|") for line in lines):
+        return True
+    if len(lines) > 6:
+        return True
+
+    sentence_count = len(_split_visible_sentences(visible, re_mod=re_mod))
+    if sentence_count > 5:
+        return True
+
+    bullet_count = len([line for line in lines if re_mod.match(r"^(?:\d+\.|[-*•])\s+\S+", line)])
+    if bullet_count >= 2:
+        return True
+
+    answer_like_patterns = (
+        r"https?://",
+        r"[A-Za-z]:\\",
+        r"(?:SQLite|Flask|Electron|LocalStorage)\s+\+",
+        r"\b(?:A|B|C)\b\s*\|",
+        r"\b\d+\s*(?:%|h|hr|hrs|hour|hours|min|mins|minute|minutes|sec|secs|second|seconds|times?)\b",
+        r"\b\d+\s*(?:to|-)\s*\d+\s*(?:degrees?|deg|°)\b",
+        r"\d+\s*(?:到|-)\s*\d+\s*(?:度|°)",
+    )
+    return any(re_mod.search(pattern, visible, flags=re_mod.I) for pattern in answer_like_patterns)
+
 
 def looks_like_tool_preamble(
     text: str,
@@ -11,6 +86,12 @@ def looks_like_tool_preamble(
     visible = clean_visible_reply_text(text)
     if not visible or "```" in visible:
         return False
+    if _looks_like_answer_payload(
+        visible,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    ):
+        return False
 
     lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
     if len(lines) > 4:
@@ -20,18 +101,8 @@ def looks_like_tool_preamble(
     if any(line.startswith("|") and line.endswith("|") for line in lines):
         return False
 
-    sentence_count = len([part for part in re_mod.split(r"[。！？?]\s*|\n+", visible) if part.strip()])
+    sentence_count = len(_split_visible_sentences(visible, re_mod=re_mod))
     if sentence_count > 4:
-        return False
-
-    answer_like_patterns = (
-        r"\b\d+\s*(?:%|小时|分钟|秒|次)\b",
-        r"https?://",
-        r"[A-Za-z]:\\",
-        r"(?:SQLite|Flask|Electron|LocalStorage)\s+\+",
-        r"\b(?:A|B|C)\b\s*\|",
-    )
-    if any(re_mod.search(pattern, visible, flags=re_mod.I) for pattern in answer_like_patterns):
         return False
 
     return contains_tool_handoff_phrase(visible)
@@ -50,7 +121,7 @@ def contains_tool_handoff_phrase(text: str, *, clean_visible_reply_text, re_mod)
     normalized = _normalize_segment(visible) or visible
     lowered = normalized.lower()
     sentence_candidates = []
-    for part in re_mod.split(r"[。！？?]\s*|\n+", visible):
+    for part in _split_visible_sentences(visible, re_mod=re_mod):
         candidate = _normalize_segment(part)
         if candidate:
             sentence_candidates.append(candidate)
@@ -61,54 +132,36 @@ def contains_tool_handoff_phrase(text: str, *, clean_visible_reply_text, re_mod)
         "我先",
         "我帮你",
         "让我",
-        "我看看",
-        "我查",
-        "我去",
         "先帮你",
         "先看",
         "先查",
         "稍等",
         "等我",
-        "好我来",
-        "好的我来",
-        "那我来",
-        "那我先",
     )
     weak_preamble_prefixes = (
         "好",
-        "好吧",
         "行",
         "那我",
     )
-    preamble_actions = (
-        "看一下",
-        "看下",
-        "看看",
-        "查一下",
-        "查下",
-        "梳理一下",
-        "梳理下",
-        "定位一下",
-        "定位下",
-        "检索一下",
-        "检索下",
-        "分析一下",
-        "分析下",
-        "处理一下",
-        "处理下",
-        "确认一下",
-        "确认下",
-        "整理一下",
-        "整理下",
-        "过一遍",
-        "回忆一下",
-        "看看记忆",
-        "开始执行",
-        "直接上代码",
+    action_stems = (
+        "看",
+        "查",
+        "梳理",
+        "定位",
+        "检索",
+        "分析",
+        "处理",
+        "确认",
+        "整理",
+        "回忆",
+        "执行",
+        "创建",
+        "写",
+        "打开",
+        "搜索",
+        "检查",
+        "记忆",
         "一步到位",
-        "先创建",
-        "然后我",
-        "逐个文件",
     )
 
     if any(normalized.startswith(prefix) for prefix in strong_preamble_prefixes):
@@ -116,12 +169,12 @@ def contains_tool_handoff_phrase(text: str, *, clean_visible_reply_text, re_mod)
 
     if any(
         any(candidate.startswith(prefix) for prefix in strong_preamble_prefixes)
-        and any(action in candidate for action in preamble_actions)
+        and _contains_any_token(candidate, action_stems)
         for candidate in later_candidates
     ):
         return True
 
-    action_hit = any(action in normalized for action in preamble_actions)
+    action_hit = _contains_any_token(normalized, action_stems)
     if not action_hit:
         english_prefixes = (
             "i will ",
@@ -140,7 +193,7 @@ def contains_tool_handoff_phrase(text: str, *, clean_visible_reply_text, re_mod)
             " create ",
             " check ",
             " inspect ",
-            " look at ",
+            " look ",
             " search ",
             " review ",
             " analyze ",
@@ -169,7 +222,7 @@ def contains_tool_handoff_phrase(text: str, *, clean_visible_reply_text, re_mod)
             any(candidate.startswith(prefix) for prefix in weak_preamble_prefixes)
             or candidate.startswith("先")
         )
-        and any(action in candidate for action in preamble_actions)
+        and _contains_any_token(candidate, action_stems)
         for candidate in later_candidates
     )
 
@@ -255,9 +308,24 @@ def should_keep_stream_tool_call_with_visible_text(
     visible_text: str,
     *,
     stream_tool_call_name,
+    clean_visible_reply_text,
+    re_mod,
 ) -> bool:
     tool_name = stream_tool_call_name(tool_calls_signal)
-    return tool_name == "ask_user" and bool(str(visible_text or "").strip())
+    visible = clean_visible_reply_text(visible_text)
+    if not visible:
+        return False
+    if tool_name == "ask_user":
+        return True
+    if not _prefers_explicit_tool_call(tool_name):
+        return False
+    if len(visible) > 240:
+        return False
+    return not _looks_like_answer_payload(
+        visible,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
 
 
 def resolve_stream_tool_calls_signal(
@@ -280,15 +348,23 @@ def resolve_stream_tool_calls_signal(
 
     if tool_calls_signal and visible_joined:
         tool_name = stream_tool_call_name(tool_calls_signal)
+        tool_profile = get_tool_parallel_profile(tool_name)
         is_preamble = looks_like_tool_preamble(visible_joined)
         is_structured_handoff = looks_like_structured_tool_handoff(visible_joined)
         is_trailing_handoff = looks_like_trailing_tool_handoff(visible_joined)
+        phrase_handoff = is_preamble or is_structured_handoff or is_trailing_handoff
+        keep_phrase_assist = phrase_handoff and _allows_phrase_handoff_assist(tool_name)
         keep_mixed = should_keep_stream_tool_call_with_visible_text(tool_calls_signal, visible_joined)
-        if not (is_preamble or is_structured_handoff or is_trailing_handoff or keep_mixed):
+        if not (keep_mixed or keep_phrase_assist):
             debug_write(
                 "tool_call_stream_mixed_output",
                 {
                     "tool_name": tool_name,
+                    "tool_profile": tool_profile,
+                    "explicit_tool_call": True,
+                    "phrase_handoff": phrase_handoff,
+                    "phrase_assist": keep_phrase_assist,
+                    "structure_kept": keep_mixed,
                     "text_len": len(visible_joined),
                     "text_preview": visible_joined[:80],
                 },
@@ -299,8 +375,12 @@ def resolve_stream_tool_calls_signal(
                 "tool_call_stream_preamble_kept",
                 {
                     "tool_name": tool_name,
+                    "tool_profile": tool_profile,
+                    "explicit_tool_call": True,
+                    "preamble_handoff": is_preamble,
                     "structured_handoff": is_structured_handoff,
                     "trailing_handoff": is_trailing_handoff,
+                    "phrase_assist": keep_phrase_assist,
                     "mixed_preserved": keep_mixed,
                     "text_len": len(visible_joined),
                     "text_preview": visible_joined[:80],

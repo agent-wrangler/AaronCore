@@ -624,8 +624,17 @@ window._reloadChatFromServer=_reloadChatFromServer;
    html+='<div class="msg-meta">';
    html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
    html+='</div>';
-   var bubbleHtml=role==='user' ? formatBubbleText(text) : renderAssistantBubbleHtml(text, item.content_html);
-   html+='<div class="bubble">'+bubbleHtml+'</div>';
+   var bubbleMode=role==='user' ? '' : (
+    typeof getAssistantBubbleMode==='function'
+     ? getAssistantBubbleMode(text, item.content_html)
+     : 'markdown'
+   );
+   var bubbleHtml=role==='user'
+    ? formatBubbleText(text)
+    : (typeof renderAssistantReplyHtml==='function'
+      ? renderAssistantReplyHtml(text, item.content_html, bubbleMode)
+      : renderAssistantBubbleHtml(text, item.content_html));
+   html+='<div class="bubble'+(role==='user' ? '' : ' assistant-reply-'+bubbleMode)+'">'+bubbleHtml+'</div>';
    html+='</div>';
    if(role!=='user'&&(plan&&plan.items&&plan.items.length)){
     html+='</div>';

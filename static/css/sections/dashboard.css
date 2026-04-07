@@ -153,13 +153,8 @@ body.light .ask-user-card {
   box-shadow: var(--shadow-card);
 }
 .stats-summary-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  border-radius: 14px 14px 0 0;
+  content: none;
 }
-.stats-summary-card:nth-child(1)::before { background: linear-gradient(90deg, var(--tone-sage), var(--tone-sage-strong)); }
-.stats-summary-card:nth-child(2)::before { background: linear-gradient(90deg, var(--tone-steel), var(--tone-steel-strong)); }
-.stats-summary-card:nth-child(3)::before { background: linear-gradient(90deg, var(--tone-mauve), var(--tone-mauve-strong)); }
-.stats-summary-card:nth-child(4)::before { background: linear-gradient(90deg, var(--tone-amber), var(--tone-amber-strong)); }
 .stats-summary-card:hover { background: var(--surface-panel-hover); border-color: var(--border-panel-strong); box-shadow: var(--shadow-card-hover); }
 .stats-summary-label { font-size: 11px; color: var(--text-label); text-transform: uppercase; letter-spacing: 1px; }
 .stats-summary-value { font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1.1; margin: 4px 0; }
@@ -761,8 +756,8 @@ body.native-shell-host .chat{
 }
 
 body.native-shell-host .input{
-  background:#FFFFFF;
-  border-top:1px solid #E5E7EB;
+  background:transparent;
+  border-top:none;
   padding:14px 20px 18px;
 }
 
@@ -789,16 +784,23 @@ body.native-shell-host .input-container{
 }
 
 body.native-shell-host .inp-wrap{
-  background:#F8FAFC;
-  border:1px solid #D8E1EC;
-  backdrop-filter:none;
-  box-shadow:none;
+  background:rgba(255,255,255,0.60);
+  border:1px solid rgba(216,225,236,0.72);
+  -webkit-backdrop-filter:saturate(118%) blur(22px);
+  backdrop-filter:saturate(118%) blur(22px);
+  box-shadow:
+    0 10px 26px rgba(15,23,42,0.06),
+    0 1px 0 rgba(255,255,255,0.5) inset;
 }
 
 body.native-shell-host .inp-wrap:focus-within{
-  background:#FFFFFF;
+  background:rgba(252,251,248,0.68);
   border-color:#C7D2FE;
-  box-shadow:0 0 0 4px rgba(99,102,241,0.08);
+  -webkit-backdrop-filter:saturate(118%) blur(22px);
+  backdrop-filter:saturate(118%) blur(22px);
+  box-shadow:
+    0 12px 28px rgba(15,23,42,0.08),
+    0 0 0 4px rgba(99,102,241,0.08);
 }
 
 body.native-shell-host .input textarea{

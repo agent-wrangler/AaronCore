@@ -86,10 +86,13 @@ def build_done_process_meta(
 
     if success:
         outcome_kind = "success"
-        next_hint_kind = "continue"
+        next_hint_kind = "wait_for_user" if requires_user_takeover else "continue"
     elif requires_user_takeover or resolved_reason == "blocked_by_user_takeover":
         outcome_kind = "blocked"
         next_hint_kind = "wait_for_user"
+    elif resolved_reason == "user_interrupted":
+        outcome_kind = "interrupted"
+        next_hint_kind = "resume_or_close"
     elif arg_failure or resolved_reason == "repeated_invalid_args":
         outcome_kind = "arg_failure"
         next_hint_kind = "repair_args"

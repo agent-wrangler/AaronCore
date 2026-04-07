@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from core import shared as S
 from core.markdown_render import render_markdown_html
+from core.process_history import normalize_process_payload
 from memory.l2_memory import classify_retention_bucket
 from memory.l8_learning import classify_l8_entry_kind, should_show_l8_timeline_entry
 from storage.stats_store import MODEL_PRICES, get_model_price
@@ -105,7 +106,7 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "skills/builtin/story.py": "故事技能",
     "skills/builtin/task_plan.py": "任务规划技能",
     "skills/builtin/weather.py": "天气技能",
-    "static/js/app.js": "主页面脚本索引",
+    "static/js/app.js": "主页面控制脚本",
     "static/js/app/chrome.js": "主页面主题与壳层脚本",
     "static/js/app/boot.js": "主页面启动与恢复脚本",
     "static/js/app/views.js": "主页面视图切换脚本",
@@ -724,7 +725,7 @@ def _runtime_graph_collect_runs(
             break
         if str(item.get("role") or "") != "nova":
             continue
-        process = item.get("process") or {}
+        process = normalize_process_payload(item.get("process")) or {}
         steps = process.get("steps") or []
         if not isinstance(steps, list) or not steps:
             continue
@@ -1281,6 +1282,11 @@ async def get_history(limit: int = 40, offset: int = 0):
     formatted = []
     for item in chunk:
         row = dict(item)
+        normalized_process = normalize_process_payload(row.get("process"))
+        if normalized_process:
+            row["process"] = normalized_process
+        else:
+            row.pop("process", None)
         if "time" in row:
             try:
                 row["time"] = datetime.fromisoformat(row["time"]).strftime("%m-%d %H:%M")

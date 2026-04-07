@@ -5,9 +5,102 @@ import unittest
 from unittest.mock import patch
 
 import core.reply_formatter as reply_formatter_module
+from decision.tool_runtime import batch as batch_module
+from decision.tool_runtime.ledger import ToolCallRecord
 
 
 class ToolCallTurnBatchTests(unittest.TestCase):
+    def test_append_tool_batch_to_messages_repairs_missing_ids_and_missing_tool_results(self):
+        outcome = batch_module.ToolCallBatchOutcome(state=batch_module.create_tool_call_batch_state())
+        outcome.tool_calls = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "folder_explore",
+                    "arguments": json.dumps({"query": "src"}, ensure_ascii=False),
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_text",
+                    "arguments": json.dumps({"query": "TODO"}, ensure_ascii=False),
+                },
+            },
+        ]
+        outcome.records = [
+            ToolCallRecord(
+                call_id="folder_explore_1",
+                tool_name="folder_explore",
+                status="completed",
+                success=True,
+                response="folder ok",
+                action_summary="folder ok",
+                order=0,
+            ),
+            ToolCallRecord(
+                call_id="search_text_2",
+                tool_name="search_text",
+                status="completed",
+                success=True,
+                response="search ok",
+                action_summary="search ok",
+                order=1,
+            ),
+        ]
+        outcome.tool_messages = [
+            {"role": "tool", "tool_call_id": "", "content": "folder ok"},
+        ]
+
+        messages = []
+        batch_module.append_tool_batch_to_messages(messages, outcome, bundle={})
+
+        assistant_message = next(message for message in messages if message.get("role") == "assistant")
+        self.assertEqual(
+            [item.get("id") for item in assistant_message.get("tool_calls") or []],
+            ["folder_explore_1", "search_text_2"],
+        )
+        tool_messages = [message for message in messages if message.get("role") == "tool"]
+        self.assertEqual(
+            [(message.get("tool_call_id"), message.get("content")) for message in tool_messages],
+            [("folder_explore_1", "folder ok"), ("search_text_2", "search ok")],
+        )
+
+    def test_append_tool_batch_to_messages_drops_orphan_and_duplicate_tool_results(self):
+        outcome = batch_module.ToolCallBatchOutcome(state=batch_module.create_tool_call_batch_state())
+        outcome.tool_calls = [
+            {
+                "id": "call_a",
+                "type": "function",
+                "function": {
+                    "name": "folder_explore",
+                    "arguments": json.dumps({"query": "src"}, ensure_ascii=False),
+                },
+            }
+        ]
+        outcome.records = [
+            ToolCallRecord(
+                call_id="call_a",
+                tool_name="folder_explore",
+                status="completed",
+                success=True,
+                response="folder ok",
+                action_summary="folder ok",
+                order=0,
+            )
+        ]
+        outcome.tool_messages = [
+            {"role": "tool", "tool_call_id": "call_a", "content": "ok"},
+            {"role": "tool", "tool_call_id": "call_a", "content": "ok with more detail"},
+            {"role": "tool", "tool_call_id": "orphan_call", "content": "should drop"},
+        ]
+
+        messages = []
+        batch_module.append_tool_batch_to_messages(messages, outcome, bundle={})
+
+        tool_messages = [message for message in messages if message.get("role") == "tool"]
+        self.assertEqual(tool_messages, [{"role": "tool", "tool_call_id": "call_a", "content": "ok with more detail"}])
+
     def test_unified_reply_with_tools_runs_safe_batch_calls_in_parallel(self):
         active = {"count": 0}
         overlap_seen = threading.Event()
@@ -422,6 +515,178 @@ class ToolCallTurnBatchTests(unittest.TestCase):
         self.assertEqual(
             [event.get("_tool_call", {}).get("name") for event in done_events[:2]],
             ["search_text", "folder_explore"],
+        )
+
+    def test_unified_reply_with_tools_stream_closes_missing_parallel_results_before_fatal_closeout(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(message, dict) and message.get("role") == "tool" for message in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_parallel_fail",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "slow"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_parallel_ok",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "fast"}, ensure_ascii=False),
+                            },
+                        },
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 2}}
+                return
+
+            yield "Done."
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, _args, _context):
+            if name == "folder_explore":
+                time.sleep(0.02)
+                raise RuntimeError("boom")
+            time.sleep(0.01)
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "并行里一个成功一个炸掉",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": "", "usage": {}}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        done_events = [
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("done")
+        ]
+        self.assertEqual(len(done_events), 2)
+        self.assertEqual(
+            [event.get("_tool_call", {}).get("process_meta", {}).get("parallel_completed_count") for event in done_events],
+            [1, 2],
+        )
+        self.assertEqual(done_events[0].get("_tool_call", {}).get("name"), "search_text")
+        self.assertTrue(done_events[0].get("_tool_call", {}).get("success"))
+        self.assertEqual(done_events[1].get("_tool_call", {}).get("name"), "folder_explore")
+        self.assertFalse(done_events[1].get("_tool_call", {}).get("success"))
+        self.assertTrue(done_events[1].get("_tool_call", {}).get("synthetic"))
+        self.assertEqual(done_events[1].get("_tool_call", {}).get("reason"), "tool_executor_exception")
+        final_done = next(chunk for chunk in reversed(chunks) if isinstance(chunk, dict) and chunk.get("_done"))
+        self.assertEqual(final_done.get("action_count"), 2)
+        self.assertTrue(final_done.get("batch_mode"))
+
+    def test_unified_reply_with_tools_stream_closes_later_prepared_calls_after_parallel_exception(self):
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(message, dict) and message.get("role") == "tool" for message in messages)
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_parallel_fail",
+                            "type": "function",
+                            "function": {
+                                "name": "folder_explore",
+                                "arguments": json.dumps({"query": "slow"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_parallel_ok",
+                            "type": "function",
+                            "function": {
+                                "name": "search_text",
+                                "arguments": json.dumps({"query": "fast"}, ensure_ascii=False),
+                            },
+                        },
+                        {
+                            "id": "call_after_parallel",
+                            "type": "function",
+                            "function": {
+                                "name": "write_file",
+                                "arguments": json.dumps({"file_path": "a.txt", "content": "x"}, ensure_ascii=False),
+                            },
+                        },
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 2}}
+                return
+
+            yield "Done."
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, _args, _context):
+            if name == "folder_explore":
+                time.sleep(0.02)
+                raise RuntimeError("boom")
+            if name == "write_file":
+                raise AssertionError("write_file should not execute after earlier parallel failure")
+            time.sleep(0.01)
+            return {
+                "success": True,
+                "response": f"{name} ok",
+                "meta": {"action": {"action_kind": name, "target_kind": "file"}},
+            }
+
+        bundle = {
+            "user_input": "并行炸掉后后续工具也要直接收尾",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": "", "usage": {}}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        done_events = [
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("done")
+        ]
+        self.assertEqual(len(done_events), 3)
+        self.assertEqual(
+            [event.get("_tool_call", {}).get("name") for event in done_events],
+            ["search_text", "folder_explore", "write_file"],
+        )
+        self.assertEqual(
+            [event.get("_tool_call", {}).get("reason") for event in done_events],
+            ["", "tool_executor_exception", "tool_executor_exception"],
+        )
+        self.assertEqual(done_events[2].get("_tool_call", {}).get("success"), False)
+        self.assertTrue(done_events[2].get("_tool_call", {}).get("synthetic"))
+        final_done = next(chunk for chunk in reversed(chunks) if isinstance(chunk, dict) and chunk.get("_done"))
+        self.assertEqual(final_done.get("action_count"), 3)
+        final_result_reasons = {
+            item.get("name"): item.get("reason")
+            for item in final_done.get("tool_results") or []
+            if isinstance(item, dict)
+        }
+        self.assertEqual(
+            final_result_reasons,
+            {
+                "folder_explore": "tool_executor_exception",
+                "search_text": "",
+                "write_file": "tool_executor_exception",
+            },
         )
 
     def test_unified_reply_with_tools_stream_marks_failed_tool_switch_as_fallback(self):

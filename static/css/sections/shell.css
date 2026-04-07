@@ -89,7 +89,7 @@ html.theme-booting *{
  --bg-chat:#161618;
  --font-ui:"Inter","Source Han Sans UI","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
  --font-chat-sans:"Inter","Source Han Sans UI","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
- --font-chat-user-sans:"Inter","Source Han Sans UI","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+ --font-chat-user-sans:"Source Han Sans UI","Noto Sans SC","Inter","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",Arial,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
  --font-chat-reply-serif:"Source Serif 4","Noto Serif SC","Source Han Serif SC","Source Han Serif CN","Songti SC","STSong","SimSun",serif;
  --font-chat-mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono","Menlo","Consolas","Liberation Mono","Courier New",monospace;
  --bubble-line-height:1.6;
@@ -164,26 +164,26 @@ body.light{
  --text-secondary:#6b645a;
  --text-label:#8f867b;
  --bg-soft:#f7f4ee;
- --bg-card:#fbfaf7;
- --border-card:rgba(114,105,94,0.18);
+ --bg-card:#ffffff;
+ --border-card:rgba(21,21,20,0.09);
  --shadow-card:0 8px 22px rgba(34,29,24,0.05);
  --bg-input:#fbfaf7;
  --border-input:#ddd7ce;
  --bg-chip:#fbfaf7;
  --text-chip:#6f675d;
  --border-chip:#e5dfd6;
- --bg-growth:linear-gradient(135deg,#f5f2ec,#f1ede6);
+ --bg-growth:#fcfbf8;
  --bg-tag-pill:rgba(255,250,244,0.82);
  --border-tag-pill:rgba(114,105,94,0.12);
  --bg-badge:rgba(114,105,94,0.08);
  --border-badge:rgba(114,105,94,0.12);
  --text-badge:#4d463d;
  --surface-panel:var(--bg-card);
- --surface-panel-strong:#f7f4ef;
- --surface-panel-soft:rgba(114,105,94,0.035);
- --surface-panel-hover:#fdfbf8;
+ --surface-panel-strong:#fcfbf8;
+ --surface-panel-soft:rgba(21,21,20,0.025);
+ --surface-panel-hover:#f7f5ef;
  --border-panel:var(--border-card);
- --border-panel-strong:rgba(114,105,94,0.2);
+ --border-panel-strong:rgba(21,21,20,0.14);
  --divider-panel:rgba(0,0,0,0.04);
  --tone-sage:#6f7e63;
  --tone-sage-strong:#5d6b53;
@@ -257,7 +257,7 @@ body{font-family:var(--font-ui);font-synthesis:none;background:var(--bg-app);col
 body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-optical-sizing:auto}
 /* ===== 优雅可拉伸侧边栏 ===== */
 .sidebar{
- width:240px;
+ width:200px;
  min-width:200px;
  max-width:400px;
  background:#1a1a1c;
@@ -446,7 +446,7 @@ body{
 
 /* 侧边栏现在在main-container内 */
 .sidebar{
- width:240px;
+ width:200px;
  min-width:200px;
  max-width:400px;
  background:linear-gradient(180deg,#161618 0%,#161618 100%);
@@ -547,12 +547,13 @@ body.light .input::before {
 
 /* ===== 回到底部按钮 ===== */
 .scroll-to-bottom-btn {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  z-index: 10;
-  width: 36px;
-  height: 36px;
+    position: absolute;
+    left: 50%;
+    right: auto;
+    bottom: 72px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
   border-radius: 50%;
   border: 1px solid rgba(148,163,184,0.2);
   background: rgba(30,32,40,0.88);
@@ -561,18 +562,18 @@ body.light .input::before {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.28);
-  transition: opacity 0.2s, transform 0.2s, background 0.15s;
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28);
+    transition: opacity 0.2s, transform 0.2s, background 0.15s;
+    opacity: 0;
+    transform: translate(-50%, 8px);
+    pointer-events: none;
+  }
 .scroll-to-bottom-btn.visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
+    opacity: 1;
+    transform: translate(-50%, 0);
+    pointer-events: auto;
+  }
 .scroll-to-bottom-btn:hover {
   background: rgba(55,65,90,0.95);
   color: #c4b5fd;

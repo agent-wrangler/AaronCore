@@ -33,6 +33,42 @@ def fallback_tool_reply(tool_response: str, *, format_skill_fallback) -> str:
     return format_skill_fallback_text(text)
 
 
+def _extract_process_meta(run_meta: dict | None) -> dict:
+    if not isinstance(run_meta, dict):
+        return {}
+    process_meta = run_meta.get("process_meta")
+    return dict(process_meta) if isinstance(process_meta, dict) else {}
+
+
+def _build_closeout_text(
+    prefix: str,
+    *,
+    summary: str = "",
+    detail: str = "",
+    detail_label: str = "",
+    allow_long_detail: bool = False,
+) -> str:
+    prefix_text = str(prefix or "").strip()
+    summary_text = str(summary or "").strip()
+    detail_text = str(detail or "").strip()
+    label_text = str(detail_label or "").strip()
+    detail_can_append = bool(detail_text) and (
+        allow_long_detail or len(detail_text) <= 160
+    )
+
+    if summary_text and detail_can_append and detail_text not in summary_text:
+        if label_text:
+            return f"{prefix_text}\n\n{summary_text}\n\n{label_text}：{detail_text}"
+        return f"{prefix_text}\n\n{summary_text}\n\n{detail_text}"
+    if summary_text:
+        return f"{prefix_text}\n\n{summary_text}"
+    if detail_text:
+        if label_text:
+            return f"{prefix_text}\n\n{label_text}：{detail_text}"
+        return f"{prefix_text}\n\n{detail_text}"
+    return prefix_text
+
+
 def build_tool_closeout_reply(
     *,
     success: bool,
@@ -43,15 +79,16 @@ def build_tool_closeout_reply(
     summarize_tool_response_text,
     fallback_tool_reply,
 ) -> str:
-    if not success:
-        return fallback_tool_reply(tool_response)
-
     summary = str(action_summary or "").strip()
     if not summary and isinstance(run_meta, dict):
         action = run_meta.get("action") if isinstance(run_meta.get("action"), dict) else {}
         summary = summarize_action_meta(action)
     if not summary:
         summary = summarize_tool_response_text(tool_response)
+
+    process_meta = _extract_process_meta(run_meta)
+    outcome_kind = str(process_meta.get("outcome_kind") or "").strip()
+    next_hint_kind = str(process_meta.get("next_hint_kind") or "").strip()
 
     verification = run_meta.get("verification") if isinstance(run_meta, dict) and isinstance(run_meta.get("verification"), dict) else {}
     verification_detail = ""
@@ -67,6 +104,47 @@ def build_tool_closeout_reply(
         action = run_meta.get("action") if isinstance(run_meta.get("action"), dict) else {}
         verification_detail = str(action.get("verification_detail") or "").strip()
 
+    if next_hint_kind == "wait_for_user" or outcome_kind == "blocked":
+        return _build_closeout_text(
+            "这一步先停在需要你接手的位置了。你先完成登录、验证、验证码或其他只能由你完成的步骤，然后我再继续。",
+            summary=summary,
+            detail=tool_response,
+            detail_label="当前情况",
+        )
+
+    if outcome_kind == "interrupted":
+        return _build_closeout_text(
+            "这一步刚才被中断了，我先停在这里。你如果要继续，我可以从当前状态接着往下走。",
+            summary=summary,
+            detail=tool_response,
+            detail_label="中断前状态",
+        )
+
+    if not success:
+        if outcome_kind == "arg_failure":
+            return _build_closeout_text(
+                "这一步没接稳，参数还不完整。",
+                summary=summary,
+                detail=tool_response,
+                detail_label="缺口",
+                allow_long_detail=True,
+            )
+        if outcome_kind == "runtime_failure":
+            return _build_closeout_text(
+                "这一步在执行里断掉了，还没有形成完整闭环。",
+                summary=summary,
+                detail=tool_response,
+                detail_label="中断原因",
+            )
+        if outcome_kind == "failed":
+            return _build_closeout_text(
+                "这一步没接稳。",
+                summary=summary,
+                detail=tool_response,
+                detail_label="失败原因",
+            )
+        return fallback_tool_reply(tool_response)
+
     if verification_state is True:
         if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
             return f"这一步已经完成，并已通过核验：\n\n{summary}\n\n核验：{verification_detail}"
@@ -80,6 +158,15 @@ def build_tool_closeout_reply(
         if summary:
             return f"这一步已经完成，但当前还没有可靠核验：\n\n{summary}"
         return ""
+
+    if verification_state is False:
+        if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
+            return f"这一步已经执行，但核验没有通过：\n\n{summary}\n\n核验失败：{verification_detail}"
+        if summary:
+            return f"这一步已经执行，但核验没有通过：\n\n{summary}"
+        if verification_detail:
+            return f"这一步已经执行，但核验没有通过：\n\n核验失败：{verification_detail}"
+        return "这一步已经执行，但核验没有通过。"
 
     if summary and verification_detail and verification_detail not in summary and len(verification_detail) <= 160:
         return f"这一步已经完成：\n\n{summary}\n\n核验：{verification_detail}"

@@ -1,27 +1,44 @@
 # AaronCore Official Site
 
-This directory contains the static official site for `AaronCore`. It does not change the current desktop app runtime.
+This directory contains the static official homepage for `AaronCore`.
 
 ## Layout
 
 - `index.html`, `styles.css`, `app.js`
-  Official site files for the current homepage.
+  The live homepage.
 - `assets/`
-  Shared production assets used by the live site.
+  Production assets used by the live homepage.
 - `lab/`
-  Experimental pages and older logo or icon exploration files.
+  Exploration pages and older logo or icon experiments.
 
-## Where to edit public-facing info
+## Homepage structure
 
-The mutable brand and contact values are now grouped in `app.js` under `siteConfig`:
+The current page follows this sequence:
+
+1. Hero
+2. How it works
+3. Core capabilities
+4. Product proof
+5. Use cases
+6. Differentiators
+7. Trust layer
+8. Docs teaser
+9. Final CTA
+
+## Where to edit public-facing values
+
+Mutable values live in `app.js`:
 
 - `siteConfig.primaryDomain`
 - `siteConfig.contactEmail`
 - `siteConfig.contactStatus`
 - `siteConfig.launchState`
 - `siteConfig.releaseRoute`
+- `siteConfig.betaUrl`
+- `siteConfig.demoUrl`
+- `siteConfig.docsUrl`
 
-The download state stays in `releaseConfig`:
+Release-state values stay in `releaseConfig`:
 
 - `releaseConfig.available`
 - `releaseConfig.url`
@@ -29,12 +46,12 @@ The download state stays in `releaseConfig`:
 - `releaseConfig.noteWhenLocked`
 - `releaseConfig.noteWhenOpen`
 
-## Current public info
+## Current public-facing details
 
 - Primary domain: `aaroncore.com`
-- Reserved contact mailbox: `hi@aaroncore.com`
-- Current launch state: official site first, no public build yet
-- Site role: brand entry, download state, release notes, future updates
+- Reserved mailbox: `hi@aaroncore.com`
+- Current state: official site first, no public build yet
+- Current tone: memory-first, execution-oriented, built to evolve
 
 ## Local preview
 
@@ -47,12 +64,12 @@ python -m http.server 8080
 
 Then open [http://localhost:8080](http://localhost:8080).
 
-## Domain and mailbox later
+## DNS and mailbox later
 
-If DNS stays on Tencent Cloud, the next steps will mostly happen in the Tencent Cloud DNS console:
+If DNS stays on Tencent Cloud, the next steps will mostly happen in Tencent Cloud DNS:
 
-- Add the `A` or `CNAME` records for the official site deployment
+- Add the `A` or `CNAME` records for site deployment
 - Add the `MX` and `TXT` records for mailbox verification
 - Add `SPF`, `DKIM`, and `DMARC` when outbound mail is enabled
 
-That means the page structure is already ready. Later you only need deployment and DNS changes, not another site rewrite.
+That means the page structure can keep evolving while the domain and mailbox are wired up later.

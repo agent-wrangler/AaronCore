@@ -52,6 +52,12 @@ _FALLBACK_TOOL_PROFILES = {
         "protocol_subfamily": "live_data_query",
         "capability_kind": "memory_tool",
     },
+    "sense_environment": {
+        "effect_level": "read_only",
+        "operation_kind": "inspect",
+        "protocol_subfamily": "environment_inspection",
+        "capability_kind": "memory_tool",
+    },
 }
 
 

@@ -84,6 +84,23 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertEqual(blocked_meta["outcome_kind"], "blocked")
         self.assertEqual(blocked_meta["next_hint_kind"], "wait_for_user")
 
+        interrupted_record = ToolCallRecord(
+            call_id="call_interrupt_1",
+            tool_name="sense_environment",
+            status="synthetic_failed",
+            success=False,
+            synthetic=True,
+            reason="user_interrupted",
+            response="interrupted",
+        )
+        interrupted_meta = build_done_process_meta(
+            record=interrupted_record,
+            attempt_meta={"attempt_kind": "retry"},
+            reason="user_interrupted",
+        )
+        self.assertEqual(interrupted_meta["outcome_kind"], "interrupted")
+        self.assertEqual(interrupted_meta["next_hint_kind"], "resume_or_close")
+
         runtime_record = ToolCallRecord(
             call_id="call_env_1",
             tool_name="sense_environment",
@@ -100,6 +117,25 @@ class ToolCallRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(runtime_meta["outcome_kind"], "runtime_failure")
         self.assertEqual(runtime_meta["next_hint_kind"], "retry_or_close")
+
+    def test_build_done_process_meta_marks_success_that_needs_user_takeover(self):
+        record = ToolCallRecord(
+            call_id="call_login_1",
+            tool_name="open_target",
+            status="completed",
+            success=True,
+            response="opened login page",
+            action_summary="已打开登录页",
+        )
+
+        meta = build_done_process_meta(
+            record=record,
+            attempt_meta={"attempt_kind": "initial"},
+            requires_user_takeover=True,
+        )
+
+        self.assertEqual(meta["outcome_kind"], "success")
+        self.assertEqual(meta["next_hint_kind"], "wait_for_user")
 
     def test_flush_unfinished_marks_pending_and_executing_calls_as_synthetic_failures(self):
         ledger = ToolCallTurnLedger()

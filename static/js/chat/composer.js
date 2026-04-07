@@ -141,7 +141,13 @@ function addMessage(sender,text,type,imageUrl,renderedHtml){
  // 创建气泡
  var bubble=document.createElement('div');
  bubble.className='bubble';
- if(type!=='user') bubble.classList.add('assistant-reply-markdown');
+ if(type!=='user'){
+  if(typeof applyAssistantBubbleRenderMode==='function'){
+   applyAssistantBubbleRenderMode(bubble, text, renderedHtml);
+  }else{
+   bubble.classList.add('assistant-reply-markdown');
+  }
+ }
  if(imageUrl){
   var img=document.createElement('img');
   img.className='bubble-image';
@@ -156,7 +162,9 @@ function addMessage(sender,text,type,imageUrl,renderedHtml){
   if(type==='user'){
    textNode.textContent=text;
   }else{
-   textNode.innerHTML=renderAssistantBubbleHtml(text, renderedHtml);
+   textNode.innerHTML=typeof renderAssistantReplyHtml==='function'
+    ? renderAssistantReplyHtml(text, renderedHtml)
+    : renderAssistantBubbleHtml(text, renderedHtml);
   }
   bubble.appendChild(textNode);
  }
@@ -419,7 +427,12 @@ function finalizePendingAssistantMessage(pendingState, replyText, renderedHtml){
  contentArea.innerHTML='';
  var bubble=document.createElement('div');
  bubble.className='bubble';
- bubble.innerHTML=renderAssistantBubbleHtml(replyText, renderedHtml);
+ if(typeof applyAssistantBubbleRenderMode==='function'){
+  applyAssistantBubbleRenderMode(bubble, replyText, renderedHtml);
+ }
+ bubble.innerHTML=typeof renderAssistantReplyHtml==='function'
+  ? renderAssistantReplyHtml(replyText, renderedHtml)
+  : renderAssistantBubbleHtml(replyText, renderedHtml);
  var meta=document.createElement('div');
  meta.className='msg-meta';
  var nameSpan=document.createElement('span');

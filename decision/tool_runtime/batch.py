@@ -18,6 +18,7 @@ from decision.tool_runtime.parallel_runtime import (
     execute_parallel_tool_calls,
     is_parallel_safe_tool,
 )
+from decision.tool_runtime.pairing import repair_tool_batch_for_context
 from decision.tool_runtime.runtime_control import (
     build_interrupted_tool_result,
     tool_runtime_cancel_detail,
@@ -302,6 +303,17 @@ def _update_state_after_record(
     )
 
 
+def _attach_process_meta_to_record(record: ToolCallRecord, process_meta: dict | None) -> ToolCallRecord:
+    if not isinstance(record, ToolCallRecord):
+        return record
+    if not isinstance(process_meta, dict) or not process_meta:
+        return record
+    merged_run_meta = dict(record.run_meta) if isinstance(record.run_meta, dict) else {}
+    merged_run_meta["process_meta"] = dict(process_meta)
+    record.run_meta = merged_run_meta
+    return record
+
+
 def append_tool_batch_to_messages(
     messages: list[dict],
     outcome: ToolCallBatchOutcome,
@@ -311,18 +323,30 @@ def append_tool_batch_to_messages(
 ) -> None:
     from decision import reply_formatter as formatter
 
-    if outcome.tool_calls:
+    repaired_tool_calls, repaired_tool_messages, repair_meta = repair_tool_batch_for_context(
+        outcome.tool_calls,
+        outcome.tool_messages,
+        records=outcome.records,
+    )
+
+    if repair_meta.get("repair_applied"):
+        formatter._debug_write(
+            "tool_call_context_pairing_repaired",
+            repair_meta,
+        )
+
+    if repaired_tool_calls:
         messages.append(
             formatter._build_assistant_history_message(
                 None,
-                tool_calls=outcome.tool_calls,
+                tool_calls=repaired_tool_calls,
                 reasoning_details=reasoning_details,
             )
         )
     messages.extend(
         _budget_tool_messages_for_context(
             formatter,
-            outcome.tool_messages,
+            repaired_tool_messages,
             records=outcome.records,
             bundle=bundle,
         )
@@ -430,16 +454,18 @@ def _handle_repeated_invalid_args(
     outcome.current_record = terminal
     outcome.records.append(terminal)
     outcome.tool_messages.append(_record_result_message(tool_call, failure_response))
+    done_process_meta = build_done_process_meta(
+        record=terminal,
+        attempt_meta=attempt_meta,
+        reason="repeated_invalid_args",
+        arg_failure=arg_failure,
+    )
+    terminal = _attach_process_meta_to_record(terminal, done_process_meta)
     _emit_batch_event(
         outcome,
         build_tool_call_done_event(
             terminal,
-            process_meta=build_done_process_meta(
-                record=terminal,
-                attempt_meta=attempt_meta,
-                reason="repeated_invalid_args",
-                arg_failure=arg_failure,
-            ),
+            process_meta=done_process_meta,
         ),
         event_callback=event_callback,
     )
@@ -541,15 +567,17 @@ def _close_remaining_prepared_calls(
             batch_index=relative_index,
             batch_size=len(prepared_calls),
         )
+        done_process_meta = build_done_process_meta(
+            record=blocked_record,
+            attempt_meta=blocked_attempt_meta,
+            reason=reason,
+        )
+        blocked_record = _attach_process_meta_to_record(blocked_record, done_process_meta)
         _emit_batch_event(
             outcome,
             build_tool_call_done_event(
                 blocked_record,
-                process_meta=build_done_process_meta(
-                    record=blocked_record,
-                    attempt_meta=blocked_attempt_meta,
-                    reason=reason,
-                ),
+                process_meta=done_process_meta,
             ),
             event_callback=event_callback,
         )
@@ -616,6 +644,7 @@ def _apply_exec_result(
         requires_user_takeover=requires_user_takeover,
         arg_failure=arg_failure,
     )
+    terminal = _attach_process_meta_to_record(terminal, done_process_meta)
     _emit_batch_event(
         outcome,
         build_tool_call_done_event(terminal, process_meta=done_process_meta),
@@ -684,16 +713,18 @@ def _apply_exec_result(
                 batch_index=blocked_batch_index,
                 batch_size=len(prepared_calls),
             )
+            done_process_meta = build_done_process_meta(
+                record=blocked_record,
+                attempt_meta=blocked_attempt_meta,
+                reason="blocked_by_user_takeover",
+                requires_user_takeover=True,
+            )
+            blocked_record = _attach_process_meta_to_record(blocked_record, done_process_meta)
             _emit_batch_event(
                 outcome,
                 build_tool_call_done_event(
                     blocked_record,
-                    process_meta=build_done_process_meta(
-                        record=blocked_record,
-                        attempt_meta=blocked_attempt_meta,
-                        reason="blocked_by_user_takeover",
-                        requires_user_takeover=True,
-                    ),
+                    process_meta=done_process_meta,
                 ),
                 event_callback=event_callback,
             )
@@ -730,6 +761,63 @@ def _ordered_parallel_specs(
         ordered.append(spec)
 
     return ordered
+
+
+def _close_parallel_specs_as_synthetic_failure(
+    *,
+    outcome: ToolCallBatchOutcome,
+    ledger: ToolCallTurnLedger,
+    bundle: dict,
+    specs: list[ParallelCallSpec],
+    attempt_meta_by_call_id: dict[str, dict],
+    completed_count: int,
+    success_count: int,
+    failure_count: int,
+    reason: str,
+    detail: str,
+    event_callback=None,
+) -> tuple[int, int, int]:
+    if not specs:
+        return completed_count, success_count, failure_count
+
+    closed_records = close_tool_call_batch_as_synthetic_failure(
+        ledger,
+        [spec.tool_call for spec in specs],
+        bundle,
+        reason=reason,
+        detail=detail,
+    )
+    outcome.records.extend(closed_records)
+    outcome.tool_messages.extend(
+        [
+            _record_result_message(spec.tool_call, closed_record.response)
+            for spec, closed_record in zip(specs, closed_records)
+        ]
+    )
+    for spec, closed_record in zip(specs, closed_records):
+        completed_count += 1
+        failure_count += 1
+        done_process_meta = build_done_process_meta(
+            record=closed_record,
+            attempt_meta=_build_parallel_progress_meta(
+                attempt_meta_by_call_id.get(spec.record.call_id),
+                completed_count=completed_count,
+                success_count=success_count,
+                failure_count=failure_count,
+            ),
+            reason=reason,
+        )
+        closed_record = _attach_process_meta_to_record(closed_record, done_process_meta)
+        _emit_batch_event(
+            outcome,
+            build_tool_call_done_event(
+                closed_record,
+                process_meta=done_process_meta,
+            ),
+            event_callback=event_callback,
+        )
+        outcome.current_record = closed_record
+    return completed_count, success_count, failure_count
 
 
 def execute_tool_call_batch(
@@ -968,6 +1056,22 @@ def execute_tool_call_batch(
                     terminal = ledger.get(spec.record.call_id)
                     if terminal and terminal.reason == "user_interrupted" and interrupted_record is None:
                         interrupted_record = terminal
+                missing_specs = [
+                    spec for spec in parallel_group if not isinstance(results_by_call_id.get(spec.record.call_id), dict)
+                ]
+                completed_count, success_count, failure_count = _close_parallel_specs_as_synthetic_failure(
+                    outcome=outcome,
+                    ledger=ledger,
+                    bundle=bundle,
+                    specs=missing_specs,
+                    attempt_meta_by_call_id=attempt_meta_by_call_id,
+                    completed_count=completed_count,
+                    success_count=success_count,
+                    failure_count=failure_count,
+                    reason="tool_executor_exception",
+                    detail=f"{type(exc.original_exception).__name__}: {exc.original_exception}",
+                    event_callback=event_callback,
+                )
                 if interrupted_record:
                     outcome.current_record = interrupted_record
                     _close_remaining_prepared_calls(
@@ -984,6 +1088,19 @@ def execute_tool_call_batch(
                         event_callback=event_callback,
                     )
                     return outcome
+                _close_remaining_prepared_calls(
+                    outcome=outcome,
+                    ledger=ledger,
+                    state=state,
+                    tools=tools,
+                    bundle=bundle,
+                    prepared_calls=prepared_calls,
+                    start_index=scan,
+                    reason="tool_executor_exception",
+                    detail=f"{type(exc.original_exception).__name__}: {exc.original_exception}",
+                    round_index=round_index,
+                    event_callback=event_callback,
+                )
                 raise exc.original_exception
 
             interrupted_record = None

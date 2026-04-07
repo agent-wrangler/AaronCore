@@ -99,10 +99,8 @@
   padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid rgba(206, 194, 172, 0.12);
-  background: linear-gradient(180deg, rgba(33, 31, 28, 0.94) 0%, rgba(28, 26, 23, 0.92) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.025),
-    0 10px 24px rgba(0, 0, 0, 0.14);
+  background: rgba(30, 29, 27, 0.94);
+  box-shadow: none;
   position: relative;
   z-index: 1;
 }
@@ -158,6 +156,7 @@
 body.light .chat-event-note-line {
   border-color: rgba(114, 105, 94, 0.12);
   background: rgba(250, 247, 242, 0.96);
+  box-shadow: none;
 }
 
 body.light .chat > .chat-event-note::before {
@@ -477,10 +476,36 @@ body.light .welcome-news-item:hover { color: #111; }
 }
 
 /* ===== AI 输出结构化排版 ===== */
+.msg.assistant .assistant-reply-plain {
+  font-family: var(--font-chat-reply-serif);
+  font-size: 15.5px;
+  line-height: 1.76;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-kerning: normal;
+  text-wrap: pretty;
+}
+
+.msg.assistant .assistant-reply-plain .assistant-plain-text,
+.msg.assistant .assistant-reply-plain .stream-live-line,
+.msg.assistant .assistant-reply-plain .bubble-body {
+  font: inherit;
+  color: inherit;
+}
+
+.msg.assistant .assistant-reply-plain .assistant-plain-text,
+.msg.assistant .assistant-reply-plain p {
+  line-height: inherit;
+}
+
+.msg.assistant .assistant-reply-plain p {
+  margin: 0;
+}
+
 .msg.assistant .assistant-reply-markdown {
   font-family: var(--font-chat-reply-serif);
-  font-size: 16px;
-  line-height: 1.82;
+  font-size: 15.4px;
+  line-height: 1.74;
   letter-spacing: 0;
   font-weight: 400;
   font-kerning: normal;
@@ -495,31 +520,31 @@ body.light .welcome-news-item:hover { color: #111; }
 }
 
 .msg.assistant .assistant-reply-markdown p {
-  margin: 0 0 14px 0;
-  line-height: 1.82;
+  margin: 0 0 10px 0;
+  line-height: 1.74;
 }
 
 .msg.assistant .assistant-reply-markdown h1 {
-  font-size: 21px;
+  font-size: 17px;
   font-weight: 600;
-  margin: 22px 0 10px 0;
-  line-height: 1.28;
-  letter-spacing: -0.012em;
+  margin: 14px 0 6px 0;
+  line-height: 1.42;
+  letter-spacing: -0.006em;
 }
 
 .msg.assistant .assistant-reply-markdown h2 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  margin: 18px 0 8px 0;
-  line-height: 1.32;
-  letter-spacing: -0.01em;
+  margin: 12px 0 6px 0;
+  line-height: 1.46;
+  letter-spacing: -0.004em;
 }
 
 .msg.assistant .assistant-reply-markdown h3 {
-  font-size: 16px;
+  font-size: 15.4px;
   font-weight: 600;
-  margin: 16px 0 7px 0;
-  line-height: 1.4;
+  margin: 10px 0 5px 0;
+  line-height: 1.5;
 }
 
 .msg.assistant .assistant-reply-markdown strong {
@@ -529,19 +554,23 @@ body.light .welcome-news-item:hover { color: #111; }
 
 .msg.assistant .assistant-reply-markdown ul,
 .msg.assistant .assistant-reply-markdown ol {
-  margin: 0 0 14px 0;
-  padding-left: 1.28em;
-  line-height: 1.82;
+  margin: 0 0 10px 0;
+  padding-left: 1.1em;
+  line-height: 1.72;
 }
 
 .msg.assistant .assistant-reply-markdown li {
-  margin: 0 0 7px 0;
+  margin: 0 0 4px 0;
+}
+
+.msg.assistant .assistant-reply-markdown li::marker {
+  color: rgba(145, 132, 112, 0.72);
 }
 
 .msg.assistant .assistant-reply-markdown blockquote {
-  margin: 2px 0 14px 0;
-  padding: 2px 0 2px 16px;
-  border-left-width: 3px;
+  margin: 2px 0 10px 0;
+  padding: 1px 0 1px 12px;
+  border-left-width: 2px;
   border-left-style: solid;
   font-style: normal;
 }
@@ -574,6 +603,10 @@ body.light .msg.assistant .assistant-reply-markdown {
   color: #171310;
 }
 
+body.light .msg.assistant .assistant-reply-plain {
+  color: #171310;
+}
+
 body.light .msg.assistant .assistant-reply-markdown a {
   color: #9a5c32;
 }
@@ -594,6 +627,10 @@ body.light .msg.assistant .assistant-reply-markdown pre {
 }
 
 body.dark .msg.assistant .assistant-reply-markdown {
+  color: #f7f1e8;
+}
+
+body.dark .msg.assistant .assistant-reply-plain {
   color: #f7f1e8;
 }
 
@@ -731,8 +768,8 @@ body.light .bubble blockquote {
 
 /* 用户文本 — 保留气泡，但与共享正文列两端对齐 */
 .msg.user .bubble {
-  background: #282A2C;
-  color: #eef2ff;
+  background: var(--surface-selected, #141412);
+  color: var(--surface-selected-text, #f5f4ef);
   border: none;
   text-align: left;
   padding: 10px 14px;

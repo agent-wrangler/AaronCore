@@ -1,8 +1,11 @@
+import asyncio
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from fastapi import BackgroundTasks
 
 import core.l8_learn as l8_learn_module
 import core.reply_formatter as reply_formatter_module
@@ -11,7 +14,9 @@ import core.executor as executor_module
 import core.fs_protocol as fs_protocol_module
 import core.target_protocol as target_protocol_module
 import memory as memory_module
+import protocols.fs as fs_paths_module
 import routes.chat as chat_module
+import routes.data as data_module
 from agent_final import normalize_route_result, resolve_route, unified_chat_reply
 from core.context_builder import build_dialogue_context, render_dialogue_context
 
@@ -387,6 +392,146 @@ class RunEventMappingTests(unittest.TestCase):
             ],
         )
 
+    def test_normalize_persisted_process_steps_merges_non_consecutive_same_step_key(self):
+        steps = [
+            {
+                "label": "调用技能",
+                "detail": "folder_explore · src",
+                "status": "done",
+                "step_key": "tool:folder_explore",
+                "phase": "tool",
+                "tool_name": "folder_explore",
+            },
+            {
+                "label": "模型思考",
+                "detail": "继续整理结果",
+                "status": "done",
+                "step_key": "thinking:decision",
+                "phase": "thinking",
+            },
+            {
+                "label": "技能完成",
+                "detail": "folder_explore · src/main.py",
+                "status": "done",
+                "step_key": "tool:folder_explore",
+                "phase": "tool",
+                "tool_name": "folder_explore",
+            },
+        ]
+
+        normalized = chat_module._normalize_persisted_process_steps(steps)
+
+        tool_rows = [row for row in normalized if row.get("step_key") == "tool:folder_explore"]
+        self.assertEqual(len(tool_rows), 1)
+        self.assertEqual(tool_rows[0].get("label"), "技能完成")
+        self.assertEqual(tool_rows[0].get("detail"), "folder_explore · src/main.py")
+        self.assertEqual(len(normalized), 2)
+
+    def test_history_route_normalizes_dirty_process_steps_on_read(self):
+        dirty_history = [
+            {
+                "role": "nova",
+                "content": "Done.",
+                "time": "2026-04-06T12:00:00",
+                "process": {
+                    "steps": [
+                        {
+                            "label": "调用技能",
+                            "detail": "folder_explore · src",
+                            "status": "done",
+                            "step_key": "tool:folder_explore",
+                            "phase": "tool",
+                            "tool_name": "folder_explore",
+                        },
+                        {
+                            "label": "等待中",
+                            "detail": "folder_explore · 2s",
+                            "status": "running",
+                            "step_key": "tool:folder_explore",
+                            "phase": "waiting",
+                        },
+                        {
+                            "label": "技能完成",
+                            "detail": "folder_explore · src/main.py",
+                            "status": "done",
+                            "step_key": "tool:folder_explore",
+                            "phase": "tool",
+                            "tool_name": "folder_explore",
+                        },
+                    ]
+                },
+            }
+        ]
+
+        with patch.object(data_module.S, "load_msg_history", return_value=dirty_history), patch.object(
+            data_module.S, "get_text_history", return_value=""
+        ):
+            result = asyncio.run(data_module.get_history(limit=40, offset=0))
+
+        steps = result["history"][0]["process"]["steps"]
+        self.assertEqual(
+            steps,
+            [
+                {
+                    "label": "技能完成",
+                    "detail": "folder_explore · src/main.py",
+                    "status": "done",
+                    "step_key": "tool:folder_explore",
+                    "phase": "tool",
+                    "tool_name": "folder_explore",
+                }
+            ],
+        )
+
+    def test_rollback_pending_user_history_turn_pops_exact_trailing_user(self):
+        history = [{"role": "user", "content": "hello", "time": "2026-04-06T12:00:00"}]
+
+        removed = chat_module._rollback_pending_user_history_turn(
+            history,
+            {"role": "user", "content": "hello", "time": "2026-04-06T12:00:00"},
+        )
+
+        self.assertTrue(removed)
+        self.assertEqual(history, [])
+
+    def test_chat_event_stream_rolls_back_persisted_user_turn_on_fatal_before_reply_saved(self):
+        state = {"history": []}
+
+        def fake_load_history():
+            return [dict(item) for item in state["history"]]
+
+        def fake_save_history(history):
+            state["history"] = [dict(item) for item in history]
+
+        async def _run_chat():
+            response = await chat_module.chat(
+                chat_module.ChatRequest(message="trigger failure"),
+                BackgroundTasks(),
+            )
+            chunks = []
+            async for item in response.body_iterator:
+                chunks.append(item)
+            return chunks
+
+        with patch.object(chat_module.S, "add_to_history", side_effect=lambda *_args, **_kwargs: None), patch.object(
+            chat_module.S, "load_msg_history", side_effect=fake_load_history
+        ), patch.object(
+            chat_module.S, "save_msg_history", side_effect=fake_save_history
+        ), patch.object(
+            chat_module.S, "awareness_pull", return_value=[]
+        ), patch.object(
+            chat_module.S, "get_recent_messages", side_effect=RuntimeError("boom before reply save")
+        ), patch.object(
+            chat_module.S, "debug_write", side_effect=lambda *_args, **_kwargs: None
+        ), patch.object(
+            chat_module, "_get_tool_call_unavailable_reason", return_value=None
+        ), patch.object(
+            chat_module, "_get_cod_enabled", return_value=False
+        ):
+            asyncio.run(_run_chat())
+
+        self.assertEqual(state["history"], [])
+
     def test_tool_preamble_detector_distinguishes_lead_in_from_answer_payload(self):
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("我先梳理一下技术方案 👇"))
         self.assertTrue(reply_formatter_module._looks_like_tool_preamble("好嘞！这个需求很明确～\n我先梳理一下技术方案 👇"))
@@ -424,6 +569,128 @@ class RunEventMappingTests(unittest.TestCase):
             )
         )
 
+    def test_stream_safe_readonly_tool_call_is_kept_with_short_soft_visible_text(self):
+        tool_calls = [
+            {
+                "id": "call_env_soft_1",
+                "type": "function",
+                "function": {
+                    "name": "sense_environment",
+                    "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                },
+            }
+        ]
+
+        kept, joined, visible = reply_formatter_module._resolve_stream_tool_calls_signal(
+            tool_calls,
+            ["主人别急，这次我认真来帮你处理这个问题。"],
+            {"user_input": "看看现在电脑环境"},
+            mode="stream_initial",
+        )
+
+        self.assertEqual(kept, tool_calls)
+        self.assertIn("处理这个问题", joined)
+        self.assertIn("处理这个问题", visible)
+
+    def test_stream_safe_readonly_tool_call_is_still_dropped_for_answer_like_visible_text(self):
+        tool_calls = [
+            {
+                "id": "call_weather_answer_1",
+                "type": "function",
+                "function": {
+                    "name": "weather",
+                    "arguments": json.dumps({"city": "常州"}, ensure_ascii=False),
+                },
+            }
+        ]
+
+        kept, _joined, _visible = reply_formatter_module._resolve_stream_tool_calls_signal(
+            tool_calls,
+            ["明天常州 18 到 26 度，阴转小雨。"],
+            {"user_input": "明天天气怎么样"},
+            mode="stream_initial",
+        )
+
+        self.assertIsNone(kept)
+
+    def test_same_soft_visible_text_keeps_readonly_tool_but_drops_write_tool(self):
+        soft_text = "主人别急，这次我认真来帮你处理这个问题。"
+        readonly_tool_calls = [
+            {
+                "id": "call_env_soft_2",
+                "type": "function",
+                "function": {
+                    "name": "sense_environment",
+                    "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                },
+            }
+        ]
+        write_tool_calls = [
+            {
+                "id": "call_write_soft_1",
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps({"file_path": "notes.txt"}, ensure_ascii=False),
+                },
+            }
+        ]
+
+        kept_readonly, _joined_readonly, _visible_readonly = reply_formatter_module._resolve_stream_tool_calls_signal(
+            readonly_tool_calls,
+            [soft_text],
+            {"user_input": "看看现在电脑环境"},
+            mode="stream_initial",
+        )
+        kept_write, _joined_write, _visible_write = reply_formatter_module._resolve_stream_tool_calls_signal(
+            write_tool_calls,
+            [soft_text],
+            {"user_input": "帮我改 notes.txt"},
+            mode="stream_initial",
+        )
+
+        self.assertEqual(kept_readonly, readonly_tool_calls)
+        self.assertIsNone(kept_write)
+
+    def test_same_handoff_phrase_keeps_read_tool_but_not_write_tool(self):
+        handoff_text = "让我先检查一下当前环境，再给你结论。"
+        readonly_tool_calls = [
+            {
+                "id": "call_env_phrase_1",
+                "type": "function",
+                "function": {
+                    "name": "sense_environment",
+                    "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                },
+            }
+        ]
+        write_tool_calls = [
+            {
+                "id": "call_write_phrase_1",
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps({"file_path": "notes.txt"}, ensure_ascii=False),
+                },
+            }
+        ]
+
+        kept_readonly, _joined_readonly, _visible_readonly = reply_formatter_module._resolve_stream_tool_calls_signal(
+            readonly_tool_calls,
+            [handoff_text],
+            {"user_input": "看看现在电脑环境"},
+            mode="stream_initial",
+        )
+        kept_write, _joined_write, _visible_write = reply_formatter_module._resolve_stream_tool_calls_signal(
+            write_tool_calls,
+            [handoff_text],
+            {"user_input": "帮我改 notes.txt"},
+            mode="stream_initial",
+        )
+
+        self.assertEqual(kept_readonly, readonly_tool_calls)
+        self.assertIsNone(kept_write)
+
     def test_failed_tool_retry_note_guides_environment_or_file_inspection(self):
         write_note = reply_formatter_module._build_failed_tool_retry_note(
             "write_file",
@@ -457,6 +724,68 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertIn("sense_environment", prompt)
         self.assertIn("self_fix and discover_tools are not available in the current tool list", prompt)
         self.assertIn("缺少必要参数", prompt)
+        self.assertIn("tool_call", prompt)
+        self.assertIn("默认相信本轮提供的工具能力可用", prompt)
+        self.assertIn("优先主动使用低风险读工具验证", prompt)
+        self.assertIn("还没执行", prompt)
+        self.assertNotIn("一律直接回复，不调工具", prompt)
+        self.assertNotIn("普通聊天直接回复", prompt)
+        self.assertNotIn("普通闲聊直接回复", prompt)
+
+    def test_cod_system_prompt_no_longer_preclassifies_chat_vs_tool_use(self):
+        prompt = reply_formatter_module._build_cod_system_prompt(
+            {
+                "l4": {},
+                "l7": [],
+                "l2": {},
+                "current_model": "test-model",
+            }
+        )
+
+        self.assertIn("自主选择合适工具", prompt)
+        self.assertNotIn("普通聊天直接回复", prompt)
+        self.assertNotIn("普通闲聊直接回复", prompt)
+
+    def test_explicit_readonly_tool_call_can_be_kept_without_phrase_handoff(self):
+        neutral_text = "我理解你的意思。"
+        readonly_tool_calls = [
+            {
+                "id": "call_env_neutral_1",
+                "type": "function",
+                "function": {
+                    "name": "sense_environment",
+                    "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                },
+            }
+        ]
+        write_tool_calls = [
+            {
+                "id": "call_write_neutral_1",
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps({"file_path": "notes.txt"}, ensure_ascii=False),
+                },
+            }
+        ]
+
+        self.assertFalse(reply_formatter_module._contains_tool_handoff_phrase(neutral_text))
+
+        kept_readonly, _joined_readonly, _visible_readonly = reply_formatter_module._resolve_stream_tool_calls_signal(
+            readonly_tool_calls,
+            [neutral_text],
+            {"user_input": "看看现在电脑环境"},
+            mode="stream_initial",
+        )
+        kept_write, _joined_write, _visible_write = reply_formatter_module._resolve_stream_tool_calls_signal(
+            write_tool_calls,
+            [neutral_text],
+            {"user_input": "帮我改 notes.txt"},
+            mode="stream_initial",
+        )
+
+        self.assertEqual(kept_readonly, readonly_tool_calls)
+        self.assertIsNone(kept_write)
 
     def test_tool_call_system_prompt_focuses_existing_task_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -683,6 +1012,68 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("tool_used"), "sense_environment")
         self.assertEqual(done.get("success"), True)
 
+    def test_unified_reply_with_tools_stream_keeps_instant_handoff_before_environment_tool(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield "好的主人！我这就去「Agent智能体Openclaw」QQ群聊天～"
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_env_openclaw_1",
+                            "type": "function",
+                            "function": {
+                                "name": "sense_environment",
+                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "我已经先看过当前环境状态了。"
+            yield {"_usage": {"prompt_tokens": 7, "completion_tokens": 2}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "Environment inspected",
+                "meta": {
+                    "action": {
+                        "action_kind": "inspect_environment",
+                        "target_kind": "desktop_environment",
+                        "display_hint": "已检查当前环境状态",
+                        "verification_detail": "environment snapshot captured",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "对，就是这个群",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "sense_environment")
+        self.assertEqual(executed[0][1].get("detail_level"), "basic")
+        self.assertTrue(any(isinstance(chunk, str) and "我这就去" in chunk for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "sense_environment")
+        self.assertEqual(done.get("success"), True)
+
     def test_unified_reply_with_tools_stream_closes_dropped_stream_tool_signal_as_failure(self):
         executed = []
 
@@ -693,11 +1084,11 @@ class RunEventMappingTests(unittest.TestCase):
                 yield {
                     "_tool_calls": [
                         {
-                            "id": "call_env_drop_1",
+                            "id": "call_write_drop_1",
                             "type": "function",
                             "function": {
-                                "name": "sense_environment",
-                                "arguments": json.dumps({"detail_level": "basic"}, ensure_ascii=False),
+                                "name": "write_file",
+                                "arguments": json.dumps({"file_path": "notes.txt"}, ensure_ascii=False),
                             },
                         }
                     ]
@@ -736,7 +1127,7 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(synthetic_done.get("_tool_call", {}).get("reason"), "stream_signal_dropped")
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
-        self.assertEqual(done.get("tool_used"), "sense_environment")
+        self.assertEqual(done.get("tool_used"), "write_file")
         self.assertEqual(done.get("success"), False)
         self.assertEqual(done.get("synthetic"), True)
         self.assertEqual(done.get("reason"), "stream_signal_dropped")
@@ -1489,6 +1880,112 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertIn("还没有可靠核验", reply)
         self.assertIn("CSS was written successfully", reply)
+
+    def test_build_tool_closeout_reply_distinguishes_failed_verification(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=True,
+            action_summary="已写入文件：main.css",
+            tool_response="",
+            run_meta={
+                "verification": {
+                    "verified": False,
+                    "verification_mode": "dom_check",
+                    "verification_detail": "Expected save banner did not appear after the action.",
+                }
+            },
+        )
+
+        self.assertIn("核验没有通过", reply)
+        self.assertNotIn("已通过核验", reply)
+        self.assertNotIn("这一步已经完成：", reply)
+        self.assertIn("Expected save banner did not appear", reply)
+
+    def test_build_tool_closeout_reply_distinguishes_wait_for_user_handoff(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=True,
+            action_summary="已打开登录页",
+            tool_response="打开网页登录入口，等待用户完成登录。",
+            run_meta={
+                "process_meta": {
+                    "outcome_kind": "success",
+                    "next_hint_kind": "wait_for_user",
+                }
+            },
+        )
+
+        self.assertIn("需要你接手", reply)
+        self.assertIn("然后我再继续", reply)
+        self.assertNotIn("这一步已经完成：", reply)
+
+    def test_build_tool_closeout_reply_distinguishes_user_interrupted(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=False,
+            action_summary="",
+            tool_response="sense_environment 没有完成：当前工具调用被中断。",
+            run_meta={
+                "process_meta": {
+                    "outcome_kind": "interrupted",
+                    "next_hint_kind": "resume_or_close",
+                }
+            },
+        )
+
+        self.assertIn("被中断", reply)
+        self.assertIn("接着往下走", reply)
+        self.assertNotIn("没接稳", reply)
+
+    def test_build_tool_closeout_reply_distinguishes_arg_failure(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=False,
+            action_summary="缺少必填参数 content",
+            tool_response="write_file 缺少 content",
+            run_meta={
+                "process_meta": {
+                    "outcome_kind": "arg_failure",
+                    "next_hint_kind": "repair_args",
+                }
+            },
+        )
+
+        self.assertIn("参数还不完整", reply)
+        self.assertIn("缺少必填参数", reply)
+
+    def test_build_tool_closeout_reply_keeps_long_write_file_arg_guidance_visible(self):
+        tool_response = (
+            "执行失败: 缺少 content。\n"
+            "write_file 至少需要 file_path，并且还要提供完整 content。\n"
+            "如果你已经知道这个文件要写什么，就直接重新调用 write_file。"
+        )
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=False,
+            action_summary="执行失败: 缺少 content。 / write_file 至少需要 file_path，并且还要提供完整 content。",
+            tool_response=tool_response,
+            run_meta={
+                "process_meta": {
+                    "outcome_kind": "arg_failure",
+                    "next_hint_kind": "repair_args",
+                }
+            },
+        )
+
+        self.assertIn("参数还不完整", reply)
+        self.assertIn("如果你已经知道这个文件要写什么", reply)
+
+    def test_build_tool_closeout_reply_distinguishes_runtime_failure(self):
+        reply = reply_formatter_module._build_tool_closeout_reply(
+            success=False,
+            action_summary="",
+            tool_response="tool executor crashed before closeout",
+            run_meta={
+                "process_meta": {
+                    "outcome_kind": "runtime_failure",
+                    "next_hint_kind": "retry_or_close",
+                }
+            },
+        )
+
+        self.assertIn("执行里断掉了", reply)
+        self.assertIn("tool executor crashed", reply)
 
     def test_unified_reply_with_tools_stream_allows_one_more_write_file_repair_attempt(self):
         executed = []
@@ -2567,6 +3064,25 @@ class TaskPlanFsTargetBridgeTests(unittest.TestCase):
             )
 
         self.assertEqual(str(repaired.get("path") or "").replace("\\", "/"), "C:/Users/36459/NovaNotes")
+
+    def test_repair_tool_args_uses_workspace_root_as_last_folder_explore_fallback(self):
+        with patch.object(reply_formatter_module, "_load_task_plan_fs_target", return_value=""), patch.object(
+            reply_formatter_module, "_load_context_fs_target", return_value=""
+        ), patch.object(reply_formatter_module, "_load_latest_structured_fs_target", return_value=""):
+            repaired = reply_formatter_module._repair_tool_args_from_context(
+                "folder_explore",
+                {},
+                {
+                    "user_input": "看看当前项目结构",
+                    "l1": [],
+                    "context_data": {},
+                },
+            )
+
+        self.assertEqual(
+            str(repaired.get("path") or "").replace("\\", "/"),
+            str(fs_paths_module.WORKSPACE_ROOT.resolve()).replace("\\", "/"),
+        )
 
     def test_directory_resolution_followup_infers_folder_explore_from_task_target(self):
         with patch(

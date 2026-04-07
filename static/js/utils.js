@@ -3,7 +3,7 @@ var CHAT_HISTORY_MAX=200;
 var CHAT_HISTORY_BOOT_TURNS=15;
 var CHAT_HISTORY_SNAPSHOT_KEY='nova_chat_history';
 var CHAT_HISTORY_SESSION_SNAPSHOT_KEY='nova_chat_history_session';
-var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412d';
+var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412e';
 var CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
 var CHAT_HISTORY_SESSION_RENDER_VERSION_KEY='nova_chat_history_session_render_version';
 var voiceEnabled=false;
@@ -157,15 +157,64 @@ function persistChatHistorySnapshot(){
  _writeChatHistorySnapshot('persistent', recentSnapshot);
 }
 
-function renderAssistantBubbleHtml(text, renderedHtml){
+function assistantReplyLooksStructured(text, renderedHtml){
   var html=String(renderedHtml||'').trim();
   if(html){
     if(typeof normalizeRenderedAssistantHtml === 'function'){
       html=normalizeRenderedAssistantHtml(html);
     }
-    if(html) return html;
+    if (/<(h[1-6]|pre|code|blockquote|table|hr)\b/i.test(html)) return true;
+    var htmlListItems=(html.match(/<li\b/gi)||[]).length;
+    if(htmlListItems>=3) return true;
+  }
+  var raw=String(text||'').replace(/\r/g,'').trim();
+  if(!raw) return false;
+  if(/```/.test(raw)) return true;
+  if(/^\s{0,3}(?:#{1,6}\s+|>\s+)/m.test(raw)) return true;
+  if(/^\s*\|.+\|\s*$/m.test(raw)) return true;
+  if(/^\s*[-*_]{3,}\s*$/m.test(raw)) return true;
+  var listCount=0;
+  var lines=raw.split('\n');
+  for(var i=0;i<lines.length;i++){
+    if(/^\s{0,3}(?:[-*+]\s+|\d+[.)]\s+)/.test(lines[i]||'')){
+      listCount++;
+      if(listCount>=3) return true;
+    }
+  }
+  return false;
+}
+
+function getAssistantBubbleMode(text, renderedHtml){
+  return assistantReplyLooksStructured(text, renderedHtml) ? 'markdown' : 'plain';
+}
+
+function applyAssistantBubbleRenderMode(bubble, text, renderedHtml, forcedMode){
+  if(!bubble || !bubble.classList) return 'plain';
+  bubble.classList.remove('assistant-reply-markdown','assistant-reply-plain');
+  var mode=String(forcedMode||'').trim() || getAssistantBubbleMode(text, renderedHtml);
+  bubble.classList.add(mode==='markdown' ? 'assistant-reply-markdown' : 'assistant-reply-plain');
+  return mode;
+}
+
+function renderAssistantReplyHtml(text, renderedHtml, forcedMode){
+  var mode=String(forcedMode||'').trim() || getAssistantBubbleMode(text, renderedHtml);
+  if(mode==='markdown'){
+    var html=String(renderedHtml||'').trim();
+    if(html){
+      if(typeof normalizeRenderedAssistantHtml === 'function'){
+        html=normalizeRenderedAssistantHtml(html);
+      }
+      if(html) return html;
+    }
+    if(typeof formatBubbleText==='function'){
+      return formatBubbleText(text);
+    }
   }
   return renderAssistantPlainTextHtml(text);
+}
+
+function renderAssistantBubbleHtml(text, renderedHtml){
+  return renderAssistantReplyHtml(text, renderedHtml);
 }
 
 function normalizeRenderedAssistantHtml(html){
@@ -177,14 +226,12 @@ function normalizeRenderedAssistantHtml(html){
 function renderAssistantPlainTextHtml(text){
   var raw=String(text||'').replace(/\r/g,'').trim();
   if(!raw) return '<div class="bubble-spacer"></div>';
-  var parts=raw.split(/\n\s*\n+/);
-  var html=[];
-  for(var i=0;i<parts.length;i++){
-    var part=String(parts[i]||'').trim();
-    if(!part) continue;
-    html.push('<p>'+escapeHtml(part).replace(/\n/g,'<br>')+'</p>');
-  }
-  return html.length ? html.join('') : '<div class="bubble-spacer"></div>';
+  return '<div class="assistant-plain-text">'
+    +escapeHtml(raw)
+      .replace(/\n{3,}/g,'\n\n')
+      .replace(/\n\n/g,'<br><br>')
+      .replace(/\n/g,'<br>')
+    +'</div>';
 }
 
 function formatMarkdownInline(text){

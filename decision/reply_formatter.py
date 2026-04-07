@@ -751,6 +751,8 @@ def _should_keep_stream_tool_call_with_visible_text(tool_calls_signal: list[dict
         tool_calls_signal,
         visible_text,
         stream_tool_call_name=_stream_tool_call_name,
+        clean_visible_reply_text=_clean_visible_reply_text,
+        re_mod=_re,
     )
 
 

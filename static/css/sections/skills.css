@@ -344,10 +344,10 @@
   gap: 10px;
   text-align: center;
   cursor: default;
-  transition: all 0.25s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
   position: relative;
   overflow: hidden;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .skill-card::before {
@@ -365,14 +365,14 @@
 }
 
 .skill-card:hover {
-  background: var(--surface-panel-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
+  background: var(--surface-panel-strong);
+  transform: none;
+  box-shadow: none;
   border-color: var(--border-panel-strong);
 }
 
 .skill-card:hover::before {
-  background: linear-gradient(135deg, var(--tone-steel-border) 0%, var(--tone-amber-border) 100%);
+  background: linear-gradient(135deg, var(--border-panel-strong) 0%, var(--border-panel) 100%);
 }
 
 .skill-card-icon {
@@ -494,7 +494,7 @@ body.light .skill-card-status { color: #94a3b8; }
 .skill-tab.active {
   background: var(--surface-panel-strong);
   color: var(--text-primary);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 .skill-tab:hover:not(.active) {
   color: var(--text-secondary);
@@ -644,15 +644,15 @@ body.light .skill-view-note { color: #7b6f61; }
   border-radius: 12px;
   font-size: 12px;
   line-height: 1.6;
-  color: #8f98a8;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-label);
+  background: var(--surface-panel-soft);
+  border: 1px solid var(--border-panel);
 }
 
 .skill-store-summary {
   margin: 0 0 18px;
   font-size: 12px;
-  color: #9aa3b2;
+  color: var(--text-label);
 }
 
 .skill-section {
@@ -675,7 +675,7 @@ body.light .skill-view-note { color: #7b6f61; }
 .skill-section-title {
   font-size: 16px;
   font-weight: 700;
-  color: #f2f5f9;
+  color: var(--text-primary);
 }
 
 .skill-section-desc {
@@ -683,7 +683,7 @@ body.light .skill-view-note { color: #7b6f61; }
   max-width: 620px;
   font-size: 12px;
   line-height: 1.6;
-  color: #8f98a8;
+  color: var(--text-label);
 }
 
 .skill-section-count {
@@ -691,9 +691,9 @@ body.light .skill-view-note { color: #7b6f61; }
   height: 32px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: #d4dbe5;
+  border: 1px solid var(--border-panel);
+  background: var(--surface-panel-soft);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
   display: inline-flex;
@@ -715,17 +715,18 @@ body.light .skill-view-note { color: #7b6f61; }
   padding: 15px 18px;
   min-height: 98px;
   border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(26, 27, 31, 0.84);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--border-panel);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 .skill-shelf-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(148, 163, 184, 0.22);
-  background: rgba(30, 31, 36, 0.98);
+  transform: none;
+  border-color: var(--border-panel-strong);
+  background: var(--surface-panel-strong);
+  box-shadow: none;
 }
 
 .skill-shelf-card.is-disabled {
@@ -733,15 +734,15 @@ body.light .skill-view-note { color: #7b6f61; }
 }
 
 .skill-shelf-card.theme-info {
-  background-image: radial-gradient(circle at top left, rgba(59, 130, 246, 0.1), transparent 46%);
+  background-image: none;
 }
 
 .skill-shelf-card.theme-content {
-  background-image: radial-gradient(circle at top left, rgba(249, 115, 22, 0.11), transparent 46%);
+  background-image: none;
 }
 
 .skill-shelf-card.theme-builder {
-  background-image: radial-gradient(circle at top left, rgba(244, 114, 182, 0.12), transparent 46%);
+  background-image: none;
 }
 
 .skill-shelf-icon,
@@ -749,12 +750,12 @@ body.light .skill-view-note { color: #7b6f61; }
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-panel);
+  background: var(--surface-panel-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #d3dae6;
+  color: var(--text-secondary);
 }
 
 .skill-shelf-icon svg,
@@ -777,17 +778,17 @@ body.light .skill-view-note { color: #7b6f61; }
 
 .skill-modal-icon.theme-info,
 .skill-shelf-card.theme-info .skill-shelf-icon {
-  color: #8ec5ff;
+  color: var(--text-secondary);
 }
 
 .skill-modal-icon.theme-content,
 .skill-shelf-card.theme-content .skill-shelf-icon {
-  color: #ffb370;
+  color: var(--tone-amber);
 }
 
 .skill-modal-icon.theme-builder,
 .skill-shelf-card.theme-builder .skill-shelf-icon {
-  color: #f2a7ff;
+  color: var(--tone-sage);
 }
 
 .skill-shelf-main {
@@ -810,7 +811,7 @@ body.light .skill-view-note { color: #7b6f61; }
   min-width: 0;
   font-size: 16px;
   font-weight: 700;
-  color: #f3f5f9;
+  color: var(--text-primary);
   line-height: 1.25;
 }
 
@@ -833,9 +834,9 @@ body.light .skill-view-note { color: #7b6f61; }
   height: 24px;
   padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(255, 255, 255, 0.04);
-  color: #c6d0dd;
+  border: 1px solid var(--border-panel);
+  background: var(--surface-panel-soft);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -874,7 +875,7 @@ body.light .skill-view-note { color: #7b6f61; }
 .skill-modal-paragraph {
   font-size: 13px;
   line-height: 1.65;
-  color: #96a0af;
+  color: var(--text-label);
 }
 
 .skill-shelf-desc {
@@ -909,9 +910,9 @@ body.light .skill-view-note { color: #7b6f61; }
   bottom: calc(100% + 8px);
   padding: 4px 9px;
   border-radius: 10px;
-  background: rgba(52, 53, 59, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  color: #f4f6fb;
+  background: #141412;
+  border: 1px solid var(--border-panel-strong);
+  color: #f5f4ef;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;

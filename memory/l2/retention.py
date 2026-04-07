@@ -127,7 +127,7 @@ def classify_retention_bucket(
             tier = "keep"
             label = "永保类"
             reason = "高复用且带任务连续性信号，说明仍在承担短中期上下文"
-        elif age_days <= 7 and crystallized and hits >= 3:
+        elif age_days <= 14 and crystallized and hits >= 3:
             tier = "keep"
             label = "永保类"
             reason = "近期一般印象已被反复命中并结晶，继续保留原始上下文更稳"

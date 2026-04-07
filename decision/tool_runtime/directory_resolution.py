@@ -7,6 +7,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
+from protocols.fs import WORKSPACE_ROOT
 from protocols.target import extract_explicit_local_path
 
 
@@ -36,6 +37,13 @@ def extract_recent_file_paths(bundle: dict) -> list[str]:
                 if len(paths) >= 6:
                     return paths
     return paths
+
+
+def workspace_root_anchor() -> str:
+    try:
+        return str(WORKSPACE_ROOT.resolve())
+    except Exception:
+        return str(WORKSPACE_ROOT)
 
 
 def infer_recent_directory_target(
@@ -205,6 +213,7 @@ def repair_tool_args_from_context(
                 or load_context_fs_target(bundle)
                 or infer_recent_target(bundle)
                 or load_latest_structured_fs_target()
+                or workspace_root_anchor()
             )
         if target:
             args["path"] = target

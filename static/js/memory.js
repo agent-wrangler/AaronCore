@@ -45,9 +45,9 @@ function _memRenderPage() {
     var label = _memoryDateLabel(date);
     html += '<div class="mem-date-group">';
     html +=
-      '<div class="mem-date-label" style="font-size:12px;color:' +
+      '<div class="mem-date-label" style="font-size:11px;color:' +
       labelColor +
-      ";margin:18px 0 8px 0;font-weight:700;letter-spacing:0.3px;\">" +
+      ";margin:18px 0 8px 0;font-weight:600;letter-spacing:0.24px;\">" +
       escapeHtml(label) +
       "</div>";
 
@@ -64,14 +64,13 @@ function _memRenderPage() {
         cardBg +
         ";border:1px solid " +
         borderColor +
-        ';border-radius:16px;margin-bottom:10px;box-shadow:var(--shadow-card);position:relative;overflow:hidden;">';
-      html += '<div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--glow-line);"></div>';
+        ';border-radius:16px;margin-bottom:10px;position:relative;overflow:hidden;">';
       html +=
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;"><div style="display:flex;align-items:center;gap:8px;min-width:0;"><span class="' +
         tagCls +
         '">' +
         escapeHtml(layer) +
-        '</span><span style="font-size:14px;font-weight:700;color:' +
+        '</span><span style="font-size:15px;font-weight:600;color:' +
         textColor +
         ';letter-spacing:0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
         escapeHtml(view.title) +
@@ -80,7 +79,7 @@ function _memRenderPage() {
         ';flex-shrink:0;">' +
         escapeHtml(time) +
         "</span></div>";
-      html += '<div style="font-size:13px;color:' + textColor + ';line-height:1.82;opacity:0.96;">' + view.content + "</div>";
+      html += '<div style="font-size:13px;color:var(--text-secondary);line-height:1.82;">' + view.content + "</div>";
       html += "</div>";
     });
 

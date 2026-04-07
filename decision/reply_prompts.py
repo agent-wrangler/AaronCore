@@ -222,7 +222,7 @@ def build_cod_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> str:
     cfg = _load_prompt_config()
     intro = cfg.get(
         "cod_prompt_template",
-        "你可以直接回复用户，也可以调用工具。需要查天气、讲故事、查新闻等时调用对应工具，普通聊天直接回复。\n"
+        "你具备当前会话提供的工具能力。面对需要查询、读取、检查、执行或保存的问题，自主选择合适工具，不要先把请求预判成“普通聊天”而跳过验证。\n"
         "你有记忆工具：recall_memory（回忆对话和经历）和 query_knowledge（查询知识库）。只在需要时调用。\n"
         "你有自我修复能力：self_fix 工具可检查和修复问题。\n"
         "重要：当任务涉及多个步骤且某一步需要用户做选择（如选主题、选方案、确认风格）时，必须调用 ask_user 工具暂停等用户选择，不要在文字里列选项让用户自己回复。ask_user 会弹出选项卡片，用户点选后你再继续。",
@@ -241,7 +241,7 @@ def build_cod_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> str:
     tool_guide = cfg.get(
         "tool_usage_guide",
         [
-            "当用户的请求涉及具体能力（查天气、讲故事、查新闻、保存文件等）时调用对应工具。普通闲聊直接回复。",
+            "当用户的请求涉及查询、读取、检查、保存、执行等具体能力时，按任务需要调用对应工具；不要预先把请求按“闲聊/非闲聊”二分。",
             "多步任务中，遇到需要用户做选择的决策点（如从多个选题中选一个、选择方案、确认风格），必须调用 ask_user 工具，传入 question 和 options 数组。不要在文字里列选项等用户回复。",
             "调用 news 工具后：按话题分板块整理新闻，加你风格的开场白和简短点评。",
             "调用 weather 工具后：保留工具返回的天气窗口，不要擅自把多天预报缩成一天。",
@@ -251,6 +251,9 @@ def build_cod_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> str:
     rules_text = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(rules_list))
     tool_text = "\n".join(f"- {t}" for t in tool_guide)
     tool_text += (
+        "\n- Treat the tools provided in this turn as available capabilities. Do not talk yourself out of low-risk read/query/inspect tools when they can verify the answer."
+        "\n- For questions that can be confirmed by reading, querying, or inspecting, proactively use low-risk read tools to verify before concluding."
+        "\n- Be willing to explore, but every concrete conclusion must stay tied to actual tool results. If you have not executed yet, say that you have not executed yet."
         "\n- For any real-world action in the environment, execute the tool first and only claim success from the tool result."
         "\n- Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction."
         "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
@@ -313,7 +316,7 @@ def build_tool_call_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> s
 
     prompt = (
         f"{time_context}\n\n"
-        "\u4f60\u53ef\u4ee5\u76f4\u63a5\u56de\u590d\u7528\u6237\uff0c\u4e5f\u53ef\u4ee5\u8c03\u7528\u5de5\u5177\u83b7\u53d6\u5b9e\u65f6\u4fe1\u606f\u3002\u9700\u8981\u67e5\u5929\u6c14\u3001\u8bb2\u6545\u4e8b\u3001\u67e5\u65b0\u95fb\u7b49\u65f6\u8c03\u7528\u5bf9\u5e94\u5de5\u5177\uff0c\u666e\u901a\u804a\u5929\u76f4\u63a5\u56de\u590d\u3002\n\n"
+        "\u4f60\u5177\u5907\u5f53\u524d\u4f1a\u8bdd\u63d0\u4f9b\u7684\u5de5\u5177\u80fd\u529b\uff0c\u53ef\u4ee5\u8c03\u7528\u5de5\u5177\u83b7\u53d6\u5b9e\u65f6\u4fe1\u606f\u5e76\u5b8c\u6210\u4efb\u52a1\u3002\u9762\u5bf9\u9700\u8981\u9a8c\u8bc1\u7684\u4e8b\u5b9e\u3001\u6587\u4ef6\u3001\u76ee\u5f55\u3001\u73af\u5883\u6216\u5916\u90e8\u4fe1\u606f\uff0c\u5e94\u6309\u771f\u5b9e\u9700\u8981\u9009\u62e9\u5de5\u5177\uff0c\u5e76\u8ba9\u7ed3\u8bba\u7ed1\u5b9a\u6267\u884c\u7ed3\u679c\u3002\n\n"
         f"\u4f60\u7684\u5e95\u5c42\u6a21\u578b\uff1a{current_model}\n\n"
         f"L2\u6301\u4e45\u8bb0\u5fc6\uff08\u4e4b\u524d\u5bf9\u8bdd\u4e2d\u7684\u91cd\u8981\u7247\u6bb5\uff09\uff1a\n{l2_text}\n\n"
         f"L3\u957f\u671f\u8bb0\u5fc6\uff1a\n{l3_json}\n\n"
@@ -333,7 +336,10 @@ def build_tool_call_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> s
         f"L4\u4eba\u683c\u4fe1\u606f\uff1a\n{l4_json}\n\n"
         f"{style_hints}\n\n"
         "\u5de5\u5177\u4f7f\u7528\u6307\u5f15\uff1a\n"
-        "- \u91cd\u8981\uff1a\u53ea\u6709\u7528\u6237\u660e\u786e\u8981\u6c42\u67e5\u5929\u6c14\u3001\u8bb2\u6545\u4e8b\u3001\u67e5\u65b0\u95fb\u7b49\u5177\u4f53\u80fd\u529b\u65f6\u624d\u8c03\u7528\u5de5\u5177\u3002\u95f2\u804a\u3001\u8ffd\u95ee\u3001\u8ba8\u8bba\u3001\u6a21\u7cca\u8868\u8fbe\uff08\u5982\u201c\u8bd5\u8bd5\u201d\u201c\u600e\u4e48\u529e\u201d\u201c\u600e\u4e48\u5f04\u201d\uff09\u4e00\u5f8b\u76f4\u63a5\u56de\u590d\uff0c\u4e0d\u8c03\u5de5\u5177\u3002\n"
+        "- \u5de5\u5177\u4f7f\u7528\u7684\u4e3b\u5224\u65ad\u8981\u770b\u8fd9\u8f6e\u662f\u5426\u5df2\u7ecf\u660e\u786e\u53d1\u51fa tool_call\u3001\u5de5\u5177\u80fd\u529b\u7c7b\u578b/\u98ce\u9669\uff0c\u4ee5\u53ca\u5f53\u524d\u6587\u672c\u662f\u5426\u5df2\u7ecf\u50cf\u6700\u7ec8\u7b54\u6848\uff1b\u63aa\u8f9e\u77ed\u8bed\u53ea\u4f5c\u8f85\u52a9\uff0c\u4e0d\u8981\u628a\u6a21\u7cca\u8868\u8fbe\u672c\u8eab\u5f53\u6210\u62d2\u7edd\u5de5\u5177\u7684\u7406\u7531\u3002\n"
+        "- \u9ed8\u8ba4\u76f8\u4fe1\u672c\u8f6e\u63d0\u4f9b\u7684\u5de5\u5177\u80fd\u529b\u53ef\u7528\uff0c\u4e0d\u8981\u5148\u81ea\u6211\u5426\u5b9a\u4f4e\u98ce\u9669\u8bfb\u53d6/\u67e5\u8be2/\u68c0\u67e5\u5de5\u5177\u3002\n"
+        "- \u9762\u5bf9\u53ef\u4ee5\u901a\u8fc7\u8bfb\u53d6\u3001\u67e5\u8be2\u3001\u68c0\u67e5\u6765\u786e\u8ba4\u7684\u95ee\u9898\uff0c\u4f18\u5148\u4e3b\u52a8\u4f7f\u7528\u4f4e\u98ce\u9669\u8bfb\u5de5\u5177\u9a8c\u8bc1\uff0c\u518d\u7ed9\u51fa\u7ed3\u8bba\u3002\n"
+        "- \u53ef\u4ee5\u5927\u80c6\u63a2\u7d22\uff0c\u4f46\u5177\u4f53\u4e8b\u5b9e\u7ed3\u8bba\u5fc5\u987b\u7ed1\u5b9a\u771f\u5b9e\u5de5\u5177\u7ed3\u679c\uff1b\u5982\u679c\u8fd9\u8f6e\u8fd8\u6ca1\u6267\u884c\uff0c\u5c31\u660e\u786e\u8bf4\u8fd8\u6ca1\u6267\u884c\u3002\n"
         "- \u4f60\u5fc5\u987b\u901a\u8fc7\u5f53\u524d\u6a21\u578b\u652f\u6301\u7684\u539f\u751f tools / tool_calls \u673a\u5236\u8c03\u7528\u5de5\u5177\u3002\n"
         "- \u4e25\u7981\u8f93\u51fa\u4efb\u4f55\u65e7\u5f0f\u6587\u672c\u5de5\u5177\u534f\u8bae\u6216\u4f2a\u8c03\u7528\u6807\u8bb0\uff0c\u4f8b\u5982 <invoke ...>\u3001<function_calls>\u3001<minimax:tool_call>\u3001DSML\u3002\u8f93\u51fa\u8fd9\u4e9b\u6587\u672c\u4e0d\u7b97\u8c03\u7528\u5de5\u5177\u3002\n"
         "- \u5de5\u5177\u8fd4\u56de\u7684\u5185\u5bb9\u662f\u7d20\u6750\uff0c\u4e0d\u662f\u6700\u7ec8\u53e3\u543b\u3002\u6700\u7ec8\u56de\u590d\u5fc5\u987b\u4fdd\u6301 Nova \u7684\u4eba\u683c\u611f\u3001\u966a\u4f34\u611f\u548c\u81ea\u7136\u804a\u5929\u611f\u3002\n"

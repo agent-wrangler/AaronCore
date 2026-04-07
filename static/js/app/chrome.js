@@ -67,6 +67,9 @@ function initSidebarResize(){
  var sidebar=document.querySelector('.sidebar');
  var isResizing=false;
  var startX,startWidth;
+ var MIN_SIDEBAR_WIDTH=200;
+ var MAX_SIDEBAR_WIDTH=400;
+ var DEFAULT_SIDEBAR_WIDTH=MIN_SIDEBAR_WIDTH;
  
  function startResize(e){
   isResizing=true;
@@ -86,8 +89,8 @@ function initSidebarResize(){
   if(!clientX)return;
   
   var diff=clientX-startX;
-  var newWidth=Math.max(200,Math.min(400,startWidth+diff));
-  sidebar.style.width=newWidth+'px';
+   var newWidth=Math.max(MIN_SIDEBAR_WIDTH,Math.min(MAX_SIDEBAR_WIDTH,startWidth+diff));
+   sidebar.style.width=newWidth+'px';
  }
  
  function stopResize(){
@@ -120,10 +123,12 @@ function initSidebarResize(){
  });
  
  // 加载保存的宽度
- var savedWidth=localStorage.getItem('nova_sidebar_width');
- if(savedWidth){
-  sidebar.style.width=savedWidth;
- }
+  var savedWidth=localStorage.getItem('nova_sidebar_width');
+  if(savedWidth){
+   sidebar.style.width=savedWidth;
+  }else{
+   sidebar.style.width=DEFAULT_SIDEBAR_WIDTH+'px';
+  }
 }
 
 // setInputVisible is in utils.js
