@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .fs import load_export_state, normalize_user_special_path
+from .fs import _extract_search_term_v2, load_export_state, normalize_user_special_path
 
 try:
     import pygetwindow as gw
@@ -33,6 +33,40 @@ _PINYIN_MAP = {
     '迅雷': 'xunlei', '搜狗': 'sougou', '夸克': 'quark',
 }
 
+_KNOWN_WEB_TARGETS = (
+    ("百度地图", "https://map.baidu.com"),
+    ("高德地图", "https://www.amap.com"),
+    ("谷歌地图", "https://maps.google.com"),
+    ("百度", "https://www.baidu.com"),
+    ("谷歌邮箱", "https://mail.google.com"),
+    ("gmail", "https://mail.google.com"),
+    ("谷歌", "https://www.google.com"),
+    ("google", "https://www.google.com"),
+    ("淘宝", "https://www.taobao.com"),
+    ("京东", "https://www.jd.com"),
+    ("抖音", "https://www.douyin.com"),
+    ("b站", "https://www.bilibili.com"),
+    ("bilibili", "https://www.bilibili.com"),
+    ("知乎", "https://www.zhihu.com"),
+    ("微博", "https://weibo.com"),
+)
+
+_WEB_HINT_TOKENS = (
+    "网页",
+    "网站",
+    "网址",
+    "浏览器",
+    "官网",
+    "首页",
+    "search",
+    "browser",
+    "website",
+    "webpage",
+    "web page",
+    "homepage",
+    "home page",
+)
+
 
 def _pinyin_expand(text: str) -> list[str]:
     variants = [text]
@@ -45,6 +79,27 @@ def _pinyin_expand(text: str) -> list[str]:
 
 def _normalize(text: str) -> str:
     return ''.join(str(text or '').strip().lower().split())
+
+
+def _web_search_term(text: str) -> str:
+    try:
+        return str(_extract_search_term_v2(text) or "").strip()
+    except Exception:
+        return ""
+
+
+def _looks_like_web_request(text: str) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower()
+    if raw.startswith(("http://", "https://")):
+        return True
+    if re.search(r'^[\w.-]+\.[A-Za-z]{2,}(/.*)?$', raw):
+        return True
+    if _web_search_term(raw):
+        return True
+    return any(token in raw or token in lowered for token in _WEB_HINT_TOKENS)
 
 
 def extract_explicit_local_path(text: str) -> str:
@@ -134,6 +189,46 @@ def _strip_action_words(text: str) -> str:
     cleaned = re.sub(r"^(桌面上的|桌面上|桌面的|应用|客户端)", "", cleaned).strip()
     cleaned = re.sub(r"(应用|客户端)$", "", cleaned).strip()
     return cleaned or str(text or "").strip()
+
+
+def _resolve_known_web_target(text: str) -> dict | None:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+
+    lowered = raw.lower()
+    clean_text = _strip_action_words(raw)
+    clean_norm = _normalize(clean_text)
+    exact_suffixes = {"首页", "官网", "网站", "网页", "浏览器", "网址"}
+
+    for alias, url in _KNOWN_WEB_TARGETS:
+        alias_norm = _normalize(alias)
+        if not alias_norm:
+            continue
+        if clean_norm == alias_norm or any(clean_norm == alias_norm + _normalize(suffix) for suffix in exact_suffixes):
+            return {
+                "target_type": "url",
+                "value": url,
+                "label": alias,
+                "resolution": "resolved",
+                "source": "known_web_target",
+            }
+
+    if not _looks_like_web_request(raw):
+        return None
+
+    for alias, url in _KNOWN_WEB_TARGETS:
+        alias_norm = _normalize(alias)
+        alias_lower = alias.lower()
+        if alias_lower in lowered or alias_norm in clean_norm:
+            return {
+                "target_type": "url",
+                "value": url,
+                "label": alias,
+                "resolution": "resolved",
+                "source": "known_web_target",
+            }
+    return None
 
 
 def _llm_resolve_target(text: str) -> dict | None:
@@ -412,6 +507,11 @@ def resolve_local_app_reference(raw: str, context: dict | None = None) -> dict:
                 'source': 'fs_action',
             }
 
+    if _resolve_known_web_target(text):
+        return {'target_type': 'unknown', 'value': text, 'resolution': 'missing', 'source': 'known_web_target'}
+    if _web_search_term(text):
+        return {'target_type': 'unknown', 'value': text, 'resolution': 'missing', 'source': 'web_search_request'}
+
     explicit_path = _extract_explicit_local_path(text) or _extract_explicit_local_path(clean_text)
     if explicit_path and not _looks_like_app_path(explicit_path):
         return {'target_type': 'unknown', 'value': explicit_path, 'resolution': 'missing', 'source': 'explicit_path_non_app'}
@@ -453,7 +553,6 @@ def resolve_local_app_reference(raw: str, context: dict | None = None) -> dict:
             'resolution': 'resolved',
             'source': 'installed_exe_fast',
         }
-
     installed = discover_installed_apps()
     best_exe = _match_best(installed, norm_variants, match_fields=['label', 'dir_label', 'path'])
     if best_exe:
@@ -472,6 +571,8 @@ def resolve_target_reference(raw: str, context: dict | None = None) -> dict:
     text = str(raw or '').strip()
     context = context if isinstance(context, dict) else {}
     export_state = load_export_state()
+    known_web_target = _resolve_known_web_target(text)
+    web_search_term = _web_search_term(text)
 
     # ── 0. 已有结构化目标（context 里已解析好的）──
     fs_action = context.get('fs_action') if isinstance(context.get('fs_action'), dict) else {}
@@ -503,6 +604,9 @@ def resolve_target_reference(raw: str, context: dict | None = None) -> dict:
         }
 
     # ── 2. 已有 path 上下文 ──
+    if known_web_target:
+        return known_web_target
+
     path = str((context.get('fs_action') or {}).get('target', {}).get('path') or '').strip() if isinstance((context.get('fs_action') or {}).get('target'), dict) else ''
     if path:
         return {'target_type': 'path', 'value': path, 'resolution': 'resolved', 'source': 'fs_action'}
@@ -533,6 +637,9 @@ def resolve_target_reference(raw: str, context: dict | None = None) -> dict:
                 llm_result['value'] = exe_path
                 llm_result['resolution'] = 'resolved'
         return llm_result
+
+    if web_search_term or _looks_like_web_request(text):
+        return {'target_type': 'unknown', 'value': text, 'resolution': 'missing', 'source': 'web_request_unresolved'}
 
     # ── 6. 纯本地兜底（LLM 不可用时）──
     installed = discover_installed_apps()

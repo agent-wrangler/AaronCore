@@ -245,6 +245,54 @@ def _local_target_result(
     )
 
 
+def _operation_section(result: dict | None, key: str) -> dict:
+    if not isinstance(result, dict):
+        return {}
+    section = result.get(key)
+    return dict(section) if isinstance(section, dict) else {}
+
+
+def _search_submit_failure_result(
+    *,
+    target: str,
+    search_term: str,
+    search_result: dict | None,
+    repair_attempted: bool,
+) -> dict:
+    state = _operation_section(search_result, "state")
+    drift = _operation_section(search_result, "drift")
+    action = _operation_section(search_result, "action")
+    reply = str((search_result or {}).get("reply") or "").strip()
+    if not reply:
+        reply = f"网页已经打开，但搜索还没有完成：`{search_term}`"
+
+    drift_reason = str(drift.get("reason") or "search_submit_pending").strip()
+    repair_hint = str(drift.get("repair_hint") or "use_ui_interaction_or_query_url").strip()
+    observed_state = str(state.get("observed_state") or "search_submit_pending").strip()
+    verification_mode = str(action.get("verification_mode") or "browser_search_submit").strip()
+    verification_detail = str(action.get("verification_detail") or reply).strip()
+    blocked_reasons = {"auth_required", "login_required", "verification_required", "captcha_required"}
+    blocked_hints = {"user_login_required", "user_verification_required"}
+    outcome = (
+        "blocked"
+        if drift_reason in blocked_reasons or repair_hint in blocked_hints
+        else "opened_search_pending"
+    )
+    return _url_result(
+        reply,
+        target=target,
+        observed_state=observed_state,
+        outcome=outcome,
+        repair_attempted=repair_attempted,
+        repair_succeeded=False,
+        drift_reason=drift_reason,
+        repair_hint=repair_hint,
+        display_hint=reply.replace("`", ""),
+        verification_mode=verification_mode,
+        verification_detail=verification_detail,
+    )
+
+
 def execute(query, context=None):
     context = context if isinstance(context, dict) else {}
     raise_if_cancelled(context, detail="open_target cancelled before start")
@@ -374,6 +422,12 @@ def execute(query, context=None):
                             verification_mode="browser_search_submit",
                             verification_detail=str((search_result.get("reply") or "")).strip(),
                         )
+                    return _search_submit_failure_result(
+                        target=effective_target,
+                        search_term=str(remote_plan.get("search_term") or ""),
+                        search_result=search_result,
+                        repair_attempted=True,
+                    )
                     return _url_result(
                         f"网页已经打开，但搜索还没有完成：`{remote_plan['search_term']}`",
                         target=effective_target,
@@ -454,6 +508,13 @@ def execute(query, context=None):
                 outcome = "opened_with_query"
             elif remote_plan.get("search_term"):
                 search_result = submit_browser_search(str(remote_plan.get("search_term") or ""))
+                if not bool(search_result.get("repair_succeeded")):
+                    return _search_submit_failure_result(
+                        target=effective_target,
+                        search_term=str(remote_plan.get("search_term") or ""),
+                        search_result=search_result,
+                        repair_attempted=True,
+                    )
                 if bool(search_result.get("repair_succeeded")):
                     return _url_result(
                         f"已打开网页并提交搜索：`{remote_plan['search_term']}`",

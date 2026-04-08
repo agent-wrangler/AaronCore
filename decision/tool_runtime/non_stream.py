@@ -18,6 +18,12 @@ from decision.tool_runtime.turn_limits import (
     resolve_max_turns,
 )
 
+_CONTINUATION_RETRY_GUIDANCE = (
+    "The latest tool result indicates the task may still need another concrete step. "
+    "Do not stop with a handoff or generic promise. Either emit the next tool call now, "
+    "or, if the task is truly complete, give a grounded final answer that directly reflects the latest tool result."
+)
+
 
 def _build_non_stream_result(
     reply: str,
@@ -179,6 +185,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
 
         current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
         current_result = {"content": ""}
+        continuation_retry_budget = 1
 
         if current_record and current_record.reason == "user_interrupted":
             reply = formatter._build_tool_closeout_reply(
@@ -251,6 +258,43 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 mode=f"non_stream_followup_{round_idx}",
             )
             if not followup_tool_calls:
+                if (
+                    continuation_retry_budget > 0
+                    and formatter._should_retry_tool_continuation_reply(
+                        current_result.get("content", ""),
+                        run_meta=batch_state.run_meta,
+                    )
+                ):
+                    reasoning_details = current_result.get("reasoning_details")
+                    if str(current_result.get("content", "") or "").strip() or reasoning_details:
+                        messages.append(
+                            formatter._build_assistant_history_message(
+                                current_result.get("content", ""),
+                                reasoning_details=reasoning_details,
+                            )
+                        )
+                    formatter._append_runtime_guidance(messages, _CONTINUATION_RETRY_GUIDANCE)
+                    continuation_retry_budget -= 1
+                    if tool_runtime_cancel_reason(bundle, skill_context):
+                        reply = formatter._build_tool_closeout_reply(
+                            success=bool(batch_state.tool_success) if batch_state.tool_success is not None else False,
+                            action_summary=batch_state.action_summary,
+                            tool_response=batch_state.tool_response,
+                            run_meta=batch_state.run_meta,
+                        )
+                        return _result(reply, current_record)
+                    if turns_used >= max_turns:
+                        return _max_turns_closeout(
+                            terminal_record=ledger.latest_terminal() or current_record,
+                            success=batch_state.tool_success,
+                        )
+                    raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before continuation retry model call")
+                    turns_used += 1
+                    current_result = formatter._llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25)
+                    formatter._merge_tool_call_usage_totals(usage, current_result.get("usage", {}))
+                    formatter._record_tool_call_usage_stats(cfg, current_result.get("usage", {}))
+                    round_idx += 1
+                    continue
                 break
 
             if tool_runtime_cancel_reason(bundle, skill_context):

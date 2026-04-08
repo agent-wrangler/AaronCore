@@ -1,8 +1,14 @@
+import json
+import re
 import unittest
+from unittest.mock import patch
 
+from core.fs_protocol import build_operation_result
 from core.decision_runtime.tool_runtime.events import build_tool_turn_done_event
 from core.decision_runtime.tool_runtime.ledger import ToolCallRecord, ToolCallTurnLedger
+from decision.tool_runtime import dispatcher as dispatcher_module
 from decision.tool_runtime import result_resolution as result_resolution_module
+from decision.tool_runtime import signal_recovery as signal_recovery_module
 from decision.tool_runtime.events import build_tool_call_done_event, build_tool_call_executing_event
 from decision.tool_runtime.process_meta import build_attempt_process_meta, build_done_process_meta
 
@@ -39,6 +45,22 @@ class ToolCallRuntimeTests(unittest.TestCase):
 
         self.assertEqual(initial, [compat_tool_call])
         self.assertIsNone(followup)
+
+    def test_infer_action_tool_call_prefers_open_target_for_known_web_search(self):
+        with patch("core.target_protocol._llm_resolve_target", return_value=None):
+            tool_call = signal_recovery_module.infer_action_tool_call_from_reply(
+                "我来帮你打开百度搜索。",
+                "打开百度 搜索agent",
+                {},
+                re_mod=re,
+                json_module=json,
+            )
+
+        self.assertIsNotNone(tool_call)
+        self.assertEqual(tool_call["function"]["name"], "open_target")
+        args = json.loads(tool_call["function"]["arguments"])
+        self.assertEqual(args.get("path"), "https://www.baidu.com")
+        self.assertEqual(args.get("user_input"), "打开百度 搜索agent")
 
     def test_tool_call_events_carry_process_meta_for_fallback_retry(self):
         attempt_meta = build_attempt_process_meta(
@@ -212,6 +234,50 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertEqual(event.get("action_count"), 2)
         self.assertTrue(event.get("batch_mode"))
         self.assertEqual(len(event.get("tool_results") or []), 2)
+
+    def test_normalize_legacy_operation_result_preserves_takeover_signals(self):
+        result = dispatcher_module.normalize_tool_adapter_result(
+            build_operation_result(
+                "当前网页需要先完成登录或验证，暂时不能继续自动搜索：`AI`",
+                expected_state="auth_cleared",
+                observed_state="auth_required",
+                drift_reason="auth_required",
+                repair_hint="user_login_required",
+                action_kind="open_url",
+                target_kind="url",
+                target="https://www.douyin.com",
+                outcome="blocked",
+                verification_mode="browser_search_submit",
+                verification_detail="Douyin login prompt",
+            ),
+            name="open_target",
+        )
+
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("meta", {}).get("drift", {}).get("reason"), "auth_required")
+        self.assertEqual(result.get("meta", {}).get("action", {}).get("outcome"), "blocked")
+        self.assertFalse(result.get("meta", {}).get("verification", {}).get("verified"))
+        self.assertTrue(signal_recovery_module.tool_requires_user_takeover(result))
+
+    def test_normalize_legacy_operation_result_marks_verified_success(self):
+        result = dispatcher_module.normalize_tool_adapter_result(
+            build_operation_result(
+                "已打开网页：`https://www.douyin.com`",
+                expected_state="url_opened",
+                observed_state="url_opened",
+                action_kind="open_url",
+                target_kind="url",
+                target="https://www.douyin.com",
+                outcome="opened",
+                verification_mode="window_changed",
+                verification_detail="Window count changed",
+            ),
+            name="open_target",
+        )
+
+        self.assertTrue(result.get("success"))
+        self.assertTrue(result.get("meta", {}).get("verification", {}).get("verified"))
+        self.assertEqual(result.get("meta", {}).get("action", {}).get("target_kind"), "url")
 
 
 if __name__ == "__main__":

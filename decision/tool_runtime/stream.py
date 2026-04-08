@@ -25,6 +25,12 @@ from decision.tool_runtime.turn_limits import (
     resolve_max_turns,
 )
 
+_CONTINUATION_RETRY_GUIDANCE = (
+    "The latest tool result indicates the task may still need another concrete step. "
+    "Do not stop with a handoff or generic promise. Either emit the next tool call now, "
+    "or, if the task is truly complete, give a grounded final answer that directly reflects the latest tool result."
+)
+
 
 def _result_to_terminal_record(result: dict) -> ToolCallRecord | None:
     tool_name = str(result.get("tool_used") or "").strip()
@@ -307,6 +313,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
 
         recent_attempts = list(batch_state.recent_attempts)
         write_file_arg_retry_budget = 1
+        continuation_retry_budget = 1
         current_record = batch_outcome.current_record or (batch_outcome.records[-1] if batch_outcome.records else ledger.latest_terminal())
         current_run_meta = batch_state.run_meta
         current_tool_success = batch_state.tool_success
@@ -515,6 +522,29 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                         formatter._build_strict_write_file_retry_note(current_tool_args, current_arg_failure),
                     )
                     write_file_arg_retry_budget -= 1
+                    round_index += 1
+                    continue
+
+                if (
+                    continuation_retry_budget > 0
+                    and formatter._should_retry_tool_continuation_reply(
+                        visible_n,
+                        run_meta=current_run_meta,
+                    )
+                ):
+                    reasoning_details = formatter._reasoning_details_from_chunks(round_reasoning_chunks)
+                    if str(joined_n or "").strip() or reasoning_details:
+                        messages.append(
+                            formatter._build_assistant_history_message(
+                                joined_n,
+                                reasoning_details=reasoning_details,
+                            )
+                        )
+                    formatter._append_runtime_guidance(
+                        messages,
+                        _CONTINUATION_RETRY_GUIDANCE,
+                    )
+                    continuation_retry_budget -= 1
                     round_index += 1
                     continue
 

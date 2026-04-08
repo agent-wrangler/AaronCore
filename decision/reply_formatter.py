@@ -710,6 +710,21 @@ def _finalize_tool_reply(
         re_mod=_re,
     )
 
+
+def _should_retry_tool_continuation_reply(
+    text: str,
+    *,
+    run_meta: dict | None = None,
+) -> bool:
+    return _closeout_helpers.should_retry_tool_continuation_reply(
+        text,
+        run_meta=run_meta,
+        clean_visible_reply_text=_clean_visible_reply_text,
+        looks_like_tool_preamble=_looks_like_tool_preamble,
+        looks_like_structured_tool_handoff=_looks_like_structured_tool_handoff,
+    )
+
+
 def _looks_like_tool_preamble(text: str) -> bool:
     return _handoff_signals.looks_like_tool_preamble(
         text,
@@ -769,6 +784,7 @@ def _resolve_stream_tool_calls_signal(
         bundle,
         mode=mode,
         strip_think_markup=_strip_think_markup,
+        clean_visible_reply_text=_clean_visible_reply_text,
         stream_tool_call_name=_stream_tool_call_name,
         looks_like_tool_preamble=_looks_like_tool_preamble,
         looks_like_structured_tool_handoff=_looks_like_structured_tool_handoff,
@@ -776,6 +792,7 @@ def _resolve_stream_tool_calls_signal(
         should_keep_stream_tool_call_with_visible_text=_should_keep_stream_tool_call_with_visible_text,
         resolve_tool_calls_from_result=_resolve_tool_calls_from_result,
         debug_write=_debug_write,
+        re_mod=_re,
     )
 
 

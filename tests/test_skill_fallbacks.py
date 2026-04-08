@@ -3636,5 +3636,19 @@ class TargetProtocolPathResolutionTests(unittest.TestCase):
         self.assertEqual(resolved.get("source"), "explicit_path_non_app")
 
 
+    def test_resolve_target_reference_prefers_known_web_target_for_baidu_search_request(self):
+        resolved = target_protocol_module.resolve_target_reference("打开百度 搜索agent", {})
+
+        self.assertEqual(resolved.get("target_type"), "url")
+        self.assertEqual(resolved.get("value"), "https://www.baidu.com")
+        self.assertEqual(resolved.get("source"), "known_web_target")
+
+    def test_resolve_local_app_reference_ignores_known_web_search_request(self):
+        resolved = target_protocol_module.resolve_local_app_reference("打开百度 搜索agent", {})
+
+        self.assertEqual(resolved.get("target_type"), "unknown")
+        self.assertEqual(resolved.get("source"), "known_web_target")
+
+
 if __name__ == "__main__":
     unittest.main()

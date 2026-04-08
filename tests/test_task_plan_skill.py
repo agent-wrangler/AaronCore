@@ -150,6 +150,45 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertEqual(plan.get("current_item_id"), "2")
         self.assertEqual(plan.get("summary"), "Config inspected, now analyzing the root cause")
 
+    def test_mark_done_with_explicit_next_item_stays_in_progress(self):
+        task_plan_module.execute(
+            "",
+            {
+                "action": "create_or_update",
+                "goal": "Diagnose execution stalls",
+                "items": [
+                    {"id": "inspect", "title": "Inspect config", "status": "done"},
+                    {"id": "verify", "title": "Verify the patch", "status": "running"},
+                    {"id": "deliver", "title": "Deliver the result", "status": "pending"},
+                ],
+                "current_item_id": "verify",
+            },
+        )
+
+        result = task_plan_module.execute(
+            "",
+            {
+                "action": "mark_done",
+                "goal": "Diagnose execution stalls",
+                "completed_item_id": "verify",
+                "next_item_id": "deliver",
+                "summary": "Verification is complete, moving to the delivery step",
+                "items": [
+                    {"id": "inspect", "title": "Inspect config", "status": "done"},
+                    {"id": "verify", "title": "Verify the patch", "status": "done"},
+                    {"id": "deliver", "title": "Deliver the result", "status": "running"},
+                ],
+            },
+        )
+
+        plan = result.get("task_plan") or {}
+        statuses = {item.get("id"): item.get("status") for item in plan.get("items") or []}
+        self.assertEqual(statuses.get("inspect"), "done")
+        self.assertEqual(statuses.get("verify"), "done")
+        self.assertEqual(statuses.get("deliver"), "running")
+        self.assertEqual(plan.get("current_item_id"), "deliver")
+        self.assertNotEqual(plan.get("phase"), "done")
+
     def test_build_active_task_context_uses_stored_plan_when_bundle_has_none(self):
         task_plan_module.execute(
             "",

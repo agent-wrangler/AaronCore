@@ -175,6 +175,27 @@ def build_tool_closeout_reply(
     return ""
 
 
+def should_retry_tool_continuation_reply(
+    text: str,
+    *,
+    run_meta: dict | None = None,
+    clean_visible_reply_text,
+    looks_like_tool_preamble,
+    looks_like_structured_tool_handoff,
+) -> bool:
+    process_meta = _extract_process_meta(run_meta)
+    if str(process_meta.get("next_hint_kind") or "").strip() != "continue":
+        return False
+
+    visible = clean_visible_reply_text(text)
+    if not visible:
+        return True
+    return bool(
+        looks_like_tool_preamble(visible)
+        or looks_like_structured_tool_handoff(visible)
+    )
+
+
 def finalize_tool_reply(
     raw_reply: str,
     *,

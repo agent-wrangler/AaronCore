@@ -68,6 +68,39 @@ def _find_item(plan: dict, item_id: str) -> dict | None:
     return None
 
 
+def _should_treat_mark_done_as_advance(goal: str, ctx: dict) -> bool:
+    next_item_id = str(ctx.get("next_item_id") or "").strip()
+    if next_item_id:
+        return True
+
+    raw_items = ctx.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        return False
+
+    normalized = normalize_task_plan_snapshot(
+        {
+            "goal": goal,
+            "items": raw_items,
+            "current_item_id": str(ctx.get("current_item_id") or "").strip(),
+        },
+        goal=goal,
+    )
+    items = normalized.get("items") if isinstance(normalized.get("items"), list) else []
+    unfinished_ids = [
+        str(item.get("id") or "").strip()
+        for item in items
+        if str(item.get("status") or "").strip() in {"pending", "running", "blocked", "error", "failed", "waiting_user"}
+        and str(item.get("id") or "").strip()
+    ]
+    if not unfinished_ids:
+        return False
+
+    completed_item_id = str(ctx.get("completed_item_id") or "").strip()
+    if completed_item_id:
+        return any(item_id != completed_item_id for item_id in unfinished_ids)
+    return len(unfinished_ids) > 1
+
+
 def _current_or_first_pending(plan: dict) -> dict | None:
     current = _find_item(plan, plan.get("current_item_id"))
     if current:
@@ -351,6 +384,8 @@ def execute(query, context=None):
         return _failure_result(reply, "missing_task_goal", "provide_goal")
 
     effective_goal = goal or str(existing.get("goal") or "").strip()
+    if normalized_action == "mark_done" and _should_treat_mark_done_as_advance(effective_goal, ctx):
+        normalized_action = "advance"
 
     if normalized_action == "create_or_update":
         plan = _apply_create_or_update(effective_goal, existing, ctx)

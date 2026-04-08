@@ -335,6 +335,7 @@ def resolve_stream_tool_calls_signal(
     *,
     mode: str,
     strip_think_markup,
+    clean_visible_reply_text,
     stream_tool_call_name,
     looks_like_tool_preamble,
     looks_like_structured_tool_handoff,
@@ -342,6 +343,7 @@ def resolve_stream_tool_calls_signal(
     should_keep_stream_tool_call_with_visible_text,
     resolve_tool_calls_from_result,
     debug_write,
+    re_mod,
 ) -> tuple[list[dict] | None, str, str]:
     joined = "".join(str(token) for token in (collected_tokens or [])).strip()
     visible_joined = strip_think_markup(joined).strip()
