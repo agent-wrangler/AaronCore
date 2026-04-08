@@ -1,12 +1,12 @@
-﻿# feedback_loop - 鍙嶉璁板綍銆佸悗鍙板涔犱换鍔?
-# 浠?agent_final.py 鎻愬彇
+﻿# feedback_loop - L7 feedback logging and routing-learning pipeline.
+# Extracted from agent_final.py.
 
 from datetime import datetime
 from pathlib import Path
 
 from core.runtime_state.state_loader import PRIMARY_STATE_DIR
 
-# 鈹€鈹€ 娉ㄥ叆渚濊禆 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# Runtime import/config wiring for L7 feedback execution and debug hooks.
 _debug_write = lambda stage, data: None
 _load_autolearn_config = lambda: {}
 _l8_auto_learn = None
@@ -48,7 +48,7 @@ def init(*, debug_write=None, load_autolearn_config=None,
         _awareness_push = awareness_push
 
 
-# 鈹€鈹€ 鍙嶉璁板綍 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# L7 feedback collection and rule escalation helpers.
 
 
 
@@ -75,8 +75,8 @@ def l7_record_feedback(msg: str, history: list, background_tasks=None):
             _debug_write("feedback_rule_error", {"error": str(exc)})
 
 
-# 鈹€鈹€ self-repair锛氱郴缁熸晠闅?+ 鐢ㄦ埛鍙嶉涓殑浠ｇ爜绾ч棶棰?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-# 浠ｇ爜绾ч棶棰橈紙璺敱璋冨害绛夛級闇€瑕佺湡姝ｆ敼浠ｇ爜鎵嶈兘淇紝浠呴潬 prompt 鎻愮ず涓嶅
+# self-repair: categorize repeatable user-facing failure patterns and route-level incidents.
+# Self-repair receives signalized categories such as system failures and code quality regressions.
 _SELF_REPAIR_CATEGORIES = {"璺敱璋冨害", "绯荤粺鏁呴殰", "鎰忓浘鐞嗚В"}
 
 
@@ -85,16 +85,17 @@ def trigger_self_repair_from_error(
     error_detail: dict,
     background_tasks=None,
 ):
-    """浠庣郴缁熸晠闅滀簨浠惰Е鍙?self-repair銆?
+    """
+    Build a system_error self-repair rule and enqueue a planning task.
 
     error_type: skill_failed | skill_missing | core_route_error | chat_exception
-    error_detail: 鍖呭惈 skill, error, input 绛変笂涓嬫枃淇℃伅
+    error_detail: 包含 skill, error, input 等上下文信息
     """
     l8_config = _load_autolearn_config()
     if not l8_config.get("allow_self_repair_planning", True):
         return None
 
-    # 鏋勯€犱竴涓被浼?feedback_rule 鐨勭粨鏋勭粰 self-repair 娴佺▼澶嶇敤
+    # Build a feedback_rule style object for the self-repair flow.
     rule_item = {
         "id": f"sys_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
         "source": "system_error",
@@ -128,9 +129,11 @@ def trigger_self_repair_from_error(
 
 
 def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tasks=None):
-    """鏁堟灉杩借釜锛氬鏋滄湁鏃ц鍒欐渶杩戝懡涓繃浣嗙敤鎴蜂粛涓嶆弧鎰忥紝鍗囩骇澶勭悊寮哄害銆?
-    L1(prompt) fail>=2 鈫?琛ョ敓鎴?L2 绾︽潫 + 浜や簰椋庢牸绫诲啓鍥?L4
-    L2(绾︽潫) fail>=2 鈫?瑙﹀彂 L3 self-repair
+    """
+    Aggregate failures by L7 buckets and evaluate escalation policy.
+
+    L1(prompt) fail>=2: add routing constraint when constraint is missing.
+    L2(routing) fail>=2 + constraint exists: trigger L3 self-repair check.
     """
     from core.feedback_classifier import _load_rules, _save_rules, _extract_routing_constraint
     from datetime import datetime, timedelta
@@ -143,18 +146,18 @@ def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tas
     for rule in rules:
         if not isinstance(rule, dict) or not rule.get("enabled", True):
             continue
-        # 鍙湅鏈€杩?24 灏忔椂鍐呭懡涓繃鐨勮鍒?
+        # Check hits in the last 24 hours; ignore stale failures.
         last_hit = rule.get("last_hit_at", "")
         if not last_hit or last_hit < cutoff:
             continue
-        # 妫€鏌ユ棫瑙勫垯鐨?last_question 鍜屾柊鍙嶉鐨?last_question 鏄惁鐩镐技
+        # Check whether old last_question and the new user feedback are semantically similar.
         old_q = str(rule.get("last_question", ""))
         if not old_q or len(old_q) < 2:
             continue
         if old_q[:4] not in last_q and last_q[:4] not in old_q:
             continue
 
-        # 鍛戒腑浜嗭細杩欐潯鏃ц鍒欐病鑳介樆姝㈤棶棰樺啀娆″彂鐢?
+        # Persist incremental escalation for repeated failures in this execution path.
         rule["fail_count"] = (rule.get("fail_count") or 0) + 1
         dirty = True
         fail_count = rule["fail_count"]
@@ -164,7 +167,7 @@ def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tas
             "has_constraint": bool(rule.get("constraint")),
         })
 
-        # L1 鈫?L2 鍗囩骇锛歱rompt 鎻愰啋澶辫触 2 娆★紝琛ョ敓鎴愯矾鐢辩害鏉?
+        # L1 to L2: after 2 prompt-stage failures and no constraint, add routing constraint + amendment attempts.
         if fail_count >= 2 and not rule.get("constraint"):
             constraint = _extract_routing_constraint(
                 rule.get("user_feedback", ""),
@@ -176,11 +179,11 @@ def _check_and_escalate_failed_rules(last_q: str, new_rule: dict, background_tas
                 rule["constraint"] = constraint
                 _debug_write("l7_escalate_l1_to_l2", {"rule_id": rule.get("id")})
 
-            # 鎵€鏈夌被鍒弽棣?鈫?淇妗堟満鍒讹紙L7鈫扡4/L5锛?
+            # If still unresolved, mark for amendment and allow L7→L4/L5 profile updates.
             if not rule.get("l4_amended"):
                 _l7_apply_amendment(rule)
 
-        # L2 鈫?L3 鍗囩骇锛氳矾鐢辩害鏉熶篃澶辫触 2 娆★紝瑙﹀彂 self-repair
+        # L2 to L3: if constraint exists but still fails 2 times, trigger self-repair planning.
         elif fail_count >= 4 and rule.get("constraint"):
             l8_config = _load_autolearn_config()
             conf = float((rule.get("constraint") or {}).get("confidence", 0) or 0)
@@ -210,10 +213,10 @@ def _l7_apply_amendment(rule: dict):
 
 
 def _amend_l4_rules(rule: dict, amendment: str, category: str):
-    """鍐欏叆 L4 interaction_rules锛屾寜 category 鍔犲墠缂€鏍囨敞鏉ユ簮"""
+    """Inject stable amendments into L4 interaction_rules only when category mapping is known."""
     from core.runtime_state.json_store import load_json, write_json
 
-    # 鎸夌被鍒姞璇箟鍓嶇紑锛岃 LLM 鐞嗚В杩欐潯瑙勫垯鐨勭敤閫?
+    # Keep semantic prefixes compact so LLMs can route the amendment properly.
     _PREFIX = {
         "\u4ea4\u4e92\u98ce\u683c": "\u98ce\u683c",
         "\u5185\u5bb9\u751f\u6210": "\u5185\u5bb9",
@@ -273,15 +276,15 @@ def l7_record_feedback_v2(msg: str, history: list, background_tasks=None):
             return None
         _debug_write("feedback_rule", rule_item)
 
-        # 鈹€鈹€ 鏁堟灉杩借釜锛氭鏌ユ槸鍚︽湁宸插懡涓絾浠嶅け璐ョ殑鏃ц鍒?鈫?鍗囩骇澶勭悊 鈹€鈹€
+        # Escalation follow-up: if old rules keep failing, continue raising risk handling level.
         try:
             _check_and_escalate_failed_rules(last_q, rule_item, background_tasks)
         except Exception as esc_err:
             _debug_write("l7_escalate_error", {"error": str(esc_err)})
 
-        # L7 鍙嶉鍒嗘祦锛?
-        # - 鍐呭鐢熸垚/浜や簰椋庢牸/鎰忓浘鐞嗚В 鈫?鐣欏湪 L7锛岄€氳繃 prompt 鎻愮ず褰卞搷涓嬫鍥炲
-        # - 璺敱璋冨害/绯荤粺鏁呴殰 鈫?鍚屾椂瑙﹀彂 self-repair锛岄渶瑕佺湡姝ｆ敼浠ｇ爜
+        # L7 feedback split: content/interaction style and intent understanding stay in L7.
+        # - Prompt guidance keeps future responses from repeating the same path mistakes.
+        # - System failures and infrastructure issues can escalate to self-repair for code updates.
         category = rule_item.get("category", "")
         confidence = float((rule_item.get("constraint") or {}).get("confidence", 0) or 0)
         if category in _SELF_REPAIR_CATEGORIES and confidence >= 0.8:
@@ -304,7 +307,7 @@ def l7_record_feedback_v2(msg: str, history: list, background_tasks=None):
         return None
 
 
-# 鈹€鈹€ L8 鐘舵€?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# L8 lifecycle helpers and background learning entry points.
 
 def l8_touch():
     _debug_write(
@@ -317,7 +320,7 @@ def l8_touch():
     )
 
 
-# 鈹€鈹€ 鍚庡彴瀛︿範浠诲姟 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+
 
 def run_l8_autolearn_task(msg: str, response: str, route: dict, has_l8_hit: bool):
     try:
@@ -338,7 +341,7 @@ def run_l8_autolearn_task(msg: str, response: str, route: dict, has_l8_hit: bool
             debug_payload["summary"] = str(result.get("summary"))[:160]
         _debug_write("l8_autolearn", debug_payload)
 
-        # 鈹€鈹€ 鎰熺煡灞傦細鎺ㄩ€佸涔犱簨浠?鈹€鈹€
+        # L8 awareness hook: successful learned plan preview (auto learn).
         if result.get("success") and isinstance(entry, dict):
             _awareness_push({
                 "type": "l8_learn",
@@ -373,7 +376,7 @@ def run_l8_feedback_relearn_task(rule_item: dict):
             debug_payload["summary"] = str(result.get("summary"))[:200]
         _debug_write("l8_feedback_relearn", debug_payload)
 
-        # 鈹€鈹€ 鎰熺煡灞傦細鎺ㄩ€佸弽棣堥噸瀛︿簨浠?鈹€鈹€
+        # L8 awareness hook: successful feedback relearn preview.
         if result.get("success") and isinstance(entry, dict):
             _awareness_push({
                 "type": "l8_relearn",
@@ -413,7 +416,7 @@ def run_self_repair_planning_task(rule_item: dict):
             },
         )
 
-        # preview + 鍙兘 auto_apply锛屽け璐ユ椂鏈夐檺閲嶈瘯
+        # preview + 可能 auto_apply，失败时有限重试
         for attempt in range(1 + MAX_REPAIR_RETRIES):
             report = _preview_self_repair_report(
                 report_id=str(report.get("id") or ""),
@@ -423,10 +426,10 @@ def run_self_repair_planning_task(rule_item: dict):
             )
             status = str(report.get("status") or "")
             apply_status = str((report.get("apply_result") or {}).get("status") or "")
-            # 鎴愬姛鎴栫瓑寰呭鏍?鈫?涓嶉渶瑕侀噸璇?
+            # Auto-apply success states can move directly to applied or await confirmation; low-risk path skips extra validation output.
             if status in ("applied", "applied_without_validation", "awaiting_confirmation", "proposal_ready"):
                 break
-            # 鍙噸璇曠殑澶辫触锛氳娉曢敊璇€乸atch 鍖归厤澶辫触銆乸atch 鐢熸垚澶辫触
+            # 可重试的失败：语法错误、patch 匹配失败、patch 生成失败
             retryable = apply_status in ("syntax_error_before_write", "edit_validation_failed", "patch_plan_failed")
             preview_failed = str((report.get("patch_preview") or {}).get("status") or "") == "preview_failed"
             if (retryable or preview_failed) and attempt < MAX_REPAIR_RETRIES:
@@ -451,7 +454,7 @@ def run_self_repair_planning_task(rule_item: dict):
         _debug_write("self_repair_report_error", {"error": str(exc)})
 
 
-# 鈹€鈹€ 璇婃柇 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# Build diagnostic helpers for runtime feedback analysis.
 
 def build_l8_diagnosis(query: str, route_mode: str = "chat", skill: str = "none", limit: int = 3) -> dict:
     route_result = {

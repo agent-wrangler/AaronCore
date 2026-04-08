@@ -7,7 +7,7 @@ function show(n){
  try{
   _closeSkillModal(true);
  }catch(e){
-  console.warn('[Nova] close skill modal failed', e);
+  console.warn('[AaronCore] close skill modal failed', e);
  }
  for(var i=1;i<=6;i++){
   var menu=document.getElementById('m'+i);
@@ -33,7 +33,7 @@ function show(n){
     })||{}).html||'';
    }else{
     try{
-     chatHistory=localStorage.getItem('nova_chat_history')||'';
+     chatHistory=localStorage.getItem('aaroncore_chat_history')||localStorage.getItem('nova_chat_history')||'';
     }catch(e){
      chatHistory='';
     }
@@ -69,18 +69,18 @@ function show(n){
   try{
    _closeSkillModal(true);
   }catch(e){
-   console.warn('[Nova] close skill modal failed on skills tab', e);
+   console.warn('[AaronCore] close skill modal failed on skills tab', e);
   }
   chat.innerHTML='<div class="skill-store"><div class="skill-store-head"><div class="skill-store-hero"><div class="page-title">'+t('skills.title')+'</div><div class="skill-store-subtitle">'+t('skills.subtitle')+'</div></div><div class="skill-store-toolbar" id="skillsToolbar"></div></div><div class="skill-tabs" id="skillsViewTabs"></div><div id="skillsList">'+t('loading')+'</div></div>';
   try{
    _renderSkillsToolbar();
   }catch(e){
-   console.warn('[Nova] render skills toolbar failed', e);
+   console.warn('[AaronCore] render skills toolbar failed', e);
   }
   try{
    _loadSkillsList();
   }catch(e){
-   console.warn('[Nova] load skills list failed', e);
+   console.warn('[AaronCore] load skills list failed', e);
   }
  }
 
@@ -90,7 +90,7 @@ function show(n){
   try{
    loadStatsData();
   }catch(e){
-   console.warn('[Nova] load stats failed', e);
+   console.warn('[AaronCore] load stats failed', e);
   }
  }
 

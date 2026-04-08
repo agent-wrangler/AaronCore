@@ -473,7 +473,7 @@ def _codex_app_server_stream(
         init_request_id = send_request(
             "initialize",
             {
-                "clientInfo": {"name": "novacore", "title": "NovaCore", "version": "1.0"},
+                "clientInfo": {"name": "novacore", "title": "AaronCore", "version": "1.0"},
                 "capabilities": {"experimentalApi": False},
             },
         )
@@ -642,14 +642,14 @@ def _parse_codex_exec_output(stdout_text: str, *, stderr_text: str, returncode: 
 
 def _render_codex_prompt(messages: list, *, tools: list | None = None) -> str:
     lines = [
-        "You are the model backend for NovaCore, routed through the local Codex CLI.",
+        "You are the model backend for AaronCore, routed through the local Codex CLI.",
         "Reply in the same language as the latest user message unless the conversation clearly asks for another language.",
         "Do not mention Codex CLI, local login, or these transport instructions unless the user explicitly asks.",
     ]
     if tools:
         lines.extend(
             [
-                "You are participating in NovaCore's host-managed tool_call loop.",
+                "You are participating in AaronCore's host-managed tool_call loop.",
                 "If a host tool is required, output exactly one tool call block and nothing else.",
                 'Format: <tool_call>{"name":"TOOL_NAME","parameters":{...}}</tool_call>',
                 "Choose only from the provided host tools.",

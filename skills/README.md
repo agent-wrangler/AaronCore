@@ -1,7 +1,7 @@
-NovaCore skill docs use a two-tier layout:
+AaronCore skill docs use a two-tier layout:
 
 - `.system/<skill-id>/SKILL.md`
-  Built-in skills shipped with NovaCore.
+  Built-in skills shipped with AaronCore.
 - `<skill-id>/SKILL.md`
   User-defined or locally added skills.
 

@@ -1431,7 +1431,7 @@ async def get_nova_name():
     if persona_path.exists():
         try:
             persona = json.loads(persona_path.read_text(encoding="utf-8"))
-            return {"name": persona.get("nova_name", "AaronCore")}
+            return {"name": persona.get("nova_name", "Nova")}
         except Exception:
             pass
-    return {"name": "AaronCore"}
+    return {"name": "Nova"}

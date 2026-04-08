@@ -18,11 +18,6 @@ async def get_health():
     }
 
 
-@router.get("/awareness/pending")
-async def get_awareness_pending(since: str = None):
-    return {"events": S.awareness_pull(since_ts=since), "server_ts": datetime.now().isoformat()}
-
-
 @router.get("/qq/monitor")
 async def get_qq_monitor_status():
     try:

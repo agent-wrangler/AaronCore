@@ -344,7 +344,7 @@ def _load_llm_config() -> dict:
         try:
             data = json.loads(config_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                # 鏂版牸寮忥細models + default
+                # 新格式：models + default
                 if "models" in data:
                     default = data.get("default", "")
                     models = data["models"]
@@ -854,7 +854,7 @@ def apply_self_repair_report(
     backup_info = _create_backup_snapshot(str(report.get("id") or ""), originals)
     apply_result["backup_root"] = str(backup_info.get("backup_root") or "")
 
-    # 璇硶棰勬锛氬啓鍏ュ墠楠岃瘉鏂囦欢鍐呭鍚堟硶鎬э紙鍙墿灞曪級
+    # 语法预检：写入前验证文件内容合法性（可扩展）
     import ast as _ast
     for rel_path, content in updated.items():
         syntax_err = None
@@ -868,7 +868,7 @@ def apply_self_repair_report(
                 json.loads(content)
             except (json.JSONDecodeError, ValueError) as e:
                 syntax_err = f"{rel_path}: invalid JSON: {e}"
-        # 鎵╁睍鐐癸細鏈潵鍔?.js/.html 绛夎瑷€鐨勯獙璇佹斁杩欓噷
+        # 扩展点：未来?.js/.html 等语言的验证放这里
         if syntax_err:
             apply_result["status"] = "syntax_error_before_write"
             apply_result["error"] = syntax_err

@@ -1,11 +1,15 @@
 var chatHistory='';
 var CHAT_HISTORY_MAX=200;
 var CHAT_HISTORY_BOOT_TURNS=15;
-var CHAT_HISTORY_SNAPSHOT_KEY='nova_chat_history';
-var CHAT_HISTORY_SESSION_SNAPSHOT_KEY='nova_chat_history_session';
+var CHAT_HISTORY_SNAPSHOT_KEY='aaroncore_chat_history';
+var CHAT_HISTORY_SESSION_SNAPSHOT_KEY='aaroncore_chat_history_session';
+var _LEGACY_CHAT_HISTORY_SNAPSHOT_KEY='nova_chat_history';
+var _LEGACY_CHAT_HISTORY_SESSION_SNAPSHOT_KEY='nova_chat_history_session';
 var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412e';
-var CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
-var CHAT_HISTORY_SESSION_RENDER_VERSION_KEY='nova_chat_history_session_render_version';
+var CHAT_HISTORY_RENDER_VERSION_KEY='aaroncore_chat_history_render_version';
+var CHAT_HISTORY_SESSION_RENDER_VERSION_KEY='aaroncore_chat_history_session_render_version';
+var _LEGACY_CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
+var _LEGACY_CHAT_HISTORY_SESSION_RENDER_VERSION_KEY='nova_chat_history_session_render_version';
 var voiceEnabled=false;
 function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
 
@@ -21,9 +25,20 @@ function _chatHistoryVersionKey(scope){
  return scope==='session' ? CHAT_HISTORY_SESSION_RENDER_VERSION_KEY : CHAT_HISTORY_RENDER_VERSION_KEY;
 }
 
+function _legacyChatHistorySnapshotKey(scope){
+ return scope==='session' ? _LEGACY_CHAT_HISTORY_SESSION_SNAPSHOT_KEY : _LEGACY_CHAT_HISTORY_SNAPSHOT_KEY;
+}
+
+function _legacyChatHistoryVersionKey(scope){
+ return scope==='session' ? _LEGACY_CHAT_HISTORY_SESSION_RENDER_VERSION_KEY : _LEGACY_CHAT_HISTORY_RENDER_VERSION_KEY;
+}
+
 function _readChatHistorySnapshot(scope){
  try{
-  return _chatHistoryStorage(scope).getItem(_chatHistorySnapshotKey(scope))||'';
+  var storage=_chatHistoryStorage(scope);
+  return storage.getItem(_chatHistorySnapshotKey(scope))
+   || storage.getItem(_legacyChatHistorySnapshotKey(scope))
+   || '';
  }catch(e){
   return '';
  }
@@ -110,7 +125,9 @@ function trimChatHistory(){
 function hasCompatibleChatHistorySnapshot(scope){
  var target=scope==='session' ? 'session' : 'persistent';
  try{
-  return _chatHistoryStorage(target).getItem(_chatHistoryVersionKey(target))===CHAT_HISTORY_RENDER_VERSION;
+  var storage=_chatHistoryStorage(target);
+  return storage.getItem(_chatHistoryVersionKey(target))===CHAT_HISTORY_RENDER_VERSION
+   || storage.getItem(_legacyChatHistoryVersionKey(target))===CHAT_HISTORY_RENDER_VERSION;
  }catch(e){
   return false;
  }
@@ -414,8 +431,6 @@ function cleanInlineText(text, limit){
 function setInputVisible(visible){
  var inputArea=document.querySelector('.input');
  if(inputArea) inputArea.style.display=visible?'block':'none';
- var awarenessBar=document.getElementById('awarenessBar');
- if(awarenessBar) awarenessBar.style.display=visible?'':'none';
 }
 
 // memoryGrowthProfile / formatGrowthNumber → 已移至 memory.js

@@ -1,19 +1,17 @@
-# NovaCore Agent Constraints
+# AaronCore Agent Constraints
 
 These constraints are hard project rules for any new coding conversation in this repository.
 
 ## Main Chain Constraints
 
 1. Do not insert any new layer before LLM decision.
-   This includes pre-routing, pre-planning, pre-injected task continuity, pre-decision context adapters, or any other new flow placed before the LLM has made its own tool or routing decision.
-
+  This includes pre-routing, pre-planning, pre-injected task continuity, pre-decision context adapters, or any other new flow placed before the LLM has made its own tool or routing decision.
 2. Do not reorder the main sequence in `routes/chat.py`.
-   Small localized fixes are allowed only if they preserve the existing order. Any structural change to the main chain requires explicit user approval first.
-
+  Small localized fixes are allowed only if they preserve the existing order. Any structural change to the main chain requires explicit user approval first.
 3. Do not rebuild or duplicate an existing subsystem.
-   Before adding any new planning, continuity, routing, protocol, or context mechanism, first check whether the repository already has that subsystem. Extend the existing design only when explicitly requested and only after confirming the exact boundary.
+  Before adding any new planning, continuity, routing, protocol, or context mechanism, first check whether the repository already has that subsystem. Extend the existing design only when explicitly requested and only after confirming the exact boundary.
 
-## Specific NovaCore Interpretations
+## Specific AaronCore Interpretations
 
 - `task_plan`, task continuity, and similar capabilities must not be reimplemented as parallel systems.
 - If a feature already exists in `task_plan.py`, `task_store.py`, `reply_formatter.py`, or related architecture files, do not create a second overlapping layer.

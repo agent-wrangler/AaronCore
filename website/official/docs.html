@@ -1,0 +1,177 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Docs</title>
+  <meta name="description" content="Docs map for AaronCore: architecture overview, memory model, execution chain, tools, verification, and release notes.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260407p">
+</head>
+<body data-page="docs">
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory-first execution, built to continue</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">涓枃</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">鏃ユ湰瑾?/span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">頃滉淡鞏?/span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./index.html#join-beta">Get Early Access</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="section section-light">
+      <div class="section-intro reveal">
+        <span class="section-tag">Docs</span>
+        <h1 class="page-title" data-i18n="docs.title">A map, not a wall of text</h1>
+        <p class="page-subtitle">
+          <span data-i18n="docs.subtitle">This page is a calm index. Deep dives can link out later 鈥?the goal is orientation and trust.</span>
+        </p>
+      </div>
+
+      <div class="docs-cta reveal">
+        <div>
+          <h3 data-i18n="docs.terms.h">Terms (kept consistent)</h3>
+          <p>
+            <span data-i18n="docs.terms.p">Memory = persistent constraints and preferences. Chain = explicit next steps. Verification = evidence of done. Repair = narrow failures and stabilize the path.</span>
+          </p>
+        </div>
+        <div class="docs-cta-actions">
+          <a class="button button-secondary" href="./product.html#proof">See chain example</a>
+        </div>
+      </div>
+
+      <div class="docs-index reveal">
+        <article class="docs-card">
+          <span class="card-kicker">Overview</span>
+          <h3 data-i18n="docs.card.overview.h">What AaronCore is</h3>
+          <p data-i18n="docs.card.overview.p">A local-first runtime focused on continuity: memory, tools, verification, and repair in one loop.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Memory</span>
+          <h3 data-i18n="docs.card.memory.h">What persists (and why)</h3>
+          <p data-i18n="docs.card.memory.p">Preferences, constraints, project context, and long-running task posture 鈥?written deliberately, not magically.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Execution</span>
+          <h3 data-i18n="docs.card.exec.h">Chains vs replies</h3>
+          <p data-i18n="docs.card.exec.p">Turn requests into explicit next steps with artifacts attached: files, shell, and runtime state.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Tools</span>
+          <h3 data-i18n="docs.card.tools.h">Tool calling model</h3>
+          <p data-i18n="docs.card.tools.p">Tools are first-class citizens with traceable inputs/outputs and reviewable outcomes.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Verification</span>
+          <h3 data-i18n="docs.card.verify.h">What counts as done</h3>
+          <p data-i18n="docs.card.verify.p">Completion is defined by checks and evidence 鈥?not by confidence or tone.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Repair</span>
+          <h3 data-i18n="docs.card.repair.h">Feedback loops</h3>
+          <p data-i18n="docs.card.repair.p">Failures narrow, paths repair, and experience compounds 鈥?without hiding the trail.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Security</span>
+          <h3 data-i18n="docs.card.bounds.h">Boundaries</h3>
+          <p data-i18n="docs.card.bounds.p">Local-first posture, explicit permissions, and clear limits on what automation can touch.</p>
+        </article>
+        <article class="docs-card">
+          <span class="card-kicker">Release</span>
+          <h3 data-i18n="docs.card.release.h">Beta + download</h3>
+          <p data-i18n="docs.card.release.p">Public builds attach when ready. Until then, the beta mailbox is the honest path.</p>
+        </article>
+      </div>
+
+      <div class="docs-cta reveal">
+        <div>
+          <h3 data-i18n="docs.deep.h">Want the deep runtime write-up?</h3>
+          <p data-i18n="docs.deep.p">When the public docs host is wired, this index becomes the front door.</p>
+        </div>
+        <div class="docs-cta-actions">
+          <a class="button button-primary" data-link-field="betaUrl" data-link-label="betaLabel" href="./index.html#join-beta">Join Beta</a>
+          <a class="button button-secondary" href="./changelog.html">Read changelog</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+        <span data-site-field="footerTagline" data-i18n="footer.tagline">Built for people who need more than chat.</span>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Domain</span>
+        <strong data-site-field="primaryDomain">aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Mail</span>
+        <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Year</span>
+        <strong id="yearSlot"></strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260407p"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+

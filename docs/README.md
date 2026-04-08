@@ -8,7 +8,7 @@
 
 ## 当前文档
 
-- `10-架构-architecture/NovaCore_当前真实流程文档.md` — 当前真实运行态主链、tool_call/CoD、电脑操作底座和上下文装载说明
+- `10-架构-architecture/NovaCore_当前真实流程文档.md` — AaronCore 当前真实运行态主链、tool_call/CoD、电脑操作底座和上下文装载说明
 - `10-架构-architecture/8层Brain架构详解.md` — L1-L8 各层详细说明
 - `10-架构-architecture/Context-on-Demand (CoD)（按需上下文系统）.md` — CoD 设计思路
 

@@ -1,5 +1,5 @@
 """
-NovaCore Desktop - 无边框窗口（子类化 + WS_THICKFRAME 缩放 + JS 拖拽）
+AaronCore Desktop - 无边框窗口（子类化 + WS_THICKFRAME 缩放 + JS 拖拽）
 """
 import webview
 import time
@@ -7,6 +7,7 @@ import os
 import ctypes
 import ctypes.wintypes
 import subprocess
+from pathlib import Path
 
 user32 = ctypes.windll.user32
 dwmapi = ctypes.windll.dwmapi
@@ -208,7 +209,8 @@ def start_backend():
         s.connect(("127.0.0.1", 8090)); s.close()
         print("[desktop] backend running"); return
     except ConnectionRefusedError: pass
-    os.chdir(r"C:\Users\36459\NovaCore")
+    repo_root = Path(__file__).resolve().parent
+    os.chdir(str(repo_root))
     subprocess.Popen([r"C:\Program Files\Python311\python.exe", "agent_final.py"])
 
 start_backend()
@@ -265,7 +267,7 @@ def _on_shown():
 
 window.events.shown += _on_shown
 
-print("NovaCore 启动中...")
+print("AaronCore 启动中...")
 _c = os.path.join(os.environ.get("APPDATA",""), "NovaCore", "EBWebView", "Default", "Cache")
 if os.path.isdir(_c):
     import shutil

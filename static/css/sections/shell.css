@@ -422,19 +422,36 @@ body{
 
 /* NovaCore标志 */
 .top-bar-spacer{flex:1;}
+.nova-mark{
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ width:24px;
+ height:24px;
+ flex-shrink:0;
+ background:transparent!important;
+ border:none!important;
+ border-radius:0!important;
+ box-shadow:none!important;
+ overflow:hidden;
+}
+
+.nova-mark-img{
+ width:100%;
+ height:100%;
+ display:block;
+}
+
+.nova-mark-img-light{
+ display:none;
+}
+
 .nova-logo{
  display:flex;
  align-items:center;
- gap:8px;
  font-size:20px;
  font-weight:700;
  color:#ebebf0;
-}
-
-.nova-logo:before{
- content:'✦';
- font-weight:300;
- font-size:24px;
 }
 
 /* 主内容区域（侧边栏+聊天区域） */
@@ -519,6 +536,14 @@ body.light .top-btn:hover{
 /* 亮色主题下的NovaCore标志 */
 body.light .nova-logo{
  color:#4b5563;
+}
+
+body.light .nova-mark-img-dark{
+ display:none;
+}
+
+body.light .nova-mark-img-light{
+ display:block;
 }
 .content{
   flex: 1;

@@ -10,6 +10,59 @@ from core.reply_formatter import (
     l1_hygiene_clean,
 )
 
+_LIST_REQUEST_HINT_RE = re.compile(r"(列(一|下)|清单|列表|要点|分点|步骤|step|对比|优缺点|总结|汇总)", re.I)
+_BULLET_LINE_RE = re.compile(r"^\s*(?:[-*•]|[0-9]{1,2}[.)、])\s+")
+
+
+def _get_last_user_message(history: list) -> str:
+    for item in reversed(history or []):
+        if isinstance(item, dict) and item.get("role") == "user":
+            return str(item.get("content") or "")
+    return ""
+
+
+def _maybe_de_listify_for_chat(text: str, *, history: list) -> str:
+    """
+    普通聊天默认不使用列表（用户没要求时），这里做一个轻量的“去列表化”收尾。
+    - 不改变事实内容，只把项目符号/编号改成自然段落。
+    - 只在明显“无必要列表化”时触发，避免破坏真正的步骤说明。
+    """
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return cleaned
+
+    last_user = _get_last_user_message(history)
+    if last_user and _LIST_REQUEST_HINT_RE.search(last_user):
+        return cleaned
+
+    lines = cleaned.splitlines()
+    bullet_idxs = [i for i, line in enumerate(lines) if _BULLET_LINE_RE.match(line)]
+    if len(bullet_idxs) < 3:
+        return cleaned
+
+    # 只处理“基本全是列表”的场景，避免把正文里偶尔出现的 1. 2. 搞坏
+    non_empty = [ln for ln in lines if ln.strip()]
+    bullet_like = [ln for ln in non_empty if _BULLET_LINE_RE.match(ln)]
+    if not non_empty or (len(bullet_like) / max(1, len(non_empty))) < 0.55:
+        return cleaned
+
+    items: list[str] = []
+    for ln in non_empty:
+        ln2 = _BULLET_LINE_RE.sub("", ln).strip()
+        if ln2:
+            items.append(ln2)
+    if len(items) < 2:
+        return cleaned
+
+    # 短内容合并成自然一句/两句；长内容保留分段但去掉符号
+    merged = "；".join(items)
+    if len(merged) <= 220:
+        return merged
+    if len(merged) <= 520:
+        # 适当换行，避免一整坨
+        return "；\n".join(items)
+    return "\n".join(items)
+
 
 def clean_reply_for_user(response: str, *, strip_markdown) -> str:
     text = str(response or "")
@@ -49,6 +102,7 @@ def prepare_reply_for_user(
     debug_write=None,
 ) -> str:
     text = clean_reply_for_user(response, strip_markdown=strip_markdown)
+    text = _maybe_de_listify_for_chat(text, history=history)
     return apply_pre_reply_hygiene(text, history, debug_write=debug_write)
 
 
@@ -141,6 +195,7 @@ def finalize_tool_call_reply(
     debug_write=None,
 ) -> str:
     text = clean_reply_for_user(response, strip_markdown=strip_markdown)
+    text = _maybe_de_listify_for_chat(text, history=history)
     missing_tool_gap = classify_missing_tool_execution(
         text,
         tool_used=tool_used,

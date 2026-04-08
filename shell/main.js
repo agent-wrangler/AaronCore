@@ -1,5 +1,5 @@
 /**
- * NovaCore Shell — Electron 主窗口
+ * AaronCore Shell — Electron 主窗口
  * 加载 http://localhost:8090/（FastAPI 后端）
  * 无边框 + 可缩放 + CSS 拖拽
  */
@@ -63,7 +63,7 @@ const ROOT_DIR = resolveRootDir();
 process.env.NOVACORE_ROOT = ROOT_DIR;
 const BACKEND_ENTRY = process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
 process.env.NOVACORE_BACKEND_ENTRY = BACKEND_ENTRY;
-const WINDOW_ICON = path.join(ROOT_DIR, 'static', 'icon', 'nova.ico');
+const WINDOW_ICON = path.join(ROOT_DIR, 'static', 'icon', 'aaroncore.ico');
 const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
 const BACKEND_PORT = 8090;
 const LOG_DIR = path.join(ROOT_DIR, 'logs');
@@ -235,7 +235,7 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-// ── 启动 Python 后端：每次先结束旧的 NovaCore 后端，再启动当前源码版本 ──
+// ── 启动 Python 后端：每次先结束旧的 AaronCore 后端，再启动当前源码版本 ──
 async function ensureBackend() {
   console.log('[shell] restarting backend...');
   stopExistingBackend();

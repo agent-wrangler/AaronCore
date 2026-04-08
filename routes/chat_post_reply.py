@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 
@@ -15,22 +15,6 @@ def update_companion_reply_state(companion, response: str, *, detect_emotion) ->
         companion.emotion = "neutral"
 
 
-def build_feedback_awareness_event(feedback_rule: dict | None) -> dict | None:
-    if not isinstance(feedback_rule, dict) or not feedback_rule:
-        return None
-    return {
-        "type": "l7_feedback",
-        "summary": "记录反馈规则: " + str(feedback_rule.get("category") or "未分类"),
-        "detail": {
-            "id": feedback_rule.get("id"),
-            "scene": feedback_rule.get("scene", ""),
-            "problem": feedback_rule.get("problem", ""),
-            "category": feedback_rule.get("category", ""),
-            "fix": feedback_rule.get("fix", ""),
-        },
-    }
-
-
 def record_feedback_memory_hit(feedback_rule: dict | None) -> None:
     if not isinstance(feedback_rule, dict) or not feedback_rule:
         return
@@ -40,6 +24,15 @@ def record_feedback_memory_hit(feedback_rule: dict | None) -> None:
         record_memory_stats(l7_hits=1, count_query=False)
     except Exception:
         pass
+
+
+def build_feedback_awareness_event(feedback_rule: dict | None) -> dict | None:
+    if not isinstance(feedback_rule, dict):
+        return None
+    event = dict(feedback_rule)
+    event["event_type"] = "feedback_awareness"
+    event["kind"] = str(event.get("kind") or "general").strip() or "general"
+    return event
 
 
 def build_repair_payload(route: dict | None, feedback_rule: dict | None) -> dict:
@@ -127,3 +120,4 @@ def persist_reply_artifacts(
     if callable(add_memory):
         add_memory(text)
     return text
+

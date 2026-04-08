@@ -154,6 +154,24 @@
     "最近使用时间": "2026-03-30T20:35:53.332140"
   },
   {
+    "source": "l6_success_path",
+    "experience_key": "folder_explore|resolve_directory|directory|resolved|directory_listed",
+    "name": "folder_explore / resolve_directory / directory",
+    "核心技能": "folder_explore",
+    "action_kind": "resolve_directory",
+    "target_kind": "directory",
+    "outcome": "resolved",
+    "observed_state": "directory_listed",
+    "verification_mode": "directory_listed",
+    "verification_detail": "dirs=1 files=5",
+    "summary": "已确认目录：C:\\Users\\36459\\NovaCore\\feedback",
+    "应用示例": "已确认目录：C:\\Users\\36459\\NovaCore\\feedback",
+    "success_count": 2,
+    "使用次数": 2,
+    "learned_at": "2026-03-31T10:05:59.834405",
+    "最近使用时间": "2026-04-07T17:25:38.699131"
+  },
+  {
     "一级场景": "内容创作",
     "二级场景": "AI画图",
     "核心技能": "draw",
@@ -168,24 +186,6 @@
     "应用示例": "用 AI 生成图片或海报",
     "使用次数": 1,
     "最近使用时间": "2026-03-09 02:38"
-  },
-  {
-    "source": "l6_success_path",
-    "experience_key": "folder_explore|resolve_directory|directory|resolved|directory_listed",
-    "name": "folder_explore / resolve_directory / directory",
-    "核心技能": "folder_explore",
-    "action_kind": "resolve_directory",
-    "target_kind": "directory",
-    "outcome": "resolved",
-    "observed_state": "directory_listed",
-    "verification_mode": "directory_listed",
-    "verification_detail": "dirs=2 files=35",
-    "summary": "已确认目录：C:\\Users\\36459\\NovaCore\\core",
-    "应用示例": "已确认目录：C:\\Users\\36459\\NovaCore\\core",
-    "success_count": 1,
-    "使用次数": 1,
-    "learned_at": "2026-03-31T10:05:59.834405",
-    "最近使用时间": "2026-03-31T10:05:59.834405"
   },
   {
     "source": "l6_success_path",

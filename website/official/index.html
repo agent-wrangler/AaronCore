@@ -1,21 +1,21 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AaronCore | Local-First Agent Runtime</title>
+  <title>AaronCore | Calm, local-first agent runtime</title>
   <meta name="description" content="AaronCore is a memory-first AI execution core built for local execution, tool calls, layered memory, and work that actually continues.">
   <meta name="theme-color" content="#0d0d0d">
   <meta property="og:title" content="AaronCore | The memory-first AI execution core">
   <meta property="og:description" content="A local-first desktop agent runtime with memory, execution, self-repair, and a product surface designed to ship.">
   <meta property="og:type" content="website">
-  <link rel="icon" type="image/svg+xml" href="./assets/aaroncore-mark.svg">
+  <link rel="icon" type="image/svg+xml" href="./assets/aaroncore-logo-mark-bracket.svg?v=20260408p10">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260406c">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260407p">
 </head>
-<body>
+<body data-page="home">
   <div class="ambient" aria-hidden="true">
     <div class="ambient-grid"></div>
     <div class="ambient-scan"></div>
@@ -26,25 +26,40 @@
 
   <header class="topbar">
     <a class="brand" href="#product" aria-label="AaronCore home">
-      <span class="brand-mark">
-        <img src="./assets/aaroncore-mark.svg" alt="AaronCore mark">
-      </span>
       <span class="brand-copy">
         <strong>AaronCore</strong>
-        <span data-site-field="brandSubline">The memory-first AI execution core</span>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory-first execution, built to continue</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
       </span>
     </a>
 
     <nav class="topnav">
-      <a href="#product">Product</a>
-      <a href="#architecture">How It Works</a>
-      <a href="#proof">Preview</a>
-      <a href="#use-cases">Use Cases</a>
-      <a data-link-field="docsUrl" data-link-label="docsLabel" href="#docs">Docs</a>
-      <a href="#join-beta">Join Beta</a>
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
     </nav>
 
-    <a class="top-cta" data-link-field="betaUrl" data-link-label="earlyAccessLabel" href="#join-beta">Get Early Access</a>
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">涓枃</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">鏃ユ湰瑾?/span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">頃滉淡鞏?/span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="#join-beta">Get Early Access</a>
+    </div>
   </header>
 
   <main class="page">
@@ -53,19 +68,19 @@
         <div class="hero-intro">
           <div class="hero-copy">
             <span class="eyebrow">AaronCore</span>
-            <h1>A local-first AI core for real execution.</h1>
-            <p class="hero-title">Memory, tool calling, and continuity in one runtime.</p>
-            <p class="hero-subtitle">Built to remember context, move through tools, verify outcomes, and keep work alive.</p>
+            <h1 data-i18n="hero.h1">A calm runtime where AI work actually continues.</h1>
+            <p class="hero-title" data-i18n="hero.title">Memory, tool calling, and continuity 鈥?without the theatrics.</p>
+            <p class="hero-subtitle" data-i18n="hero.subtitle">Turn one request into an execution chain that survives files, tools, and sessions.</p>
             <p class="hero-lede">
-              AaronCore turns requests into execution chains so real work can continue across files, tools, and sessions.
+              <span data-i18n="hero.lede">AaronCore is built for the moments chat products drop: repo changes, tool calls, verification, and the next step that should already be queued.</span>
             </p>
 
             <div class="hero-actions">
-              <a class="button button-secondary" data-link-field="demoUrl" data-link-label="demoLabel" href="#proof">Watch Demo</a>
-              <a class="button button-primary" data-link-field="betaUrl" data-link-label="betaLabel" href="#join-beta">Join Beta</a>
+              <a class="button button-secondary" href="./product.html#proof" data-i18n="cta.seeProof">See product proof</a>
+              <a class="button button-primary" data-link-field="betaUrl" data-i18n="cta.joinBeta" href="#join-beta">Join Beta</a>
             </div>
 
-            <p class="hero-note">Local-first / Memory-first / Built to evolve</p>
+            <p class="hero-note" data-i18n="hero.note">Local-first 路 Memory-first 路 Continuity-first</p>
           </div>
         </div>
 
@@ -83,11 +98,10 @@
           <div class="stage-main">
             <section class="stage-display">
               <div class="display-copy">
-                <span class="display-kicker">Desktop runtime</span>
-                <h2>One surface for memory, execution, and ongoing task state.</h2>
+                <span class="display-kicker" data-i18n="home.stage.kicker">Desktop runtime</span>
+                <h2 data-i18n="home.stage.h">One surface for memory, execution, and ongoing task state.</h2>
                 <p>
-                  A calmer product shell for the parts that matter most: understanding intent, loading memory, calling
-                  tools, verifying changes, and keeping continuity intact.
+                  <span data-i18n="home.stage.p">A calmer product shell for the parts that matter most: understanding intent, loading memory, calling tools, verifying changes, and keeping continuity intact.</span>
                 </p>
               </div>
 
@@ -112,14 +126,14 @@
 
               <div class="display-panels">
                 <article class="display-panel display-panel-accent">
-                  <span class="panel-label">Execution layer</span>
-                  <strong>Requests become task chains instead of polished dead ends.</strong>
-                  <p>Files, shell, state, memory, and repair stay connected inside one runtime surface.</p>
+                  <span class="panel-label" data-i18n="home.panel.exec.label">Execution layer</span>
+                  <strong data-i18n="home.panel.exec.h">Requests become task chains 鈥?not polished dead ends.</strong>
+                  <p data-i18n="home.panel.exec.p">Files, shell, memory, and verification stay connected inside one runtime surface.</p>
                 </article>
                 <article class="display-panel">
-                  <span class="panel-label">System posture</span>
-                  <strong>Built to carry work forward</strong>
-                  <p>Context holds, direction stays visible, and outcomes feed back into the next run.</p>
+                  <span class="panel-label" data-i18n="home.panel.posture.label">System posture</span>
+                  <strong data-i18n="home.panel.posture.h">Built to carry work forward</strong>
+                  <p data-i18n="home.panel.posture.p">State stays visible, outcomes are reviewable, and the next step stays ready.</p>
                 </article>
               </div>
             </section>
@@ -131,29 +145,29 @@
                   <article class="rail-card is-active" data-runtime-step>
                     <span>01</span>
                     <div>
-                      <strong>Understand</strong>
-                      <p>turn intent into a real target</p>
+                      <strong data-i18n="home.rail.1.h">Understand</strong>
+                      <p data-i18n="home.rail.1.p">turn intent into a real target</p>
                     </div>
                   </article>
                   <article class="rail-card" data-runtime-step>
                     <span>02</span>
                     <div>
-                      <strong>Plan</strong>
-                      <p>form a chain instead of a guess</p>
+                      <strong data-i18n="home.rail.2.h">Plan</strong>
+                      <p data-i18n="home.rail.2.p">form a chain instead of a guess</p>
                     </div>
                   </article>
                   <article class="rail-card" data-runtime-step>
                     <span>03</span>
                     <div>
-                      <strong>Execute</strong>
-                      <p>move through files, shell, and state</p>
+                      <strong data-i18n="home.rail.3.h">Execute</strong>
+                      <p data-i18n="home.rail.3.p">move through files, shell, and state</p>
                     </div>
                   </article>
                   <article class="rail-card" data-runtime-step>
                     <span>04</span>
                     <div>
-                      <strong>Stabilize</strong>
-                      <p>verify, repair, and carry forward</p>
+                      <strong data-i18n="home.rail.4.h">Stabilize</strong>
+                      <p data-i18n="home.rail.4.p">verify, repair, and carry forward</p>
                     </div>
                   </article>
                 </div>
@@ -162,10 +176,10 @@
               <section class="stage-side-card">
                 <span class="side-label">Live feed</span>
                 <div class="rail-log">
-                  <div class="stream-line is-active" data-runtime-log>goal recognized: inspect the project and prepare the next execution chain</div>
-                  <div class="stream-line" data-runtime-log>memory loaded: preferences, constraints, and recent state recovered</div>
-                  <div class="stream-line" data-runtime-log>tool chain engaged: files, shell, and runtime state connected</div>
-                  <div class="stream-line" data-runtime-log>system stable: verification passed and the next step is ready</div>
+                  <div class="stream-line is-active" data-runtime-log>goal recognized: patch the repo, not just draft a reply</div>
+                  <div class="stream-line" data-runtime-log>memory loaded: constraints, preferences, and current project state</div>
+                  <div class="stream-line" data-runtime-log>tools engaged: files + shell + runtime state wired together</div>
+                  <div class="stream-line" data-runtime-log>verified: changes reviewed, next step queued</div>
                 </div>
               </section>
             </aside>
@@ -192,10 +206,9 @@
     <section class="section section-light" id="architecture">
       <div class="section-intro reveal">
         <span class="section-tag">How It Works</span>
-        <h2>From one request to one execution chain</h2>
+        <h2 data-i18n="home.how.h">From one request to one execution chain</h2>
         <p>
-          AaronCore keeps the flow simple: remember relevant context, plan the path, act through tools, and improve
-          from what actually happened.
+          <span data-i18n="home.how.p">The runtime keeps the flow simple: load relevant memory, form a chain, execute through tools, verify outcomes, and carry state forward.</span>
         </p>
       </div>
 
@@ -203,23 +216,23 @@
         <div class="process-line" aria-hidden="true"></div>
         <article class="process-node">
           <span class="node-index">01</span>
-          <h3>Remember</h3>
-          <p>carry context, preferences, history, and long-term signals</p>
+          <h3 data-i18n="home.how.step1.h">Remember</h3>
+          <p data-i18n="home.how.step1.p">load constraints, preferences, history, and long-term signals</p>
         </article>
         <article class="process-node">
           <span class="node-index">02</span>
-          <h3>Plan</h3>
-          <p>turn vague intent into a chain of concrete next moves</p>
+          <h3 data-i18n="home.how.step2.h">Plan</h3>
+          <p data-i18n="home.how.step2.p">turn intent into a concrete chain with a next step</p>
         </article>
         <article class="process-node">
           <span class="node-index">03</span>
-          <h3>Act</h3>
-          <p>call tools, perform actions, and move beyond text output</p>
+          <h3 data-i18n="home.how.step3.h">Act</h3>
+          <p data-i18n="home.how.step3.p">call tools, change real artifacts, and keep the state attached</p>
         </article>
         <article class="process-node">
           <span class="node-index">04</span>
-          <h3>Improve</h3>
-          <p>learn through feedback and compound system sharpness over time</p>
+          <h3 data-i18n="home.how.step4.h">Improve</h3>
+          <p data-i18n="home.how.step4.p">close the loop with feedback, repair, and compounding experience</p>
         </article>
       </div>
     </section>
@@ -227,19 +240,18 @@
     <section class="section section-heavy" id="capabilities">
       <div class="section-intro reveal">
         <span class="section-tag">Core Capabilities</span>
-        <h2>Built for real execution</h2>
+        <h2 data-i18n="home.cap.h">Built for execution, not just answers</h2>
         <p>
-          Memory, execution, routing, and repair live inside one runtime designed to move work forward.
+          <span data-i18n="home.cap.p">Memory, execution, routing, and verification live inside one runtime designed to move work forward.</span>
         </p>
       </div>
 
       <div class="capability-layout">
         <article class="capability-feature reveal">
           <span class="card-kicker">Execution Layer</span>
-          <h3>The point is not to answer beautifully. The point is to move the work.</h3>
+          <h3 data-i18n="home.cap.exec.h">The point is not to answer beautifully. The point is to move the work.</h3>
           <p>
-            AaronCore holds memory, carries tasks, calls tools, repairs itself, and keeps going until the real task is
-            complete.
+            <span data-i18n="home.cap.exec.p">AaronCore holds memory, carries task state, calls tools, and keeps going until the work is actually done 鈥?with a verifiable trail.</span>
           </p>
           <div class="feature-ribbon">
             <span>filesystem</span>
@@ -261,8 +273,8 @@
             </div>
           </div>
           <span class="card-kicker">Memory Engine</span>
-          <h3>Recall that shapes execution</h3>
-          <p>Memory exists to make the next action sharper, not just to sound personalized.</p>
+          <h3 data-i18n="home.cap.memory.h">Recall that shapes execution</h3>
+          <p data-i18n="home.cap.memory.p">Memory exists to make the next action sharper 鈥?not to sprinkle personalization over a reset loop.</p>
         </article>
 
         <article class="capability-side reveal">
@@ -277,16 +289,16 @@
             </div>
           </div>
           <span class="card-kicker">Skill Matrix</span>
-          <h3>Capabilities routed by context</h3>
-          <p>The runtime activates the right surface at the right time instead of feeling noisy or random.</p>
+          <h3 data-i18n="home.cap.route.h">Capabilities routed by context</h3>
+          <p data-i18n="home.cap.route.p">The runtime activates the right surface at the right time 鈥?without noisy keyword theatrics.</p>
         </article>
 
         <article class="capability-wide reveal">
           <div class="capability-columns">
             <div>
               <span class="card-kicker">Self-Repair Loop</span>
-              <h3>Correct through evidence, not prettier retries</h3>
-              <p>When something slips, the loop narrows the problem, repairs the path, and verifies again.</p>
+              <h3 data-i18n="home.cap.repair.h">Correct through evidence, not prettier retries</h3>
+              <p data-i18n="home.cap.repair.p">When something slips, the loop narrows the failure, repairs the path, and verifies again.</p>
             </div>
             <div class="repair-loop">
               <span>error</span>
@@ -302,82 +314,26 @@
       </div>
     </section>
 
-    <section class="section section-heavy" id="proof">
-      <div class="section-intro reveal">
-        <span class="section-tag">Product Preview</span>
-        <h2>See AaronCore in action</h2>
-        <p>
-          See how conversation turns into action, how recall changes execution, and how task state stays visible from
-          start to finish.
-        </p>
-      </div>
-
-      <div class="proof-shell reveal">
-        <div class="proof-header">
-          <div class="proof-tabs" role="tablist" aria-label="Proof tabs">
-            <button class="proof-tab is-active" data-proof-tab="chat" type="button">Chat + Execution</button>
-            <button class="proof-tab" data-proof-tab="memory" type="button">Memory Recall</button>
-            <button class="proof-tab" data-proof-tab="task" type="button">Task Flow</button>
-          </div>
+    <section class="section section-medium" id="signal">
+      <div class="signal-shell reveal">
+        <div class="section-intro signal-intro">
+          <span class="section-tag">Signal</span>
+          <h2 data-i18n="home.signal.h">Proof without theater</h2>
+          <p>
+            <span data-i18n="home.signal.p">AaronCore is opinionated about one thing: the work should leave a trail. Here is a compact example of how a request becomes a chain you can audit.</span>
+          </p>
         </div>
-
-        <div class="proof-stage">
-          <section class="proof-pane is-active" data-proof-pane="chat">
-            <div class="chat-pane">
-              <div class="chat-column">
-                <div class="chat-bubble user">Inspect this repo, prepare the release page, and keep the runtime state clear.</div>
-                <div class="chat-bubble agent">I will inspect the current project, build a task chain, patch the site, and verify the public path.</div>
-                <div class="chat-bubble user">Keep the tone direct, developer-friendly, and execution-first.</div>
-              </div>
-              <div class="exec-column">
-                <div class="exec-step done">Inspect project state</div>
-                <div class="exec-step done">Load active constraints</div>
-                <div class="exec-step active">Patch structure and styles</div>
-                <div class="exec-step">Verify release route</div>
-              </div>
-            </div>
-            <p class="pane-note">From conversation to action, without stopping at a polished response.</p>
-          </section>
-
-          <section class="proof-pane" data-proof-pane="memory">
-            <div class="memory-pane">
-              <article class="memory-card">
-                <span class="fact-label">Preference hit</span>
-                <strong>Prefers calm product surfaces over noisy AI theatrics</strong>
-              </article>
-              <article class="memory-card">
-                <span class="fact-label">Project context</span>
-                <strong>AaronCore centers on memory, execution, tool calls, and continuity</strong>
-              </article>
-              <article class="memory-card">
-                <span class="fact-label">Working rule</span>
-                <strong>Keep the interface human and direct. Let docs carry the deeper architecture.</strong>
-              </article>
-            </div>
-            <p class="pane-note">Memory matters when it changes the next action instead of sitting beside the flow.</p>
-          </section>
-
-          <section class="proof-pane" data-proof-pane="task">
-            <div class="task-pane">
-              <div class="task-node">
-                <span>01</span>
-                <strong>Understand the goal</strong>
-              </div>
-              <div class="task-node">
-                <span>02</span>
-                <strong>Build a task chain</strong>
-              </div>
-              <div class="task-node">
-                <span>03</span>
-                <strong>Execute through tools</strong>
-              </div>
-              <div class="task-node">
-                <span>04</span>
-                <strong>Verify and write back</strong>
-              </div>
-            </div>
-            <p class="pane-note">Every step stays traceable, understandable, and easy to revisit.</p>
-          </section>
+        <div class="signal-body">
+          <div class="signal-code" role="figure" aria-label="Compact execution chain example">
+            <pre><code>User: Ship the site refresh (calm premium), keep nav honest.
+Memory: constraints + prior tone preferences.
+Chain: inspect 鈫?edit pages 鈫?verify responsive rhythm.
+Output: artifacts + next step, not a monologue.</code></pre>
+          </div>
+          <div class="signal-actions">
+            <a class="button button-primary" href="./product.html#proof">Open full product proof</a>
+            <a class="button button-secondary" href="./docs.html">Read the docs map</a>
+          </div>
         </div>
       </div>
     </section>
@@ -386,28 +342,28 @@
       <div class="use-case-layout">
         <div class="use-copy reveal">
           <span class="section-tag">Use Cases</span>
-          <h2>Who AaronCore is for</h2>
+        <h2 data-i18n="home.use.h">Who AaronCore is for</h2>
           <p>
-            AaronCore is for people who want AI to carry real work across sessions instead of resetting at every prompt.
+          <span data-i18n="home.use.p">AaronCore is for people who want AI to carry real work across sessions instead of resetting at every prompt.</span>
           </p>
         </div>
 
         <div class="use-grid">
           <article class="use-card reveal">
             <span class="card-kicker">For Builders</span>
-            <h3>Plan development work, connect tools, and keep execution moving</h3>
+            <h3 data-i18n="home.use.b1">Plan development work, connect tools, and keep execution moving</h3>
           </article>
           <article class="use-card reveal">
             <span class="card-kicker">For Creators</span>
-            <h3>Organize materials, shape scripts, and carry a production flow</h3>
+            <h3 data-i18n="home.use.b2">Organize materials, shape scripts, and carry a production flow</h3>
           </article>
           <article class="use-card reveal">
             <span class="card-kicker">For Solo Operators</span>
-            <h3>Remember habits, follow tasks, and cut repetitive overhead</h3>
+            <h3 data-i18n="home.use.b3">Remember habits, follow tasks, and cut repetitive overhead</h3>
           </article>
           <article class="use-card reveal">
             <span class="card-kicker">For Agent Explorers</span>
-            <h3>Push AI from sounding smart toward doing real work</h3>
+            <h3 data-i18n="home.use.b4">Push AI from sounding smart toward doing real work</h3>
           </article>
         </div>
       </div>
@@ -417,25 +373,24 @@
       <div class="difference-shell reveal">
         <div class="section-intro difference-intro">
           <span class="section-tag">Differentiators</span>
-          <h2>Why AaronCore feels different</h2>
+          <h2 data-i18n="home.diff.h">Why AaronCore feels different</h2>
           <p>
-            Other products package intelligence as style. AaronCore is designed to carry memory, tasks, and forward
-            motion through a real runtime.
+            <span data-i18n="home.diff.p">Other products package intelligence as style. AaronCore is designed to carry state, tools, and forward motion through a real runtime loop.</span>
           </p>
         </div>
 
         <div class="difference-grid">
           <article class="difference-card">
             <span class="card-kicker">Memory-first</span>
-            <h3>Not temporary context, but recall that accumulates and returns</h3>
+            <h3 data-i18n="home.diff.c1">Not temporary context, but recall that accumulates and returns</h3>
           </article>
           <article class="difference-card feature">
             <span class="card-kicker">Execution-oriented</span>
-            <h3>Not prettier answers, but forward progress</h3>
+            <h3 data-i18n="home.diff.c2">Not prettier answers, but forward progress</h3>
           </article>
           <article class="difference-card">
             <span class="card-kicker">Built to evolve</span>
-            <h3>Feedback, repair, and experience compound over time</h3>
+            <h3 data-i18n="home.diff.c3">Feedback, repair, and experience compound over time</h3>
           </article>
         </div>
       </div>
@@ -445,28 +400,28 @@
       <div class="trust-layout">
         <div class="trust-copy reveal">
           <span class="section-tag">Trust Layer</span>
-          <h2>Transparent by design</h2>
+          <h2 data-i18n="home.trust.h">Transparent by design</h2>
           <p>
-            AaronCore is built to make the path from request to result understandable, reviewable, and dependable.
+            <span data-i18n="home.trust.p">AaronCore is built to make the path from request to result understandable, reviewable, and dependable.</span>
           </p>
         </div>
 
         <div class="trust-list reveal">
           <article class="trust-item">
-            <strong>Traceable steps</strong>
-            <p>The path from request to execution stays visible.</p>
+            <strong data-i18n="home.trust.i1.h">Traceable steps</strong>
+            <p data-i18n="home.trust.i1.p">The path from request to execution stays visible.</p>
           </article>
           <article class="trust-item">
-            <strong>Verifiable results</strong>
-            <p>The runtime shows what changed and why it counts as done.</p>
+            <strong data-i18n="home.trust.i2.h">Verifiable results</strong>
+            <p data-i18n="home.trust.i2.p">The runtime shows what changed and why it counts as done.</p>
           </article>
           <article class="trust-item">
-            <strong>Controlled memory writes</strong>
-            <p>Memory stays deliberate instead of mysterious.</p>
+            <strong data-i18n="home.trust.i3.h">Controlled memory writes</strong>
+            <p data-i18n="home.trust.i3.p">Memory stays deliberate instead of mysterious.</p>
           </article>
           <article class="trust-item">
-            <strong>Extendable boundaries</strong>
-            <p>The system makes clear what it can do now and what can expand later.</p>
+            <strong data-i18n="home.trust.i4.h">Extendable boundaries</strong>
+            <p data-i18n="home.trust.i4.p">The system makes clear what it can do now and what can expand later.</p>
           </article>
         </div>
       </div>
@@ -474,7 +429,7 @@
       <div class="docs-strip reveal" id="docs">
         <div>
           <span class="section-tag">Docs</span>
-          <h3>Go deeper when you want the runtime model, memory system, and execution details</h3>
+          <h3 data-i18n="home.docs.h">Go deeper when you want the runtime model, memory system, and execution details</h3>
         </div>
         <div class="docs-meta">
           <div>
@@ -485,6 +440,9 @@
             <span class="fact-label">Mailbox</span>
             <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
           </div>
+          <div class="docs-strip-action">
+            <a class="button button-secondary" href="./docs.html">Open docs map</a>
+          </div>
         </div>
       </div>
     </section>
@@ -493,14 +451,14 @@
       <div class="cta-shell reveal">
         <div class="cta-copy">
           <span class="section-tag">Final CTA</span>
-          <h2>Give your AI a real core</h2>
+          <h2 data-i18n="home.cta.h">Give your AI a real core</h2>
           <p class="cta-subtitle">Built for people who need more than chat.</p>
           <p>
-            The public build is not attached yet, but the beta path, the release route, and the official entry surface are already in place.
+            <span data-i18n="home.cta.p">The public build is not attached yet, but the beta path, the release route, and the official entry surface are already in place.</span>
           </p>
           <div class="hero-actions">
             <a class="button button-primary" data-link-field="betaUrl" data-link-label="betaLabel" href="#join-beta">Join Beta</a>
-            <a class="button button-secondary" data-link-field="demoUrl" data-link-label="demoLabel" href="#proof">Watch Demo</a>
+            <a class="button button-secondary" href="./product.html#proof">See product proof</a>
           </div>
         </div>
 
@@ -525,10 +483,10 @@
 
   <footer class="footer reveal">
     <div class="footer-brand">
-      <img src="./assets/aaroncore-mark.svg" alt="AaronCore mark">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
       <div>
         <strong>AaronCore</strong>
-        <span data-site-field="footerTagline">Built for people who need more than chat.</span>
+        <span data-site-field="footerTagline" data-i18n="footer.tagline">Built for people who need more than chat.</span>
       </div>
     </div>
 
@@ -548,6 +506,17 @@
     </div>
   </footer>
 
-  <script src="./app.js?v=20260406c"></script>
+  <script src="./app.js?v=20260407p"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+

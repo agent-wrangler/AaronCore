@@ -1,0 +1,313 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Logo Preview</title>
+  <meta name="description" content="Preview AaronCore logo variants (base / vA / vB) on coal backgrounds and neutral surfaces.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260407p">
+  <style>
+    .logo-preview {
+      display: grid;
+      gap: 14px;
+    }
+    .logo-card {
+      padding: 18px 18px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: var(--surface-strong);
+      box-shadow: var(--shadow-md);
+    }
+    .logo-card h2 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+      letter-spacing: -0.01em;
+    }
+    .logo-meta {
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+    .logo-pane {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .logo-pane-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .logo-pane-title {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--muted-soft);
+    }
+    .logo-pane-body {
+      padding: 16px 14px 18px;
+      display: grid;
+      gap: 12px;
+    }
+    .swatch {
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 14px;
+      background: #262624;
+    }
+    .swatch.light {
+      background: #FAF9F5;
+      border-color: rgba(21,21,20,0.08);
+    }
+    :root {
+      --cmp-size: 72px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+    .mark {
+      width: var(--cmp-size);
+      height: var(--cmp-size);
+      display: grid;
+      place-items: center;
+    }
+    .mark img {
+      width: var(--cmp-size);
+      height: var(--cmp-size);
+    }
+    .lockup img {
+      height: var(--cmp-size);
+      width: auto;
+      display: block;
+    }
+    .lockup {
+      display: flex;
+      align-items: center;
+      min-height: var(--cmp-size);
+    }
+
+    .file {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--muted-soft);
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 900px) {
+      .logo-grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 64px 1fr; }
+      :root { --cmp-size: 64px; }
+    }
+  </style>
+</head>
+<body data-page="preview">
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline">Memory-first execution, built to continue</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html">Home</a>
+      <a href="./product.html">Product</a>
+      <a href="./docs.html">Docs</a>
+      <a href="./changelog.html">Changelog</a>
+      <a href="./logo-preview.html" class="is-active">Logo Preview</a>
+    </nav>
+
+    <a class="top-cta" data-link-field="betaUrl" data-link-label="earlyAccessLabel" href="./index.html#join-beta">Get Early Access</a>
+  </header>
+
+  <main class="page">
+    <section class="section section-light">
+      <div class="section-intro reveal">
+        <span class="section-tag">Logo Preview</span>
+        <h1 class="page-title">Compare logo variants</h1>
+        <p class="page-subtitle">This page loads assets via normal HTTP paths. If you can open this page, you can preview every SVG reliably.</p>
+      </div>
+
+      <div class="logo-preview reveal">
+        <div class="logo-card">
+          <h2>Base (Bracket)</h2>
+          <p class="logo-meta">The current baseline. Brackets = boundary/runtime container. Clay = core.</p>
+          <div class="logo-grid">
+            <div class="logo-pane">
+              <div class="logo-pane-head"><div class="logo-pane-title">Coal background</div></div>
+              <div class="logo-pane-body">
+                <div class="swatch">
+                  <div class="row">
+                    <div class="mark"><img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="Base mark"></div>
+                    <div class="lockup">
+                      <img src="./assets/aaroncore-logo-lockup-bracket.svg?v=20260407p6" alt="Base lockup">
+                      <div class="file">assets/aaroncore-logo-*-bracket.svg</div>
+                    </div>
+                  </div>
+                  
+                </div>
+              </div>
+            </div>
+            <div class="logo-pane">
+              <div class="logo-pane-head"><div class="logo-pane-title">Light surface</div></div>
+              <div class="logo-pane-body">
+                <div class="swatch light">
+                  <div class="row">
+                    <div class="mark"><img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="Base mark on light"></div>
+                    <div class="lockup">
+                      <img src="./assets/aaroncore-logo-lockup-bracket-light.svg?v=20260407p6" alt="Base lockup on light">
+                      <div class="file">Same assets on ivory (#FAF9F5)</div>
+                    </div>
+                  </div>
+                  
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="logo-card">
+          <h2>Variant A (Node)</h2>
+          <p class="logo-meta">Swap the core dot for a diamond execution node.</p>
+          <div class="logo-grid">
+            <div class="logo-pane">
+              <div class="logo-pane-head"><div class="logo-pane-title">Coal background</div></div>
+              <div class="logo-pane-body">
+                <div class="swatch">
+                  <div class="row">
+                    <div class="mark"><img src="./assets/aaroncore-logo-mark-bracket-vA-node.svg?v=20260407p6" alt="Variant A mark"></div>
+                    <div class="lockup">
+                      <img src="./assets/aaroncore-logo-lockup-bracket-vA-node.svg?v=20260407p6" alt="Variant A lockup">
+                      <div class="file">assets/aaroncore-logo-*-bracket-vA-node.svg</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="logo-pane">
+              <div class="logo-pane-head"><div class="logo-pane-title">Light surface</div></div>
+              <div class="logo-pane-body">
+                <div class="swatch light">
+                  <div class="row">
+                    <div class="mark"><img src="./assets/aaroncore-logo-mark-bracket-vA-node.svg?v=20260407p6" alt="Variant A mark on light"></div>
+                    <div class="lockup">
+                      <img src="./assets/aaroncore-logo-lockup-bracket-vA-node-light.svg?v=20260407p6" alt="Variant A lockup on light">
+                      <div class="file">Same assets on ivory (#FAF9F5)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="logo-card">
+          <h2>Variant B (Frame)</h2>
+          <p class="logo-meta">Make brackets feel more like a UI frame than code punctuation.</p>
+          <div class="logo-grid">
+            <div class="logo-pane">
+              <div class="logo-pane-head"><div class="logo-pane-title">Coal background</div></div>
+              <div class="logo-pane-body">
+                <div class="swatch">
+                  <div class="row">
+                    <div class="mark"><img src="./assets/aaroncore-logo-mark-bracket-vB-frame.svg" alt="Variant B mark"></div>
+                    <div class="lockup">
+                      <img src="./assets/aaroncore-logo-lockup-bracket-vB-frame.svg" alt="Variant B lockup">
+                      <div class="file">assets/aaroncore-logo-*-bracket-vB-frame.svg</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="logo-pane">
+              <div class="logo-pane-head"><div class="logo-pane-title">Light surface</div></div>
+              <div class="logo-pane-body">
+                <div class="swatch light">
+                  <div class="row">
+                    <div class="mark"><img src="./assets/aaroncore-logo-mark-bracket-vB-frame.svg" alt="Variant B mark on light"></div>
+                    <div class="lockup">
+                      <img src="./assets/aaroncore-logo-lockup-bracket-vB-frame.svg" alt="Variant B lockup on light">
+                      <div class="file">Same assets on ivory (#FAF9F5)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+        <span data-site-field="footerTagline">Built for people who need more than chat.</span>
+      </div>
+    </div>
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Page</span>
+        <strong>Logo Preview</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Path</span>
+        <strong class="file">/website/official/logo-preview.html</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Year</span>
+        <strong id="yearSlot"></strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260407p"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+

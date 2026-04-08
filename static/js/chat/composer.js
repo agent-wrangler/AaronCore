@@ -492,7 +492,10 @@ function _syncProcessDetailDisplay(stepObj){
 }
 
 function showRepairBar(repair){
- if(!repair || !repair.show) return;
+ // Chat page: fully disable repair/feedback bar UI (L7/self-repair progress).
+ // Backend may still record feedback and generate proposals; we just don't interrupt the user here.
+ hideRepairBar();
+ return;
  var bar=document.getElementById('repairBar');
  var chip=document.getElementById('repairChip');
  var headline=document.getElementById('repairHeadline');

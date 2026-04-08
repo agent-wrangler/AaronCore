@@ -4,7 +4,7 @@
 # ⚠️ 重要说明：
 # 此文件主要负责 LLM 调用（llm_call、think、think_stream）和人格表达（think 函数中的 persona 处理）。
 #
-# 当前 NovaCore 的主流程不是在这里！
+# 当前 AaronCore 的主流程不是在这里！
 # 当前主流程是 LLM/tool_call 主导，详见：
 #   docs/10-架构-architecture/NovaCore_当前真实流程文档.md
 #

@@ -49,7 +49,7 @@ def build_tool_call_unavailable_reply(reason: str) -> str:
     details = {
         "disabled": "tool_call 开关当前被关闭。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
         "unsupported_model": "当前模型走的是不支持原生 tool_call 的协议。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
-        "core_not_ready": "NOVA Core 当前未就绪。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
+        "core_not_ready": "AaronCore 当前未就绪。按照现在的架构，这属于主链事故，不会再静默回退到旧 skill 链。",
     }
     detail = details.get(reason, "tool_call 主链当前不可用，而且系统不会再回退到旧链。")
     return (

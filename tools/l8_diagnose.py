@@ -11,7 +11,7 @@ from memory import l8_learning as l8_learn
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Diagnose NovaCore L8 auto-learn decisions.")
+    parser = argparse.ArgumentParser(description="Diagnose AaronCore L8 auto-learn decisions.")
     parser.add_argument("--query", required=True, help="User message to inspect.")
     parser.add_argument("--route-mode", default="chat", help="Route mode to simulate, e.g. chat/skill/hybrid.")
     parser.add_argument("--skill", default="none", help="Skill name to simulate alongside the route mode.")

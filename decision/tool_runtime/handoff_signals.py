@@ -355,7 +355,15 @@ def resolve_stream_tool_calls_signal(
         phrase_handoff = is_preamble or is_structured_handoff or is_trailing_handoff
         keep_phrase_assist = phrase_handoff and _allows_phrase_handoff_assist(tool_name)
         keep_mixed = should_keep_stream_tool_call_with_visible_text(tool_calls_signal, visible_joined)
-        if not (keep_mixed or keep_phrase_assist):
+        keep_short_preface = (
+            len(visible_joined) <= 120
+            and not _looks_like_answer_payload(
+                visible_joined,
+                clean_visible_reply_text=clean_visible_reply_text,
+                re_mod=re_mod,
+            )
+        )
+        if not (keep_mixed or keep_phrase_assist or keep_short_preface):
             debug_write(
                 "tool_call_stream_mixed_output",
                 {
@@ -365,6 +373,7 @@ def resolve_stream_tool_calls_signal(
                     "phrase_handoff": phrase_handoff,
                     "phrase_assist": keep_phrase_assist,
                     "structure_kept": keep_mixed,
+                    "short_preface_kept": keep_short_preface,
                     "text_len": len(visible_joined),
                     "text_preview": visible_joined[:80],
                 },
@@ -382,6 +391,7 @@ def resolve_stream_tool_calls_signal(
                     "trailing_handoff": is_trailing_handoff,
                     "phrase_assist": keep_phrase_assist,
                     "mixed_preserved": keep_mixed,
+                    "short_preface_preserved": keep_short_preface,
                     "text_len": len(visible_joined),
                     "text_preview": visible_joined[:80],
                 },

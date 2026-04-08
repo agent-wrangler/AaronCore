@@ -1,5 +1,5 @@
 """
-NovaCore 主入口 — 仅负责 app 初始化和路由挂载。
+AaronCore 主入口 — 仅负责 app 初始化和路由挂载。
 所有 API 路由请放到 routes/ 目录下对应模块。
 """
 import sys
@@ -47,8 +47,6 @@ S.RESTORED_OUTPUT_JS_FILE = RESTORED_OUTPUT_JS_FILE
 
 # ── 便捷别名（保持向后兼容，测试 patch agent_final.debug_write 等） ──
 debug_write = S.debug_write
-awareness_push = S.awareness_push
-awareness_pull = S.awareness_pull
 
 # ── Core 模块导入 ──
 try:
@@ -290,7 +288,6 @@ _feedback_loop_init(
     should_trigger_auto_learn=should_trigger_auto_learn,
     create_self_repair_report=create_self_repair_report,
     preview_self_repair_report=preview_self_repair_report,
-    awareness_push=awareness_push,
 )
 
 # ── MCP Client 初始化 ──
@@ -451,11 +448,16 @@ def build_capability_chat_reply(route: dict | None = None) -> str:
 def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict | None = None) -> dict:
     route = route if isinstance(route, dict) else {}
     feedback_rule = feedback_rule if isinstance(feedback_rule, dict) else {}
+    mode = str(route.get("mode") or "").strip() or "chat"
     intent = str(route.get("intent") or "").strip()
     feedback_type = str(feedback_rule.get("type") or "").strip()
     feedback_problem = str(feedback_rule.get("problem") or "").strip()
+    # 聊天页不应被 L7 的常规反馈“打扰式提示”刷屏：只在明确的纠偏/报错意图下展示修复进度条。
+    if mode == "chat" and intent not in {"meta_bug_report", "answer_correction"}:
+        return {"show": False}
+
     should_show = intent in {"meta_bug_report", "answer_correction"} or feedback_type in {"skill_route", "llm_rule", "execution_policy"}
-    if not should_show and feedback_problem not in {"wrong_skill_selected", "output_not_matching_intent", "fallback_too_generic"}:
+    if not should_show:
         return {"show": False}
     status = build_self_repair_status()
     can_plan = bool(status.get("can_plan_repairs"))

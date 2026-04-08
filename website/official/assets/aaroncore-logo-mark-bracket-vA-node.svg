@@ -1,0 +1,12 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="#141412"/>
+
+  <!-- Brackets -->
+  <path d="M100 82H84C74.059 82 66 90.059 66 100V156C66 165.941 74.059 174 84 174H100"
+        stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M156 82H172C181.941 82 190 90.059 190 100V156C190 165.941 181.941 174 172 174H156"
+        stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Execution node (diamond) -->
+  <path d="M128 112L144 128L128 144L112 128L128 112Z" fill="#D97757"/>
+</svg>

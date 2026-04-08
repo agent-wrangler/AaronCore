@@ -1,0 +1,160 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Product</title>
+  <meta name="description" content="Product details for AaronCore: memory-first execution, tool calling, continuity, verification, and self-repair.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260407p">
+</head>
+<body data-page="product">
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory-first execution, built to continue</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">涓枃</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">鏃ユ湰瑾?/span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">頃滉淡鞏?/span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./index.html#join-beta">Get Early Access</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="section section-light">
+      <div class="section-intro reveal">
+        <span class="section-tag">Product</span>
+        <h1 class="page-title" data-i18n="product.title">A runtime that keeps work alive</h1>
+        <p class="page-subtitle">
+          <span data-i18n="product.subtitle">AaronCore is designed for execution chains: memory, tool calls, verification, and continuity 鈥?in one calm surface.</span>
+        </p>
+      </div>
+
+      <div class="product-grid reveal">
+        <article class="product-card">
+          <span class="card-kicker">Continuity</span>
+          <h3 data-i18n="product.card.continuity.h">State survives the next prompt</h3>
+          <p data-i18n="product.card.continuity.p">Tasks, constraints, and the next action remain visible and reusable instead of resetting into chat history.</p>
+        </article>
+        <article class="product-card">
+          <span class="card-kicker">Tools</span>
+          <h3 data-i18n="product.card.tools.h">Tool calls are first-class</h3>
+          <p data-i18n="product.card.tools.p">Files, shell, and runtime actions stay attached to the conversation, with a traceable chain from request to result.</p>
+        </article>
+        <article class="product-card">
+          <span class="card-kicker">Verification</span>
+          <h3 data-i18n="product.card.verify.h">Outcomes are reviewable</h3>
+          <p data-i18n="product.card.verify.p">Completion is not a vibe. The runtime makes it clear what changed, what was checked, and what remains.</p>
+        </article>
+        <article class="product-card">
+          <span class="card-kicker">Repair</span>
+          <h3 data-i18n="product.card.repair.h">Feedback becomes sharper runs</h3>
+          <p data-i18n="product.card.repair.p">When failures happen, AaronCore narrows the issue, repairs the path, and compounds experience over time.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section section-heavy" id="proof">
+      <div class="section-intro reveal">
+        <span class="section-tag">Micro proof</span>
+        <h2 data-i18n="product.proof.h">What an execution chain looks like</h2>
+        <p data-i18n="product.proof.p">Short, human-readable, and easy to audit. This is the default posture: do the work, show the trail.</p>
+      </div>
+
+      <div class="proof-block reveal">
+        <div class="proof-code" role="figure" aria-label="Execution chain example">
+          <pre><code>Goal: Patch the landing page, keep tone calm premium.
+Memory: load constraints + prior preferences.
+Plan: (1) inspect site (2) rewrite copy (3) add docs/changelog pages (4) verify layout.
+Tools: read files 鈫?edit pages 鈫?run local preview.
+Verify: check nav, spacing, and responsive breakpoints.
+Result: changes shipped with traceable steps.</code></pre>
+        </div>
+        <div class="proof-copy">
+          <h3 data-i18n="product.proof.side.h">Designed to avoid 鈥減olished dead ends鈥?/h3>
+          <p>
+            <span data-i18n="product.proof.side.p">The chain keeps the next step explicit. It stays attached to artifacts (files, state, verification) rather than evaporating into a final paragraph.</span>
+          </p>
+          <a class="button button-secondary" href="./docs.html">Read docs overview</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+        <span data-site-field="footerTagline" data-i18n="footer.tagline">Built for people who need more than chat.</span>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Domain</span>
+        <strong data-site-field="primaryDomain">aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Mail</span>
+        <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Year</span>
+        <strong id="yearSlot"></strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260407p"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+

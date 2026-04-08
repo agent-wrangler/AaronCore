@@ -1,0 +1,24 @@
+<svg width="980" height="220" viewBox="0 0 980 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Light-surface lockup: keep mark, switch wordmark to dark -->
+
+  <!-- Mark -->
+  <g transform="translate(18 0)">
+    <rect x="18" y="18" width="184" height="184" rx="46" fill="#141412"/>
+
+    <!-- Scale/translate the 256px master mark into this 184px tile -->
+    <g transform="translate(4.857 4.857) scale(0.821428)">
+      <path d="M100 82H84C74.059 82 66 90.059 66 100V156C66 165.941 74.059 174 84 174H100"
+            stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M156 82H172C181.941 82 190 90.059 190 100V156C190 165.941 181.941 174 172 174H156"
+            stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="128" cy="128" r="10" fill="#D97757"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(258 70)">
+    <text x="0" y="62" font-family="Sora, system-ui, -apple-system, Segoe UI, sans-serif" font-size="72" font-weight="600" letter-spacing="0" fill="#141412">
+      AaronCore
+    </text>
+  </g>
+</svg>

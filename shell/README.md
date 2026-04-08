@@ -1,6 +1,6 @@
 # Electron Shell Source
 
-`shell/` contains the actual Electron shell source used by NovaCore desktop.
+`shell/` contains the actual Electron shell source used by AaronCore desktop.
 
 Responsibilities:
 

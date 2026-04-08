@@ -110,6 +110,20 @@ def _build_reply_payload(reply: str, **extra) -> dict:
 router = APIRouter()
 
 
+def _get_pending_awareness_events() -> list[dict]:
+    pull_fn = getattr(S, "awareness_pull", None)
+    if callable(pull_fn):
+        try:
+            return pull_fn()
+        except Exception as exc:
+            if callable(getattr(S, "debug_write", None)):
+                S.debug_write("awareness_pull_error", {"error": str(exc)})
+            return []
+    if callable(getattr(S, "debug_write", None)):
+        S.debug_write("awareness_pull_missing", {"available": sorted([name for name in dir(S) if "awareness" in name])})
+    return []
+
+
 class ChatRequest(BaseModel):
     message: str
     image: str | None = None
@@ -172,7 +186,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             debug_write=S.debug_write,
         )
 
-        pending_awareness = S.awareness_pull()
+        pending_awareness = _get_pending_awareness_events()
         for evt in pending_awareness:
             yield {"event": "awareness", "data": json.dumps(evt, ensure_ascii=False)}
 

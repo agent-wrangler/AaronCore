@@ -1,7 +1,7 @@
-/* Composer, prompts, and input controls */
+﻿/* Composer, prompts, and input controls */
 /* Source: main.css lines 1809-2395 */
 
-/* ===== 未来感输入区域 ===== */
+/* ===== 未来感输入区?===== */
 :root {
   --primary-gradient: linear-gradient(135deg, #9ca3af 0%, #4b5563 100%);
   --primary-hover: linear-gradient(135deg, #3b7de8 0%, #1d5fc4 100%);
@@ -134,147 +134,7 @@
   color: var(--text-primary, #f1ede3);
 }
 
-/* ============================================
-   轻感知状态层 — Awareness Bar
-   ============================================ */
-.awareness-bar {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px;
-  padding: 0 24px;
-  min-height: 0;
-  overflow: visible;
-  position: relative;
-  z-index: 2;
-  pointer-events: none;
-  background: var(--bg-chat, #161618);
-}
-.awareness-bar.has-balls {
-  padding: 4px 24px 6px;
-}
-.awareness-ball {
-  pointer-events: auto;
-}
-
-/* 球体基础样式 */
-.awareness-ball {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  cursor: pointer;
-  position: relative;
-  opacity: 0;
-  background: radial-gradient(circle at 35% 35%,
-    rgba(255,255,255,0.5), rgba(100,200,255,0.8));
-  box-shadow: 0 0 6px rgba(100,200,255,0.4);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.awareness-ball:hover {
-  transform: scale(1.6);
-  z-index: 10;
-}
-
-/* L7 反馈规则 — 琥珀色 */
-.awareness-ball.l7 {
-  background: radial-gradient(circle at 35% 35%,
-    rgba(255,255,255,0.6), rgba(251,191,36,0.85));
-  box-shadow: 0 0 6px rgba(251,191,36,0.4);
-}
-.awareness-ball.l7:hover {
-  box-shadow: 0 0 12px rgba(251,191,36,0.7);
-}
-
-/* L8 主动学习 — 青蓝色 */
-.awareness-ball.l8-learn {
-  background: radial-gradient(circle at 35% 35%,
-    rgba(255,255,255,0.6), rgba(56,189,248,0.85));
-  box-shadow: 0 0 6px rgba(56,189,248,0.4);
-}
-.awareness-ball.l8-learn:hover {
-  box-shadow: 0 0 12px rgba(56,189,248,0.7);
-}
-
-/* L8 反馈重学 — 紫色 */
-.awareness-ball.l8-relearn {
-  background: radial-gradient(circle at 35% 35%,
-    rgba(255,255,255,0.6), rgba(167,139,250,0.85));
-  box-shadow: 0 0 6px rgba(167,139,250,0.4);
-}
-.awareness-ball.l8-relearn:hover {
-  box-shadow: 0 0 12px rgba(167,139,250,0.7);
-}
-
-/* 滚入动画 */
-@keyframes ballRollIn {
-  0%   { opacity: 0; transform: translateX(-60vw) rotate(0deg); }
-  10%  { opacity: 1; }
-  100% { opacity: 1; transform: translateX(0) rotate(720deg); }
-}
-.awareness-ball.rolling-in {
-  animation: ballRollIn 1.8s cubic-bezier(0.25,0.46,0.45,0.94) forwards;
-}
-
-/* 落定后呼吸光效 */
-@keyframes ballBreath {
-  0%, 100% { filter: brightness(1); }
-  50%      { filter: brightness(1.3); }
-}
-.awareness-ball.settled {
-  animation: ballBreath 3s ease-in-out infinite;
-  opacity: 1;
-}
-
-/* 午夜清除动画 */
-@keyframes ballFadeOut {
-  0%   { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0); }
-}
-.awareness-ball.clearing {
-  animation: ballFadeOut 0.5s ease-out forwards;
-}
-
-/* 纯CSS tooltip */
-.awareness-ball::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 50%;
-  transform: translateX(50%);
-  background: rgba(22,22,24,0.95);
-  color: rgba(255,255,255,0.9);
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 10px;
-  line-height: 1.3;
-  white-space: nowrap;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  border: 1px solid rgba(255,255,255,0.1);
-  z-index: 100;
-}
-.awareness-ball:hover::after {
-  opacity: 1;
-}
-
-/* Light theme */
-body.light .awareness-bar {
-  background: #f8fafc;
-}
-body.light .awareness-ball::after {
-  background: rgba(255,255,255,0.95);
-  color: #1a1a1a;
-  border: 1px solid rgba(0,0,0,0.08);
-}
-
-/* 输入区域 — 负边距上浮，悬浮在聊天内容之上 */
-.input {
+\n\n.input {
   background: transparent;
   border-top: none;
   padding: 0 16px 16px;
@@ -289,13 +149,13 @@ body.light .awareness-ball::after {
   align-items: stretch;
   position: relative;
   z-index: 1;
-  /* 与正文 .msg 对齐：同样 90% + max 1600px，居中 */
+  /* 涓庢鏂?.msg 瀵归綈锛氬悓鏍?90% + max 1600px锛屽眳涓?*/
   width: 94%;
   max-width: 1680px;
   margin: 0 auto;
 }
 
-/* 监听状态小圆点 */
+/* 鐩戝惉鐘舵€佸皬鍦嗙偣 */
 .monitor-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: #8a7bc8;
@@ -323,7 +183,7 @@ body.light .awareness-ball::after {
   50% { opacity: 0.7; }
 }
 
-/* GPT风格输入框 — 悬浮在聊天背景上 */
+/* GPT风格输入??悬浮在聊天背景上 */
 .inp-wrap {
     flex: 1;
     display: flex;
@@ -384,7 +244,7 @@ body.light .awareness-ball::after {
   font-weight: 300;
 }
 
-/* 输入框内滚动条 — 细、透明、跟随主题 */
+/* 输入框内滚动??细、透明、跟随主?*/
 .input textarea::-webkit-scrollbar {
   width: 3px;
 }
@@ -405,7 +265,7 @@ body.light .input textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.35);
 }
 
-/* ===== 简约现代发送按钮 ===== */
+/* ===== 绠€绾︾幇浠ｅ彂閫佹寜閽?===== */
 .input-container {
   display: flex;
   gap: 0;
@@ -413,7 +273,7 @@ body.light .input textarea::-webkit-scrollbar-thumb:hover {
   position: relative;
 }
 
-/* 底部工具栏（图片、语音、发送按钮整合在输入框内） */
+/* 底部工具栏（图片、语音、发送按钮整合在输入框内?*/
 .inp-actions {
   display: flex;
   align-items: center;
@@ -518,7 +378,7 @@ body.light .send-btn:not(:disabled) {
 @media (min-width: 1200px) {
 }
 
-/* 快捷键提示：仅宽屏可见 */
+/* 蹇嵎閿彁绀猴細浠呭灞忓彲瑙?*/
 .inp-shortcut-hint {
   display: none;
   font-size: 11px;
@@ -535,7 +395,7 @@ body.light .inp-shortcut-hint {
   color: rgba(100, 116, 139, 0.35);
 }
 
-/* 响应式设计 */
+/* 鍝嶅簲寮忚璁?*/
 @media (max-width: 768px) {
   .input {
     padding: 16px;
@@ -543,7 +403,7 @@ body.light .inp-shortcut-hint {
   
   .input textarea {
     padding: 14px 16px;
-    font-size: 16px; /* 移动端字体稍大 */
+    font-size: 16px; /* 绉诲姩绔瓧浣撶◢澶?*/
   }
   
   .send-btn {
@@ -552,7 +412,7 @@ body.light .inp-shortcut-hint {
   }
 }
 
-/* 亮色主题适配 */
+/* 浜壊涓婚閫傞厤 */
 body.light .input {
   background: transparent;
   border-top: none;

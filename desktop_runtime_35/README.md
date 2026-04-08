@@ -1,6 +1,6 @@
-# NovaCore Desktop Runtime
+# AaronCore Desktop Runtime
 
-This directory is the dedicated Electron desktop wrapper for NovaCore.
+This directory is the dedicated Electron desktop wrapper for AaronCore.
 
 Development:
 
@@ -20,6 +20,6 @@ npm run dist:portable
 
 Notes:
 
-- The packaged app bundles the current NovaCore backend/source tree as `resources/novacore`.
+- The packaged app bundles the current AaronCore backend/source tree as `resources/novacore`.
 - The current backend still expects a local Python runtime on the target machine.
 - Continue editing the main app in the repo root (`shell`, `routes`, `core`, `static`, etc.); this wrapper only handles launching and packaging.

@@ -9,7 +9,15 @@ $packagedTargets = @(
 $packagedTarget = $packagedTargets | Where-Object { Test-Path $_ } | Select-Object -First 1
 $fallbackTarget = Join-Path $root 'start_nova.bat'
 $target = if ($packagedTarget) { $packagedTarget } else { $fallbackTarget }
-$icon = Join-Path $root 'static\icon\nova.ico'
+$iconCandidates = @(
+  Join-Path $root 'static\icon\ico-sizes\aaroncore-desktop-multi.ico'
+  Join-Path $root 'static\icon\aaroncore-desktop-svg.ico'
+  Join-Path $root 'static\icon\aaroncore-desktop-soft.ico'
+  Join-Path $root 'static\icon\aaroncore-desktop.ico'
+  Join-Path $root 'static\icon\aaroncore.ico'
+  Join-Path $root 'static\icon\nova.ico'
+)
+$icon = $iconCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)

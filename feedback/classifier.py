@@ -185,7 +185,7 @@ def _classify_feedback_with_llm(user_feedback: str, last_question: str = "", las
     if not _llm_call:
         return None
     prompt = (
-        "你是 NovaCore 的反馈分类器。根据上一轮用户问题、上一轮助手回复、以及用户这轮输入，"
+        "你是 AaronCore 的反馈分类器。根据上一轮用户问题、上一轮助手回复、以及用户这轮输入，"
         "判断用户这轮话是不是在纠正或投诉上一轮系统行为。\n"
         "只返回一个 JSON 对象，不要解释。\n"
         'JSON 格式: {"is_feedback": true, "category": "...", "type": "...", "scene": "...", '

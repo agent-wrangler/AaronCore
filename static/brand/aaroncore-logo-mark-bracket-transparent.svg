@@ -1,0 +1,13 @@
+﻿<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Primary mark -->
+  <g transform="translate(128 128) scale(1.07) translate(-128 -128)">
+    <path d="M96.92 60.38H79.16C68.193 60.38 59.18 71.807 59.18 86.84V169.16C59.18 184.193 68.193 195.62 79.16 195.62H96.92"
+          stroke="#F5F4EF" stroke-opacity="0.92" stroke-width="19.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M159.08 60.38H176.84C187.807 60.38 196.82 71.807 196.82 86.84V169.16C196.82 184.193 187.807 195.62 176.84 195.62H159.08"
+          stroke="#F5F4EF" stroke-opacity="0.92" stroke-width="19.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <circle cx="128" cy="128" r="17" fill="#D97757"/>
+</svg>
+

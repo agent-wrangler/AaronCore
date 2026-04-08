@@ -54,7 +54,7 @@ LOG = {
 API = {
     "host": "0.0.0.0",
     "port": 8090,
-    "title": "NovaCore",
+    "title": "AaronCore",
     "version": "4.0",
 }
 

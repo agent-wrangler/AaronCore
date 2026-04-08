@@ -1,5 +1,5 @@
-﻿# tool_adapter - skill 娉ㄥ唽琛?鈫?OpenAI function calling tools 鏍煎紡杞崲
-# 浠ュ強 tool_call 鎵ц妗ユ帴
+﻿# tool_adapter - Register skills and convert them to OpenAI function-calling tools.
+# Provides wrappers for tool_call execution paths.
 
 import json
 import time
@@ -24,22 +24,20 @@ from decision.tool_runtime import self_fix as _self_fix_runtime
 from decision.tool_runtime import tool_defs as _tool_defs
 from decision.tool_runtime import web_tools as _web_tool_runtime
 
-# 鈹€鈹€ ask_user 鍏变韩鐘舵€?鈹€鈹€
+# ask_user state lock for interactive tool prompts.
 _ask_user_lock = threading.Lock()
 _ask_user_pending = None   # {"question": str, "options": [...], "id": str}
-_ask_user_answer = None    # 鐢ㄦ埛閫夋嫨鐨勭粨鏋?
-
+_ask_user_answer = None    # Cached user selection payload.
 def ask_user_submit(question_id: str, answer: str) -> bool:
     return _ask_user_runtime.ask_user_submit(question_id, answer)
-
 
 def get_ask_user_pending() -> dict | None:
     return _ask_user_runtime.get_ask_user_pending()
 
-# 鈹€鈹€ 閰嶇疆鏂囦欢璺緞 鈹€鈹€
+# Configuration directory for runtime resources.
 _CONFIGS_DIR = _Path(__file__).resolve().parent.parent / "configs"
 
-# 鈹€鈹€ 娉ㄥ叆渚濊禆 鈹€鈹€
+# Runtime adapter injection points.
 _get_all_skills = lambda: {}
 _get_exposed_skills = None
 _debug_write = lambda stage, data: None
@@ -139,9 +137,7 @@ def init(*, get_all_skills=None, get_exposed_skills=None, debug_write=None,
 def _build_file_protocol_tool_defs() -> list[dict]:
     return _tool_defs.build_file_protocol_tool_defs()
 
-
 _MEMORY_TOOLS = _memory_tool_runtime.MEMORY_TOOL_NAMES
-
 
 def _load_cod_tool_defs() -> list:
     return _tool_defs.load_cod_tool_defs()
@@ -203,9 +199,9 @@ def _execute_web_search(query: str) -> dict:
         search_web_results=search_web_results,
     )
 
-# 鈹€鈹€ self_fix锛氬璇濅腑鍗虫椂鑷垜淇 鈹€鈹€
+# self_fix helper for best-effort runtime recovery behavior.
 
-# 瀹夊叏鐧藉悕鍗曪細鍏佽璇诲啓鐨勭洰褰?
+# Safe write/read prefix guard for self-fix runtime behavior.
 _SELF_FIX_ALLOWED = list(_self_fix_runtime.SAFE_FILE_PREFIXES)
 
 def _execute_self_fix(arguments: dict) -> dict:
@@ -262,10 +258,8 @@ def _execute_sense_environment(arguments: dict) -> dict:
 def _execute_write_file(arguments: dict) -> dict:
     return _execute_write_file_protocol(arguments)
 
-
 def _execute_write_file_v2(arguments: dict) -> dict:
     return _execute_write_file_protocol(arguments)
-
 
 def _format_recall(l2_results, l3_events):
     return _memory_tool_runtime.format_recall(l2_results, l3_events)
@@ -289,7 +283,7 @@ def _execute_memory_tool(name: str, arguments: dict) -> dict:
         execute_sense_environment=_execute_sense_environment,
     )
 
-# 鈹€鈹€ ask_user 宸ュ叿 鈹€鈹€
+# ask_user adapter tool hook.
 
 def _execute_ask_user(arguments: dict) -> dict:
     return _ask_user_runtime.execute_ask_user(arguments, debug_write=_debug_write)
