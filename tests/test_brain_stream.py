@@ -291,3 +291,49 @@ class BrainStreamTests(unittest.TestCase):
             chunks = list(brain_module.llm_call_stream(cfg, messages))
 
         self.assertEqual(chunks, ["Hel", "lo", {"_usage": {"completion_tokens": 2}}])
+
+    def test_openai_stream_surfaces_balance_errors_as_visible_reply(self):
+        cfg = {"model": "MiniMax-M2.7", "base_url": "https://api.minimaxi.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "hello"}]
+        error_payload = {
+            "type": "error",
+            "error": {
+                "type": "insufficient_balance_error",
+                "message": "insufficient balance",
+                "http_code": "429",
+            },
+        }
+
+        stream_resp = _FakeStreamResponse(status_code=429, text=json.dumps(error_payload, ensure_ascii=False))
+        retry_resp = _FakeJsonResponse(error_payload, status_code=429)
+
+        with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+            chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+
+        visible = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+
+        self.assertIn("余额不足", visible)
+        self.assertEqual(chunks[-1].get("_usage", {}), {})
+
+    def test_openai_stream_surfaces_context_limit_errors_as_visible_reply(self):
+        cfg = {"model": "MiniMax-M2.7", "base_url": "https://api.minimaxi.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "hello"}]
+        error_payload = {
+            "type": "error",
+            "error": {
+                "type": "bad_request_error",
+                "message": "invalid params, context window exceeds limit (2013)",
+                "http_code": "400",
+            },
+        }
+
+        stream_resp = _FakeStreamResponse(status_code=400, text=json.dumps(error_payload, ensure_ascii=False))
+        retry_resp = _FakeJsonResponse(error_payload, status_code=400)
+
+        with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+            chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+
+        visible = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+
+        self.assertIn("上下文太长", visible)
+        self.assertEqual(chunks[-1].get("_usage", {}), {})

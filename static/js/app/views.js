@@ -56,6 +56,11 @@ function show(n){
      window._schedulePinChatToBottom();
     }
    }
+   if(typeof window._flushPendingModelSwitchNote==='function'){
+    setTimeout(function(){
+     if(window._currentTab===1) window._flushPendingModelSwitchNote();
+    },0);
+   }
   } else {
    if(typeof window._reloadChatFromServer==='function'){
     window._reloadChatFromServer(true);

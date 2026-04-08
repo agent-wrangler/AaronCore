@@ -129,13 +129,28 @@ function _alertModelSwitchFailure(detail){
  }catch(_err){}
 }
 function _emitSidebarModelSwitchNote(fromLabel, toLabel){
- if(window._currentTab!==1) return;
  if(typeof addChatEventNote!=='function') return;
  var previous=String(fromLabel||'').trim();
  var next=String(toLabel||'').trim();
  if(!next || previous===next) return;
  var text=previous ? (previous+' → '+next) : next;
  addChatEventNote('model-switch', 'MODEL SWITCH', text);
+}
+function _emitSidebarModelSwitchNote(fromLabel, toLabel){
+ var previous=String(fromLabel||'').trim();
+ var next=String(toLabel||'').trim();
+ if(!next || previous===next) return;
+ if(window._currentTab===1 && typeof addChatEventNote==='function'){
+  var text=previous ? (previous+' -> '+next) : next;
+  addChatEventNote('model-switch', 'MODEL SWITCH', text);
+  return;
+ }
+ if(typeof _queueModelSwitchNote==='function'){
+  _queueModelSwitchNote({
+   previous_model_name: previous,
+   model_name: next
+  });
+ }
 }
 function _sidebarSwitchModel(mid){
  // 即时关闭 dropdown
@@ -160,7 +175,7 @@ function _sidebarSwitchModel(mid){
   var onclick=String(it.getAttribute('onclick')||'');
   if(targetMid===mid||onclick.indexOf(mid)!==-1){clicked=it;}
  });
- if(clicked){clicked.style.opacity='1';clicked.style.outline='2px solid #60a5fa';clicked.style.outlineOffset='-2px';}
+  if(clicked){clicked.style.opacity='1';}
  fetch('/model/'+encodeURIComponent(mid),{method:'POST'}).then(r=>r.json()).then(function(d){
   if(d.ok){
    console.log('[models][sidebar] switch ok', mid);
@@ -207,4 +222,28 @@ function loadStatsData(){
     box.innerHTML='<div style="color:#ef4444;">'+t('dash.load.fail')+'</div>';
     if(btn) btn.classList.remove('spinning');
   });
+}
+
+function switchModel(mid){
+ _sidebarSwitchModel(mid);
+}
+
+function _emitSidebarModelSwitchNote(fromLabel, toLabel){
+ var previous=String(fromLabel||'').trim();
+ var next=String(toLabel||'').trim();
+ if(!next || previous===next) return;
+ if(typeof _queueModelSwitchNote==='function'){
+  _queueModelSwitchNote({
+   previous_model_name: previous,
+   model_name: next
+  });
+  if(window._currentTab===1 && typeof window._flushPendingModelSwitchNote==='function'){
+   window._flushPendingModelSwitchNote();
+  }
+  return;
+ }
+ if(window._currentTab===1 && typeof addChatEventNote==='function'){
+  var text=previous ? (previous+' -> '+next) : next;
+  addChatEventNote('model-switch', 'MODEL SWITCH', text);
+ }
 }

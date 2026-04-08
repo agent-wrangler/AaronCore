@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import threading
 import time
 
@@ -142,6 +143,84 @@ def _split_stream_recovery_text(text: str, *, chunk_size: int):
     return chunks
 
 
+def _extract_status_code_from_error_text(text: str) -> int:
+    match = re.search(r"\bstatus\s+(\d{3})\b", str(text or ""), re.I)
+    if not match:
+        return 0
+    try:
+        return int(match.group(1))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _extract_error_payload(text: str) -> dict:
+    raw = str(text or "").strip()
+    if not raw:
+        return {}
+    json_start = raw.find("{")
+    if json_start < 0:
+        return {}
+    try:
+        payload = json.loads(raw[json_start:])
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _build_visible_provider_error_text(
+    error_text: str,
+    *,
+    provider: str,
+    status_code: int = 0,
+) -> str:
+    raw_text = str(error_text or "").strip()
+    lowered = raw_text.lower()
+    payload = _extract_error_payload(raw_text)
+    error_block = payload.get("error") if isinstance(payload.get("error"), dict) else payload
+    error_type = str((error_block or {}).get("type") or payload.get("type") or "").strip().lower()
+    message = str((error_block or {}).get("message") or payload.get("message") or "").strip()
+    http_code = status_code or _extract_status_code_from_error_text(raw_text)
+    if not http_code:
+        try:
+            http_code = int((error_block or {}).get("http_code") or payload.get("http_code") or 0)
+        except (TypeError, ValueError):
+            http_code = 0
+
+    if "insufficient_balance" in error_type or "insufficient balance" in lowered:
+        return "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。"
+    if "context window exceeds limit" in lowered or "invalid chat setting" in lowered or (
+        http_code == 400 and "2013" in lowered
+    ):
+        return "当前模型请求失败：上下文太长，超过了该模型的限制。请重试，或切换到上下文更大的模型。"
+    if any(
+        token in lowered
+        for token in (
+            "proxyerror",
+            "connection refused",
+            "cannot connect to proxy",
+            "failed to establish a new connection",
+            "read timed out",
+            "connect timeout",
+            "timed out",
+        )
+    ):
+        return "当前模型连接失败，请检查网络或代理设置后重试。"
+    if http_code == 429:
+        return "当前模型请求过于频繁，或该账户额度已不足。请稍后重试，或先切换到其他模型。"
+    if http_code in (401, 403):
+        return "当前模型鉴权失败，请检查 API Key 或权限配置。"
+    if http_code == 400:
+        if message:
+            return f"当前模型请求失败：{message}"
+        return "当前模型请求参数无效，暂时无法继续。请检查模型配置后重试。"
+    if message and message.lower() != "unknown error":
+        return f"当前模型请求失败：{message}"
+    if http_code:
+        provider_name = "模型接口" if provider == "openai" else f"{provider} 接口"
+        return f"当前{provider_name}请求失败（HTTP {http_code}）。请稍后重试，或切换到其他模型。"
+    return ""
+
+
 def _yield_stream_recovery_from_blocking_call(
     *,
     cfg: dict,
@@ -197,14 +276,25 @@ def _yield_stream_recovery_from_blocking_call(
         )
 
     if not retry_chunks and not retry_tool_calls:
-        _debug_stream_recovery(
-            "llm_stream_fallback_empty",
-            {
-                **payload,
-                "error": retry_error,
-            },
+        fallback_error_text = _build_visible_provider_error_text(
+            retry_error,
+            provider=provider,
+            status_code=int((payload.get("status") or 0) if isinstance(payload, dict) else 0),
         )
-        return False
+        if fallback_error_text:
+            retry_chunks = _split_stream_recovery_text(
+                fallback_error_text,
+                chunk_size=_stream_recovery_chunk_size(cfg),
+            )
+        else:
+            _debug_stream_recovery(
+                "llm_stream_fallback_empty",
+                {
+                    **payload,
+                    "error": retry_error,
+                },
+            )
+            return False
 
     if emitted_visible:
         yield {
@@ -222,6 +312,7 @@ def _yield_stream_recovery_from_blocking_call(
         {
             **payload,
             "fallback_content_len": len(retry_content),
+            "fallback_error_visible": bool(retry_chunks and not retry_content and not retry_tool_calls),
             "fallback_tool_calls": len(retry_tool_calls or []),
             "streamed_chunk_count": len(retry_chunks),
         },

@@ -277,12 +277,22 @@ var _chatAutoStickToBottom=true;
     if(!(keepScroll&&_restoreChatScroll())){
      _schedulePinChatToBottom();
     }
+    if(typeof window._flushPendingModelSwitchNote==='function'){
+     setTimeout(function(){
+      if(window._currentTab===1) window._flushPendingModelSwitchNote();
+     },0);
+    }
     return;
    }
    chat.innerHTML='';
    chatHistory='';
    if(typeof persistChatHistorySnapshot==='function'){
     persistChatHistorySnapshot();
+   }
+   if(typeof window._flushPendingModelSwitchNote==='function'){
+    setTimeout(function(){
+     if(window._currentTab===1) window._flushPendingModelSwitchNote();
+    },0);
    }
   }).catch(function(e){
    console.warn('[Nova] reload chat from server failed', e);

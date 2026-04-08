@@ -172,7 +172,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      if(isCurrent){
       html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(122,140,109,0.12)':'rgba(52,211,153,0.12)')+';color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
      }else{
-      html+='<button onclick="switchModel(\''+escapeHtml(cmid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,116,107,0.24)':'rgba(99,102,241,0.3)')+';background:none;color:'+(isLight?'#6a6258':'#6366f1')+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+(isLight?'#6a6258':'#6366f1')+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+(isLight?'#6a6258':'#6366f1')+'\'">'+t('settings.models.activate')+'</button>';
+      html+='<button onclick="_sidebarSwitchModel(\''+escapeHtml(cmid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,116,107,0.24)':'rgba(99,102,241,0.3)')+';background:none;color:'+(isLight?'#6a6258':'#6366f1')+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+(isLight?'#6a6258':'#6366f1')+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+(isLight?'#6a6258':'#6366f1')+'\'">'+t('settings.models.activate')+'</button>';
      }
      html+='<button onclick="openModelDialog(\''+escapeHtml(cmid)+'\')" style="padding:3px 8px;border:1px solid '+borderColor+';border-radius:5px;background:none;color:'+subColor+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      html+='</div>';
@@ -222,7 +222,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      if(uCurrent){
       html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(122,140,109,0.12)':'rgba(52,211,153,0.12)')+';color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
     }else{
-      html+='<button onclick="switchModel(\''+escapeHtml(umid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,116,107,0.24)':'rgba(99,102,241,0.3)')+';background:none;color:'+(isLight?'#6a6258':'#6366f1')+';font-size:11px;cursor:pointer;font-weight:500;">'+t('settings.models.activate')+'</button>';
+      html+='<button onclick="_sidebarSwitchModel(\''+escapeHtml(umid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,116,107,0.24)':'rgba(99,102,241,0.3)')+';background:none;color:'+(isLight?'#6a6258':'#6366f1')+';font-size:11px;cursor:pointer;font-weight:500;">'+t('settings.models.activate')+'</button>';
      }
      html+='<button onclick="openModelDialog(\''+escapeHtml(umid)+'\')" style="padding:3px 8px;border:1px solid '+borderColor+';border-radius:5px;background:none;color:'+subColor+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      html+='</div>';
@@ -344,19 +344,54 @@ function _getModelTransport(cfg){
  return 'openai_api';
 }
 
+function _formatModelDialogStatusMessage(kind, message){
+ var text=String(message||'').trim();
+ if(!text || kind!=='error') return text;
+ var lang=(typeof getLang==='function' ? String(getLang()||'zh').toLowerCase() : 'zh');
+ var statusMatch=text.match(/status\s+(\d{3})/i);
+ var statusCode=statusMatch?String(statusMatch[1]||'').trim():'';
+ var jsonStart=text.indexOf('{');
+ if(jsonStart>=0){
+  try{
+   var payload=JSON.parse(text.slice(jsonStart));
+   var errorBlock=(payload&&typeof payload.error==='object')?payload.error:payload;
+   var errorType=String((errorBlock&&errorBlock.type)||payload.type||'').trim().toLowerCase();
+   var errorMessage=String((errorBlock&&errorBlock.message)||payload.message||'').trim();
+   if(/insufficient_balance/.test(errorType)||/insufficient balance/i.test(errorMessage)){
+    return lang==='en'
+     ? ('Model test failed: insufficient balance'+(statusCode?' (HTTP '+statusCode+')':'')+'.')
+     : ('模型测试失败：余额不足'+(statusCode?'（HTTP '+statusCode+'）':'')+'。');
+   }
+   if(/context window exceeds limit/i.test(errorMessage)||(/bad_request_error/.test(errorType)&&/2013/.test(text))){
+    return lang==='en'
+     ? ('Model test failed: context window exceeds this model limit'+(statusCode?' (HTTP '+statusCode+')':'')+'.')
+     : ('模型测试失败：上下文太长，超过了该模型的限制'+(statusCode?'（HTTP '+statusCode+'）':'')+'。');
+   }
+   if(errorMessage){
+    return lang==='en'
+     ? ('Model test failed: '+errorMessage+(statusCode?' (HTTP '+statusCode+')':''))
+     : ('模型测试失败：'+errorMessage+(statusCode?'（HTTP '+statusCode+'）':''));
+   }
+  }catch(_err){}
+ }
+ return text;
+}
+
 function _setModelDialogStatus(kind, message){
  var box=document.getElementById('mdlTestStatus');
  if(!box) return;
- var theme=(typeof _settingsPageTheme==='function'
-  ? _settingsPageTheme(document.body.classList.contains('light'))
-  : {
-     actionSecondary:'rgba(255,255,255,0.04)',
-     border:'rgba(255,255,255,0.08)',
-     dangerText:'#b91c1c',
-     successText:'#15803d',
-     text:'#111827'
-    });
- var text=String(message||'').trim();
+  var isLight=document.body.classList.contains('light');
+  var theme=(typeof _settingsPageTheme==='function'
+   ? _settingsPageTheme(isLight)
+   : {
+      actionSecondary:'rgba(255,255,255,0.04)',
+      border:'rgba(255,255,255,0.08)',
+      dangerText:'#b91c1c',
+      dangerBg:'rgba(239,68,68,0.12)',
+      modelDialogSuccessText:isLight?'#708264':'#97ab89',
+      text:'#111827'
+     });
+ var text=_formatModelDialogStatusMessage(kind, message);
  if(!text){
   box.style.display='none';
   box.textContent='';
@@ -364,9 +399,22 @@ function _setModelDialogStatus(kind, message){
  }
  box.style.display='block';
  box.textContent=text;
- box.style.background=theme.actionSecondary;
- box.style.border='1px solid '+theme.border;
- box.style.color=kind==='error'?theme.dangerText:(kind==='success'?theme.successText:theme.text);
+ box.style.whiteSpace='pre-wrap';
+ box.style.wordBreak='break-word';
+ box.style.overflowWrap='anywhere';
+ box.style.maxHeight='120px';
+ box.style.overflowY='auto';
+  box.style.background=kind==='error'
+   ? (theme.dangerBg||theme.actionSecondary)
+   : theme.actionSecondary;
+  box.style.border='1px solid '+(
+   kind==='error'
+    ? (theme.dangerSoftBorder||theme.border)
+    : theme.border
+  );
+  box.style.color=kind==='error'
+   ? theme.dangerText
+   : (kind==='success' ? (theme.modelDialogSuccessText||theme.successText||theme.text) : theme.text);
 }
 
 function _setSettingsModelFeedback(kind, message){
@@ -471,7 +519,7 @@ function openModelDialog(editId, draftSeed){
  html+='<div style="position:relative;"><input id="mdlKey" value="" placeholder="'+(isEdit?(maskedKey||t('settings.models.field.key.hint')):'sk-...')+'" style="'+inputStyle+';padding-right:40px;"'+textInputAttrs+'>';
  if(isEdit&&fullKey){html+='<button type="button" id="mdlKeyToggle" onclick="(function(b){var inp=document.getElementById(\'mdlKey\');var showing=b.getAttribute(\'data-show\')===\'1\';if(!showing){inp.value=\''+escapeHtml(fullKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94\\\'/><path d=\\\'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19\\\'/><line x1=\\\'1\\\' y1=\\\'1\\\' x2=\\\'23\\\' y2=\\\'23\\\'/></svg>\';b.setAttribute(\'data-show\',\'1\');}else{inp.value=\'\';inp.placeholder=\''+escapeHtml(maskedKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\\'/><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'3\\\'/></svg>\';b.setAttribute(\'data-show\',\'0\');}})(this)" data-show="0" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.5;color:'+subColor+';display:flex;align-items:center;" title="Show/Hide"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>';}
  html+='</div></div>';
- html+='<div id="mdlTestStatus" style="display:none;padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.6;"></div>';
+ html+='<div id="mdlTestStatus" style="display:none;padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;max-height:120px;overflow-y:auto;"></div>';
  html+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">';
  if(isEdit&&!isCurrent){
   html+='<button onclick="_modelDialogDelete(\''+escapeHtml(editId)+'\')" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(171,113,99,0.22);background:transparent;color:#9a665d;cursor:pointer;font-size:12px;opacity:0.7;transition:opacity 0.15s;" onmouseenter="this.style.opacity=\'1\'" onmouseleave="this.style.opacity=\'0.7\'">'+t('settings.models.delete')+'</button>';

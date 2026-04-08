@@ -144,6 +144,34 @@ class ModelRoutesTests(unittest.TestCase):
             "https://api.deepseek.com/v1",
         )
 
+    def test_switch_model_does_not_probe_remote_api_before_switching(self):
+        original = self._install_fake_brain(
+            {
+                "minimax-chat": {
+                    "model": "MiniMax-M2.7",
+                    "transport": "openai_api",
+                    "base_url": "https://api.minimax.chat/v1",
+                    "api_key": "sk-live-123",
+                    "vision": False,
+                }
+            },
+            current="deepseek-chat",
+            llm_result={
+                "error": (
+                    '{"type":"error","error":{"type":"insufficient_balance_error",'
+                    '"message":"insufficient balance","http_code":"429"}}'
+                )
+            },
+        )
+        try:
+            result = asyncio.run(switch_model("minimax-chat"))
+            fake_brain = sys.modules["brain"]
+        finally:
+            self._restore_brain(original)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["current"], "minimax-chat")
+        self.assertEqual(fake_brain._current_default, "minimax-chat")
+
     def test_test_model_config_can_probe_derived_catalog_model_by_id(self):
         original = self._install_fake_brain(
             {

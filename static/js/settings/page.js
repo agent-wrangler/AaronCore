@@ -50,6 +50,7 @@ function _settingsPageTheme(isLight){
   softDashedBorder:'var(--border-panel)',
   successBg:'var(--tone-sage-soft)',
   successText:'var(--tone-sage)',
+  modelDialogSuccessText:isLight?'#708264':'#97ab89',
   inactiveTagBg:'var(--surface-panel-soft)',
   inactiveTagText:'var(--text-label)',
   actionBorder:'var(--tone-amber-border)',
@@ -219,7 +220,7 @@ function _renderSettingsModelRow(rowId, cfg, allModels, displayCounts, currentMo
  if(isCurrent){
   html+='<span style="padding:3px 10px;border-radius:999px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+escapeHtml((typeof t==='function'?t('settings.models.active'):'')||'Active')+'</span>';
  }else{
-  html+='<button type="button" onclick="switchModel(\''+escapeHtml(rowId)+'\')" style="padding:4px 10px;border-radius:999px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:600;">'+escapeHtml((typeof t==='function'?t('settings.models.activate'):'')||'Use')+'</button>';
+  html+='<button type="button" onclick="_sidebarSwitchModel(\''+escapeHtml(rowId)+'\')" style="padding:4px 10px;border-radius:999px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:600;">'+escapeHtml((typeof t==='function'?t('settings.models.activate'):'')||'Use')+'</button>';
  }
  if(showEdit){
   html+='<button type="button" onclick="openModelDialog(\''+escapeHtml(rowId)+'\')" style="padding:4px 10px;border-radius:999px;border:1px solid '+theme.border+';background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+escapeHtml((typeof t==='function'?t('settings.models.edit'):'')||'Edit')+'</button>';

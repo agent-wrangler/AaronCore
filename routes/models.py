@@ -225,7 +225,6 @@ async def list_models():
 @router.post("/model/{name}")
 async def switch_model(name: str):
     import brain
-    from brain import validate_codex_cli_login
 
     created_derived = False
     if name in brain.MODELS_CONFIG:
@@ -238,15 +237,9 @@ async def switch_model(name: str):
             return {"ok": False, "error": f"model '{name}' not found"}
         created_derived = True
 
-    transport = str(cfg.get("transport") or "openai_api").strip().lower()
-    if transport == "codex_cli":
-        ok, detail = validate_codex_cli_login(timeout=8)
-        if not ok:
-            return {"ok": False, "error": detail}
-    else:
-        ok, detail = _probe_api_model(cfg, timeout=8)
-        if not ok:
-            return {"ok": False, "error": detail}
+    validation_error = _validate_api_model_config(cfg)
+    if validation_error:
+        return {"ok": False, "error": validation_error}
 
     brain.MODELS_CONFIG[name] = cfg
     try:
