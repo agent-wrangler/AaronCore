@@ -1,546 +1,5 @@
-// Send flow, SSE handling, stream rendering, and thinking steps
+﻿// Send flow, SSE handling, stream rendering, and thinking steps
 // Source: chat.js lines 712-1968
-
-var _runPanelStoreKey='nova_run_panel_open';
-var _runPanelWidthKey='nova_run_panel_width';
-var _runPanelUserOpen=true;
-var _runPanelTabVisible=true;
-var _runPanelBusy=false;
-var _runPanelWidth=null;
-var _runPanelResizeBound=false;
-var _pendingModelSwitchNote=null;
-
-function _normalizeRunPanelDom(){
- var host=document.getElementById('runPanel');
- if(!host) return;
- host.innerHTML=''
-  +'<div class="run-panel-header">'
-  +'<div class="run-panel-header-main">'
-  +'<div class="run-panel-kicker-row">'
-  +'<div class="run-panel-kicker" id="runPanelKicker">Current Run</div>'
-  +'<div class="run-panel-status-pill state-idle" id="runPanelStatus">Idle ? 0 / 0</div>'
-  +'</div>'
-  +'<div class="run-panel-task" id="runPanelTask">Elapsed ? 00:00</div>'
-  +'<div class="run-panel-meta" id="runPanelMeta">0 files ? 0 tools ? 0 errors</div>'
-  +'</div>'
-  +'<button class="run-panel-close" id="runPanelCloseBtn" type="button" onclick="toggleRunPanel(false)" title="Hide run panel" aria-label="Hide run panel">'
-  +'<svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">'
-  +'<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-  +'</svg>'
-  +'</button>'
-  +'</div>'
-  +'<div class="run-panel-summary" aria-hidden="true">'
-  +'<div class="run-panel-summary-item">'
-  +'<div class="run-panel-summary-label">Progress</div>'
-  +'<div class="run-panel-summary-value" id="runPanelProgress">0 / 0</div>'
-  +'</div>'
-  +'<div class="run-panel-summary-item">'
-  +'<div class="run-panel-summary-label">Current Action</div>'
-  +'<div class="run-panel-summary-value run-panel-summary-text" id="runPanelAction">Waiting for first step</div>'
-  +'</div>'
-  +'<div class="run-panel-summary-item">'
-  +'<div class="run-panel-summary-label">Outputs</div>'
-  +'<div class="run-panel-summary-value run-panel-summary-text" id="runPanelOutputs">0 files ? 0 tools ? 0 errors</div>'
-  +'</div>'
-  +'</div>'
-  +'<div class="run-panel-stream" id="runPanelStream">'
-  +'<div class="run-panel-empty" id="runPanelEmpty">Run stream will appear here.</div>'
-  +'</div>';
-}
-
-function _mountRunPanelLayout(){
- var main=document.querySelector('.main');
- var shell=document.getElementById('chatShell');
- if(!main || !shell) return;
- var content=main.querySelector('.content');
- var host=document.getElementById('runPanel');
- var resizer=document.getElementById('runPanelResizer');
- var input=document.querySelector('.main > .input');
- var stageWrap=document.getElementById('mainStage');
- if(!stageWrap){
-  stageWrap=document.createElement('div');
-  stageWrap.id='mainStage';
-  stageWrap.className='main-stage';
- }
- if(!resizer){
-  resizer=document.createElement('div');
-  resizer.id='runPanelResizer';
-  resizer.className='run-panel-resizer';
-  resizer.setAttribute('aria-hidden','true');
- }
- if(stageWrap.parentNode!==main){
-  main.insertBefore(stageWrap, main.firstChild||null);
- }
- if(content && content.parentNode!==stageWrap){
-  stageWrap.appendChild(content);
- }
- if(input && input.parentNode!==stageWrap){
-  stageWrap.appendChild(input);
- }
- if(resizer.parentNode!==main){
-  main.appendChild(resizer);
- }
- if(host && host.parentNode!==main){
-  main.appendChild(host);
- }else if(host && main.lastElementChild!==host){
-  main.appendChild(host);
- }
- if(host && resizer && resizer.nextElementSibling!==host){
-  main.insertBefore(resizer, host);
- }
-}
-
-function _getRunPanelEls(){
- var shell=document.getElementById('chatShell');
- var main=document.querySelector('.main');
- if(!shell || !main) return null;
- return {
-  main:main,
-  shell:shell,
-  stage:document.getElementById('mainStage'),
-  host:document.getElementById('runPanel'),
-  resizer:document.getElementById('runPanelResizer'),
-  btn:document.getElementById('runPanelBtn'),
-  inlineToggle:document.getElementById('runPanelInlineToggle'),
-  kicker:document.getElementById('runPanelKicker'),
-  closeBtn:document.getElementById('runPanelCloseBtn'),
-  status:document.getElementById('runPanelStatus'),
-  task:document.getElementById('runPanelTask'),
-  meta:document.getElementById('runPanelMeta'),
-  progress:document.getElementById('runPanelProgress'),
-  action:document.getElementById('runPanelAction'),
-  outputs:document.getElementById('runPanelOutputs'),
-  stream:document.getElementById('runPanelStream'),
-  empty:document.getElementById('runPanelEmpty')
- };
-}
-
-function _ensureRunPanelMetaLine(els){
- if(!els || !els.host) return null;
- if(els.meta) return els.meta;
- var headerMain=els.host.querySelector('.run-panel-header-main');
- if(!headerMain) return null;
- var meta=document.createElement('div');
- meta.id='runPanelMeta';
- meta.className='run-panel-meta';
- headerMain.appendChild(meta);
- els.meta=meta;
- return meta;
-}
-
-function _formatRunPanelOutputs(fileCount, toolCount, errorCount){
- return String(fileCount||0)+' 个文件 · '+String(toolCount||0)+' 个工具 · '+String(errorCount||0)+' 个异常';
-}
-
-var _runPanelCopy={
- show:'\u663e\u793a\u8fd0\u884c\u9762\u677f',
- hide:'\u9690\u85cf\u8fd0\u884c\u9762\u677f',
- kicker:'[RUN #000 | READY]',
- progress:'\u8fdb\u5ea6',
- action:'\u5f53\u524d\u52a8\u4f5c',
- outputs:'TOOLS',
- idle:'STATUS:    [IDLE] READY (0/0)',
- taskIdle:'ELAPSED:   00:00',
- actionIdle:'\u6682\u65e0\u6d3b\u52a8',
- empty:'AGENT STANDBY · Awaiting current run...'
-};
-
-var _runPanelEmptyCopy={
- idle:'AGENT STANDBY · Awaiting current run...',
- open:'RUNTIME CHANNEL OPEN · Awaiting agent events...',
- quiet:'RUNTIME CHANNEL OPEN · No events emitted.',
- error:'RUNTIME CHANNEL ERROR · Agent unavailable.',
- stopped:'RUNTIME CHANNEL CLOSED · Run interrupted.'
-};
-
-function _setRunPanelEmptyState(kind){
- var text=_runPanelEmptyCopy[kind]||_runPanelEmptyCopy.idle;
- _runPanelCopy.empty=text;
- var els=(typeof _getRunPanelEls==='function') ? _getRunPanelEls() : null;
- if(els && els.empty) els.empty.textContent=text;
-}
-
-function _formatRunPanelOutputs(fileCount, toolCount, errorCount){
- return String(fileCount||0)+' \u4e2a\u6587\u4ef6 \u00b7 '+String(toolCount||0)+' \u6b21\u5de5\u5177 \u00b7 '+String(errorCount||0)+' \u4e2a\u5f02\u5e38';
-}
-
-function _readRunPanelPref(){
- try{
-  var raw=localStorage.getItem(_runPanelStoreKey);
-  if(raw===null) return true;
-  return !(raw==='0' || raw==='false');
- }catch(e){
-  return true;
- }
-}
-
-function _writeRunPanelPref(open){
- try{
-  localStorage.setItem(_runPanelStoreKey, open ? 'true' : 'false');
- }catch(e){}
-}
-
-function _readRunPanelWidth(){
- try{
-  var raw=parseInt(localStorage.getItem(_runPanelWidthKey)||'', 10);
-  return isFinite(raw) && raw>0 ? raw : null;
- }catch(e){
-  return null;
- }
-}
-
-function _writeRunPanelWidth(width){
- try{
-  localStorage.setItem(_runPanelWidthKey, String(Math.round(width||0)));
- }catch(e){}
-}
-
-function _getRunPanelWidthBounds(mainWidth){
- var min=300;
- var max=Math.min(620, Math.max(360, (Number(mainWidth)||0)-420));
- if(max<min) max=min;
- return { min:min, max:max };
-}
-
-function _applyRunPanelWidth(width){
- var els=_getRunPanelEls();
- if(!els || !els.main) return null;
- if(window.innerWidth<=760){
-  els.main.style.removeProperty('--run-panel-width');
-  return null;
- }
- var bounds=_getRunPanelWidthBounds(els.main.clientWidth||window.innerWidth);
- var next=Number(width);
- if(!isFinite(next) || next<=0){
-  next=_runPanelWidth||_readRunPanelWidth()||390;
- }
- next=Math.max(bounds.min, Math.min(bounds.max, next));
- _runPanelWidth=next;
- els.main.style.setProperty('--run-panel-width', next+'px');
- return next;
-}
-
-function _initRunPanelResize(){
- var els=_getRunPanelEls();
- if(!els || !els.main || !els.resizer || !els.host || _runPanelResizeBound) return;
- var isResizing=false;
- var startX=0;
- var startWidth=0;
- function getClientX(e){
-  return e && (typeof e.clientX==='number' ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX));
- }
- function startResize(e){
-  if(window.innerWidth<=760 || !_runPanelUserOpen || !_runPanelTabVisible) return;
-  var clientX=getClientX(e);
-  if(typeof clientX!=='number') return;
-  isResizing=true;
-  startX=clientX;
-  startWidth=_applyRunPanelWidth()||els.host.getBoundingClientRect().width;
-  document.body.classList.add('is-resizing-run-panel');
-  document.body.style.userSelect='none';
-  document.addEventListener('mousemove', onResize);
-  document.addEventListener('mouseup', stopResize);
-  document.addEventListener('touchmove', onResize, {passive:false});
-  document.addEventListener('touchend', stopResize);
-  e.preventDefault();
- }
- function onResize(e){
-  if(!isResizing) return;
-  var clientX=getClientX(e);
-  if(typeof clientX!=='number') return;
-  var next=startWidth+(startX-clientX);
-  var applied=_applyRunPanelWidth(next);
-  if(applied) _runPanelWidth=applied;
-  if(e.cancelable) e.preventDefault();
- }
- function stopResize(){
-  if(!isResizing) return;
-  isResizing=false;
-  document.body.classList.remove('is-resizing-run-panel');
-  document.body.style.userSelect='';
-  document.removeEventListener('mousemove', onResize);
-  document.removeEventListener('mouseup', stopResize);
-  document.removeEventListener('touchmove', onResize);
-  document.removeEventListener('touchend', stopResize);
-  if(_runPanelWidth) _writeRunPanelWidth(_runPanelWidth);
- }
- els.resizer.addEventListener('mousedown', startResize);
- els.resizer.addEventListener('touchstart', startResize, {passive:false});
- window.addEventListener('resize', function(){
-  _applyRunPanelWidth(_runPanelWidth||_readRunPanelWidth()||390);
- });
- _runPanelResizeBound=true;
-}
-
-function _setRunPanelBusyState(isBusy){
- _runPanelBusy=!!isBusy;
- var els=_getRunPanelEls();
- if(!els) return;
- if(els.btn) els.btn.classList.toggle('is-busy', _runPanelBusy);
- if(els.inlineToggle) els.inlineToggle.classList.toggle('is-busy', _runPanelBusy);
-}
-
-function _applyRunPanelUiState(){
- var els=_getRunPanelEls();
- if(!els || !els.shell || !els.main) return;
- var open=!!(_runPanelUserOpen && _runPanelTabVisible);
- els.main.classList.toggle('run-panel-open', open);
- els.main.classList.toggle('run-panel-collapsed', !open);
- els.shell.classList.toggle('run-panel-open', open);
- els.shell.classList.toggle('run-panel-collapsed', !open);
- if(els.host) els.host.style.display=_runPanelTabVisible ? '' : 'none';
- if(els.btn){
-  els.btn.style.display=_runPanelTabVisible ? '' : 'none';
-  els.btn.classList.toggle('is-active', open);
-  els.btn.setAttribute('aria-pressed', open ? 'true' : 'false');
-  els.btn.title=open ? '隐藏运行面板' : '显示运行面板';
-  }
- if(els.closeBtn) els.closeBtn.title='隐藏运行面板';
-}
-
-function _applyRunPanelUiState(){
- var els=_getRunPanelEls();
- if(!els || !els.shell || !els.main) return;
- var open=!!(_runPanelUserOpen && _runPanelTabVisible);
- els.main.classList.toggle('run-panel-open', open);
- els.main.classList.toggle('run-panel-collapsed', !open);
- els.shell.classList.toggle('run-panel-open', open);
- els.shell.classList.toggle('run-panel-collapsed', !open);
- if(els.host) els.host.style.display=_runPanelTabVisible ? '' : 'none';
- if(els.btn){
-  els.btn.style.display=_runPanelTabVisible ? '' : 'none';
-  els.btn.classList.toggle('is-active', open);
-  els.btn.classList.toggle('is-busy', _runPanelBusy);
-  els.btn.setAttribute('aria-pressed', open ? 'true' : 'false');
-  els.btn.title=open ? _runPanelCopy.hide : _runPanelCopy.show;
- }
- if(els.inlineToggle){
-  var showInline=_runPanelTabVisible && !open;
-  els.inlineToggle.classList.toggle('is-visible', showInline);
-  els.inlineToggle.classList.toggle('is-busy', _runPanelBusy);
-  els.inlineToggle.setAttribute('aria-hidden', showInline ? 'false' : 'true');
-  els.inlineToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  els.inlineToggle.title=_runPanelCopy.show;
- }
- if(els.closeBtn) els.closeBtn.title=_runPanelCopy.hide;
- _applyRunPanelWidth(_runPanelWidth||_readRunPanelWidth()||390);
-}
-
-function toggleRunPanel(forceOpen){
- if(typeof forceOpen==='boolean') _runPanelUserOpen=!!forceOpen;
- else _runPanelUserOpen=!_runPanelUserOpen;
- _writeRunPanelPref(_runPanelUserOpen);
- _applyRunPanelUiState();
- return false;
-}
-
-function _setRunPanelTabState(isChatTab){
- _runPanelTabVisible=!!isChatTab;
- _applyRunPanelUiState();
-}
-
-window.toggleRunPanel=toggleRunPanel;
-window._setRunPanelTabState=_setRunPanelTabState;
-
-(function _initRunPanelUi(){
- _runPanelUserOpen=_readRunPanelPref();
- _normalizeRunPanelDom();
- _mountRunPanelLayout();
- _initRunPanelResize();
- var els=_getRunPanelEls();
- if(els){
-  _ensureRunPanelMetaLine(els);
-  var summaryLabels=els.host ? els.host.querySelectorAll('.run-panel-summary-label') : [];
-  if(els.kicker) els.kicker.textContent='本轮运行';
-  if(summaryLabels[0]) summaryLabels[0].textContent='进度';
-  if(summaryLabels[1]) summaryLabels[1].textContent='当前动作';
-  if(summaryLabels[2]) summaryLabels[2].textContent='已产出';
-  if(els.status) els.status.textContent='空闲';
-  if(els.task) els.task.textContent='这里会实时显示本轮思考和动作。';
-  if(els.progress) els.progress.textContent='0 / 0';
-  if(els.action) els.action.textContent='等待第一个动作';
-  if(els.outputs) els.outputs.textContent=_formatRunPanelOutputs(0, 0, 0);
-  if(els.empty) els.empty.textContent='开始一轮真实任务后，这里会实时显示思考、动作和执行过程。';
- }
- _applyRunPanelUiState();
-})();
-
-(function _refreshRunPanelUiCopy(){
- var els=_getRunPanelEls();
- if(!els) return;
- _ensureRunPanelMetaLine(els);
- var summaryLabels=els.host ? els.host.querySelectorAll('.run-panel-summary-label') : [];
- if(els.kicker) els.kicker.textContent=_runPanelCopy.kicker;
-  if(summaryLabels[0]) summaryLabels[0].textContent=_runPanelCopy.progress;
-  if(summaryLabels[1]) summaryLabels[1].textContent=_runPanelCopy.action;
-  if(summaryLabels[2]) summaryLabels[2].textContent=_runPanelCopy.outputs;
- if(els.status) els.status.textContent=_runPanelCopy.idle+' · 0 / 0';
- if(els.task) els.task.textContent=_runPanelCopy.actionIdle;
- if(els.progress) els.progress.textContent='0 / 0';
- if(els.action) els.action.textContent=_runPanelCopy.actionIdle;
- if(els.outputs) els.outputs.textContent=_formatRunPanelOutputs(0,0,0);
- if(els.empty) els.empty.textContent=_runPanelCopy.empty;
- _applyRunPanelUiState();
-})();
-
-(function _finalizeRunPanelStaticCopy(){
- var els=_getRunPanelEls();
- if(!els) return;
- _ensureRunPanelMetaLine(els);
- if(els.kicker) els.kicker.textContent=_runPanelCopy.kicker;
- if(els.status) els.status.textContent=_runPanelCopy.idle+' \u00b7 0 / 0';
- if(els.task) els.task.textContent='\u603b\u8017\u65f6 \u00b7 00:00';
- if(els.meta) els.meta.textContent=_formatRunPanelOutputs(0,0,0);
- if(els.empty) els.empty.textContent=_runPanelCopy.empty;
-})();
-
-var _runPanelConsoleCounterKey='nova_run_panel_console_counter';
-
-function _readRunPanelConsoleCounter(){
- try{
-  var raw=localStorage.getItem(_runPanelConsoleCounterKey);
-  var parsed=parseInt(raw,10);
-  return isFinite(parsed) && parsed>0 ? parsed : 0;
- }catch(e){
-  return 0;
- }
-}
-
-function _nextRunPanelConsoleCounter(){
- var next=_readRunPanelConsoleCounter()+1;
- try{
-  localStorage.setItem(_runPanelConsoleCounterKey, String(next));
- }catch(e){}
- return next;
-}
-
-function _formatRunPanelConsoleSeq(value){
- return String(Math.max(0, parseInt(value,10)||0)).padStart(3,'0');
-}
-
-function _formatRunPanelConsoleTimestamp(value){
- if(!value) return 'READY';
- var d=new Date(value);
- if(isNaN(d.getTime())) return 'READY';
- var y=String(d.getFullYear());
- var m=String(d.getMonth()+1).padStart(2,'0');
- var day=String(d.getDate()).padStart(2,'0');
- var hh=String(d.getHours()).padStart(2,'0');
- var mm=String(d.getMinutes()).padStart(2,'0');
- var ss=String(d.getSeconds()).padStart(2,'0');
- return y+'-'+m+'-'+day+' '+hh+':'+mm+':'+ss;
-}
-
-function _estimateRunPanelConsoleTokens(value){
- var text=String(value||'').trim();
- if(!text) return 0;
- var cjk=(text.match(/[\u3400-\u9fff]/g)||[]).length;
- var latin=(text.replace(/[\u3400-\u9fff]/g,' ').match(/[A-Za-z0-9_]+/g)||[]).length;
- var symbols=(text.match(/[^\sA-Za-z0-9_\u3400-\u9fff]/g)||[]).length;
- return Math.max(1, cjk + Math.ceil(latin*0.75) + Math.ceil(symbols*0.25));
-}
-
-function _formatRunPanelConsoleHeader(runNumber, startedAt){
- return '[RUN #'+_formatRunPanelConsoleSeq(runNumber)+' | '+_formatRunPanelConsoleTimestamp(startedAt)+']';
-}
-
-function _queueModelSwitchNote(payload){
- if(!payload) return;
- var nextName=String(payload.model_name||payload.model||'').trim();
- if(!nextName) return;
- var labelEl=document.getElementById('modelName');
- var previousName=String(payload.previous_model_name||'').trim();
- if(!previousName && labelEl){
-  previousName=String(labelEl.textContent||'').trim();
- }
- if(!previousName){
-  previousName=String(window._novaCurrentModel||'').trim();
- }
- if(previousName===nextName){
-  previousName=String(payload.previous_model||'').trim();
- }
- _pendingModelSwitchNote={
-  from:previousName,
-  to:nextName,
-  toId:String(payload.model||'').trim()
- };
-}
-
-function _flushPendingModelSwitchNote(){
- if(!_pendingModelSwitchNote || typeof addChatEventNote!=='function') return;
- var note=_pendingModelSwitchNote;
- _pendingModelSwitchNote=null;
- var text=note.from && note.from!==note.to
-  ? (note.from+' → '+note.to)
-  : (note.to||note.toId||'');
- if(!text) return;
- addChatEventNote('model-switch', 'MODEL SWITCH', text);
-}
-
-function _formatRunPanelConsoleStatus(statusKey, progressCurrent, totalSteps){
- var marker='IDLE';
- var label='READY';
- if(statusKey==='thinking'){
-  marker='...';
-  label='THINKING';
- }else if(statusKey==='tool'){
-  marker='RUN';
-  label='TOOLING';
- }else if(statusKey==='waiting'){
-  marker='WAIT';
-  label='WAITING';
- }else if(statusKey==='running'){
-  marker='RUN';
-  label='RUNNING';
- }else if(statusKey==='done'){
-  marker='OK';
-  label='COMPLETED';
- }else if(statusKey==='error'){
-  marker='ERR';
-  label='FAILED';
- }
- return 'STATUS:    ['+marker+'] '+label+' ('+String(progressCurrent||0)+'/'+String(totalSteps||0)+')';
-}
-
-function _formatRunPanelTokenLine(inputTokens, outputTokens){
- return 'TOKENS:    ~'+String(inputTokens||0)+' / ~'+String(outputTokens||0)+' (in/out)';
-}
-
-function _formatRunPanelToolLine(fileCount, toolCount, errorCount){
- return 'TOOLS:     '+String(toolCount||0)+' CALLS | '+String(errorCount||0)+' ERRORS | '+String(fileCount||0)+' FILES';
-}
-
-function _normalizeRunPanelConsoleDom(){
- var host=document.getElementById('runPanel');
- if(!host) return;
- host.innerHTML=''
-  +'<div class="run-panel-header">'
-  +'<div class="run-panel-header-main">'
-  +'<div class="run-panel-kicker" id="runPanelKicker">[RUN #000 | READY]</div>'
-  +'<div class="run-panel-status-pill state-idle" id="runPanelStatus">STATUS:    [IDLE] READY (0/0)</div>'
-  +'<div class="run-panel-task" id="runPanelTask">ELAPSED:   00:00</div>'
-  +'<div class="run-panel-meta" id="runPanelMeta">TOKENS:    ~0 / ~0 (in/out)</div>'
-  +'<div class="run-panel-outputs" id="runPanelOutputs">TOOLS:     0 CALLS | 0 ERRORS | 0 FILES</div>'
-  +'</div>'
-  +'</div>'
-  +'<div class="run-panel-stream" id="runPanelStream">'
-  +'<div class="run-panel-empty" id="runPanelEmpty">Run stream will appear here.</div>'
-  +'</div>';
-}
-
-(function _rebuildRunPanelConsoleUi(){
- _normalizeRunPanelConsoleDom();
- _mountRunPanelLayout();
- var els=_getRunPanelEls();
- if(!els) return;
- if(els.kicker) els.kicker.textContent='[RUN #000 | READY]';
- if(els.status) els.status.textContent='STATUS:    [IDLE] READY (0/0)';
- if(els.task) els.task.textContent='ELAPSED:   00:00';
- if(els.meta) els.meta.textContent='TOKENS:    ~0 / ~0 (in/out)';
- if(els.outputs) els.outputs.textContent='TOOLS:     0 CALLS | 0 ERRORS | 0 FILES';
- if(els.empty) els.empty.textContent=_runPanelCopy.empty;
- _applyRunPanelUiState();
-})();
 
 async function send(){
  AwarenessManager.stopPolling();
@@ -583,87 +42,9 @@ var _runPanelFollowRAF=0;
   var _showRawThinkingPanel=false;
   var repairData=null;
   var hasTrace=false;
-  var _streamBubble=null; // 流式输出的气泡
-  var _streamText=''; // 流式累积的文本
-  var _streamStarted=false;
-  var _suppressTypingCursor=false;
-  var _streamAutoFollow=true;
-  var _streamScrollFollowBound=false;
+  var _streamRuntime=null;
 
- function _truncateRunText(value, limit){
-  var textValue=String(value||'').replace(/\s+/g,' ').trim();
-  if(!textValue) return '';
-  if(textValue.length<=limit) return textValue;
-  return textValue.slice(0, Math.max(0, limit-1))+'…';
- }
 
- function _extractRunFiles(textValue){
-  var text=String(textValue||'');
-  if(!text) return [];
-  var matches=text.match(/(?:[A-Za-z]:)?[\w./\\-]+\.(?:css|js|py|html|json|md|ts|tsx|jsx|yml|yaml|txt|ttf|otf|svg)/ig) || [];
-  var seen={};
-  var files=[];
-  for(var i=0;i<matches.length;i++){
-   var file=String(matches[i]||'').replace(/[),.;:]+$/,'').trim();
-   if(!file || seen[file.toLowerCase()]) continue;
-   seen[file.toLowerCase()]=true;
-   files.push(file);
-  }
-  return files;
- }
-
- function _runPanelStateKey(status, phase){
-  if(status==='error') return 'error';
-  if(status==='running'){
-   if(phase==='thinking') return 'thinking';
-   if(phase==='tool') return 'tool';
-   if(phase==='waiting') return 'waiting';
-   return 'running';
-  }
-  return status==='done' ? 'done' : 'idle';
- }
-
- function _runPanelStatusText(statusKey){
-  if(statusKey==='error') return '异常';
-  if(statusKey==='thinking') return '思考中';
-  if(statusKey==='tool') return '调用工具';
-  if(statusKey==='waiting') return '等待中';
-  if(statusKey==='running') return '执行中';
-  if(statusKey==='done') return '已完成';
-  return '空闲';
- }
-
- function _runPanelStepStateText(stepObj){
-  if(!stepObj) return '';
-  var key=_runPanelStateKey(stepObj.status, stepObj.phase);
-  if(key==='error') return '异常';
-  if(key==='thinking') return '思考';
-  if(key==='tool') return '工具';
-  if(key==='waiting') return '等待';
-  if(key==='running') return '进行中';
-  return '完成';
- }
-
- function _runPanelStatusText(statusKey){
-  if(statusKey==='error') return '\u5f02\u5e38';
-  if(statusKey==='thinking') return '\u601d\u8003\u4e2d';
-  if(statusKey==='tool') return '\u8c03\u7528\u5de5\u5177';
-  if(statusKey==='waiting') return '\u7b49\u5f85\u4e2d';
-  if(statusKey==='running') return '\u6267\u884c\u4e2d';
-  if(statusKey==='done') return '\u5df2\u5b8c\u6210';
-  return '\u7a7a\u95f2';
- }
-
-function _runPanelStepStateText(stepObj){
- if(!stepObj) return '';
- var key=_runPanelStateKey(stepObj.status, stepObj.phase);
- if(key==='error') return '\u5f02\u5e38';
- if(key==='thinking') return '\u601d\u8003';
- if(key==='tool') return '\u5de5\u5177';
- if(key==='waiting') return '\u7b49\u5f85';
- if(key==='running') return '\u8fdb\u884c\u4e2d';
- return '\u5b8c\u6210';
-}
 
 function _formatRunElapsedLabel(){
  var endAt=_runFinishedAt||Date.now();
@@ -677,56 +58,6 @@ function _formatRunElapsedLabel(){
  return String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0');
 }
 
-function _escapeRunPanelText(value){
- return String(value||'')
-  .replace(/&/g,'&amp;')
-  .replace(/</g,'&lt;')
-  .replace(/>/g,'&gt;')
-  .replace(/"/g,'&quot;')
-  .replace(/'/g,'&#39;');
-}
-
-function _getRunPanelStepDetailParts(stepObj){
- var raw=String((stepObj && (stepObj.fullDetail||stepObj.summaryDetail||stepObj.displayLabel||stepObj.label))||'').trim();
- if(!raw) return {text:'', wait:''};
- if(typeof _splitProcessWaitSuffix==='function'){
-  var split=_splitProcessWaitSuffix(raw);
-  return {
-   text:String((split&&split.text)||raw).trim(),
-   wait:String((split&&split.wait)||'').trim()
-  };
- }
- return {text:raw, wait:''};
-}
-
-function _getRunPanelStepElapsed(stepObj){
- if(!stepObj) return '';
- var parts=_getRunPanelStepDetailParts(stepObj);
- if(parts.wait) return parts.wait;
- if(stepObj.status==='running' && stepObj.startedAt){
-  var seconds=Math.max(1, Math.round((Date.now()-Number(stepObj.startedAt||Date.now()))/1000));
-  return String(seconds)+'s';
- }
- return '';
-}
-
-function _getRunPanelStepIconClass(stepObj){
- if(!stepObj) return 'state-pending phase-info';
- var status=String(stepObj.status||'pending');
- var phase=String(stepObj.phase||'info');
- return 'status-'+status+' phase-'+phase;
-}
-
-function _getRunPanelStepBadge(stepObj){
- if(!stepObj) return '[WAIT]';
- var status=String(stepObj.status||'pending');
- var phase=String(stepObj.phase||'info');
- if(status==='error') return '[ERR]';
- if(status==='running' && phase==='waiting') return '[WAIT]';
- if(status==='running') return '[RUN]';
- if(status==='done') return '[OK]';
- return '[WAIT]';
-}
 
 function _isRunPanelNearBottom(threshold){
  if(!_runPanelEls || !_runPanelEls.stream) return true;
@@ -744,13 +75,6 @@ function _attachRunPanelScrollFollow(){
  _runPanelEls.stream.addEventListener('scroll', _syncRunPanelAutoFollow, {passive:true});
  _runPanelScrollFollowBound=true;
  _syncRunPanelAutoFollow();
-}
-
-function _detachRunPanelScrollFollow(){
- if(_runPanelEls && _runPanelEls.stream && _runPanelScrollFollowBound){
-  _runPanelEls.stream.removeEventListener('scroll', _syncRunPanelAutoFollow);
- }
- _runPanelScrollFollowBound=false;
 }
 
 function _queueRunPanelFollow(force){
@@ -830,170 +154,7 @@ function _stopRunElapsedClock(){
  }
 }
 
-function _collectStepToolNames(step){
- var names=(typeof _normalizeStepNameList==='function') ? _normalizeStepNameList(step&&step.parallelTools) : [];
- if(names.length) return names;
- var primary=String((step&&(step.toolName||step.toolKey))||'').trim();
- return primary ? [primary] : [];
-}
 
-  function _syncRunPanelHeader(){
-  if(!_runPanelEls) return;
-  var steps=pendingState.steps||[];
-  var runningStep=null;
-  var latestStep=steps.length ? steps[steps.length-1] : null;
-  var errorCount=0;
-  var toolMap={};
-  var fileMap={};
-  for(var i=0;i<steps.length;i++){
-   var step=steps[i];
-   if(!step) continue;
-   if(step.status==='running') runningStep=step;
-   if(step.status==='error') errorCount++;
-    var toolNames=_collectStepToolNames(step);
-    for(var ti=0;ti<toolNames.length;ti++){
-     var toolKey=String(toolNames[ti]||'').trim();
-     if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
-    }
-   var fileSources=[
-    step.label,
-    step.displayLabel,
-    step.summaryDetail,
-    step.fullDetail,
-    step.goal,
-    step.expectedOutput,
-    step.nextUserNeed
-   ];
-   for(var fi=0;fi<fileSources.length;fi++){
-    var files=_extractRunFiles(fileSources[fi]);
-    for(var fj=0;fj<files.length;fj++){
-     fileMap[files[fj].toLowerCase()]=files[fj];
-    }
-   }
-  }
-  var totalSteps=steps.length;
-  if(pendingState.plan && pendingState.plan.items && pendingState.plan.items.length){
-   totalSteps=Math.max(totalSteps, pendingState.plan.items.length);
-  }
-  var progressCurrent=steps.length;
-  if(totalSteps===0) progressCurrent=0;
-  if(progressCurrent>totalSteps) progressCurrent=totalSteps;
-  var statusKey='idle';
-  if(errorCount>0) statusKey='error';
-  else if(runningStep) statusKey=_runPanelStateKey(runningStep.status, runningStep.phase);
-  else if(_streamStarted || steps.length) statusKey='running';
-  if(replyText) statusKey='done';
-  var currentAction=_truncateRunText(
-   pendingState.activitySummary
-   || (runningStep && (runningStep.fullDetail||runningStep.summaryDetail||runningStep.displayLabel||runningStep.label))
-   || (latestStep && (latestStep.fullDetail||latestStep.summaryDetail||latestStep.displayLabel||latestStep.label))
-   || '',
-   120
-  );
-  if(!currentAction){
-   if(_streamStarted && !replyText) currentAction='正在输出回复';
-   else if(steps.length) currentAction='等待下一步动作';
-   else currentAction='等待第一个动作';
-  }
-  if(_runPanelEls.task){
-   _runPanelEls.task.textContent=_runPromptText ? _truncateRunText(_runPromptText, 120) : '这里会实时显示本轮思考和动作。';
-  }
-  if(_runPanelEls.status){
-   _runPanelEls.status.textContent=_runPanelStatusText(statusKey);
-   _runPanelEls.status.className='run-panel-status-pill state-'+statusKey;
-  }
-  if(_runPanelEls.progress){
-   _runPanelEls.progress.textContent=(progressCurrent||0)+' / '+(totalSteps||0);
-  }
-  if(_runPanelEls.action){
-   _runPanelEls.action.textContent=currentAction;
-  }
-  if(_runPanelEls.outputs){
-   _runPanelEls.outputs.textContent=_formatRunPanelOutputs(Object.keys(fileMap).length, Object.keys(toolMap).length, errorCount);
-  }
-  if(_runPanelEls.task && !_runPromptText){
-   _runPanelEls.task.textContent=_runPanelCopy.taskIdle;
-  }
-  if(_runPanelEls.action && !steps.length && !_streamStarted && !replyText){
-   _runPanelEls.action.textContent=_runPanelCopy.actionIdle;
-  }
- }
-
-  function _syncRunPanelHeader(){
-   if(!_runPanelEls) return;
-   var steps=pendingState.steps||[];
-   var runningStep=null;
-   var latestStep=steps.length ? steps[steps.length-1] : null;
-   var errorCount=0;
-   var toolMap={};
-   var fileMap={};
-   for(var i=0;i<steps.length;i++){
-   var step=steps[i];
-   if(!step) continue;
-   if(step.status==='running') runningStep=step;
-   if(step.status==='error') errorCount++;
-    var toolNames=_collectStepToolNames(step);
-    for(var ti=0;ti<toolNames.length;ti++){
-     var toolKey=String(toolNames[ti]||'').trim();
-     if(toolKey) toolMap[toolKey.toLowerCase()]=toolKey;
-    }
-    var fileSources=[
-     step.label,
-     step.displayLabel,
-     step.summaryDetail,
-     step.fullDetail,
-     step.goal,
-     step.expectedOutput,
-     step.nextUserNeed
-    ];
-    for(var fi=0;fi<fileSources.length;fi++){
-     var files=_extractRunFiles(fileSources[fi]);
-     for(var fj=0;fj<files.length;fj++){
-      fileMap[files[fj].toLowerCase()]=files[fj];
-     }
-    }
-   }
-   var totalSteps=steps.length;
-   if(pendingState.plan && pendingState.plan.items && pendingState.plan.items.length){
-    totalSteps=Math.max(totalSteps, pendingState.plan.items.length);
-   }
-   var progressCurrent=steps.length;
-   if(totalSteps===0) progressCurrent=0;
-   if(progressCurrent>totalSteps) progressCurrent=totalSteps;
-   var statusKey='idle';
-   if(errorCount>0) statusKey='error';
-   else if(runningStep) statusKey=_runPanelStateKey(runningStep.status, runningStep.phase);
-   else if(_streamStarted || steps.length) statusKey='running';
-   if(replyText) statusKey='done';
-   var currentAction=_truncateRunText(
-    pendingState.activitySummary
-    || (runningStep && (runningStep.fullDetail||runningStep.summaryDetail||runningStep.displayLabel||runningStep.label))
-    || (latestStep && (latestStep.fullDetail||latestStep.summaryDetail||latestStep.displayLabel||latestStep.label))
-    || '',
-    120
-   );
-   if(!currentAction){
-    if(_streamStarted && !replyText) currentAction='正在输出回复';
-    else if(steps.length) currentAction='等待下一步动作';
-    else currentAction=_runPanelCopy.actionIdle;
-   }
-   if(_runPanelEls.status){
-    _runPanelEls.status.textContent=_runPanelStatusText(statusKey)+' · '+(progressCurrent||0)+' / '+(totalSteps||0);
-    _runPanelEls.status.className='run-panel-status-pill state-'+statusKey;
-   }
-   if(_runPanelEls.task){
-    _runPanelEls.task.textContent=currentAction;
-   }
-   if(_runPanelEls.progress){
-    _runPanelEls.progress.textContent=(progressCurrent||0)+' / '+(totalSteps||0);
-   }
-   if(_runPanelEls.action){
-    _runPanelEls.action.textContent=currentAction;
-   }
-   if(_runPanelEls.outputs){
-    _runPanelEls.outputs.textContent=_formatRunPanelOutputs(Object.keys(fileMap).length, Object.keys(toolMap).length, errorCount);
-   }
-  }
 
   function _syncRunPanelHeader(){
    if(!_runPanelEls) return;
@@ -1041,7 +202,7 @@ function _collectStepToolNames(step){
    var statusKey='idle';
    if(errorCount>0) statusKey='error';
    else if(runningStep) statusKey=_runPanelStateKey(runningStep.status, runningStep.phase);
-   else if(_streamStarted || steps.length) statusKey='running';
+   else if(_streamRuntime.hasStarted() || steps.length) statusKey='running';
    if(replyText) statusKey='done';
    var currentAction=_truncateRunText(
     pendingState.activitySummary
@@ -1051,7 +212,7 @@ function _collectStepToolNames(step){
     120
    );
   if(!currentAction){
-    if(_streamStarted && !replyText) currentAction='\u6b63\u5728\u8f93\u51fa\u56de\u590d';
+    if(_streamRuntime.hasStarted() && !replyText) currentAction='\u6b63\u5728\u8f93\u51fa\u56de\u590d';
     else if(steps.length) currentAction='\u7b49\u5f85\u4e0b\u4e00\u4e2a\u52a8\u4f5c';
     else currentAction=_runPanelCopy.actionIdle;
    }
@@ -1060,7 +221,7 @@ function _collectStepToolNames(step){
     _runPanelEls.status.textContent=_formatRunPanelConsoleStatus(statusKey, progressCurrent, totalSteps);
     _runPanelEls.status.className='run-panel-status-pill state-'+statusKey;
    }
-   var outputTokenCount=_estimateRunPanelConsoleTokens(replyText||_streamText||'');
+   var outputTokenCount=_estimateRunPanelConsoleTokens(replyText||_streamRuntime.getText()||'');
    var inputTokenCount=_estimateRunPanelConsoleTokens(_runPromptText||'');
    if(_runPanelEls.kicker){
     _runPanelEls.kicker.textContent=_formatRunPanelConsoleHeader(_runNumber, _runStartedAt);
@@ -1112,6 +273,22 @@ function _resetRunPanelForCurrentRun(){
  _syncRunPanelHeader();
 }
 
+ var _streamRuntime=_createStreamRuntime({
+  chat:chat,
+  pendingState:pendingState,
+  collapseSteps:_collapseSteps,
+  ensureTraceDetached:_ensureTraceDetached,
+  getReplyImage:function(){ return replyImage; },
+  getShowRawThinkingPanel:function(){ return _showRawThinkingPanel; },
+  getThinkingContent:function(){ return _thinkingContent; },
+  placePendingRootAtEnd:_placePendingRootAtEnd,
+  pruneLowSignalStreamWaitingSteps:_pruneLowSignalStreamWaitingSteps,
+  setStepStatus:_setStepStatus,
+  setThinkingContent:function(value){ _thinkingContent=String(value||''); },
+  snapshotChatHistory:_snapshotChatHistory,
+  syncRunPanelHeader:_syncRunPanelHeader
+ });
+
  _resetRunPanelForCurrentRun();
 
  function _clearPendingPlaceholderTimer(){
@@ -1121,52 +298,15 @@ function _resetRunPanelForCurrentRun(){
   }
  }
 
+ 
+
  function _placePendingRootAtEnd(){
   _clearPendingPlaceholderTimer();
   chat.appendChild(pendingState.root);
   pendingState.replyVisible=true;
  }
 
- function _detachIdlePendingRoot(){
-  if(!pendingState.root || pendingState.replyVisible) return;
-  if(pendingState.root.parentNode){
-   pendingState.root.parentNode.removeChild(pendingState.root);
-  }
- }
-
- function _syncStreamAutoFollow(){
-  var nearBottom=(typeof window._isChatNearBottom==='function')
-   ? !!window._isChatNearBottom(180)
-   : _nearBottom();
-  _streamAutoFollow=nearBottom;
-  if(typeof window._setChatAutoStick==='function'){
-   window._setChatAutoStick(nearBottom);
-  }
- }
-
- function _attachStreamScrollFollow(){
-  if(!chat || _streamScrollFollowBound) return;
-  chat.addEventListener('scroll', _syncStreamAutoFollow, {passive:true});
-  _streamScrollFollowBound=true;
-  _syncStreamAutoFollow();
- }
-
- function _detachStreamScrollFollow(){
-  if(chat && _streamScrollFollowBound){
-   chat.removeEventListener('scroll', _syncStreamAutoFollow);
-  }
-  _streamScrollFollowBound=false;
- }
-
- function _followStreamToBottom(options){
-  if(!_streamAutoFollow) return false;
-  if(typeof window._setChatAutoStick==='function'){
-   window._setChatAutoStick(true);
-  }
-  return _stickChatToBottom(options||{threshold:220});
- }
-
- pendingState.placeholderTimer=setTimeout(function(){
+pendingState.placeholderTimer=setTimeout(function(){
   if(pendingState.replyVisible || pendingState.steps.length>0 || replyText) return;
   chat.appendChild(pendingState.root);
   _stickChatToBottom();
@@ -1176,233 +316,10 @@ function _ensureTraceDetached(){
   _placePendingRootAtEnd();
 }
 
-  function _looksLikeThinkingLabel(label){
-  return /thinking|\u6a21\u578b\u601d\u8003/i.test(String(label||''));
- }
-
- function _looksLikeMemoryLoadLabel(label){
-  return /^(?:\u8bb0\u5fc6\u52a0\u8f7d(?:\u5b8c\u6210)?|memory_load|load_memory)$/i.test(String(label||'').trim());
- }
-
- function _extractToolKey(detail){
-  var text=String(detail||'').trim();
-  if(!text) return '';
-  var parts=text.split(/\s*[\u00b7\u2022]\s*/);
-  var head=String(parts[0]||'').trim();
-  if(!head && parts.length>1) head=String(parts[1]||'').trim();
-  return head.toLowerCase();
- }
-
- function _extractToolDetail(detail){
-  var text=String(detail||'').trim();
-  if(!text) return '';
-  var parts=text.split(/\s*[\u00b7\u2022]\s*/);
-  if(parts.length<=1) return text;
-  return String(parts.slice(1).join(' · ')).trim();
- }
-
- function _collapseProcessDetail(detail, phase, status){
-  var text=String(detail||'').replace(/\s+/g,' ').trim();
-  if(!text) return '';
-  if(String(status||'')==='error') return text;
-  var limit=(phase==='thinking') ? 110 : 130;
-  return text.length>limit ? (text.slice(0, limit-1)+'…') : text;
- }
-
- function _stepMetaText(value){
-  return String(value||'').replace(/\s+/g,' ').trim();
- }
-
- function _stepMetaContains(base, sample){
-  var left=_stepMetaText(base).toLowerCase();
-  var right=_stepMetaText(sample).toLowerCase();
-  if(!left || !right) return false;
-  return left.indexOf(right)!==-1 || right.indexOf(left)!==-1;
- }
-
- function _appendUniqueStepMeta(parts, text, prefix){
-  var value=_stepMetaText(text);
-  if(!value) return;
-  if(prefix && value.indexOf(prefix)!==0) value=prefix+value;
-  for(var i=0;i<parts.length;i++){
-   if(_stepMetaContains(parts[i], value)) return;
-  }
-  parts.push(value);
- }
-
- function _joinStepMeta(parts){
-  return parts.join(' ').trim();
- }
-
- function _buildThinkingProcessDetail(card, fallbackSummary, fallbackFull){
-  var summaryParts=[];
-  var fullParts=[];
-  var emittedSummary=_stepMetaText(fallbackSummary);
-  var emittedFull=_stepMetaText(fallbackFull);
-  var lead=emittedFull || emittedSummary || _stepMetaText((card&&card.decision_note)||'') || _stepMetaText((card&&card.handoff_note)||'');
-  var decisionNote=_stepMetaText(card&&card.decision_note);
-  var handoffNote=_stepMetaText(card&&card.handoff_note);
-  var goal=_stepMetaText(card&&card.goal);
-  var expected=_stepMetaText(card&&card.expected_output);
-  var nextNeed=_stepMetaText(card&&card.next_user_need);
-  _appendUniqueStepMeta(summaryParts, lead, '');
-  _appendUniqueStepMeta(fullParts, lead, '');
-  if(decisionNote && !_stepMetaContains(lead, decisionNote)){
-   _appendUniqueStepMeta(fullParts, decisionNote, '判断基线：');
-  }
-  if(handoffNote && !_stepMetaContains(lead, handoffNote)){
-   _appendUniqueStepMeta(fullParts, handoffNote, '接手方式：');
-  }
-  if(goal){
-   _appendUniqueStepMeta(summaryParts, goal, '先确认：');
-   _appendUniqueStepMeta(fullParts, goal, '先确认：');
-  }
-  if(expected){
-   _appendUniqueStepMeta(fullParts, expected, '预期产出：');
-  }
-  if(nextNeed){
-   _appendUniqueStepMeta(fullParts, nextNeed, '下一步可能会关心：');
-  }
-  return {
-   summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
-   full:_joinStepMeta(fullParts) || _stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
-  };
- }
-
-function _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state){
-  var summaryParts=[];
-  var fullParts=[];
-  var lead=_stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull) || _stepMetaText(card&&card.goal) || _stepMetaText(card&&card.handoff_note) || _stepMetaText(card&&card.expected_output);
-  var goal=_stepMetaText(card&&card.goal);
-  var expected=_stepMetaText(card&&card.expected_output);
-  var parallelSize=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_size) : 0;
-  _appendUniqueStepMeta(summaryParts, lead, '');
-  _appendUniqueStepMeta(fullParts, lead, '');
-  if(parallelSize<=1 && String(state||'')==='running' && goal){
-   _appendUniqueStepMeta(fullParts, goal, '目标：');
-  }
-  if(parallelSize<=1 && String(state||'')==='running' && expected){
-   _appendUniqueStepMeta(fullParts, expected, '预期：');
-  }
-  return {
-   summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
-   full:_joinStepMeta(fullParts) || _stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
-  };
- }
-
- function _buildStructuredProcessDetail(card, phase, state, fallbackSummary, fallbackFull){
-  if(phase==='thinking') return _buildThinkingProcessDetail(card, fallbackSummary, fallbackFull);
-  if(phase==='tool') return _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state);
-  return {
-   summary:_stepMetaText(fallbackSummary),
-   full:_stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
-  };
- }
-
-function _normalizeStepCard(card){
-  var rawLabel=String((card&&card.label)||'').trim();
-  var rawStatus=String((card&&card.status)||'running');
-  var state=(rawStatus==='error'?'error':(rawStatus==='running'?'running':'done'));
-  var rawSummaryDetail=String((card&&card.detail)||'').trim();
-  var rawFullDetail=String((card&&((card.full_detail&&String(card.full_detail).trim())||card.detail))||'').trim();
-  var summaryDetail=rawSummaryDetail;
-  var fullDetail=rawFullDetail;
-  var explicitPhase=String((card&&card.phase)||'').trim().toLowerCase();
-  var parallelGroupId=String((card&&card.parallel_group_id)||'').trim();
-  var parallelIndex=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_index) : 0;
-  var parallelSize=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_size) : 0;
-  var parallelCompletedCount=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_completed_count) : 0;
-  var parallelSuccessCount=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_success_count) : 0;
-  var parallelFailureCount=(typeof _normalizePositiveStepCount==='function') ? _normalizePositiveStepCount(card&&card.parallel_failure_count) : 0;
-  var parallelTools=(typeof _normalizeStepNameList==='function') ? _normalizeStepNameList(card&&card.parallel_tools) : [];
-  var toolName=String((card&&card.tool_name)||'').trim();
-  var phase='info';
-  var displayLabel=rawLabel||t('chat.process');
-  var toolKey='';
-  var toolFallback=_toolLabelFallback(rawLabel);
-  var isParallelTool=!!(parallelGroupId && parallelSize>1);
-  if(explicitPhase==='thinking' || (!explicitPhase && _looksLikeThinkingLabel(rawLabel))){
-   phase='thinking';
-   displayLabel='Thinking';
-  }else if((explicitPhase==='info' || !explicitPhase) && _looksLikeMemoryLoadLabel(rawLabel)){
-   displayLabel='memory_load';
-  }else if(explicitPhase==='tool' || toolFallback){
-    phase='tool';
-    toolKey=toolName||_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)||toolFallback||(parallelTools[0]||'');
-    displayLabel=isParallelTool ? (rawLabel||'并行调用') : (toolKey||toolFallback||rawLabel||'tool');
-    fullDetail=_extractToolDetail(rawFullDetail)||rawFullDetail||rawSummaryDetail;
-    summaryDetail=_extractToolDetail(rawSummaryDetail)||fullDetail||rawSummaryDetail;
-    fullDetail=_simplifyToolDetail(fullDetail, isParallelTool ? '' : toolKey, state);
-    summaryDetail=_simplifyToolDetail(summaryDetail, isParallelTool ? '' : toolKey, state);
-  }else if(explicitPhase==='waiting' || /\u7b49\u5f85|waiting/i.test(rawLabel)){
-    phase='waiting';
-    displayLabel='waiting';
-  }else{
-    var alias=_processLabelAlias(rawLabel);
-    if(alias) displayLabel=alias;
-  }
-  var stepKey=String((card&&card.step_key)||'').trim();
-  var reasonKind=String((card&&card.reason_kind)||'').trim();
-  var goal=String((card&&card.goal)||'').trim();
-  var decisionNote=String((card&&card.decision_note)||'').trim();
-  var handoffNote=String((card&&card.handoff_note)||'').trim();
-  var expectedOutput=String((card&&card.expected_output)||'').trim();
-  var nextUserNeed=String((card&&card.next_user_need)||'').trim();
-  var structuredDetail=_buildStructuredProcessDetail(card, phase, state, summaryDetail, fullDetail);
-  summaryDetail=structuredDetail.summary;
-  fullDetail=structuredDetail.full;
-  displayLabel=_formatProcessDisplayLabel(displayLabel);
-  fullDetail=_cleanProcessDetail(fullDetail, rawLabel, displayLabel, state);
-  summaryDetail=_cleanProcessDetail(summaryDetail, rawLabel, displayLabel, state);
-  if(!fullDetail) fullDetail=summaryDetail;
-  if(!summaryDetail) summaryDetail=fullDetail;
-  summaryDetail=_collapseProcessDetail(summaryDetail||fullDetail, phase, state);
-  return {
-   rawLabel:rawLabel,
-   status:state,
-   phase:phase,
-   displayLabel:displayLabel,
-   summaryDetail:summaryDetail,
-   fullDetail:fullDetail,
-   toolKey:phase==='tool' ? (toolName||toolKey||_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)) : '',
-   stepKey:stepKey,
-   reasonKind:reasonKind,
-   goal:goal,
-   decisionNote:decisionNote,
-   handoffNote:handoffNote,
-   expectedOutput:expectedOutput,
-   nextUserNeed:nextUserNeed,
-   toolName:toolName,
-   parallelGroupId:parallelGroupId,
-   parallelIndex:parallelIndex,
-   parallelSize:parallelSize,
-   parallelCompletedCount:parallelCompletedCount,
-   parallelSuccessCount:parallelSuccessCount,
-   parallelFailureCount:parallelFailureCount,
-   parallelTools:parallelTools
-  };
-}
-
- function _buildActivitySummary(meta){
-  if(!meta) return '';
-  var detail=String(meta.summaryDetail||meta.fullDetail||'').trim();
-  if(!detail) return meta.displayLabel||'';
-  if(meta.phase==='thinking') return detail;
-  if(detail.indexOf(meta.displayLabel)===0) return detail;
-  return meta.displayLabel+' \u00b7 '+detail;
- }
-
- function _stepLikeField(stepLike, snakeKey, camelKey){
-  if(!stepLike) return '';
-  var camelValue=stepLike[camelKey];
-  if(camelValue!==undefined && camelValue!==null) return camelValue;
-  var snakeValue=stepLike[snakeKey];
-  return snakeValue!==undefined && snakeValue!==null ? snakeValue : '';
- }
 
  function _isLowSignalStreamWaitingStep(stepLike){
   if(!stepLike) return false;
-  if(!(_streamStarted || _streamText || replyText)) return false;
+  if(!(_streamRuntime.hasStarted() || _streamRuntime.getText() || replyText)) return false;
   var phase=String(_stepLikeField(stepLike, 'phase', 'phase')||'').trim().toLowerCase();
   if(phase!=='waiting') return false;
  var toolName=String(_stepLikeField(stepLike, 'tool_name', 'toolName')||'').trim();
@@ -1451,12 +368,6 @@ function _normalizeStepCard(card){
   _syncRunPanelHeader();
  }
 
- function _stepIconState(phase, status){
-  var current=String(status||'done');
-  if(current==='error') return 'error';
-  if(phase==='thinking') return 'thinking';
-  return current==='running' ? 'running' : 'done';
- }
 
  function _hasErroredSteps(){
   for(var i=0;i<pendingState.steps.length;i++){
@@ -1465,12 +376,6 @@ function _normalizeStepCard(card){
   return false;
  }
 
- function _hasRunningSteps(){
-  for(var i=0;i<pendingState.steps.length;i++){
-   if(pendingState.steps[i] && pendingState.steps[i].status==='running') return true;
-  }
-  return false;
- }
 
  function _syncTrackerChrome(){
   if(pendingState.status){
@@ -1641,32 +546,6 @@ function _normalizeStepCard(card){
   return step;
 }
 
- function _canMergeStep(existing, meta){
-  if(!existing || !meta) return false;
-  if(existing.stepKey && meta.stepKey && existing.stepKey===meta.stepKey) return true;
-  if(existing.phase==='thinking' && meta.phase==='thinking'){
-   if(existing.stepKey && meta.stepKey && existing.stepKey!==meta.stepKey) return false;
-   var existingThinking=String(existing.fullDetail||existing.summaryDetail||'').trim();
-   var nextThinking=String(meta.fullDetail||meta.summaryDetail||'').trim();
-   if(existingThinking && nextThinking && (_stepMetaContains(existingThinking, nextThinking) || _stepMetaContains(nextThinking, existingThinking))){
-    return true;
-   }
-   return false;
-  }
-  if(existing.phase==='tool' && meta.phase==='tool' && existing.toolKey && existing.toolKey===meta.toolKey) return true;
-  if(existing.label===meta.rawLabel && existing.phase===meta.phase) return true;
-  return false;
- }
-
- function _planCssStatus(status){
-  status=String(status||'pending');
-  if(status==='done') return 'done';
-  if(status==='running') return 'running';
-  if(status==='waiting_user') return 'waiting-user';
-  if(status==='blocked' || status==='error' || status==='failed') return 'error';
-  return '';
- }
-
 function _renderPendingPlan(plan){
   pendingState.plan=null;
   var host=pendingState.planStrip;
@@ -1685,7 +564,7 @@ function _renderPendingPlan(plan){
    host.style.display='';
    var goal=document.createElement('div');
    goal.className='plan-goal';
-   goal.textContent=String(plan.goal||'当前任务');
+   goal.textContent=String(plan.goal||'\u5f53\u524d\u4efb\u52a1');
    host.appendChild(goal);
    var summaryText=String(plan.summary||'').trim();
    if(summaryText){
@@ -1734,7 +613,7 @@ function _renderPendingPlan(plan){
   if(mergeTarget){
    _applyStepMeta(mergeTarget, meta);
    var preserveDoneThinking=(
-    _streamStarted
+    _streamRuntime.hasStarted()
     && mergeTarget.phase==='thinking'
     && meta.phase==='thinking'
     && mergeTarget.status==='done'
@@ -1801,689 +680,7 @@ function _collapseSteps(){
   _syncTrackerChrome();
  }
 
- function _initStreamBubble(){
-  // 把所有 running 步骤标记为 done
-  _placePendingRootAtEnd();
-  pendingState.root.style.display='';
-  for(var i=0;i<pendingState.steps.length;i++){
-   if(pendingState.steps[i].status==='running') _setStepStatus(pendingState.steps[i],'done');
-  }
-  if(pendingState.labelTimer){ clearInterval(pendingState.labelTimer); pendingState.labelTimer=null; }
-  _collapseSteps();
-  if(pendingState.steps.length) _ensureTraceDetached();
-  // 隐藏 spinner，显示内容区
-  pendingState.status.style.display='none';
-  pendingState.root.className='msg assistant';
-  var contentArea=pendingState.contentArea;
-  contentArea.style.display='';
-  contentArea.innerHTML='';
-  var bubble=document.createElement('div');
-  bubble.className='bubble assistant-reply-plain';
-  bubble.style.display='none';
-  var blocksEl=document.createElement('div');
-  blocksEl.className='stream-blocks';
-  bubble.appendChild(blocksEl);
-  var lineEl=document.createElement('div');
-  lineEl.className='stream-live-line';
-  lineEl.style.display='none';
-  bubble.appendChild(lineEl);
-  var meta=document.createElement('div');
-  meta.className='msg-meta';
-  meta.style.display='none';
-  var nameSpan=document.createElement('span');
-  nameSpan.className='msg-name';
-  nameSpan.textContent='Nova';
-  var timeSpan=document.createElement('span');
-  timeSpan.className='msg-time';
-  timeSpan.textContent=T();
-  meta.appendChild(nameSpan);
-  meta.appendChild(timeSpan);
-  contentArea.appendChild(meta);
-  contentArea.appendChild(bubble);
-  _streamBubble=bubble;
-  _streamBlocksEl=blocksEl;
-  _streamLineEl=lineEl;
-  _streamProtocol='';
-  _streamText='';
-  _streamLiveText='';
-  _streamStarted=true;
-  _pruneLowSignalStreamWaitingSteps();
-  _suppressTypingCursor=false;
-  _streamTokenCount=0;
-  _attachStreamScrollFollow();
-  _followStreamToBottom({threshold:220});
-  _syncRunPanelHeader();
- }
-
- var _scrollRAF=0; // scroll 节流
-var _renderTimer=0; // 渐进渲染节流
-var _streamTokenCount=0; // 流式 token 计数，前 N 个无条件滚动
- var _lastRenderedBlockCount=0; // 上次渲染的块数，用于 fade-in 新块
-var _streamLineEl=null;
-var _streamBlocksEl=null;
-var _streamProtocol='';
-var _streamLiveText='';
-var _streamTailTargetText='';
-var _streamTailDisplayText='';
-var _streamTailTimer=0;
-var _streamRenderedText='';
-var _streamFlushBuffer='';
-var _streamMeasureHost=null;
-var _streamMeasureLine=null;
-
- // Stream UI invariants:
- // 1. Completed fragments must be promoted above pendingState.root so the newest text stays at the bottom.
- // 2. Fragment promotion prefers explicit newline, then visual-line overflow as fallback.
- // 3. Finalization may complete the trailing remainder, but must not flatten already promoted fragments back into one block.
-
- // 判断是否在底部附近（阈值 120px），避免强制跳视图打断用户回翻
-function _nearBottom(){
-  return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 220;
-}
-
- function _getStreamRenderWidth(){
-  if(pendingState.contentArea){
-   var contentWidth=Math.floor(pendingState.contentArea.clientWidth||0);
-   if(contentWidth>0) return Math.max(contentWidth-2, 0);
-  }
-  if(pendingState.wrap){
-   var wrapWidth=Math.floor(pendingState.wrap.clientWidth||0);
-   if(wrapWidth>0) return Math.max(wrapWidth-2, 0);
-  }
-  if(pendingState.root){
-   var rootWidth=Math.floor(pendingState.root.clientWidth||0);
-   if(rootWidth>0) return Math.max(rootWidth-2, 0);
-  }
-  return 0;
- }
-
- function _destroyStreamMeasureHost(){
-  if(_streamMeasureHost && _streamMeasureHost.parentNode){
-   _streamMeasureHost.parentNode.removeChild(_streamMeasureHost);
-  }
-  _streamMeasureHost=null;
-  _streamMeasureLine=null;
- }
-
- function _ensureStreamMeasureLine(){
-  if(_streamMeasureHost && _streamMeasureLine) return _streamMeasureLine;
-  var host=document.createElement('div');
-  host.className='bubble';
-  host.style.position='fixed';
-  host.style.left='-100000px';
-  host.style.top='-100000px';
-  host.style.visibility='hidden';
-  host.style.pointerEvents='none';
-  host.style.margin='0';
-  host.style.padding='0';
-  host.style.border='none';
-  host.style.maxWidth='none';
-  host.style.minWidth='0';
-  host.style.whiteSpace='pre-wrap';
-  host.style.wordBreak='break-word';
-  host.style.overflowWrap='break-word';
-  host.setAttribute('aria-hidden','true');
-  var line=document.createElement('span');
-  line.className='stream-live-line';
-  host.appendChild(line);
-  document.body.appendChild(host);
-  _streamMeasureHost=host;
-  _streamMeasureLine=line;
-  return line;
- }
-
- function _syncStreamMeasureHost(){
-  var line=_ensureStreamMeasureLine();
-  var width=_getStreamRenderWidth();
-  if(width>0) _streamMeasureHost.style.width=width+'px';
-  if(_streamBubble){
-   var style=window.getComputedStyle(_streamBubble);
-   _streamMeasureHost.style.font=style.font;
-   _streamMeasureHost.style.lineHeight=style.lineHeight;
-   _streamMeasureHost.style.letterSpacing=style.letterSpacing;
-   _streamMeasureHost.style.fontKerning=style.fontKerning;
-   _streamMeasureHost.style.textTransform=style.textTransform;
-  }
-  return line;
- }
-
-function _streamLineHtml(line){
-  var text=String(line||'');
-  if(!text) return '<div class="bubble-spacer"></div>';
-  var html;
-  if(typeof formatMarkdownInline==='function'){
-    html=formatMarkdownInline(text);
-  }else{
-    html=escapeHtml(text);
-    html=html.replace(/\*\*(.+?)\*\*/g,'$1');
-    html=html.replace(/__(.+?)__/g,'$1');
-    html=html.replace(/`([^`]+)`/g,'<code>$1</code>');
-  }
-  return '<p>'+html+'</p>';
-}
-
- function _countStreamVisualLines(text){
-  if(!text) return 1;
-  var line=_syncStreamMeasureHost();
-  line.textContent=String(text||'');
-  var rects=line.getClientRects();
-  if(rects && rects.length) return rects.length;
-  var style=window.getComputedStyle(_streamBubble||_streamMeasureHost);
-  var lineHeight=parseFloat(style.lineHeight||'0');
-  if(!(lineHeight>0)) lineHeight=parseFloat(style.fontSize||'16')*1.46;
-  return Math.max(1, Math.round((_streamMeasureHost.scrollHeight||lineHeight)/lineHeight));
- }
-
- function _fitsSingleStreamLine(text){
-  if(!text) return true;
-  return _countStreamVisualLines(text)<=1;
- }
-
- function _findStreamBreakIndex(text){
-  var chars=Array.from(String(text||''));
-  if(chars.length<=1) return chars.length;
-  var low=1;
-  var high=chars.length-1;
-  var best=1;
-  while(low<=high){
-   var mid=Math.floor((low+high)/2);
-   var candidate=chars.slice(0, mid).join('');
-   if(_fitsSingleStreamLine(candidate)){
-    best=mid;
-    low=mid+1;
-   }else{
-    high=mid-1;
-   }
-  }
-  return best;
- }
-
- function _removeTrailingStreamParts(keepCount){
-  while(_streamParts.length>keepCount){
-   var stalePart=_streamParts.pop();
-   if(stalePart && stalePart.root && stalePart.root.parentNode){
-    stalePart.root.parentNode.removeChild(stalePart.root);
-   }
-  }
- }
-
- function _syncPromotedStreamParts(parts){
-  var normalized=Array.isArray(parts) ? parts : [];
-  var anchor=pendingState.root;
-  for(var i=normalized.length-1;i>=0;i--){
-   var html=_streamLineHtml(normalized[i]);
-   var part=_streamParts[i];
-   if(!part){
-    part=createReplyPartMessage(html);
-    _streamParts[i]=part;
-   }else if(part.bubble && part.bubble.innerHTML!==html){
-    part.bubble.innerHTML=html;
-   }
-   if(part.root && (part.root.parentNode!==chat || part.root.nextSibling!==anchor)){
-    chat.insertBefore(part.root, anchor);
-   }
-   anchor=part.root;
-  }
-  _removeTrailingStreamParts(normalized.length);
- }
-
- function _scheduleProgressiveRender(delay){
-  if(_renderTimer || !_streamBubble) return;
-  _renderTimer=setTimeout(_progressiveRender, Math.max(0, Number(delay)||0));
- }
-
- function _takeStreamRenderChunk(){
-  if(!_streamFlushBuffer) return '';
-  var chars=Array.from(_streamFlushBuffer);
-  if(!chars.length) return '';
-  var maxChars=chars.length>240 ? 64 : 28;
-  if(chars.length<=maxChars){
-   var fullChunk=_streamFlushBuffer;
-   _streamFlushBuffer='';
-   return fullChunk;
-  }
-  var minChars=Math.max(1, maxChars-12);
-  var cut=maxChars;
-  for(var i=maxChars;i>=minChars;i--){
-   if(/[\s,.;:!?\u3001\u3002\uFF01\uFF1F\uFF1B\uFF1A]/.test(chars[i-1])){
-    cut=i;
-    break;
-   }
-  }
- var chunk=chars.slice(0, cut).join('');
- _streamFlushBuffer=chars.slice(cut).join('');
- return chunk;
-}
-
- function _findTypingCursorHost(root){
-  if(!root) return null;
-  var blocks=root.querySelectorAll('.bubble p,.bubble h1,.bubble h2,.bubble h3,.bubble blockquote,li,pre');
-  if(!blocks.length) return null;
-  var last=blocks[blocks.length-1];
-  if(last && last.tagName && last.tagName.toLowerCase()==='pre'){
-   var code=last.querySelector('code');
-   if(code) return code;
-  }
-  return last;
- }
-
- function _attachTypingCursor(){
-  return;
- }
-
- function _hideTypingCursor(){
-  if(!_streamBubble) return;
-  var cursor=_streamBubble.querySelector('.typing-cursor');
-  if(cursor && cursor.parentNode) cursor.parentNode.removeChild(cursor);
- }
-
- function _normalizeStreamCompareText(text){
-  return String(text||'').replace(/\s+/g,' ').trim();
- }
-
-function _chooseFinalStreamText(replyText, streamedText){
- var reply=String(replyText||'');
- var streamed=String(streamedText||'');
-  if(reply) return reply;
-  return streamed;
- }
-
-function _findHardStreamBoundary(text){
-  var source=String(text||'').replace(/\r/g,'');
-  if(!source) return 0;
-  var lines=source.split('\n');
-  var offset=0;
-  var inFence=false;
-  var lastBoundary=0;
-  for(var i=0;i<lines.length;i++){
-   var line=lines[i];
-   var trimmed=String(line||'').trim();
-   var lineEnd=offset+line.length;
-   var blockEnd=(i<lines.length-1) ? (lineEnd+1) : lineEnd;
-   var lineHasBreak=i<lines.length-1;
-   if(/^```/.test(trimmed)){
-    inFence=!inFence;
-    if(!inFence && lineHasBreak) lastBoundary=blockEnd;
-    offset=blockEnd;
-    continue;
-   }
-   if(inFence){
-    offset=blockEnd;
-    continue;
-   }
-   if(!lineHasBreak){
-    offset=blockEnd;
-    continue;
-   }
-   if(trimmed==='' && blockEnd>0){
-    lastBoundary=blockEnd;
-   }else if(/^(?:#{1,6}\s|[-*+]\s+|\d+[.)]\s+|>\s?)/.test(trimmed)){
-    lastBoundary=blockEnd;
-   }
-   offset=blockEnd;
-  }
-  return lastBoundary;
- }
-
-function _findSoftStreamBoundary(text){
-  return 0;
-}
-
-function _extractRenderableStreamState(text){
-  var source=String(text||'').replace(/\r/g,'');
-  if(!source) return {committed:'', pending:''};
-  var boundary=_findHardStreamBoundary(source);
-  if(boundary<=0) return {committed:'', pending:source};
-  return {
-   committed:source.slice(0, boundary),
-   pending:source.slice(boundary)
-  };
-}
-
-function _ensureStreamBubbleVisible(){
-  if(!_streamBubble) return;
-  _streamBubble.style.display='';
-  var meta=_streamBubble.parentNode ? _streamBubble.parentNode.querySelector('.msg-meta') : null;
-  if(meta) meta.style.display='';
-}
-
-function _appendRenderedNodes(target, text){
-  if(!target) return false;
-  var html=renderAssistantBubbleHtml(String(text||''), '')||'';
-  if(!String(html||'').trim()) return false;
-  return _appendRenderedHtml(target, html);
-}
-
-function _appendRenderedHtml(target, html){
-  if(!target) return false;
-  var safeHtml=String(html||'').trim();
-  if(!safeHtml) return false;
-  var frag=document.createElement('div');
-  frag.innerHTML=safeHtml;
-  while(frag.firstChild){
-   target.appendChild(frag.firstChild);
-  }
-  return true;
-}
-
-function _appendIncrementalMarkdownBlocks(blocks){
-  if(!_streamBlocksEl || !Array.isArray(blocks) || !blocks.length) return;
-  _ensureStreamBubbleVisible();
-  for(var i=0;i<blocks.length;i++){
-   var block=blocks[i]||{};
-   if(String(block.kind||'')!=='markdown_block') continue;
-   _appendRenderedHtml(_streamBlocksEl, block.html||'');
-  }
-}
-
-function _renderStructuredStreamTail(text, html){
-  _streamLiveText=String(text||'');
-  if(!_streamLineEl) return;
-  var safeHtml=String(html||'').trim();
-  if(safeHtml){
-   _ensureStreamBubbleVisible();
-   _streamLineEl.style.display='block';
-   _streamLineEl.innerHTML=safeHtml;
-   _followStreamToBottom({threshold:220});
-  }else if(_streamLiveText){
-   _ensureStreamBubbleVisible();
-   _streamLineEl.style.display='block';
-   _streamLineEl.innerHTML='';
-   _streamLineEl.textContent=typeof stripMarkdownForStreamingText==='function'
-    ? stripMarkdownForStreamingText(_streamLiveText)
-    : _streamLiveText;
-   _followStreamToBottom({threshold:220});
-  }else{
-   _streamLineEl.innerHTML='';
-   _streamLineEl.textContent='';
-   _streamLineEl.style.display='none';
-  }
-}
-
-function _clearStructuredTailTimer(){
-  if(_streamTailTimer){
-   clearTimeout(_streamTailTimer);
-   _streamTailTimer=0;
-  }
-}
-
-function _pickStructuredTailChunk(remaining){
-  var chars=Array.from(String(remaining||''));
-  if(!chars.length) return '';
-  var maxChars=chars.length>24 ? 8 : 5;
-  var minChars=Math.min(3, maxChars);
-  var cut=Math.min(maxChars, chars.length);
-  for(var i=cut;i>=minChars;i--){
-   var joined=chars.slice(0, i).join('');
-   var last=chars[i-1] || '';
-   if(/\n/.test(last)) return joined;
-   if(/[，。、；：！？,.!?;:]/.test(last)) return joined;
-  }
-  return chars.slice(0, cut).join('');
-}
-
-function _pumpStructuredTail(){
-  _streamTailTimer=0;
-  if(_streamTailDisplayText===_streamTailTargetText){
-   _renderStructuredStreamTail(_streamTailDisplayText);
-   return;
-  }
-  if(_streamTailTargetText.indexOf(_streamTailDisplayText)!==0){
-   _streamTailDisplayText=_streamTailTargetText;
-   _renderStructuredStreamTail(_streamTailDisplayText);
-   return;
-  }
-  var remaining=_streamTailTargetText.slice(_streamTailDisplayText.length);
-  var nextChunk=_pickStructuredTailChunk(remaining);
-  if(!nextChunk){
-   _streamTailDisplayText=_streamTailTargetText;
-  }else{
-   _streamTailDisplayText+=nextChunk;
-  }
-  _renderStructuredStreamTail(_streamTailDisplayText);
-  if(_streamTailDisplayText!==_streamTailTargetText){
-   _streamTailTimer=setTimeout(_pumpStructuredTail, 26);
-  }
-}
-
-function _syncStructuredStreamTail(tailText){
-  var nextTarget=String(tailText||'');
-  _clearStructuredTailTimer();
-  _streamTailTargetText=nextTarget;
-  if(!nextTarget){
-   _streamTailDisplayText='';
-   _renderStructuredStreamTail('');
-   return;
-  }
-  _streamTailDisplayText=nextTarget;
-  _renderStructuredStreamTail(_streamTailDisplayText);
-}
-
-function _applyMarkdownIncrementalStream(payload){
-  if(!_streamStarted) _initStreamBubble();
-  if(_streamBubble && typeof applyAssistantBubbleRenderMode==='function'){
-   applyAssistantBubbleRenderMode(
-    _streamBubble,
-    String((payload&&payload.full_text)||''),
-    String((payload&&payload.tail_html)||''),
-    'markdown'
-   );
-  }
-  _streamProtocol='markdown_incremental';
-  _streamText=String((payload&&payload.full_text)||'');
-  _appendIncrementalMarkdownBlocks(payload&&payload.append);
-  _renderStructuredStreamTail(
-   String((payload&&payload.tail)||''),
-   String((payload&&payload.tail_html)||'')
-  );
-}
-
-function _renderCommittedStreamBubble(text){
-  if(!_streamBubble) return;
-  var committed=String(text||'').replace(/\r/g,'');
-  var wasHidden=_streamBubble.style.display==='none';
-  _streamLiveText='';
-  _ensureStreamBubbleVisible();
-  if(_streamLineEl){
-   _streamLineEl.textContent=typeof stripMarkdownForStreamingText==='function'
-    ? stripMarkdownForStreamingText(committed)
-    : committed;
-   _streamLineEl.style.display=committed ? 'block' : 'none';
-  }
-  if(wasHidden || _streamAutoFollow){
-   _followStreamToBottom({threshold:220});
-  }
-}
-
-function _renderStreamSnapshot(text){
-  var snapshot=String(text||'').replace(/\r/g,'');
-  _streamLiveText=snapshot;
-  if(_streamLineEl){
-   if(_streamLiveText){
-    _ensureStreamBubbleVisible();
-    _streamLineEl.style.display='block';
-    _streamLineEl.textContent=typeof stripMarkdownForStreamingText==='function'
-     ? stripMarkdownForStreamingText(_streamLiveText)
-     : _streamLiveText;
-    _followStreamToBottom({threshold:220});
-   }else{
-    _streamLineEl.textContent='';
-    _streamLineEl.style.display='none';
-   }
-  }
-}
-
-function _progressiveRender(){
-  _renderTimer=0;
-  if(!_streamBubble) return;
-  _renderStreamSnapshot(_streamText);
-  _streamTokenCount++;
-  if(_streamAutoFollow){
-   if(!_scrollRAF){
-    _scrollRAF=requestAnimationFrame(function(){
-     _followStreamToBottom({threshold:220});
-     _scrollRAF=0;
-    });
-   }
-  }
-}
-
-function _appendStreamToken(token){
-  if(!_streamStarted) _initStreamBubble();
-  if(_streamBubble && typeof applyAssistantBubbleRenderMode==='function'){
-   applyAssistantBubbleRenderMode(_streamBubble, _streamText+String(token||''), '', 'plain');
-  }
-  if(!_streamProtocol) _streamProtocol='text';
-  _streamText+=String(token||'');
-  _scheduleProgressiveRender(36);
- }
-
-function _resetActiveStreamRender(){
-  _detachStreamScrollFollow();
-  if(_renderTimer){
-   clearTimeout(_renderTimer);
-   _renderTimer=0;
-  }
-  _clearStructuredTailTimer();
-  if(_scrollRAF){
-   cancelAnimationFrame(_scrollRAF);
-   _scrollRAF=0;
-  }
-  _removeTrailingStreamParts(0);
-  _streamBubble=null;
-  _streamBlocksEl=null;
-  _streamLineEl=null;
-  _streamText='';
-  _streamProtocol='';
-  _streamLiveText='';
-  _streamTokenCount=0;
-  _streamStarted=false;
-  _suppressTypingCursor=false;
-  _thinkingContent='';
-  if(pendingState.contentArea){
-   pendingState.contentArea.innerHTML='';
-   pendingState.contentArea.style.display='none';
-  }
- }
-
-function _finalizeStream(fullText){
-  if(!_streamBubble) return;
-  _detachStreamScrollFollow();
-  if(_renderTimer){
-   clearTimeout(_renderTimer);
-   _renderTimer=0;
-  }
-  _clearStructuredTailTimer();
-  var finalText=String(fullText||'');
-  var finalRenderText=String(finalText||_streamText||'');
-  var finalMode=(typeof applyAssistantBubbleRenderMode==='function')
-   ? applyAssistantBubbleRenderMode(
-    _streamBubble,
-    finalRenderText,
-    '',
-    _streamProtocol==='markdown_incremental' ? 'markdown' : ''
-   )
-   : (_streamProtocol==='markdown_incremental' ? 'markdown' : 'plain');
-  _ensureStreamBubbleVisible();
-  if(_streamProtocol!=='markdown_incremental' && _streamLineEl){
-    _streamLineEl.innerHTML=(typeof renderAssistantReplyHtml==='function')
-     ? renderAssistantReplyHtml(finalRenderText, '', finalMode)
-     : renderAssistantBubbleHtml(finalRenderText, '');
-    _streamLineEl.style.display=finalRenderText ? 'block' : 'none';
-  }
-  _streamLiveText='';
-  // 如果有附带图片，追加到气泡末尾
-  if(replyImage){
-   var img=document.createElement('img');
-   img.className='bubble-image';
-   img.src=replyImage;
-   img.alt='截图';
-   img.style.maxWidth='100%';
-   img.style.maxHeight='400px';
-   img.style.borderRadius='8px';
-   img.style.marginTop='8px';
-   img.style.cursor='pointer';
-   img.onclick=function(){window.open(replyImage,'_blank');};
-   _streamBubble.appendChild(img);
-  }
-  var meta=_streamBubble.parentNode.querySelector('.msg-meta');
-  if(meta&&!meta.querySelector('.msg-copy')){
-   var cpBtn=document.createElement('button');
-   cpBtn.className='msg-copy';
-   cpBtn.textContent=t('chat.copy');
-   cpBtn.onclick=function(){navigator.clipboard.writeText(fullText).then(function(){cpBtn.textContent=t('chat.copied');setTimeout(function(){cpBtn.textContent=t('chat.copy');},1200);});};
-   meta.appendChild(cpBtn);
-  }
-  // ── 思考折叠面板（流式路径）──
-  if(_showRawThinkingPanel && _thinkingContent && _streamBubble.parentNode){
-   var existPanel=_streamBubble.parentNode.querySelector('.thinking-panel');
-   if(!existPanel){
-    var thinkPanel=document.createElement('details');
-    thinkPanel.className='thinking-panel';
-    var thinkSummary=document.createElement('summary');
-    thinkSummary.textContent='💭 模型思考过程';
-    thinkSummary.style.cssText='cursor:pointer;font-size:12px;color:#888;padding:6px 0;user-select:none;';
-    var thinkBody=document.createElement('div');
-    thinkBody.style.cssText='font-size:12px;color:#999;padding:8px 12px;background:rgba(128,128,128,0.08);border-radius:8px;margin:4px 0 8px;white-space:pre-wrap;line-height:1.5;max-height:300px;overflow-y:auto;';
-    thinkBody.textContent=_thinkingContent;
-    thinkPanel.appendChild(thinkSummary);
-    thinkPanel.appendChild(thinkBody);
-    _streamBubble.parentNode.insertBefore(thinkPanel,_streamBubble);
-   }
-  }
-  _collapseSteps();
-  _syncRunPanelHeader();
-  _followStreamToBottom({threshold:220});
-  if(!pendingState.persisted){
-   _snapshotChatHistory();
-   // 持久化 steps 摘要
-   if(pendingState.steps&&pendingState.steps.length>0){
-    var stepsMap=JSON.parse(localStorage.getItem('nova_steps_map')||'{}');
-    var tsKey=String(Date.now());
-    stepsMap[tsKey]=pendingState.steps.map(function(s){
-     return {
-      label:s.label||'',
-      detail:s.summaryDetail||s.fullDetail||((s.detailEl&&s.detailEl.dataset&&s.detailEl.dataset.rawDetail)||''),
-      full_detail:s.fullDetail||s.summaryDetail||((s.detailEl&&s.detailEl.dataset&&s.detailEl.dataset.rawDetail)||''),
-      status:s.status||'done',
-      step_key:s.stepKey||'',
-      phase:s.phase||'',
-      reason_kind:s.reasonKind||'',
-      goal:s.goal||'',
-      decision_note:s.decisionNote||'',
-      handoff_note:s.handoffNote||'',
-      expected_output:s.expectedOutput||'',
-      next_user_need:s.nextUserNeed||'',
-      tool_name:s.toolName||'',
-      parallel_group_id:s.parallelGroupId||'',
-      parallel_index:s.parallelIndex||0,
-      parallel_size:s.parallelSize||0,
-      parallel_completed_count:s.parallelCompletedCount||0,
-      parallel_success_count:s.parallelSuccessCount||0,
-      parallel_failure_count:s.parallelFailureCount||0,
-      parallel_tools:Array.isArray(s.parallelTools)?s.parallelTools:[]
-     };
-    });
-    // 只保留最近 200 条
-    var keys=Object.keys(stepsMap);
-    if(keys.length>200){keys.sort();keys.slice(0,keys.length-200).forEach(function(k){delete stepsMap[k];});}
-    localStorage.setItem('nova_steps_map',JSON.stringify(stepsMap));
-    pendingState.root.setAttribute('data-steps-key',tsKey);
-   }
-   pendingState.persisted=true;
-  }
- }
-
-function _renderReplyViaStream(text){
-  var finalText=String(text||_streamText||'').trim();
-  if(!finalText) finalText=t('chat.error.retry');
-  if(!_streamStarted){
-   _initStreamBubble();
-  }
-  _streamText=finalText;
-  _finalizeStream(finalText);
-}
-
+ 
  try{
   _abortController=new AbortController();
   var imagesBase64=null;
@@ -2531,7 +728,7 @@ function _renderReplyViaStream(text){
        var parsed=JSON.parse(currentData);
        if(currentEvent==='trace'){
         addStep(parsed);
-        // ── CoD 状态点：轻量级，只更新 5px 指示灯颜色 ──
+        // 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾剧懓顪冪€ｎ亝鎹ｉ柣顓炴閵嗘帒顫濋敐鍛闁诲氦顫夊ú锕傚垂鐠鸿櫣鏆︾紒瀣嚦閺冨牆鐒垫い鎺戝绾惧ジ鏌曟繝蹇擃洭缂佲檧鍋撳┑鐘垫暩婵挳宕愮紒妯绘珷闁哄洨濮峰Λ顖炴煙椤栧棗鐬奸崥瀣⒑閸濆嫮鐏遍柛鐘崇墪閻ｅ嘲顭ㄩ崱鈺傂梺姹囧焺閸ㄩ亶鎯勯鐐茶摕闁挎繂顦粻濠氭煕閹邦剙绾ф繛鍫濐煼濮婃椽宕崟顒佹嫳缂備礁顑嗛悧婊呭垝鐠囨祴妲堥柕蹇曞Х椤旀捇姊洪崨濠傚闁轰讲鏅犻弫鍌炴偩瀹€鈧?CoD 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌ｉ幋锝呅撻柛銈呭閺屾盯骞橀懠顒夋М闂佹悶鍔嶇换鍐Φ閸曨垰鍐€妞ゆ劦婢€濮规姊洪柅鐐茶嫰婢у墽绱掗悩铏碍闁伙綁鏀辩缓鐣岀矙鐠囦勘鍔戦弻鏇熷緞濞戙垺顎嶉悶姘剧秮濮婂宕掑▎鎴М闂佸湱鈷堥崑鍡欏垝濞嗘劗鐟归柍褜鍓欓悾鐑藉閿涘嫰妾梺鍛婄☉閿曘倝鍩€椤掆偓濞硷繝寮诲☉鈶┾偓锕傚箣濠靛懐鎸夊┑鐐茬摠缁秶鍒掗幘璇茶摕闁绘柨鎲＄紞鍥煕閹炬鍟悡鍌炴⒒娴ｅ憡鍟炴慨濠傤煼瀵偅绻濆顒冩憰濠电偞鍨剁划搴ㄦ偪閳ь剟姊虹憴鍕姢濠⒀冮叄瀹曟繈顢涢悙绮规嫼闂佸憡绻傜€氼厼锕㈤幍顔剧＜閻庯綆鍋呭畷宀勬煕閳规儳浜炬俊鐐€栫敮鎺楁晝閿曞倸绀嗛柡澶嬵儥閻斿棛鎲稿鍚よ顦版惔鈥崇亰闂佸搫鍟悧婊堝极鐎ｎ喗鐓冪憸婊堝礈閻斿鍤曞┑鐘宠壘閻掓椽鏌涢幇銊︽珔妞ゅ孩鎹囧娲川婵犲嫮绱伴梺绋垮閻╊垱鎱ㄩ埀顒勫箳閾忣偆顩叉繝濠傚娴滄粓鏌熼弶鍨暢闁诡喛鍋愮槐鎺楁偐闂堟稐鎴烽梺閫炲苯澧叉い顐㈩槸鐓ゆ慨妞诲亾闁靛棗鍟换婵嬪磼濠婂嫭顔曢梻渚€娼ц墝闁哄應鏅犲顐ｇ節閸ャ劎鍘遍棅顐㈡处閹告悂骞冮幋锔界厸闁糕剝锕懓鎸庢叏婵犲偆鐓肩€规洘甯掗～婵嬵敄閽樺澹曢梺褰掓？缁€浣哄瑜版帗鐓熼柟杈剧到琚氶梺绋匡工濞硷繝寮婚妸鈺佸嵆婵鍩栭鏍ㄧ箾鐎涙鐭婄紓宥咃躬瀵鈽夐姀鐘电杸闂佺绻愰幗婊堝礄瑜版帗鍊甸悷娆忓缁€鍐煟閹垮嫮绡€鐎殿喖顭烽幃銏ゅ礂閻撳簶鍋撶紒妯圭箚妞ゆ牗绮庣敮娑㈡煕鎼达繝顎楅柍瑙勫灴閹瑩鎳犻鈧。鍦磽娓氬洤鏋熼柣鐔叉櫅椤曪絿鎷犲ù瀣潔闂侀潧绻掓慨鍫ュΩ閿旇桨绨婚梺鍝勫暙閸婂摜鏁懜鐐逛簻妞ゆ劦鍋傞柇顖涙叏婵犲啯銇濈€规洦鍋婂畷鐔碱敆閳ь剟顢撳☉銏♀拺闁告稑锕ョ亸鐢告煕閻樺磭澧甸柣娑卞櫍瀹曟﹢鈥﹂幋鐐茬紦闂備線鈧偛鑻晶瀛橆殽閻愭彃鏆欓柍璇查叄楠炴﹢寮堕幋鐐垫澓濠电姷鏁搁崑娑㈡偋婵犲嫧鍋撶粭娑樻硽婢跺绶為悗锝庡墰閻﹀牓姊哄Ч鍥х伈婵炰匠鍕浄闁挎洖鍊归悡鏇㈡煏閸繄鍑归梺顓у灣閳ь剝顫夊ú鏍偉閸忛棿绻嗘慨婵嗙焾濡茶螖閻橀潧浠﹂柛鏃€鐟ラ～蹇曠磼濡顎撻柣鐔哥懃鐎氼剚绂掗埡鍛拺缂佸鐏濋銏㈢磼椤旇姤灏柣锝囧厴婵℃悂鍩℃繝鍐╂珦闂備浇濮ら敋妞わ缚鍗抽幃姗€宕奸妷锔规嫽?5px 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾剧懓顪冪€ｎ亝鎹ｉ柣顓炴闇夐柨婵嗩槹娴溿倝鏌ら弶鎸庡仴婵﹥妞介、妤呭焵椤掑倻鐭撴い鏇楀亾闁糕斁鍋撳銈嗗笒閿曪箓鎮鹃悽纰樺亾鐟欏嫭绀堥柛妯犲洠鈧箓宕归瑙勬杸闂佹悶鍎崝濠冪閵忥紕绡€缁剧増锚婢ф煡鏌熼鐓庘偓鍨暦濞差亜鐒洪柛鎰ㄦ櫅椤庢捇姊洪崨濠冪闁绘牜鍘ч‖濠囶敋閳ь剟寮婚悢鍝ョ懝闁割煈鍠栭‖鍫ユ煣娴兼瑧绉柡灞剧洴閳ワ箓骞嬪┑鍥╀壕闂備礁鎲￠敃鈺呭磻婵犲偆娼栭柧蹇撴贡閻瑩鏌涢弽鐢电瘈缂佽埖鎸冲铏瑰寲閺囩喐鐝曢梺缁橆殘婵灚绌辨繝鍥ㄥ仺缂佸娉曢ˇ鏉款渻閵堝棛澧柤褰掔畺瀹曨剟濡搁妷顔藉瘜闂侀潧鐗嗗Λ妤佹叏閸岀偞鐓曢柕濠庣厛濞兼劗绱掗弮鍌氭瀾鐎垫澘瀚伴獮鍥敇濞戞瑥顏归梻鍌欑閹诧紕鎹㈤崒婧惧亾濮橆剙妲婚崡閬嶆煕濠靛嫬鍔ょ痪鍓ф櫕閳ь剙绠嶉崕閬嶅箯閹达妇鍙曟い鎺戝€甸崑?闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾剧懓顪冪€ｎ亝鎹ｉ柣顓炴閵嗘帒顫濋敐鍛闁诲氦顫夊ú锕傚垂鐠鸿櫣鏆︾紒瀣嚦閺冨牆鐒垫い鎺戝绾惧ジ鏌曟繝蹇擃洭缂佲檧鍋撳┑鐘垫暩婵挳宕愮紒妯绘珷闁哄洨濮峰Λ顖炴煙椤栧棗鐬奸崥瀣⒑閸濆嫮鐏遍柛鐘崇墪閻ｅ嘲顭ㄩ崱鈺傂梺姹囧焺閸ㄩ亶鎯勯鐐茶摕闁挎繂顦粻濠氭煕閹邦剙绾ф繛鍫濐煼濮婃椽宕崟顒佹嫳缂備礁顑嗛悧婊呭垝鐠囨祴妲堥柕蹇曞Х椤旀捇姊洪崨濠傚闁轰讲鏅犻弫鍌炴偩瀹€鈧?
         try{
          var _det=String(parsed.detail||'');
          if(_det.indexOf('recall_memory')!==-1||_det.indexOf('query_knowledge')!==-1){
@@ -2543,10 +740,9 @@ function _renderReplyViaStream(text){
        }else if(currentEvent==='reply'){
         replyText=parsed.reply||t('chat.error.retry');
         if(parsed.image) replyImage=parsed.image;
-        // 本轮回复完成 → 复位状态点为金色
+        // 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾剧懓顪冪€ｎ亝鎹ｉ柣顓炴閵嗘帒顫濋敐鍛婵°倗濮烽崑鐐烘偋閻樻眹鈧線寮撮姀鈩冩珕闂佽姤锚椤︻喚绱旈弴鐔虹瘈闁汇垽娼у瓭闂佹寧娲忛崐婵嬪箖瑜斿畷鍗炩枎閹寸姷鍔堕梻浣稿閸嬪棝宕伴幘璺哄К闁逞屽墴濮婂宕掑鍗烆杸婵炴挻纰嶉〃濠傜暦閺囥垹绠涢柣妤€鐗忛崢閬嶆煟鎼搭垳鍒伴柛姘ｅ亾闂備緡鍙庨崹鍫曞蓟閿涘嫪娌柛鎾楀嫬鍨遍梻浣虹《閺呮稓鈧碍婢橀悾宄邦潨閳ь剟銆侀弮鈧幏鍛嫚閳╁啰绉鹃梻鍌氬€搁崐鐑芥嚄閸撲礁鍨濇い鏍仜缁€澶愭煛閸ャ儱鐏柡鍛箖閵囧嫯绠涢幘璺侯暫闂佽棄鍟伴崰鏍蓟閵娿儮鏀介柛鈾€鏅滅瑧缂傚倷鑳舵慨鐢电矙閹烘桅闁告洦鍨扮粻宕団偓骞垮劚閻楁粓宕ぐ鎺撯拺闁告繂瀚烽崕鎰版煟閻旀潙鍔﹂柛鈺冨仱楠炲鏁冮埀顒勬倿濞差亝鐓曢柟鎵虫櫅婵¤法绱掓担绋挎Щ妞ゎ亜鍟存俊鑸垫償閳ュ磭顔掗梻浣侯焾缁绘垿鏁冮姀銈嗗仒妞ゆ洍鍋撶€规洘锕㈡俊鍛婃償閵忊槅妫冮悗瑙勬磸閸旀垿銆佸▎鎾粹拻閻庨潧鎲￠弳浼存⒒閸屾艾鈧兘鎳楅崜浣稿灊妞ゆ牜鍋戦埀顒€鍟村畷銊р偓娑櫭禍杈ㄧ節閻㈤潧孝婵炲眰鍊楃划濠氼敍閻愮补鎷哄銈嗗坊閸嬫挾绱掓径灞炬毈闁?闂?濠电姷鏁告慨鐑藉极閸涘﹥鍙忛柣鎴ｆ閺嬩線鏌涘☉姗堟敾闁告瑥绻愰湁闁稿繐鍚嬬紞鎴︽煕閵娿儱鈧潡寮婚敐澶婄鐎规洖娲ら崫娲⒑閸濆嫷鍎愰柣妤侇殘閹广垹鈽夐姀鐘殿吅闂佺粯鍔曢顓炩枔閵堝鈷戞繛鑼额嚙楠炴鏌熼幖浣虹暫闁糕斁鍋撳銈嗗笒閸犳艾顭囬幇顓犵闁告瑥顦辨晶顏堟偂閵堝鐓忓┑鐐戝啯鍣介柣鎺戝悑缁绘繈鎮介棃娴躲垺绻涚拠褏鐣甸柟顕嗙節瀵挳鎮㈤搹璇″晭闂備胶鎳撻顓㈠磿閹扮増鍊垮ù鐘差儐閻撴瑩鏌ｉ敐鍛板闁宠鐗撻弻锛勪沪閸撗佲偓鎺楁煃瑜滈崜銊х礊閸℃稑纾婚柛鏇ㄥ墯閸欏繒鈧箍鍎遍ˇ浼存偂濞戙垺鍊堕柣鎰邦杺閸ゆ瑩鏌嶈閸撴氨鎹㈤崒鐐村仼闁绘垹鐡旈弫鍐煥閺囨浜鹃柛鐑嗗灠椤啴濡堕崱姗嗘⒖婵犳鍠撻崐婵嬪箚娴ｅ壊鐓ラ柛顐ゅ暱閹风粯绻涙潏鍓у閻犫偓閿曞倹鍊块柣鎰靛厵娴滄粓鏌熺€涙绠栨い銉ｅ灪椤ㄣ儵鎮欓弶鎴濐潔缂備胶绮换鍌烇綖濠靛鏁嗛柛灞诲€曢弫鎼佹⒒閸屾瑧顦﹂柟璇х磿缁瑩骞掗幋顓犲姺濠电偛妫欓崝鏇㈩敋闁秵鐓熸俊顖濆亹鐢盯鏌ｉ幘瀛樼闁哄矉绻濆畷鍫曞Ψ閵夈儺鐎辩紓鍌欓檷閸斿矂鈥﹂悜钘夌畺婵°倕鎳庨崹鍌涖亜閹扳晛鐏紒浣哄厴濮婅櫣鈧湱濯鎰版煕閵娿儲鍋ユ鐐插暙閳诲酣骞樺畷鍥崜闂備胶鎳撻顓熸叏閸愬樊娴栭柟鍓х帛閳锋帒霉閿濆洨鎽傛繛鍏煎姍閺岋綁鍩勯崘鈺冾槹濡炪們鍨烘穱娲囪ぐ鎺撶厓闁靛闄勯ˉ鍫⑩偓瑙勬礃閿曘垽宕洪敓鐘茬闁绘劦鍓涢妶顐︽⒒娴ｇ瓔鍤欓柛鎴犳櫕缁辩偤宕卞Ο纰辨锤濡炪倕绻愮€氣偓婵炴垯鍨洪悡銉╂倵閿濆倹娅囩紒鐘冲哺濮婃椽妫冨☉姘暫缂備胶绮敮鈥崇暦濮橆厼顕遍悗娑欘焽閸橀亶姊虹紒妯荤；缂佲偓娓氣偓閹﹢鏁傞柨顖氫壕?
         try{ setTimeout(function(){_setCodDot('flash');},600); }catch(e){}
-        _suppressTypingCursor=true;
-        _hideTypingCursor();
+        _streamRuntime.suppressTypingCursor();
        }else if(currentEvent==='agent_step'){
         if(parsed.phase==='complete'){
          for(var si=0;si<pendingState.steps.length;si++){
@@ -2632,20 +828,20 @@ function _renderReplyViaStream(text){
        }else if(currentEvent==='thinking'){
         var _thinkingText=String(parsed.content||'').replace(/<\/?think>/ig,' ').trim();
         if(_thinkingText){
-         addStep({label:'模型思考',detail:_thinkingText,status:(parsed.status||'done'),full_detail:_thinkingText});
+          addStep({label:'thinking',detail:_thinkingText,status:(parsed.status||'done'),full_detail:_thinkingText});
          if(_showRawThinkingPanel) _thinkingContent=_thinkingText;
         }
        }else if(currentEvent==='ask_user'){
-        // agent 暂停等用户选择 → 渲染选项卡片
+        // agent 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾剧懓顪冪€ｎ亝鎹ｉ柣顓炴閵嗘帒顫濋敐鍛婵°倗濮烽崑鐐烘偋閻樻眹鈧線寮撮姀鐘靛幀闂佸吋浜介崕鎶藉煡婢舵劖鎳氶柡宥庡幗閻撴洘绻涢幋婵嗚埞妤犵偞锕㈤弻銊モ槈濞嗘垶鍣板┑顔硷攻濡炶棄鐣烽妸锔剧瘈闁告洏鍔嶉～宥夋⒒娴ｇ懓顕滄繛娴嬫櫇缁骞樼拠鍙傘儵鏌涘☉妯兼憼闁稿﹤顭烽弻銈夊箒閹烘垵濮㈤梺鍛婎焾濡嫰鍩為幋锕€鐓￠柛鈩冾殘娴犫晠姊洪崨濠呭妞ゆ垵顦锝夊箮閽樺鍘告繛鎾磋壘濞诧妇鈧潧鐭傚娲嚒閵堝懏鐎惧┑鐘灪閿曘垹顕ｉ搹顐ｇ秶闁靛绲肩花璇差渻閵堝棙灏ㄩ柛鎾寸箘濞戠敻宕奸弴鐔哄幍闂佽崵鍠愬姗€顢旈銏＄厵妞ゆ梻鏅惌濠囨懚閿濆洨纾藉ù锝咁潠椤忓牜鏁傚ù鐓庣摠閳锋帡鏌涚仦鍓ф噮妞わ讣绠撻弻鐔哄枈閸楃偘绨婚柧鑽ゅ仦娣囧﹪濡堕崨顓熸閻庤娲栧鍫曞箞閵娿儺娓婚悹鍥紦婢规洟鏌ｆ惔銏╁晱闁哥姵鐗犻垾锕傛倻閽樺鐣洪梺闈涚箞閸ㄦ椽宕戝鈧弻宥夊Ψ閵夈儱绗繝銏ｎ潐濞茬喎顫忛崫鍕懷囧炊瑜忔禒鎯ь渻閵堝棙鈷愰柣妤冨█楠炲啴鎮欏ǎ顒€浜濋梺鍛婂姀閺呮繈宕㈤崡鐐╂斀闁宠棄妫楅悘锝囩磼椤曞懎鐏ｅù婊勬倐閺佸啴宕掑☉姘箰闂佽绻掗崑鐔煎疾椤愩垺姣勫┑锛勫亼娴煎洭宕掑鍛床闂備礁鎼張顒勬儎椤栫偟宓佹俊顖氱毞閸嬫捇妫冨☉娆忔殘闂侀潻绲奸崡鎶藉蓟閿曗偓铻ｉ柤濮愬€楅悿鍕⒑閸濆嫮鐏遍柛鐘查叄閸┿垽骞樼拠鎻掔€銈嗘⒒閺咁偅绂嶉幇鐗堚拻?闂?婵犵數濮烽弫鍛婃叏閻戣棄鏋侀柛娑橈攻閸欏繘鏌ｉ幋锝嗩棄闁哄绶氶弻鐔兼⒒鐎靛壊妲紒鐐劤椤兘寮婚敐澶婄疀妞ゆ帊鐒﹂崕鎾剁磽娴ｅ搫校濠㈢懓妫涘Σ鎰板箳閺傚搫浜鹃柨婵嗛娴滀粙鏌涙惔娑樺姦闁哄本鐩俊鍫曞幢濡⒈妲归梻浣告惈閺堫剟鎯勯鐐偓渚€寮撮姀鈩冩珳闂佺硶鍓濋悷顖毼ｆ导瀛樷拻濞达絼璀﹂悞鐐亜閹存繃鍤囩€规洘鍔欏畷绋课旈埀顒傜不閺嶃劋绻嗛柕鍫濇噺閸ｆ椽鏌￠崨顔惧弨妤犵偞鐗滈崚鎺楁偡閺夊簱鎷ら梻浣筋嚙缁绘劗绮旈悷閭︽綎闁惧繐婀辩壕鍏间繆椤栨繃顏犳い鎴濆椤啴濡堕崱妯垮亖闂佹悶鍎荤徊娲磻閹剧粯鏅濋柛灞惧哺閺佹粌鈹戞幊閸婃挾绮堟担绯曟灁婵犻潧顑嗛埛鎺楁煕鐏炵偓鐨戝褎绋撶槐鎺斺偓锝庡亜閻忔挳鏌ㄥ┑鍫濅槐鐎规洖鐖奸、妤佹媴閸欏顏归梻鍌氬€风欢锟犲磻閸℃稑纾绘繛鎴欏灪閸ゆ劖銇勯弽銊р姇婵炲懐濮甸妵鍕棘閸喒鎸冪紒鎯у⒔閸樠団€︾捄銊﹀磯闁绘垶蓱閹烽亶姊洪幖鐐测偓鎰板磻閹剧粯鈷掑ù锝夘棑娑撹尙绱掗幓鎺撳仴鐎规洘顨呴～婊堝焵椤掆偓椤曪綁顢曢敃鈧粻鑽ょ磽娴ｅ顏呯瑜版帗鈷戦柟顖嗗嫮顩伴梺绋款儏閹虫﹢骞冮悽鍓叉晝闁挎棁袙閹风粯绻涙潏鍓у埌闁硅绻濆畷顖炴倷鐎靛摜顔曢柣鐘叉厂閸涱垱娈奸柣搴ゎ潐濞叉﹢宕归崸妤冨祦闁圭儤鍤﹂弮鍫濈劦妞ゆ巻鍋撻弫?
         _renderAskUser(parsed, pendingState);
       }else if(currentEvent==='stream'){
        if(parsed&&parsed.format==='markdown_incremental'){
-        _applyMarkdownIncrementalStream(parsed);
+        _streamRuntime.applyMarkdownIncrementalStream(parsed);
        }else{
-        _appendStreamToken(parsed.token||'');
+        _streamRuntime.appendStreamToken(parsed.token||'');
        }
        }else if(currentEvent==='stream_reset'){
-        _resetActiveStreamRender();
+        _streamRuntime.resetActiveStreamRender();
         _tombstoneAbandonedStreamAttempt();
       }else if(currentEvent==='repair'){
        repairData=parsed;
@@ -2675,12 +871,12 @@ function _renderReplyViaStream(text){
    }
   }
 
- var finalText=_chooseFinalStreamText(replyText, _streamText)||'';
-if(_streamStarted && finalText){
-  _finalizeStream(finalText);
+ var finalText=_chooseFinalStreamText(replyText, _streamRuntime.getText())||'';
+if(_streamRuntime.hasStarted() && finalText){
+  _streamRuntime.finalizeStream(finalText);
   if(!(pendingState.steps&&pendingState.steps.length)) _setRunPanelEmptyState('quiet');
  }else if(finalText){
-   _renderReplyViaStream(finalText);
+   _streamRuntime.renderReplyViaStream(finalText);
    if(!(pendingState.steps&&pendingState.steps.length)) _setRunPanelEmptyState('quiet');
   }else{
    _setRunPanelEmptyState('quiet');
@@ -2693,14 +889,14 @@ if(_streamStarted && finalText){
  }catch(e){
   if(e.name==='AbortError'){
    _setRunPanelEmptyState('stopped');
-   // 用户点了停止，显示已有的部分回复或提示
-   var abortText=_chooseFinalStreamText(replyText, _streamText)||_streamText||'';
-   if(_streamStarted&&abortText){
-    _finalizeStream(abortText);
+   // 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌ｉ幋锝呅撻柛濠傛健閺屻劑寮村Δ鈧禍鎯ь渻閵堝簼绨婚柛鐔告綑閻ｇ柉銇愰幒婵囨櫔闂佸憡渚楅崹鐗堟叏濞差亝鈷掑ù锝勮濞兼帡鏌涢弴鐐典粵闁伙絽澧庣槐鎾存媴閹绘帊澹曞┑鐘灱濞夋稒寰勯崶顒€纾婚柟鎹愬吹瀹撲線鏌涢…鎴濇灈濠殿喖楠搁—鍐Χ韫囨挾妲ｉ梺鎼炲姀濞夋盯顢氶敐鍡楊嚤闁哄鍤﹂妸鈺傜叆闁哄倸鐏濋埛鏃€銇勯弮鈧ú鐔奉潖濞差亝鍋￠柟娈垮枟閹插ジ姊洪懡銈呮瀭闁稿海鏁婚獮鍐潨閳ь剟銆侀弮鍫濋唶闁绘柨鎼獮鍫濃攽閻樺灚鏆╁┑顔碱嚟閳ь剚鍑归崜鐔风暦閵忊懇鍋撳☉娅虫垿宕ｈ箛鎾斀闁绘ɑ褰冮弳鐐烘煏閸ャ劎绠栭柕鍥у婵偓闁斥晛鍟伴ˇ浼存⒑鏉炴壆鍔嶉柛鏃€鐟ラ悾鐑藉醇閺囩倣銊╂煏韫囨洖小濠㈣娲熷娲捶椤撶偛濡哄銈冨妼濡繈骞冮敓鐘插嵆闁靛骏绱曢崢浠嬫⒑閸濆嫬鈧悂鎮樺┑鍡忔灁闁冲搫鎳忛ˉ濠冦亜閹烘埈妲稿褎鎸抽弻鈥崇暆鐎ｎ剛锛熸繛瀵稿缁犳挸鐣峰鍡╂Ч闂侀€炲苯澧悽顖ょ節瀵顓奸崼顐ｎ€囬梻浣告啞閹稿爼宕濇惔锝嗩潟闁绘劕鎼獮銏＄箾閹寸儐鐒介柨娑欑洴濮婅櫣鍖栭弴鐐测拤缂備礁顑嗙敮鈥崇暦閺囩倣鏃堝川椤斿皷鍋撻悽鍛婄叆婵犻潧妫濋妤€霉濠婂嫮澧棁澶嬬節婵犲倸顏柣顓熷浮閺屸€崇暆閳ь剟宕伴弽顓炵畺婵犲﹤鍚橀悢鐑樺珰闁告瑥顦伴鍌氣攽閻樺灚鏆╅柛瀣☉椤曪綁宕奸弴鐐殿唶闂佽鍎煎Λ鍕嫅閻斿吋鐓冮柍杞扮閺嗙偛鈹戦娑欏唉闁哄本绋戦埞鎴﹀礋椤愩垹顥濋梻渚€娼ч悧鍡涘箖閼愁垬浜归柟鐑樻尭娴滃ジ姊洪崨濠佺繁闁搞劍濞婂鎶藉Χ婢跺鎷洪柣鐘叉礌閳ь剝娅曢悘宥夋⒑閼姐倕鏆遍柡鍛█婵″瓨绗熼埀顒€顕ｆ禒瀣垫晣闁绘棃鏀遍悿鍛存⒒娓氣偓濞佳囨晬韫囨稑纾兼繝濠傛閸橆厾绱撻崒姘偓鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌熼梻瀵割槮缁惧墽鎳撻—鍐偓锝庝簻椤掋垹鈹戦姘ュ仮闁哄矉绱曟禒锔炬嫚閹绘帒顫撶紓浣哄亾閸庢娊鈥﹂悜钘夎摕闁绘梻鍘х粈鍫㈡喐韫囨洘鏆滄繛鎴欏灪閻撶喖鏌熼幆褏鎽犵紒鈧崘顏嗙＜缂備焦顭囩粻鐐翠繆椤愩垹鏆欓柍钘夘槸閳诲骸螣濞茬粯锛囨繝纰夌磿閸嬫垿宕愰弴鐘冲床闁糕剝绋戦悿楣冩煟濡鍤欓柦鍐枑缁绘盯骞嬪▎蹇曚患闁搞儲鎸冲铏瑰寲閺囩偛鈷夊銈冨妼濡盯骞忛悩缁樺€烽柣鎴炃氶幏娲⒑閸涘﹦绠撻悗姘煎櫍閹偟鎹勯妸褏锛滅紓鍌欑劍椤洨绮婚幘缁樼厽闁挎繂娲ら崢鎾煙椤旂懓澧查柟顖涙煥铻ｇ紓浣股戝鎴︽⒒閸屾瑧顦︾紓宥咃躬瀹曟垶绻濋崶褍鍋嶅┑鐘诧工閻楀棙鍎梻渚€娼чˇ顓㈠垂濞差亜妫橀柍褜鍓熷缁樻媴閾忕懓绗￠梺鍛婃⒐椤洦绂嶇粙搴撴瀻闁归偊鍘介悵宄扳攽閻愭潙鐏熼柛銊︽そ閹繝寮撮姀锛勫帾婵犵數鍋涢悘婵嬪礉濠婂牊鐓曢悗锝冨妼閸斻倝鏌嶈閸撴岸顢欓弽顓炵獥闁哄稁鍘搁埀顒婄畱閻ｏ繝骞嶉鑺ヮ啎濠电娀娼ч崐濠氣€﹂崼婵囨殰闂傚倷绶氬褔藝椤栨粏濮抽柛顐ｆ礀閻ら箖鏌ｅΟ娆惧殭闁藉啰鍠栭弻锟犲炊閳轰焦鐎荤紓浣稿閸嬨倝寮诲☉銏╂晝闁挎繂娲ㄩ悾鍨節濞堝灝鏋旈柛銊ㄦ椤繐煤椤忓懐鍔甸梺缁樺姌鐏忣亞鈧碍婢橀…鑳檨闁哥姵顨婃俊鐢稿礋椤栵絾鏅ｉ梺缁樕戣ぐ鍐嵁鐎ｎ喗鍊垫繛鍫濈仢閺嬶附銇勯弴鍡楁搐閻撯€愁熆閼搁潧濮囨い顐㈡嚇閺岋絽螣閼姐倕鈪甸梺鍛婃煥闁帮綁鐛径宀€鐭欐繛鍡樺劤閹垿姊虹化鏇炲⒉闁荤噥鍨伴湁闁告洦鍋€閺€浠嬫煟濡鍤嬬€规悶鍎甸幃妤€顫濋妷銉ヮ瀴缂備礁鍊哥粔鎾€﹂妸鈺侀唶闁绘柨鎼鎶芥⒒娴ｅ憡鎯堥柛鐕佸亰瀹曟劙鎮烽幍铏€洪梺鍝勬储閸ㄦ椽鎮￠弴鐔虹闁糕剝顨夌€氭澘霉濠婂嫬鍔ら柍瑙勫灦楠炲﹪鏌涙繝鍐炬畷闁逛究鍔戦幃婊堟寠婢跺矉绱辨繝鐢靛仦閸垶宕洪崟顖氭瀬闁告洦鍋掗悢鍡涙偣鏉炴媽顒熼柣鎿冨墴閺屾盯濡堕崱妯碱槬闂傚洤顦甸弻锝呂熼悜妯锋灆闂佺楠哥换姗€鐛崱娑欏亜闁稿繐鐨烽幏娲⒒閸屾氨澧涢柛鎰吹濡叉劙鏁撻悩宕囧幈闂佽婢樻晶搴ㄥ礆閺夋５鐟邦煥閸垻鏆梺鍝勭灱閸犳牠骞冨鍏剧喖鎮滈埡鍌氼伜缂傚倷鑳堕崑鎾崇暦濡綍娑㈠礋椤栨稓鐣抽梻鍌欑劍鐎笛呮崲閸屾娑樜旈崘銊х瓘闁荤姴娲╅ˉ?
+   var abortText=_chooseFinalStreamText(replyText, _streamRuntime.getText())||_streamRuntime.getText()||'';
+   if(_streamRuntime.hasStarted()&&abortText){
+    _streamRuntime.finalizeStream(abortText);
    }else if(abortText){
-    _renderReplyViaStream(abortText);
+    _streamRuntime.renderReplyViaStream(abortText);
    }else{
-    finalizePendingAssistantMessage(pendingState, t('chat.stopped')||'已停止');
+    finalizePendingAssistantMessage(pendingState, t('chat.stopped')||'\u5df2\u505c\u6b62');
    }
   }else{
    _setRunPanelEmptyState('error');
@@ -2714,3 +910,5 @@ if(_streamStarted && finalText){
  _exitStopMode();
  _stickChatToBottom();
 }
+
+
