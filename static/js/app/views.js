@@ -86,7 +86,7 @@ function show(n){
 
  if(n==3){
   setInputVisible(false);
-  chat.innerHTML='<div class="stats-page"><div style="text-align:right;margin-bottom:8px;"><button class="stats-refresh-btn" onclick="loadStatsData()" title="'+t('common.refresh')+'"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button></div><div id="statsBox">'+t('loading')+'</div></div>';
+  chat.innerHTML='<div class="stats-page"><div id="statsBox">'+t('loading')+'</div></div>';
   try{
    loadStatsData();
   }catch(e){
