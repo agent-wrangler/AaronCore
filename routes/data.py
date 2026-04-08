@@ -129,7 +129,6 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "static/js/window-shell.js": "窗口壳层脚本",
     "static/js/output-init.js": "首页收尾启动脚本",
     "static/js/settings.js": "设置页脚本索引",
-    "static/js/settings/autolearn.js": "设置页自学习脚本",
     "static/js/settings/models-base.js": "设置页模型管理基础脚本",
     "static/js/settings/models-ui.js": "设置页模型管理界面脚本",
     "static/js/stats.js": "统计页脚本",

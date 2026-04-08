@@ -1,7 +1,6 @@
 // Model management data flow and first-pass settings model actions
 // Source: settings.js lines 655-994
 
-// ── 模型管理 ──
 var _settingsModels=null;
 var _settingsCurrentModel='';
 var _settingsCatalog=null;
@@ -12,7 +11,6 @@ function _classifyModelToProvider(mid, cfg, catalog){
  var midL=mid.toLowerCase();
  var modelName=String((cfg||{}).model||'').toLowerCase();
  var baseUrl=String((cfg||{}).base_url||'').toLowerCase();
- // 第一轮：按模型 ID / 模型名 / 别名匹配（优先级高）
  for(var pkey in catalog){
   if(midL.indexOf(pkey)!==-1||modelName.indexOf(pkey)!==-1) return pkey;
   var aliases=catalog[pkey].aliases||[];
@@ -20,7 +18,6 @@ function _classifyModelToProvider(mid, cfg, catalog){
    if(midL.indexOf(aliases[i])!==-1||modelName.indexOf(aliases[i])!==-1) return pkey;
   }
  }
- // 第二轮：按 base_url 匹配（兜底）
  for(var pkey2 in catalog){
   if(catalog[pkey2].url_hint && baseUrl.indexOf(catalog[pkey2].url_hint)!==-1) return pkey2;
  }
@@ -50,7 +47,6 @@ function _quickAddModel(pkey, modelId){
  var catalog=_settingsCatalog;
  var pinfo=catalog[pkey];
  if(!pinfo) return;
- // 找同厂商已有配置作为 donor
  var donorCfg=null;
  for(var mid in _settingsModels){
   var classified=_classifyModelToProvider(mid, _settingsModels[mid], catalog);
@@ -178,7 +174,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   var models=_settingsModels;
   var currentModel=_settingsCurrentModel;
   var displayCounts=_buildModelNameCounts(models);
-  // 按厂商分组已配置模型
   var providerConfigured={};
   var uncategorized=[];
   for(var mid in models){
@@ -190,12 +185,10 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
     uncategorized.push(mid);
    }
   }
-  // 确定哪些厂商默认展开（有当前使用模型的厂商）
   var currentProvider=null;
   if(currentModel){
    currentProvider=_classifyModelToProvider(currentModel, models[currentModel], catalog);
   }
-  // 渲染每个 catalog 厂商
   for(var pk in catalog){
    var pi=catalog[pk];
    var configured=providerConfigured[pk]||[];
@@ -203,7 +196,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    var isExpanded=_settingsExpandedProviders[pk]!==undefined?_settingsExpandedProviders[pk]:(pk===currentProvider);
    var hasConfigured=configured.length>0;
    var providerLabel=pk.charAt(0).toUpperCase()+pk.slice(1);
-   // 找当前使用的模型名
    var activeModelName='';
    for(var ci=0;ci<configured.length;ci++){
     if(configured[ci]===currentModel){
@@ -214,7 +206,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   var headerBg=isExpanded?(isLight?'rgba(122,116,107,0.06)':'rgba(99,102,241,0.06)'):('transparent');
    var chevron=isExpanded?'\u25BC':'\u25B6';
    html+='<div style="border:1px solid '+borderColor+';border-radius:12px;overflow:hidden;'+(isExpanded?'box-shadow:'+(isLight?'0 2px 8px rgba(0,0,0,0.04)':'0 2px 8px rgba(0,0,0,0.12)')+';':'')+'margin-bottom:2px;">';
-   // 折叠头
    html+='<div onclick="_toggleProviderGroup(\''+pk+'\')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:'+headerBg+';transition:background 0.15s;">';
    html+='<span style="font-size:11px;color:'+subColor+';width:14px;text-align:center;">'+chevron+'</span>';
    html+='<span style="font-size:14px;font-weight:600;color:'+textColor+';flex:1;">'+escapeHtml(providerLabel)+'</span>';
@@ -226,10 +217,8 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
     html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(148,163,184,0.1)':'rgba(148,163,184,0.1)')+';color:'+subColor+';font-size:11px;">'+t('settings.models.notconfigured')+'</span>';
    }
    html+='</div>';
-   // 展开内容
    if(isExpanded){
     html+='<div style="padding:6px 14px 12px;display:flex;flex-direction:column;gap:5px;">';
-    // 已配置模型
     for(var j=0;j<configured.length;j++){
      var cmid=configured[j];
      var cm=models[cmid]||{};
@@ -254,7 +243,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      html+='<button onclick="openModelDialog(\''+escapeHtml(cmid)+'\')" style="padding:3px 8px;border:1px solid '+borderColor+';border-radius:5px;background:none;color:'+subColor+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      html+='</div>';
     }
-    // catalog 中未配置的模型
     var configuredIds={};
     for(var k=0;k<configured.length;k++){
      configuredIds[configured[k].toLowerCase()]=true;
@@ -279,7 +267,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    }
    html+='</div>';
   }
-  // 未分类模型
   if(uncategorized.length>0){
    var uncExpanded=_settingsExpandedProviders['_other']!==undefined?_settingsExpandedProviders['_other']:(!currentProvider);
    var uncChevron=uncExpanded?'\u25BC':'\u25B6';
@@ -329,7 +316,6 @@ function loadSettingsModels(){
   _settingsCatalog=c.catalog||{};
   var unlockedModels=_buildUnlockedSettingsModels(_settingsModels, _settingsCatalog, _settingsCurrentModel);
   var nameCounts=_buildModelNameCounts(unlockedModels);
-  // 同步侧边栏
   window._novaModels={};
   Object.keys(unlockedModels).forEach(function(k){
    var cfg=unlockedModels[k]||{};
@@ -458,11 +444,9 @@ function openModelDialog(editId){
  html+='<div style="font-size:16px;font-weight:600;color:'+textColor+';margin-bottom:18px;">'+escapeHtml(title)+'</div>';
  html+='<div style="display:flex;flex-direction:column;gap:14px;">';
 
- // 模型 ID
  html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.id')+'</div>';
  html+='<input id="mdlId" value="'+escapeHtml(isEdit?editId:'')+'" placeholder="gpt-4o, claude-3 ..." style="'+inputStyle+(isEdit?'opacity:0.5;cursor:not-allowed;':'')+'\"'+(isEdit?' disabled':'')+'></div>';
 
- // 模型名称
  html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.name')+'</div>';
  html+='<input id="mdlName" value="'+escapeHtml(m.model||'')+'" placeholder="'+t('settings.models.field.name.hint')+'" style="'+inputStyle+'"></div>';
 
@@ -479,15 +463,12 @@ function openModelDialog(editId){
  if(isEdit&&fullKey){html+='<button type="button" id="mdlKeyToggle" onclick="(function(b){var inp=document.getElementById(\'mdlKey\');var showing=b.getAttribute(\'data-show\')===\'1\';if(!showing){inp.value=\''+escapeHtml(fullKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94\\\'/><path d=\\\'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19\\\'/><line x1=\\\'1\\\' y1=\\\'1\\\' x2=\\\'23\\\' y2=\\\'23\\\'/></svg>\';b.setAttribute(\'data-show\',\'1\');}else{inp.value=\'\';inp.placeholder=\''+escapeHtml(maskedKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\\'/><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'3\\\'/></svg>\';b.setAttribute(\'data-show\',\'0\');}})(this)" data-show="0" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.5;color:'+subColor+';display:flex;align-items:center;" title="Show/Hide"><svg width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\'/><circle cx=\'12\' cy=\'12\' r=\'3\'/></svg></button>';}
  html+='</div></div>';
 
- // 视觉支持 toggle
  var checked=m.vision?'checked':'';
  html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">';
  html+='<input id="mdlVision" type="checkbox" '+checked+' style="width:16px;height:16px;accent-color:#7a7267;">';
  html+='<span style="font-size:13px;color:'+textColor+';">'+t('settings.models.vision')+'</span></label>';
 
- // 底部按钮行
  html+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">';
- // 删除按钮（编辑模式 + 非当前模型）
  if(isEdit&&!isCurrent){
   html+='<button onclick="_modelDialogDelete(\''+escapeHtml(editId)+'\')" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(171,113,99,0.22);background:transparent;color:#9a665d;cursor:pointer;font-size:12px;opacity:0.7;transition:opacity 0.15s;" onmouseenter="this.style.opacity=\'1\'" onmouseleave="this.style.opacity=\'0.7\'">'+t('settings.models.delete')+'</button>';
  }
@@ -499,7 +480,6 @@ function openModelDialog(editId){
  overlay.innerHTML=html;
  document.body.appendChild(overlay);
  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
- // 自动聚焦第一个可编辑字段
  var first=isEdit?document.getElementById('mdlName'):document.getElementById('mdlId');
  if(first)setTimeout(function(){first.focus();},50);
 }
@@ -643,7 +623,11 @@ function openModelDialog(editId, draftSeed){
 
 function _collectModelDialogPayload(editId){
  var isEdit=!!editId;
- var theme=getSettingsTheme(document.body.classList.contains('light'));
+ var theme=(typeof _settingsPageTheme==='function'
+  ? _settingsPageTheme(document.body.classList.contains('light'))
+  : {
+     dangerText:'#b91c1c'
+    });
  var mid=isEdit?editId:(document.getElementById('mdlId').value||'').trim();
  if(!mid){document.getElementById('mdlId').style.borderColor=theme.dangerText;return null;}
  var modelName=(document.getElementById('mdlName').value||'').trim()||mid;
@@ -668,7 +652,15 @@ function _collectModelDialogPayload(editId){
 function _setModelDialogStatus(kind, message){
  var box=document.getElementById('mdlTestStatus');
  if(!box) return;
- var theme=getSettingsTheme(document.body.classList.contains('light'));
+ var theme=(typeof _settingsPageTheme==='function'
+  ? _settingsPageTheme(document.body.classList.contains('light'))
+  : {
+     actionSecondary:'rgba(255,255,255,0.04)',
+     border:'rgba(255,255,255,0.08)',
+     dangerText:'#b91c1c',
+     successText:'#15803d',
+     text:'#111827'
+    });
  var text=String(message||'').trim();
  if(!text){
   box.style.display='none';
@@ -683,11 +675,16 @@ function _setModelDialogStatus(kind, message){
 }
 
 function _setSettingsModelFeedback(kind, message){
- if(!window.settingsPanelState) return;
- settingsPanelState.notice='';
- settingsPanelState.error='';
- if(kind==='error') settingsPanelState.error=String(message||'').trim();
- else settingsPanelState.notice=String(message||'').trim();
+ var state=(typeof _settingsPageState==='function'
+  ? _settingsPageState()
+  : ((typeof window!=='undefined' && window.settingsPanelState && typeof window.settingsPanelState==='object')
+     ? window.settingsPanelState
+     : null));
+ if(!state) return;
+ state.notice='';
+ state.error='';
+ if(kind==='error') state.error=String(message||'').trim();
+ else state.notice=String(message||'').trim();
  renderSettingsPage(document.body.classList.contains('light'));
 }
 
