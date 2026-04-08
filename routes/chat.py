@@ -951,6 +951,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 # 记录技能使用统计
                 _direct_tool_gap = _classify_missing_tool_execution(
                     response,
+                    user_input=msg,
                     tool_used=_tool_used or "",
                     stream_had_output=bool(_stream_chunks),
                 )
@@ -1005,6 +1006,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     history=history,
                     strip_markdown=_strip_markdown,
                     ensure_tool_call_failure_reply=_ensure_tool_call_failure_reply,
+                    user_input=msg,
                     tool_used=_tool_used or "",
                     tool_success=_tool_success,
                     tool_response=_tool_response_text,
