@@ -49,25 +49,25 @@ function _quickAddModel(pkey, modelId){
  if(!pinfo) return;
  var donorCfg=null;
  for(var mid in _settingsModels){
-  var classified=_classifyModelToProvider(mid, _settingsModels[mid], catalog);
-  if(classified===pkey){ donorCfg=_settingsModels[mid]; break; }
+  var cfg=_settingsModels[mid]||{};
+  var classified=_classifyModelToProvider(mid, cfg, catalog);
+  if(classified===pkey&&_isVisibleSettingsModel(cfg)){ donorCfg=cfg; break; }
  }
  if(!donorCfg){
-  alert('\u8be5\u5382\u5546\u6ca1\u6709\u5df2\u914d\u7f6e\u7684\u6a21\u578b\uff0c\u8bf7\u5148\u624b\u52a8\u6dfb\u52a0\u4e00\u4e2a');
+  alert('\u8be5\u5382\u5546\u6ca1\u6709\u5df2\u914d\u7f6e\u7684 API \u6a21\u578b\uff0c\u8bf7\u5148\u624b\u52a8\u6dfb\u52a0\u4e00\u4e2a');
   return;
  }
- var transport=String((donorCfg&&donorCfg.transport)||'openai_api');
- var cfg={model:modelId,vision:donorCfg.vision||false,transport:transport};
- if(transport==='codex_cli'){
-  cfg.base_url='codex://local';
- }else{
-  if(!donorCfg.api_key||!donorCfg.base_url){
-   alert('\u8be5\u5382\u5546\u6ca1\u6709\u5df2\u914d\u7f6e\u7684 API \u6216\u8ba2\u9605\u8fde\u63a5\uff0c\u8bf7\u5148\u624b\u52a8\u6dfb\u52a0\u4e00\u4e2a');
-   return;
-  }
-  cfg.api_key=donorCfg.api_key;
-  cfg.base_url=donorCfg.base_url;
+ if(!donorCfg.api_key||!donorCfg.base_url){
+  alert('\u8be5\u5382\u5546\u6ca1\u6709\u5df2\u914d\u7f6e\u7684 API \u8fde\u63a5\uff0c\u8bf7\u5148\u624b\u52a8\u6dfb\u52a0\u4e00\u4e2a');
+  return;
  }
+ var cfg={
+  model:modelId,
+  vision:donorCfg.vision||false,
+  transport:'openai_api',
+  api_key:donorCfg.api_key,
+  base_url:donorCfg.base_url
+ };
  fetch('/models/config',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
@@ -96,67 +96,7 @@ function _getModelDisplayName(mid, cfg, allModels, nameCounts){
  if(!base) base=String(mid||'').trim();
  var counts=nameCounts||_buildModelNameCounts(allModels||{});
  if((counts[base.toLowerCase()]||0)<=1) return base;
- var transport=_getModelTransport(cfg);
- var suffix=transport==='codex_cli'?' (Subscription)':' (API)';
- var candidate=base+suffix;
- var sameCandidateCount=0;
- Object.keys(allModels||{}).forEach(function(otherId){
-  var otherCfg=allModels[otherId]||{};
-  var otherBase=String(otherCfg.display_name||otherCfg.model||otherId||'').trim();
-  if(!otherBase) otherBase=String(otherId||'').trim();
-  if(otherBase.toLowerCase()!==base.toLowerCase()) return;
-  var otherTransport=_getModelTransport(otherCfg);
-  var otherCandidate=otherBase+(otherTransport==='codex_cli'?' (Subscription)':' (API)');
-  if(otherCandidate.toLowerCase()===candidate.toLowerCase()) sameCandidateCount++;
- });
- if(sameCandidateCount<=1) return candidate;
- return candidate+' ['+mid+']';
-}
-
-function _providerSupportsSubscription(pkey, providerInfo){
- return pkey==='openai' && !!((providerInfo||{}).subscription_ready);
-}
-
-function _buildSubscriptionModelConfig(modelId){
- return {model:modelId,vision:false,transport:'codex_cli',base_url:'codex://local'};
-}
-
-function _saveAndMaybeSwitchModel(modelId, cfg, autoSwitch){
- fetch('/models/config',{
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({id:modelId,config:cfg})
- }).then(function(r){return r.json();}).then(function(d){
-  if(!d.ok){
-   alert(d.error||'\u4fdd\u5b58\u5931\u8d25');
-   return;
-  }
-  if(!autoSwitch){
-   loadSettingsModels();
-   return;
-  }
-  fetch('/model/'+encodeURIComponent(modelId),{method:'POST'}).then(function(r){return r.json();}).then(function(s){
-   if(s.ok) loadSettingsModels();
-   else alert(s.error||'\u542f\u7528\u5931\u8d25');
-  }).catch(function(){alert('\u542f\u7528\u5931\u8d25');});
- }).catch(function(){alert('\u4fdd\u5b58\u5931\u8d25');});
-}
-
-function _quickEnableCatalogModel(pkey, modelId){
- if(!_settingsCatalog) return;
- var pinfo=_settingsCatalog[pkey]||{};
- if(!_providerSupportsSubscription(pkey, pinfo)){
-  _quickAddModel(pkey, modelId);
-  return;
- }
- _saveAndMaybeSwitchModel(modelId, _buildSubscriptionModelConfig(modelId), true);
-}
-
-function _switchConfiguredModelToSubscription(modelId){
- if(!_settingsModels||!_settingsModels[modelId]) return;
- var cfg=_settingsModels[modelId]||{};
- var nextCfg=_buildSubscriptionModelConfig(String(cfg.model||modelId||'').trim()||modelId);
- _saveAndMaybeSwitchModel(modelId, nextCfg, true);
+ return base+' ['+mid+']';
 }
 
 function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor){
@@ -171,7 +111,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   html+='\u52a0\u8f7d\u4e2d...';
  }else{
   var catalog=_settingsCatalog;
-  var models=_settingsModels;
+  var models=_buildUnlockedSettingsModels(_settingsModels||{}, catalog, _settingsCurrentModel);
   var currentModel=_settingsCurrentModel;
   var displayCounts=_buildModelNameCounts(models);
   var providerConfigured={};
@@ -192,7 +132,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   for(var pk in catalog){
    var pi=catalog[pk];
    var configured=providerConfigured[pk]||[];
-   var subscriptionReady=_providerSupportsSubscription(pk, pi);
    var isExpanded=_settingsExpandedProviders[pk]!==undefined?_settingsExpandedProviders[pk]:(pk===currentProvider);
    var hasConfigured=configured.length>0;
    var providerLabel=pk.charAt(0).toUpperCase()+pk.slice(1);
@@ -211,8 +150,6 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    html+='<span style="font-size:14px;font-weight:600;color:'+textColor+';flex:1;">'+escapeHtml(providerLabel)+'</span>';
    if(activeModelName){
    html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(122,140,109,0.12)':'rgba(52,211,153,0.12)')+';color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;font-weight:600;">'+escapeHtml(activeModelName)+'</span>';
-   }else if(subscriptionReady){
-    html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(122,140,109,0.12)':'rgba(52,211,153,0.12)')+';color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;">\u8ba2\u9605\u53ef\u7528</span>';
    }else if(!hasConfigured){
     html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(148,163,184,0.1)':'rgba(148,163,184,0.1)')+';color:'+subColor+';font-size:11px;">'+t('settings.models.notconfigured')+'</span>';
    }
@@ -232,12 +169,9 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      html+='<span style="font-size:13px;font-weight:'+(isCurrent?'700':'500')+';color:'+textColor+';flex:1;">'+escapeHtml(_getModelDisplayName(cmid, cm, models, displayCounts))+'</span>';
      html+=visionDot;
      html+='<span style="font-size:11px;color:'+subColor+';margin-right:4px;">'+escapeHtml(cmid)+'</span>';
-     if(subscriptionReady&&_getModelTransport(cm)!=='codex_cli'){
-      html+='<button onclick="_switchConfiguredModelToSubscription(\''+escapeHtml(cmid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,140,109,0.24)':'rgba(52,211,153,0.28)')+';background:none;color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+(isLight?'#6f7e63':'#34d399')+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+(isLight?'#6f7e63':'#34d399')+'\'">\u8f6c\u8ba2\u9605</button>';
-     }
      if(isCurrent){
       html+='<span style="padding:3px 10px;border-radius:5px;background:'+(isLight?'rgba(122,140,109,0.12)':'rgba(52,211,153,0.12)')+';color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
-    }else{
+     }else{
       html+='<button onclick="switchModel(\''+escapeHtml(cmid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,116,107,0.24)':'rgba(99,102,241,0.3)')+';background:none;color:'+(isLight?'#6a6258':'#6366f1')+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+(isLight?'#6a6258':'#6366f1')+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+(isLight?'#6a6258':'#6366f1')+'\'">'+t('settings.models.activate')+'</button>';
      }
      html+='<button onclick="openModelDialog(\''+escapeHtml(cmid)+'\')" style="padding:3px 8px;border:1px solid '+borderColor+';border-radius:5px;background:none;color:'+subColor+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
@@ -255,9 +189,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      if(configuredIds[catModel.id.toLowerCase()]) continue;
     html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:'+(isLight?'rgba(122,116,107,0.04)':'rgba(148,163,184,0.04)')+';border:1px dashed '+(isLight?'rgba(122,116,107,0.18)':'rgba(148,163,184,0.12)')+';border-radius:10px;">';
     html+='<span style="font-size:13px;color:'+subColor+';flex:1;">'+escapeHtml(catModel.id)+'<span style="font-size:11px;margin-left:6px;opacity:0.7;">'+escapeHtml(catModel.desc)+'</span></span>';
-    if(subscriptionReady){
-      html+='<button onclick="_quickEnableCatalogModel(\''+escapeHtml(pk)+'\',\''+escapeHtml(catModel.id)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,140,109,0.24)':'rgba(52,211,153,0.28)')+';background:none;color:'+(isLight?'#6f7e63':'#34d399')+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+(isLight?'#6f7e63':'#34d399')+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+(isLight?'#6f7e63':'#34d399')+'\'">\u542f\u7528</button>';
-    }else if(hasConfigured){
+    if(hasConfigured){
       html+='<button onclick="_quickAddModel(\''+escapeHtml(pk)+'\',\''+escapeHtml(catModel.id)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+(isLight?'rgba(122,116,107,0.24)':'rgba(99,102,241,0.3)')+';background:none;color:'+(isLight?'#6a6258':'#6366f1')+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+(isLight?'#6a6258':'#6366f1')+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+(isLight?'#6a6258':'#6366f1')+'\'">'+t('settings.models.quickadd')+'</button>';
     }
     html+='<button onclick="openCatalogModelDialog(\''+escapeHtml(catModel.id)+'\',\''+escapeHtml(pk)+'\')" style="padding:3px 8px;border:1px solid '+borderColor+';border-radius:5px;background:none;color:'+subColor+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
@@ -412,243 +344,6 @@ function _getModelTransport(cfg){
  return 'openai_api';
 }
 
-function _syncModelDialogTransport(){
- var sel=document.getElementById('mdlTransport');
- if(!sel) return;
- var transport=String(sel.value||'openai_api');
- var apiRows=document.querySelectorAll('[data-model-transport=\"api\"]');
- var subRows=document.querySelectorAll('[data-model-transport=\"codex\"]');
- apiRows.forEach(function(node){node.style.display=transport==='codex_cli'?'none':'';});
- subRows.forEach(function(node){node.style.display=transport==='codex_cli'?'':'none';});
-}
-
-function openModelDialog(editId){
- var isEdit=!!editId;
- var m=isEdit?(_settingsModels[editId]||{}):{};
- var isCurrent=isEdit&&editId===_settingsCurrentModel;
- var isLight=document.body.classList.contains('light');
- var bg=isLight?'#fbfaf7':'#1c1c1e';
- var border=isLight?'rgba(114,105,94,0.18)':'rgba(255,255,255,0.1)';
- var textColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var inputBg=isLight?'#f5f1ea':'rgba(255,255,255,0.06)';
- var labelStyle='font-size:12px;font-weight:600;color:'+subColor+';margin-bottom:5px;';
- var inputStyle='width:100%;padding:10px 14px;border-radius:10px;border:1px solid '+border+';background:'+inputBg+';color:'+textColor+';outline:none;font-size:13px;box-sizing:border-box;';
- var title=isEdit?t('settings.models.edit'):t('settings.models.add');
-
- var overlay=document.createElement('div');
- overlay.id='modelDialog';
- overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-
- var html='<div style="background:'+bg+';border:1px solid '+border+';border-radius:16px;padding:24px;width:420px;max-width:90vw;">';
- html+='<div style="font-size:16px;font-weight:600;color:'+textColor+';margin-bottom:18px;">'+escapeHtml(title)+'</div>';
- html+='<div style="display:flex;flex-direction:column;gap:14px;">';
-
- html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.id')+'</div>';
- html+='<input id="mdlId" value="'+escapeHtml(isEdit?editId:'')+'" placeholder="gpt-4o, claude-3 ..." style="'+inputStyle+(isEdit?'opacity:0.5;cursor:not-allowed;':'')+'\"'+(isEdit?' disabled':'')+'></div>';
-
- html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.name')+'</div>';
- html+='<input id="mdlName" value="'+escapeHtml(m.model||'')+'" placeholder="'+t('settings.models.field.name.hint')+'" style="'+inputStyle+'"></div>';
-
- // Base URL
- html+='<div><div style="'+labelStyle+'">Base URL</div>';
- html+='<input id="mdlUrl" value="'+escapeHtml(m.base_url||'')+'" placeholder="https://api.openai.com/v1" style="'+inputStyle+'"></div>';
-
- // API Key
- html+='<div><div style="'+labelStyle+'">API Key</div>';
- var maskedKey='';
- var fullKey='';
- if(isEdit&&m.api_key){var k=m.api_key;fullKey=k;maskedKey=k.length>14?(k.slice(0,6)+'****'+k.slice(-4)):k.replace(/./g,'*');}
- html+='<div style="position:relative;"><input id="mdlKey" value="" placeholder="'+(isEdit?(maskedKey||t('settings.models.field.key.hint')):'sk-...')+'" style="'+inputStyle+';padding-right:40px;">';
- if(isEdit&&fullKey){html+='<button type="button" id="mdlKeyToggle" onclick="(function(b){var inp=document.getElementById(\'mdlKey\');var showing=b.getAttribute(\'data-show\')===\'1\';if(!showing){inp.value=\''+escapeHtml(fullKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94\\\'/><path d=\\\'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19\\\'/><line x1=\\\'1\\\' y1=\\\'1\\\' x2=\\\'23\\\' y2=\\\'23\\\'/></svg>\';b.setAttribute(\'data-show\',\'1\');}else{inp.value=\'\';inp.placeholder=\''+escapeHtml(maskedKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\\'/><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'3\\\'/></svg>\';b.setAttribute(\'data-show\',\'0\');}})(this)" data-show="0" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.5;color:'+subColor+';display:flex;align-items:center;" title="Show/Hide"><svg width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\'/><circle cx=\'12\' cy=\'12\' r=\'3\'/></svg></button>';}
- html+='</div></div>';
-
- var checked=m.vision?'checked':'';
- html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">';
- html+='<input id="mdlVision" type="checkbox" '+checked+' style="width:16px;height:16px;accent-color:#7a7267;">';
- html+='<span style="font-size:13px;color:'+textColor+';">'+t('settings.models.vision')+'</span></label>';
-
- html+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">';
- if(isEdit&&!isCurrent){
-  html+='<button onclick="_modelDialogDelete(\''+escapeHtml(editId)+'\')" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(171,113,99,0.22);background:transparent;color:#9a665d;cursor:pointer;font-size:12px;opacity:0.7;transition:opacity 0.15s;" onmouseenter="this.style.opacity=\'1\'" onmouseleave="this.style.opacity=\'0.7\'">'+t('settings.models.delete')+'</button>';
- }
- html+='<div style="flex:1;"></div>';
- html+='<button onclick="document.getElementById(\'modelDialog\').remove()" style="padding:8px 18px;border-radius:8px;border:1px solid '+border+';background:transparent;color:'+textColor+';cursor:pointer;font-size:13px;">'+t('cancel')+'</button>';
- html+='<button onclick="_modelDialogSave(\''+escapeHtml(isEdit?editId:'')+'\')" style="padding:8px 18px;border-radius:8px;border:none;background:#6a6258;color:#fff;cursor:pointer;font-size:13px;">'+t('save')+'</button>';
- html+='</div></div></div>';
-
- overlay.innerHTML=html;
- document.body.appendChild(overlay);
- overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
- var first=isEdit?document.getElementById('mdlName'):document.getElementById('mdlId');
- if(first)setTimeout(function(){first.focus();},50);
-}
-
-function _modelDialogSave(editId){
- var isEdit=!!editId;
- var mid=isEdit?editId:(document.getElementById('mdlId').value||'').trim();
- if(!mid){document.getElementById('mdlId').style.borderColor='#ef4444';return;}
- var modelName=(document.getElementById('mdlName').value||'').trim()||mid;
- var baseUrl=(document.getElementById('mdlUrl').value||'').trim();
- if(!baseUrl){document.getElementById('mdlUrl').style.borderColor='#ef4444';return;}
- var apiKey=(document.getElementById('mdlKey').value||'').trim();
- if(!isEdit&&!apiKey){document.getElementById('mdlKey').style.borderColor='#ef4444';return;}
- var vision=document.getElementById('mdlVision').checked;
- var cfg={base_url:baseUrl,model:modelName,vision:vision};
- if(apiKey) cfg.api_key=apiKey;
- else if(isEdit&&_settingsModels[editId]) cfg.api_key=_settingsModels[editId].api_key;
- saveModelConfig(mid,cfg);
- var dlg=document.getElementById('modelDialog');
- if(dlg)dlg.remove();
-}
-
-function _modelDialogDelete(mid){
- if(!confirm(t('settings.models.delete.confirm')+' '+mid+' ?'))return;
- fetch('/models/config',{
-  method:'DELETE',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({id:mid})
- }).then(function(r){return r.json();}).then(function(d){
-  if(d.ok){var dlg=document.getElementById('modelDialog');if(dlg)dlg.remove();loadSettingsModels();}
-  else alert(d.error||t('settings.models.delete.fail'));
- }).catch(function(){alert(t('settings.models.delete.fail'));});
-}
-
-function saveModelConfig(mid,cfg,handlers){
- handlers=handlers||{};
- fetch('/models/config',{
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({id:mid,config:cfg})
- }).then(function(r){return r.json();}).then(function(d){
-  if(d.ok){
-   if(typeof handlers.onSuccess==='function') handlers.onSuccess(d);
-   loadSettingsModels();
-   return;
-  }
-  var msg=(d&&d.error)?d.error:'\u4fdd\u5b58\u5931\u8d25';
-  if(typeof handlers.onError==='function') handlers.onError(msg,d||{});
-  else alert(msg);
- }).catch(function(){
-  if(typeof handlers.onError==='function') handlers.onError('\u4fdd\u5b58\u5931\u8d25',{});
-  else alert('\u4fdd\u5b58\u5931\u8d25');
- });
-}
-
-function openCatalogModelDialog(modelId, providerKey){
- var seedId=String(modelId||'').trim();
- if(!seedId) return;
- var providerInfo=((_settingsCatalog||{})[providerKey]||{});
- var useSubscription=_providerSupportsSubscription(providerKey, providerInfo);
- openModelDialog('',{
-  id:seedId,
-  config:{
-   model:seedId,
-   vision:false,
-   transport:useSubscription?'codex_cli':'openai_api',
-   base_url:useSubscription?'codex://local':''
-  }
- });
-}
-
-function openModelDialog(editId, draftSeed){
- var isEdit=!!editId;
- var draft=(draftSeed&&typeof draftSeed==='object')?draftSeed:{};
- var draftId=!isEdit?String(draft.id||'').trim():'';
- var m=isEdit?(_settingsModels[editId]||{}):((draft.config&&typeof draft.config==='object')?draft.config:{});
- var transport=_getModelTransport(m);
- var isCurrent=isEdit&&editId===_settingsCurrentModel;
- var isLight=document.body.classList.contains('light');
- var bg=isLight?'#fbfaf7':'#1c1c1e';
- var border=isLight?'rgba(114,105,94,0.18)':'rgba(255,255,255,0.1)';
- var textColor=isLight?'#1c1c1e':'#e2e8f0';
- var subColor=isLight?'#64748b':'#94a3b8';
- var inputBg=isLight?'#f5f1ea':'rgba(255,255,255,0.06)';
- var labelStyle='font-size:12px;font-weight:600;color:'+subColor+';margin-bottom:5px;';
- var inputStyle='width:100%;padding:10px 14px;border-radius:10px;border:1px solid '+border+';background:'+inputBg+';color:'+textColor+';outline:none;font-size:13px;box-sizing:border-box;';
- var title=isEdit?t('settings.models.edit'):t('settings.models.add');
- var maskedKey='';
- var fullKey='';
- if(isEdit&&transport!=='codex_cli'&&m.api_key){
-  var k=m.api_key;
-  fullKey=k;
-  maskedKey=k.length>14?(k.slice(0,6)+'****'+k.slice(-4)):k.replace(/./g,'*');
- }
-
- var overlay=document.createElement('div');
- overlay.id='modelDialog';
- overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-
- var html='<div style="background:'+bg+';border:1px solid '+border+';border-radius:16px;padding:24px;width:420px;max-width:90vw;">';
- html+='<div style="font-size:16px;font-weight:600;color:'+textColor+';margin-bottom:18px;">'+escapeHtml(title)+'</div>';
- html+='<div style="display:flex;flex-direction:column;gap:14px;">';
- html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.id')+'</div>';
- html+='<input id="mdlId" value="'+escapeHtml(isEdit?editId:draftId)+'" placeholder="gpt-4o, claude-3 ..." style="'+inputStyle+(isEdit?'opacity:0.5;cursor:not-allowed;':'')+'\"'+(isEdit?' disabled':'')+'></div>';
- html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.name')+'</div>';
- html+='<input id="mdlName" value="'+escapeHtml(m.model||'')+'" placeholder="'+t('settings.models.field.name.hint')+'" style="'+inputStyle+'"></div>';
- html+='<div><div style="'+labelStyle+'">Connection</div>';
- html+='<select id="mdlTransport" onchange="_syncModelDialogTransport()" style="'+inputStyle+'">';
- html+='<option value="openai_api"'+(transport==='codex_cli'?'':' selected')+'>API (Base URL + Key)</option>';
- html+='<option value="codex_cli"'+(transport==='codex_cli'?' selected':'')+'>Codex Subscription (local login)</option>';
- html+='</select></div>';
- html+='<div data-model-transport="api"><div style="'+labelStyle+'">Base URL</div>';
- html+='<input id="mdlUrl" value="'+escapeHtml(transport==='codex_cli'?'':(m.base_url||''))+'" placeholder="https://api.openai.com/v1" style="'+inputStyle+'"></div>';
- html+='<div data-model-transport="api"><div style="'+labelStyle+'">API Key</div>';
- html+='<div style="position:relative;"><input id="mdlKey" value="" placeholder="'+(isEdit?(maskedKey||t('settings.models.field.key.hint')):'sk-...')+'" style="'+inputStyle+';padding-right:40px;">';
- if(isEdit&&fullKey){html+='<button type="button" id="mdlKeyToggle" onclick="(function(b){var inp=document.getElementById(\'mdlKey\');var showing=b.getAttribute(\'data-show\')===\'1\';if(!showing){inp.value=\''+escapeHtml(fullKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94\\\'/><path d=\\\'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19\\\'/><line x1=\\\'1\\\' y1=\\\'1\\\' x2=\\\'23\\\' y2=\\\'23\\\'/></svg>\';b.setAttribute(\'data-show\',\'1\');}else{inp.value=\'\';inp.placeholder=\''+escapeHtml(maskedKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\\'/><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'3\\\'/></svg>\';b.setAttribute(\'data-show\',\'0\');}})(this)" data-show="0" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.5;color:'+subColor+';display:flex;align-items:center;" title="Show/Hide"><svg width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\'/><circle cx=\'12\' cy=\'12\' r=\'3\'/></svg></button>';}
- html+='</div></div>';
- html+='<div data-model-transport="codex" style="display:none;padding:10px 12px;border:1px dashed '+border+';border-radius:10px;color:'+subColor+';font-size:12px;line-height:1.6;">';
- html+='Uses the local <code>codex</code> login on this machine. No Base URL or API Key is required here.';
- html+='</div>';
- var checked=m.vision?'checked':'';
- html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">';
- html+='<input id="mdlVision" type="checkbox" '+checked+' style="width:16px;height:16px;accent-color:#7a7267;">';
- html+='<span style="font-size:13px;color:'+textColor+';">'+t('settings.models.vision')+'</span></label>';
- html+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">';
- if(isEdit&&!isCurrent){
-  html+='<button onclick="_modelDialogDelete(\''+escapeHtml(editId)+'\')" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(171,113,99,0.22);background:transparent;color:#9a665d;cursor:pointer;font-size:12px;opacity:0.7;transition:opacity 0.15s;" onmouseenter="this.style.opacity=\'1\'" onmouseleave="this.style.opacity=\'0.7\'">'+t('settings.models.delete')+'</button>';
- }
- html+='<div style="flex:1;"></div>';
- html+='<button onclick="document.getElementById(\'modelDialog\').remove()" style="padding:8px 18px;border-radius:8px;border:1px solid '+border+';background:transparent;color:'+textColor+';cursor:pointer;font-size:13px;">'+t('cancel')+'</button>';
- html+='<button onclick="_modelDialogSave(\''+escapeHtml(isEdit?editId:'')+'\')" style="padding:8px 18px;border-radius:8px;border:none;background:#6a6258;color:#fff;cursor:pointer;font-size:13px;">'+t('save')+'</button>';
- html+='</div></div></div>';
-
- overlay.innerHTML=html;
- document.body.appendChild(overlay);
- overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
- _syncModelDialogTransport();
- var first=isEdit?document.getElementById('mdlName'):document.getElementById('mdlId');
- if(first)setTimeout(function(){first.focus();},50);
-}
-
-function _collectModelDialogPayload(editId){
- var isEdit=!!editId;
- var theme=(typeof _settingsPageTheme==='function'
-  ? _settingsPageTheme(document.body.classList.contains('light'))
-  : {
-     dangerText:'#b91c1c'
-    });
- var mid=isEdit?editId:(document.getElementById('mdlId').value||'').trim();
- if(!mid){document.getElementById('mdlId').style.borderColor=theme.dangerText;return null;}
- var modelName=(document.getElementById('mdlName').value||'').trim()||mid;
- var baseUrl=(document.getElementById('mdlUrl').value||'').trim();
- if(!baseUrl){document.getElementById('mdlUrl').style.borderColor=theme.dangerText;return null;}
- var apiKey=(document.getElementById('mdlKey').value||'').trim();
- if(!apiKey&&isEdit&&_settingsModels[editId]) apiKey=String(_settingsModels[editId].api_key||'').trim();
- if(!apiKey){document.getElementById('mdlKey').style.borderColor=theme.dangerText;return null;}
- var previousVision=isEdit&&_settingsModels[editId]?!!_settingsModels[editId].vision:false;
- return {
-  mid:mid,
-  cfg:{
-   model:modelName,
-   vision:previousVision,
-   transport:'openai_api',
-   base_url:baseUrl,
-   api_key:apiKey
-  }
- };
-}
-
 function _setModelDialogStatus(kind, message){
  var box=document.getElementById('mdlTestStatus');
  if(!box) return;
@@ -688,6 +383,156 @@ function _setSettingsModelFeedback(kind, message){
  renderSettingsPage(document.body.classList.contains('light'));
 }
 
+function _modelDialogDelete(mid){
+ if(!confirm(t('settings.models.delete.confirm')+' '+mid+' ?'))return;
+ fetch('/models/config',{
+  method:'DELETE',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({id:mid})
+ }).then(function(r){return r.json();}).then(function(d){
+  if(d.ok){var dlg=document.getElementById('modelDialog');if(dlg)dlg.remove();loadSettingsModels();}
+  else alert(d.error||t('settings.models.delete.fail'));
+ }).catch(function(){alert(t('settings.models.delete.fail'));});
+}
+
+function saveModelConfig(mid,cfg,handlers){
+ handlers=handlers||{};
+ fetch('/models/config',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({id:mid,config:cfg})
+ }).then(function(r){return r.json();}).then(function(d){
+  if(d.ok){
+   if(typeof handlers.onSuccess==='function') handlers.onSuccess(d);
+   loadSettingsModels();
+   return;
+  }
+  var msg=(d&&d.error)?d.error:'\u4fdd\u5b58\u5931\u8d25';
+  if(typeof handlers.onError==='function') handlers.onError(msg,d||{});
+  else alert(msg);
+ }).catch(function(){
+  if(typeof handlers.onError==='function') handlers.onError('\u4fdd\u5b58\u5931\u8d25',{});
+  else alert('\u4fdd\u5b58\u5931\u8d25');
+ });
+}
+
+function openCatalogModelDialog(modelId, providerKey){
+ var seedId=String(modelId||'').trim();
+ if(!seedId) return;
+ openModelDialog('',{
+  id:seedId,
+  config:{
+   model:seedId,
+   vision:false,
+   transport:'openai_api',
+   base_url:''
+  }
+ });
+}
+
+function openModelDialog(editId, draftSeed){
+ var isEdit=!!editId;
+ var draft=(draftSeed&&typeof draftSeed==='object')?draftSeed:{};
+ var draftId=!isEdit?String(draft.id||'').trim():'';
+ var m=isEdit?(_settingsModels[editId]||{}):((draft.config&&typeof draft.config==='object')?draft.config:{});
+ var isCurrent=isEdit&&editId===_settingsCurrentModel;
+ var isLight=document.body.classList.contains('light');
+ var bg=isLight?'#fbfaf7':'#1c1c1e';
+ var border=isLight?'rgba(114,105,94,0.18)':'rgba(255,255,255,0.1)';
+ var textColor=isLight?'#1c1c1e':'#e2e8f0';
+ var subColor=isLight?'#64748b':'#94a3b8';
+ var inputBg=isLight?'#f5f1ea':'rgba(255,255,255,0.06)';
+ var labelStyle='font-size:12px;font-weight:600;color:'+subColor+';margin-bottom:5px;';
+ var inputStyle='width:100%;padding:10px 14px;border-radius:10px;border:1px solid '+border+';background:'+inputBg+';color:'+textColor+';outline:none;font-size:13px;box-sizing:border-box;';
+ var textInputAttrs=' spellcheck="false" autocapitalize="off" autocomplete="off"';
+ var title=isEdit?t('settings.models.edit'):t('settings.models.add');
+ var maskedKey='';
+ var fullKey='';
+ if(isEdit&&m.api_key){
+  var k=m.api_key;
+  fullKey=k;
+  maskedKey=k.length>14?(k.slice(0,6)+'****'+k.slice(-4)):k.replace(/./g,'*');
+ }
+
+ var overlay=document.createElement('div');
+ overlay.id='modelDialog';
+ overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+ var html='<div style="background:'+bg+';border:1px solid '+border+';border-radius:16px;padding:24px;width:420px;max-width:90vw;">';
+ html+='<div style="font-size:16px;font-weight:600;color:'+textColor+';margin-bottom:18px;">'+escapeHtml(title)+'</div>';
+ html+='<div style="display:flex;flex-direction:column;gap:14px;">';
+ html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.id')+'</div>';
+ html+='<input id="mdlId" value="'+escapeHtml(isEdit?editId:draftId)+'" placeholder="gpt-4o, claude-3 ..." style="'+inputStyle+(isEdit?'opacity:0.5;cursor:not-allowed;':'')+'"'+textInputAttrs+(isEdit?' disabled':'')+'></div>';
+ html+='<div><div style="'+labelStyle+'">'+t('settings.models.field.name')+'</div>';
+ html+='<input id="mdlName" value="'+escapeHtml(m.model||'')+'" placeholder="'+t('settings.models.field.name.hint')+'" style="'+inputStyle+'"'+textInputAttrs+'></div>';
+ html+='<div><div style="'+labelStyle+'">Base URL</div>';
+ html+='<input id="mdlUrl" value="'+escapeHtml(m.base_url||'')+'" placeholder="https://api.openai.com/v1" style="'+inputStyle+'"'+textInputAttrs+'></div>';
+ html+='<div><div style="'+labelStyle+'">API Key</div>';
+ html+='<div style="position:relative;"><input id="mdlKey" value="" placeholder="'+(isEdit?(maskedKey||t('settings.models.field.key.hint')):'sk-...')+'" style="'+inputStyle+';padding-right:40px;"'+textInputAttrs+'>';
+ if(isEdit&&fullKey){html+='<button type="button" id="mdlKeyToggle" onclick="(function(b){var inp=document.getElementById(\'mdlKey\');var showing=b.getAttribute(\'data-show\')===\'1\';if(!showing){inp.value=\''+escapeHtml(fullKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94\\\'/><path d=\\\'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19\\\'/><line x1=\\\'1\\\' y1=\\\'1\\\' x2=\\\'23\\\' y2=\\\'23\\\'/></svg>\';b.setAttribute(\'data-show\',\'1\');}else{inp.value=\'\';inp.placeholder=\''+escapeHtml(maskedKey)+'\';b.innerHTML=\'<svg width=\\\'16\\\' height=\\\'16\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'currentColor\\\' stroke-width=\\\'2\\\'><path d=\\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\\'/><circle cx=\\\'12\\\' cy=\\\'12\\\' r=\\\'3\\\'/></svg>\';b.setAttribute(\'data-show\',\'0\');}})(this)" data-show="0" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.5;color:'+subColor+';display:flex;align-items:center;" title="Show/Hide"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>';}
+ html+='</div></div>';
+ html+='<div id="mdlTestStatus" style="display:none;padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.6;"></div>';
+ html+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">';
+ if(isEdit&&!isCurrent){
+  html+='<button onclick="_modelDialogDelete(\''+escapeHtml(editId)+'\')" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(171,113,99,0.22);background:transparent;color:#9a665d;cursor:pointer;font-size:12px;opacity:0.7;transition:opacity 0.15s;" onmouseenter="this.style.opacity=\'1\'" onmouseleave="this.style.opacity=\'0.7\'">'+t('settings.models.delete')+'</button>';
+ }
+ html+='<div style="flex:1;"></div>';
+ html+='<button id="mdlTestBtn" onclick="_modelDialogTest(\''+escapeHtml(isEdit?editId:'')+'\')" style="padding:8px 14px;border-radius:8px;border:1px solid '+border+';background:transparent;color:'+textColor+';cursor:pointer;font-size:13px;">'+t('settings.models.test')+'</button>';
+ html+='<button onclick="document.getElementById(\'modelDialog\').remove()" style="padding:8px 18px;border-radius:8px;border:1px solid '+border+';background:transparent;color:'+textColor+';cursor:pointer;font-size:13px;">'+t('cancel')+'</button>';
+ html+='<button onclick="_modelDialogSave(\''+escapeHtml(isEdit?editId:'')+'\')" style="padding:8px 18px;border-radius:8px;border:none;background:#6a6258;color:#fff;cursor:pointer;font-size:13px;">'+t('save')+'</button>';
+ html+='</div></div></div>';
+
+ overlay.innerHTML=html;
+ document.body.appendChild(overlay);
+ overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+ var first=isEdit?document.getElementById('mdlName'):document.getElementById('mdlId');
+ if(first)setTimeout(function(){first.focus();},50);
+}
+
+function _collectModelDialogPayload(editId){
+ var isEdit=!!editId;
+ var theme=(typeof _settingsPageTheme==='function'
+  ? _settingsPageTheme(document.body.classList.contains('light'))
+  : {
+     dangerText:'#b91c1c'
+    });
+ var idInput=document.getElementById('mdlId');
+ var urlInput=document.getElementById('mdlUrl');
+ var keyInput=document.getElementById('mdlKey');
+ if(idInput) idInput.style.borderColor='';
+ if(urlInput) urlInput.style.borderColor='';
+ if(keyInput) keyInput.style.borderColor='';
+ var mid=isEdit?editId:((idInput&&idInput.value)||'').trim();
+ if(!mid){
+  if(idInput) idInput.style.borderColor=theme.dangerText;
+  return null;
+ }
+ var nameInput=document.getElementById('mdlName');
+ var modelName=((nameInput&&nameInput.value)||'').trim()||mid;
+ var baseUrl=((urlInput&&urlInput.value)||'').trim();
+ if(!baseUrl){
+  if(urlInput) urlInput.style.borderColor=theme.dangerText;
+  return null;
+ }
+ var apiKey=((keyInput&&keyInput.value)||'').trim();
+ if(!apiKey&&isEdit&&_settingsModels[editId]) apiKey=String(_settingsModels[editId].api_key||'').trim();
+ if(!apiKey){
+  if(keyInput) keyInput.style.borderColor=theme.dangerText;
+  return null;
+ }
+ var previousVision=isEdit&&_settingsModels[editId]?!!_settingsModels[editId].vision:false;
+ return {
+  mid:mid,
+  cfg:{
+   model:modelName,
+   vision:previousVision,
+   transport:'openai_api',
+   base_url:baseUrl,
+   api_key:apiKey
+  }
+ };
+}
+
 function testModelConfig(mid, cfg, handlers){
  handlers=handlers||{};
  var payload={};
@@ -702,11 +547,11 @@ function testModelConfig(mid, cfg, handlers){
    if(typeof handlers.onSuccess==='function') handlers.onSuccess(d);
    return d;
   }
-  var msg=(d&&d.error)?d.error:'Model test failed';
+  var msg=(d&&d.error)?d.error:t('settings.models.test.fail');
   if(typeof handlers.onError==='function') handlers.onError(msg,d||{});
   throw new Error(msg);
  }).catch(function(err){
-  var msg=(err&&err.message)?err.message:'Model test failed';
+  var msg=(err&&err.message)?err.message:t('settings.models.test.fail');
   if(typeof handlers.onError==='function') handlers.onError(msg,{});
   throw err;
  }).finally(function(){
@@ -720,20 +565,20 @@ function testConfiguredModel(mid, trigger){
  if(btn){
   btn.disabled=true;
   btn.style.opacity='0.65';
-  btn.textContent='Testing...';
+  btn.textContent=t('settings.models.test.running');
  }
  testModelConfig(mid,null,{
   onSuccess:function(){
-   _setSettingsModelFeedback('notice','Model connection OK');
+   _setSettingsModelFeedback('notice',t('settings.models.test.ok'));
   },
   onError:function(message){
-   _setSettingsModelFeedback('error',message||'Model test failed');
+   _setSettingsModelFeedback('error',message||t('settings.models.test.fail'));
   },
   onFinally:function(){
    if(!btn) return;
    btn.disabled=false;
    btn.style.opacity='';
-   btn.textContent=originalText||'Test';
+   btn.textContent=originalText||t('settings.models.test');
   }
  }).catch(function(){});
 }
@@ -746,21 +591,21 @@ function _modelDialogTest(editId){
  if(btn){
   btn.disabled=true;
   btn.style.opacity='0.65';
-  btn.textContent='Testing...';
+  btn.textContent=t('settings.models.test.running');
  }
- _setModelDialogStatus('info','Checking model connection...');
+ _setModelDialogStatus('info',t('settings.models.test.checking'));
  testModelConfig(payload.mid,payload.cfg,{
   onSuccess:function(){
-   _setModelDialogStatus('success','Connection OK');
+   _setModelDialogStatus('success',t('settings.models.test.ok'));
   },
   onError:function(message){
-   _setModelDialogStatus('error',message||'Model test failed');
+   _setModelDialogStatus('error',message||t('settings.models.test.fail'));
   },
   onFinally:function(){
    if(!btn) return;
    btn.disabled=false;
    btn.style.opacity='';
-   btn.textContent=originalText||'Test';
+   btn.textContent=originalText||t('settings.models.test');
   }
  }).catch(function(){});
 }
@@ -768,16 +613,15 @@ function _modelDialogTest(editId){
 function _modelDialogSave(editId){
  var payload=_collectModelDialogPayload(editId);
  if(!payload) return;
- _setModelDialogStatus('info','Saving model...');
+ _setModelDialogStatus('info',t('settings.saving'));
  saveModelConfig(payload.mid,payload.cfg,{
   onSuccess:function(){
    var dlg=document.getElementById('modelDialog');
-   if(dlg)dlg.remove();
-   _setSettingsModelFeedback('notice','Model saved');
+   if(dlg) dlg.remove();
+   _setSettingsModelFeedback('notice',t('settings.saved'));
   },
   onError:function(message){
-   _setModelDialogStatus('error',message||'Save failed');
+   _setModelDialogStatus('error',message||t('settings.save.fail'));
   }
  });
 }
-
