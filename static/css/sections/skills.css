@@ -143,7 +143,6 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  border-bottom: 1px solid var(--divider-panel);
 }
 
 .settings-row-copy {

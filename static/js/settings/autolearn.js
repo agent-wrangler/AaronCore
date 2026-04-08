@@ -118,17 +118,17 @@ function renderSettingsToggleCard(title, desc, key, value, isLight){
  return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:var(--shadow-card);">'
   +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
   +'<div style="min-width:0;"><div style="font-size:15px;font-weight:700;color:'+titleColor+';margin-bottom:4px;">'+escapeHtml(title)+'</div><div style="font-size:12px;line-height:1.7;color:'+subColor+';">'+escapeHtml(desc)+'</div></div>'
-  +'<span style="flex-shrink:0;padding:6px 10px;border-radius:999px;background:'+stateBg+';color:'+stateColor+';font-size:12px;font-weight:700;">'+(value?'已开启':'已关闭')+'</span>'
+  +'<span style="flex-shrink:0;padding:6px 10px;border-radius:999px;background:'+stateBg+';color:'+stateColor+';font-size:12px;font-weight:700;">'+(value?'宸插紑鍚?:'宸插叧闂?)+'</span>'
   +'</div>'
-  +'<button type="button" data-settings-action="toggle" data-settings-key="'+escapeHtml(key)+'" style="margin-top:auto;padding:10px 12px;border:none;border-radius:12px;background:'+actionBg+';color:'+actionColor+';font-size:13px;font-weight:700;cursor:pointer;box-shadow:'+(value?'var(--shadow-card)':'none')+';">'+(value?'保持开启':'现在开启')+'</button>'
+  +'<button type="button" data-settings-action="toggle" data-settings-key="'+escapeHtml(key)+'" style="margin-top:auto;padding:10px 12px;border:none;border-radius:12px;background:'+actionBg+';color:'+actionColor+';font-size:13px;font-weight:700;cursor:pointer;box-shadow:'+(value?'var(--shadow-card)':'none')+';">'+(value?'淇濇寔寮€鍚?:'鐜板湪寮€鍚?)+'</button>'
   +'</div>';
 }
 
 function autolearnPresets(){
  return {
-  basic:{label:'基础',desc:'不联网学新知识，不整理修复提案。反馈记忆始终开启，AI Agent 会记住你说过的纠正。',patch:{enabled:true,allow_knowledge_write:true,allow_web_search:false,allow_self_repair_planning:false,allow_self_repair_test_run:false,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
-  advanced:{label:'进阶',desc:'会联网补学知识，会整理修复提案并先跑验证。真正改代码前先停下来给你看。',patch:{enabled:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
-  deep:{label:'深度',desc:'包含进阶的全部能力，低风险问题允许后台自动落地，中高风险改动仍然会停下来。',patch:{enabled:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:true,self_repair_apply_mode:'confirm'}}
+  basic:{label:'鍩虹',desc:'涓嶈仈缃戝鏂扮煡璇嗭紝涓嶆暣鐞嗕慨澶嶆彁妗堛€傚弽棣堣蹇嗗缁堝紑鍚紝AI Agent 浼氳浣忎綘璇磋繃鐨勭籂姝ｃ€?,patch:{enabled:true,allow_knowledge_write:true,allow_web_search:false,allow_self_repair_planning:false,allow_self_repair_test_run:false,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
+  advanced:{label:'杩涢樁',desc:'浼氳仈缃戣ˉ瀛︾煡璇嗭紝浼氭暣鐞嗕慨澶嶆彁妗堝苟鍏堣窇楠岃瘉銆傜湡姝ｆ敼浠ｇ爜鍓嶅厛鍋滀笅鏉ョ粰浣犵湅銆?,patch:{enabled:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:false,self_repair_apply_mode:'confirm'}},
+  deep:{label:'娣卞害',desc:'鍖呭惈杩涢樁鐨勫叏閮ㄨ兘鍔涳紝浣庨闄╅棶棰樺厑璁稿悗鍙拌嚜鍔ㄨ惤鍦帮紝涓珮椋庨櫓鏀瑰姩浠嶇劧浼氬仠涓嬫潵銆?,patch:{enabled:true,allow_knowledge_write:true,allow_web_search:true,allow_self_repair_planning:true,allow_self_repair_test_run:true,allow_self_repair_auto_apply:true,self_repair_apply_mode:'confirm'}}
  };
 }
 
@@ -142,7 +142,7 @@ function currentAutolearnPreset(config){
   }
   if(match) return {key:key,label:p.label,desc:p.desc};
  }
- return {key:'custom',label:'自定义组合',desc:'当前配置不完全等于基础、进阶、深度三档中的任意一档。'};
+ return {key:'custom',label:'鑷畾涔夌粍鍚?,desc:'褰撳墠閰嶇疆涓嶅畬鍏ㄧ瓑浜庡熀纭€銆佽繘闃躲€佹繁搴︿笁妗ｄ腑鐨勪换鎰忎竴妗ｃ€?};
 }
 
 function renderAutolearnPresetCard(key, preset, currentKey, isLight){
@@ -157,7 +157,7 @@ function renderAutolearnPresetCard(key, preset, currentKey, isLight){
  return '<div style="background:'+cardBg+';border:1px solid '+borderColor+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow-card);">'
   +'<div style="font-size:16px;font-weight:800;color:'+textColor+';">'+escapeHtml(preset.label)+'</div>'
   +'<div style="font-size:12px;line-height:1.7;color:'+subColor+';flex:1;">'+escapeHtml(preset.desc)+'</div>'
-  +'<button type="button" data-settings-action="preset" data-settings-key="'+escapeHtml(key)+'" style="padding:10px 12px;border:none;border-radius:12px;background:'+btnBg+';color:'+btnColor+';font-size:13px;font-weight:700;cursor:pointer;">'+(active?'保持这一档':'切到这一档')+'</button>'
+  +'<button type="button" data-settings-action="preset" data-settings-key="'+escapeHtml(key)+'" style="padding:10px 12px;border:none;border-radius:12px;background:'+btnBg+';color:'+btnColor+';font-size:13px;font-weight:700;cursor:pointer;">'+(active?'淇濇寔杩欎竴妗?:'鍒囧埌杩欎竴妗?)+'</button>'
   +'</div>';
 }
 
@@ -165,12 +165,12 @@ function selfRepairOutcome(status){
  var safe=status&&typeof status==='object'?status:{};
  var lastAction=String(safe.last_action||safe.last_outcome||'').trim();
  if(lastAction.indexOf('applied')===0||lastAction==='auto_applied')
-  return {label:'自动修改',title:'自动修改',desc:'已经真的动手改了，并可能通过验证或触发回滚。'};
+  return {label:'鑷姩淇敼',title:'鑷姩淇敼',desc:'宸茬粡鐪熺殑鍔ㄦ墜鏀逛簡锛屽苟鍙兘閫氳繃楠岃瘉鎴栬Е鍙戝洖婊氥€?};
  if(lastAction==='proposal_ready'||lastAction==='preview_ready'||lastAction.indexOf('plan')>=0)
-  return {label:'生成方案',title:'生成方案',desc:'已经整理出修复提案或改法预览。'};
+  return {label:'鐢熸垚鏂规',title:'鐢熸垚鏂规',desc:'宸茬粡鏁寸悊鍑轰慨澶嶆彁妗堟垨鏀规硶棰勮銆?};
  if(lastAction==='skill_generated'||lastAction==='new_skill')
-  return {label:'解锁新技能',title:'解锁新技能',desc:'当前不是日常默认主链，通常保持关闭。'};
- return {label:'积累经验',title:'积累经验',desc:'已经记住这次反馈，但还没进入具体修法落地。'};
+  return {label:'瑙ｉ攣鏂版妧鑳?,title:'瑙ｉ攣鏂版妧鑳?,desc:'褰撳墠涓嶆槸鏃ュ父榛樿涓婚摼锛岄€氬父淇濇寔鍏抽棴銆?};
+ return {label:'绉疮缁忛獙',title:'绉疮缁忛獙',desc:'宸茬粡璁颁綇杩欐鍙嶉锛屼絾杩樻病杩涘叆鍏蜂綋淇硶钀藉湴銆?};
 }
 
 function toggleAutolearnAdvanced(){
@@ -180,7 +180,7 @@ function toggleAutolearnAdvanced(){
 
 function formatSettingsTimestamp(value){
  var raw=String(value||'').trim();
- if(!raw) return '刚刚';
+ if(!raw) return '鍒氬垰';
  return raw.replace('T',' ').replace(/\.\d+$/,'').slice(0,16);
 }
 
@@ -207,10 +207,10 @@ function renderSettingsMetaPill(label, tone, isLight){
 
 function selfRepairFlowSummary(config){
  var normalized=mergeAutolearnConfig(config||{});
- var planning=normalized.allow_self_repair_planning?'新的负反馈会继续整理成修复提案':'新的负反馈暂时不会继续生成修复提案';
- var lowRisk=normalized.allow_self_repair_auto_apply?'低风险补丁允许后台自动落地':'低风险补丁也会先停在提案阶段';
- var highRisk=normalized.self_repair_apply_mode==='suggest'?'中高风险改动会先给你看方案':'中高风险改动会停下来等你确认一次';
- return planning+'。'+lowRisk+'，'+highRisk+'。';
+ var planning=normalized.allow_self_repair_planning?'鏂扮殑璐熷弽棣堜細缁х画鏁寸悊鎴愪慨澶嶆彁妗?:'鏂扮殑璐熷弽棣堟殏鏃朵笉浼氱户缁敓鎴愪慨澶嶆彁妗?;
+ var lowRisk=normalized.allow_self_repair_auto_apply?'浣庨闄╄ˉ涓佸厑璁稿悗鍙拌嚜鍔ㄨ惤鍦?:'浣庨闄╄ˉ涓佷篃浼氬厛鍋滃湪鎻愭闃舵';
+ var highRisk=normalized.self_repair_apply_mode==='suggest'?'涓珮椋庨櫓鏀瑰姩浼氬厛缁欎綘鐪嬫柟妗?:'涓珮椋庨櫓鏀瑰姩浼氬仠涓嬫潵绛変綘纭涓€娆?;
+ return planning+'銆?+lowRisk+'锛?+highRisk+'銆?;
 }
 
 function selfRepairReportStatusMeta(report){
@@ -220,23 +220,23 @@ function selfRepairReportStatusMeta(report){
  var status=String(safe.status||'').trim();
  var previewStatus=String(preview.status||'').trim();
  var applyStatus=String(apply.status||'').trim();
- if(applyStatus.indexOf('rolled_back')===0||status.indexOf('rolled_back')===0) return {label:'已自动回滚',tone:'warn'};
- if(applyStatus==='applied'||applyStatus==='applied_without_validation'||status==='applied'||status==='applied_without_validation') return {label:'已应用',tone:'ok'};
- if(previewStatus==='preview_failed'||status==='needs_attention') return {label:'需要处理',tone:'danger'};
- if(previewStatus==='preview_ready') return {label:(preview.confirmation_required===false?'可直接落地':'待你审核'),tone:(preview.confirmation_required===false?'ok':'accent')};
- if(status==='awaiting_confirmation') return {label:'待你确认',tone:'accent'};
- if(status==='proposal_ready') return {label:'提案已就绪',tone:'accent'};
- return {label:'已进入修复链路',tone:'muted'};
+ if(applyStatus.indexOf('rolled_back')===0||status.indexOf('rolled_back')===0) return {label:'宸茶嚜鍔ㄥ洖婊?,tone:'warn'};
+ if(applyStatus==='applied'||applyStatus==='applied_without_validation'||status==='applied'||status==='applied_without_validation') return {label:'宸插簲鐢?,tone:'ok'};
+ if(previewStatus==='preview_failed'||status==='needs_attention') return {label:'闇€瑕佸鐞?,tone:'danger'};
+ if(previewStatus==='preview_ready') return {label:(preview.confirmation_required===false?'鍙洿鎺ヨ惤鍦?:'寰呬綘瀹℃牳'),tone:(preview.confirmation_required===false?'ok':'accent')};
+ if(status==='awaiting_confirmation') return {label:'寰呬綘纭',tone:'accent'};
+ if(status==='proposal_ready') return {label:'鎻愭宸插氨缁?,tone:'accent'};
+ return {label:'宸茶繘鍏ヤ慨澶嶉摼璺?,tone:'muted'};
 }
 
 function selfRepairRiskMeta(report){
  var safe=report&&typeof report==='object'?report:{};
  var preview=safe.patch_preview&&typeof safe.patch_preview==='object'?safe.patch_preview:{};
  var level=String(preview.risk_level||safe.risk_level||'').trim();
- if(level==='low') return {label:'低风险',tone:'ok'};
- if(level==='medium') return {label:'中风险',tone:'warn'};
- if(level==='high') return {label:'高风险',tone:'danger'};
- return {label:'风险待评估',tone:'muted'};
+ if(level==='low') return {label:'浣庨闄?,tone:'ok'};
+ if(level==='medium') return {label:'涓闄?,tone:'warn'};
+ if(level==='high') return {label:'楂橀闄?,tone:'danger'};
+ return {label:'椋庨櫓寰呰瘎浼?,tone:'muted'};
 }
 
 function summarizeSelfRepairValidation(report){
@@ -246,24 +246,24 @@ function summarizeSelfRepairValidation(report){
  var runs=[];
  if(applyValidation&&applyValidation.ran){
   runs=Array.isArray(applyValidation.test_runs)?applyValidation.test_runs:[];
-  if(applyValidation.all_passed===true) return '应用后验证已通过'+(runs.length?'，共 '+runs.length+' 项':'');
-  if(applyValidation.all_passed===false) return '应用后验证未通过，已自动回滚'+(runs.length?'，共 '+runs.length+' 项':'');
-  return '已经执行应用后的验证';
+  if(applyValidation.all_passed===true) return '搴旂敤鍚庨獙璇佸凡閫氳繃'+(runs.length?'锛屽叡 '+runs.length+' 椤?:'');
+  if(applyValidation.all_passed===false) return '搴旂敤鍚庨獙璇佹湭閫氳繃锛屽凡鑷姩鍥炴粴'+(runs.length?'锛屽叡 '+runs.length+' 椤?:'');
+  return '宸茬粡鎵ц搴旂敤鍚庣殑楠岃瘉';
  }
  if(baseValidation&&baseValidation.ran){
   runs=Array.isArray(baseValidation.test_runs)?baseValidation.test_runs:[];
-  if(baseValidation.all_passed===true) return '提案预检已通过'+(runs.length?'，共 '+runs.length+' 项':'');
-  if(baseValidation.all_passed===false) return '提案预检未通过，需要先处理'+(runs.length?'，共 '+runs.length+' 项':'');
-  return '已经执行提案预检';
+  if(baseValidation.all_passed===true) return '鎻愭棰勬宸查€氳繃'+(runs.length?'锛屽叡 '+runs.length+' 椤?:'');
+  if(baseValidation.all_passed===false) return '鎻愭棰勬鏈€氳繃锛岄渶瑕佸厛澶勭悊'+(runs.length?'锛屽叡 '+runs.length+' 椤?:'');
+  return '宸茬粡鎵ц鎻愭棰勬';
  }
- return '这条提案还没有跑出验证结果';
+ return '杩欐潯鎻愭杩樻病鏈夎窇鍑洪獙璇佺粨鏋?;
 }
 
 function renderRepairPathList(paths, isLight, emptyText){
  var theme=getSettingsTheme(isLight);
  var list=(Array.isArray(paths)?paths:[]).map(function(item){ return String(item||'').trim(); }).filter(Boolean).slice(0,6);
  var subColor=theme.sub;
- if(!list.length) return '<div style="font-size:12px;color:'+subColor+';">'+escapeHtml(emptyText||'暂时没有')+'</div>';
+ if(!list.length) return '<div style="font-size:12px;color:'+subColor+';">'+escapeHtml(emptyText||'鏆傛椂娌℃湁')+'</div>';
  var bg=theme.pathBg;
  var color=theme.pathText;
  return '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+list.map(function(path){
@@ -287,14 +287,14 @@ function runSelfRepairAction(action, reportId){
  var targetId=String(reportId||'').trim();
  if(action!=='refresh'&&!targetId) return;
  settingsPanelState.error='';
- settingsPanelState.notice=(action==='preview'?'正在生成改动预览...':(action==='apply'?'正在应用修复提案...':'正在刷新修复提案...'));
+ settingsPanelState.notice=(action==='preview'?'姝ｅ湪鐢熸垚鏀瑰姩棰勮...':(action==='apply'?'姝ｅ湪搴旂敤淇鎻愭...':'姝ｅ湪鍒锋柊淇鎻愭...'));
  settingsPanelState.repairActionBusy=action+':'+targetId;
  if(targetId) settingsPanelState.activeRepairId=targetId;
  renderSettingsPage(isLight);
  if(action==='refresh'){
   settingsPanelState.repairActionBusy='';
-  refreshSettingsData(isLight,'修复提案列表已刷新').catch(function(){
-   settingsPanelState.error='修复提案刷新失败，请稍后再试';
+  refreshSettingsData(isLight,'淇鎻愭鍒楄〃宸插埛鏂?).catch(function(){
+   settingsPanelState.error='淇鎻愭鍒锋柊澶辫触锛岃绋嶅悗鍐嶈瘯';
    renderSettingsPage(isLight);
   });
   return;
@@ -306,17 +306,17 @@ function runSelfRepairAction(action, reportId){
   var report=(data&&data.report)||{};
   var applyStatus=String(((report.apply_result||{}).status)||'').trim();
   var previewStatus=String((((report.patch_preview||{}).status)||'')).trim();
-  var notice='修复提案状态已更新';
-  if(action==='preview') notice=previewStatus==='preview_ready'?'改动预览已经准备好了':'改动预览生成失败，请看卡片详情';
-  else if(applyStatus==='applied'||applyStatus==='applied_without_validation') notice='修复提案已经应用';
-  else if(applyStatus.indexOf('rolled_back')===0) notice='修复执行后未通过验证，已经自动回滚';
-  else if(applyStatus==='already_applied') notice='这条修复提案已经应用过了';
-  else if(applyStatus) notice='修复提案已处理，请看卡片里的最新状态';
+  var notice='淇鎻愭鐘舵€佸凡鏇存柊';
+  if(action==='preview') notice=previewStatus==='preview_ready'?'鏀瑰姩棰勮宸茬粡鍑嗗濂戒簡':'鏀瑰姩棰勮鐢熸垚澶辫触锛岃鐪嬪崱鐗囪鎯?;
+  else if(applyStatus==='applied'||applyStatus==='applied_without_validation') notice='淇鎻愭宸茬粡搴旂敤';
+  else if(applyStatus.indexOf('rolled_back')===0) notice='淇鎵ц鍚庢湭閫氳繃楠岃瘉锛屽凡缁忚嚜鍔ㄥ洖婊?;
+  else if(applyStatus==='already_applied') notice='杩欐潯淇鎻愭宸茬粡搴旂敤杩囦簡';
+  else if(applyStatus) notice='淇鎻愭宸插鐞嗭紝璇风湅鍗＄墖閲岀殑鏈€鏂扮姸鎬?;
   settingsPanelState.repairActionBusy='';
   return refreshSettingsData(isLight,notice);
  }).catch(function(){
   settingsPanelState.repairActionBusy='';
-  settingsPanelState.error=(action==='apply'?'修复提案应用失败，请稍后再试':'修复提案预览失败，请稍后再试');
+  settingsPanelState.error=(action==='apply'?'淇鎻愭搴旂敤澶辫触锛岃绋嶅悗鍐嶈瘯':'淇鎻愭棰勮澶辫触锛岃绋嶅悗鍐嶈瘯');
   renderSettingsPage(isLight);
  });
 }
@@ -332,7 +332,7 @@ function renderSelfRepairReportCard(report, isLight, active){
  var subColor=theme.sub;
  var borderColor=active?theme.borderStrong:theme.border;
  var cardBg=active?theme.cardBgActive:theme.cardBg;
- var summary=cleanInlineText(safe.summary||safe.problem||'',220)||'这条修复提案还没有生成摘要。';
+ var summary=cleanInlineText(safe.summary||safe.problem||'',220)||'杩欐潯淇鎻愭杩樻病鏈夌敓鎴愭憳瑕併€?;
  var diagnosis=cleanInlineText(safe.diagnosis||safe.fix||'',240);
  var question=cleanInlineText(safe.last_question||'',140);
  var feedback=cleanInlineText(safe.user_feedback||'',140);
@@ -357,24 +357,24 @@ function renderSelfRepairReportCard(report, isLight, active){
  html+='<div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
  html+='<div style="font-size:12px;line-height:1.7;color:'+subColor+';">'+escapeHtml(summarizeSelfRepairValidation(safe))+'</div>';
  html+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
- html+=renderSettingsActionButton(active?'收起详情':'展开详情','self-repair-toggle',String(safe.id||''),isLight,'secondary',anyBusy);
- if(canPreview) html+=renderSettingsActionButton(isBusyPreview?'正在生成...':(previewStatus==='preview_failed'?'重新生成预览':'生成改动预览'),'self-repair-preview',String(safe.id||''),isLight,'secondary',anyBusy);
- if(canApply) html+=renderSettingsActionButton(isBusyApply?'正在应用...':'批准并应用','self-repair-apply',String(safe.id||''),isLight,'primary',anyBusy);
+ html+=renderSettingsActionButton(active?'鏀惰捣璇︽儏':'灞曞紑璇︽儏','self-repair-toggle',String(safe.id||''),isLight,'secondary',anyBusy);
+ if(canPreview) html+=renderSettingsActionButton(isBusyPreview?'姝ｅ湪鐢熸垚...':(previewStatus==='preview_failed'?'閲嶆柊鐢熸垚棰勮':'鐢熸垚鏀瑰姩棰勮'),'self-repair-preview',String(safe.id||''),isLight,'secondary',anyBusy);
+ if(canApply) html+=renderSettingsActionButton(isBusyApply?'姝ｅ湪搴旂敤...':'鎵瑰噯骞跺簲鐢?,'self-repair-apply',String(safe.id||''),isLight,'primary',anyBusy);
  html+='</div></div>';
  if(active){
   html+='<div style="margin-top:14px;padding-top:14px;border-top:1px dashed '+borderColor+';display:grid;gap:12px;">';
-  if(question) html+=renderRepairDetailRow('对应提问','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(question)+'</div>',isLight);
-  if(feedback) html+=renderRepairDetailRow('用户反馈','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(feedback)+'</div>',isLight);
-  if(diagnosis) html+=renderRepairDetailRow('排查判断','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(diagnosis)+'</div>',isLight);
-  html+=renderRepairDetailRow('候选文件',renderRepairPathList(candidatePaths,isLight,'这条提案还没有列出候选文件'),isLight);
-  html+=renderRepairDetailRow('建议测试',renderRepairPathList(testPaths,isLight,'这条提案还没有列出建议测试'),isLight);
+  if(question) html+=renderRepairDetailRow('瀵瑰簲鎻愰棶','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(question)+'</div>',isLight);
+  if(feedback) html+=renderRepairDetailRow('鐢ㄦ埛鍙嶉','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(feedback)+'</div>',isLight);
+  if(diagnosis) html+=renderRepairDetailRow('鎺掓煡鍒ゆ柇','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(diagnosis)+'</div>',isLight);
+  html+=renderRepairDetailRow('鍊欓€夋枃浠?,renderRepairPathList(candidatePaths,isLight,'杩欐潯鎻愭杩樻病鏈夊垪鍑哄€欓€夋枃浠?),isLight);
+  html+=renderRepairDetailRow('寤鸿娴嬭瘯',renderRepairPathList(testPaths,isLight,'杩欐潯鎻愭杩樻病鏈夊垪鍑哄缓璁祴璇?),isLight);
   if(previewStatus==='preview_ready'){
-   html+=renderRepairDetailRow('改动预览','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(previewSummary||'已经生成改动预览，可以先看文件范围和片段后，再在这里批准应用。')+'</div>',isLight);
-   html+=renderRepairDetailRow('拟改文件',renderRepairPathList(previewPaths,isLight,'这次预览还没有列出具体改动文件'),isLight);
+   html+=renderRepairDetailRow('鏀瑰姩棰勮','<div style="font-size:13px;line-height:1.8;color:'+textColor+';">'+escapeHtml(previewSummary||'宸茬粡鐢熸垚鏀瑰姩棰勮锛屽彲浠ュ厛鐪嬫枃浠惰寖鍥村拰鐗囨鍚庯紝鍐嶅湪杩欓噷鎵瑰噯搴旂敤銆?)+'</div>',isLight);
+   html+=renderRepairDetailRow('鎷熸敼鏂囦欢',renderRepairPathList(previewPaths,isLight,'杩欐棰勮杩樻病鏈夊垪鍑哄叿浣撴敼鍔ㄦ枃浠?),isLight);
   }else if(previewStatus==='preview_failed'){
-   html+=renderRepairDetailRow('预览失败','<div style="font-size:13px;line-height:1.8;color:'+(isLight?'#b91c1c':'#fca5a5')+';">'+escapeHtml(previewError||'这次改动预览没有成功生成。')+'</div>',isLight);
+   html+=renderRepairDetailRow('棰勮澶辫触','<div style="font-size:13px;line-height:1.8;color:'+(isLight?'#b91c1c':'#fca5a5')+';">'+escapeHtml(previewError||'杩欐鏀瑰姩棰勮娌℃湁鎴愬姛鐢熸垚銆?)+'</div>',isLight);
   }else{
-   html+=renderRepairDetailRow('审批入口','<div style="font-size:13px;line-height:1.8;color:'+subColor+';">先点"生成改动预览"，看完文件范围和片段后，再在这里批准应用。</div>',isLight);
+   html+=renderRepairDetailRow('瀹℃壒鍏ュ彛','<div style="font-size:13px;line-height:1.8;color:'+subColor+';">鍏堢偣"鐢熸垚鏀瑰姩棰勮"锛岀湅瀹屾枃浠惰寖鍥村拰鐗囨鍚庯紝鍐嶅湪杩欓噷鎵瑰噯搴旂敤銆?/div>',isLight);
   }
   html+='</div>';
  }
@@ -488,7 +488,7 @@ function renderSettingsPage(isLight){
  var borderColor=theme.border;
  var html='';
 
- // ── 语言切换 ──
+ // 鈹€鈹€ 璇█鍒囨崲 鈹€鈹€
  var _isZh=getLang()==='zh';
  html+='<div style="margin-bottom:14px;background:'+cardBg+';border:1px solid '+borderColor+';padding:14px 18px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;">';
  html+='<span style="font-size:14px;font-weight:600;color:'+textColor+';">'+t('settings.lang')+'</span>';
@@ -497,14 +497,14 @@ function renderSettingsPage(isLight){
  html+='<button onclick="setLang(\'en\')" style="padding:6px 14px;border-radius:8px;border:1px solid '+borderColor+';background:'+(!_isZh?theme.actionPrimary:cardBg)+';color:'+(!_isZh?theme.actionPrimaryText:textColor)+';font-size:13px;font-weight:600;cursor:pointer;">'+t('settings.lang.en')+'</button>';
  html+='</div></div>';
 
- // ── 区块1：状态总览（4个数字）──
+ // 鈹€鈹€ 鍖哄潡1锛氱姸鎬佹€昏锛?涓暟瀛楋級鈹€鈹€
  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">';
  html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.correction')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.l7_rule_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
  html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.behavior')+'</div><div style="font-size:22px;font-weight:800;color:'+(l7s.l7_constraint_count?theme.successText:textColor)+';">'+(l7s.l7_constraint_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
  html+='<div style="background:'+cardBg+';padding:16px;border-radius:14px;border:1px solid '+borderColor+';"><div style="font-size:12px;color:'+subColor+';margin-bottom:8px;">'+t('settings.knowledge')+'</div><div style="font-size:22px;font-weight:800;color:'+textColor+';">'+(l7s.l8_knowledge_count||0)+'<span style="font-size:12px;font-weight:400;color:'+subColor+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
  html+='</div>';
 
- // ── 区块2：持续进化 ──
+ // 鈹€鈹€ 鍖哄潡2锛氭寔缁繘鍖?鈹€鈹€
  var _evo=config.enabled;
  if(!document.getElementById('nova-spin-style')){var _ss=document.createElement('style');_ss.id='nova-spin-style';_ss.textContent='@keyframes nova-spin{to{transform:rotate(360deg)}}';document.head.appendChild(_ss);}
  var _dotHtml=_evo?'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2.5px solid '+theme.spinner+';border-top-color:transparent;animation:nova-spin 1s linear infinite;vertical-align:middle;margin-right:10px;"></span>':'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+theme.stateOffText+';vertical-align:middle;margin-right:10px;"></span>';
@@ -513,10 +513,10 @@ function renderSettingsPage(isLight){
  html+='<div data-settings-action="toggle" data-settings-key="enabled" style="flex-shrink:0;width:44px;height:24px;border-radius:12px;background:'+(_evo?theme.toggleOn:theme.toggleOff)+';cursor:pointer;position:relative;transition:background 0.2s;"><span style="position:absolute;top:2px;'+(_evo?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.2s;"></span></div>';
  html+='</div>';
 
- // ── 区块3：模型管理 ──
+ // 鈹€鈹€ 鍖哄潡3锛氭ā鍨嬬鐞?鈹€鈹€
  html+=renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor);
 
- // ── 区块4：修复提案审核（已废弃，改用对话中 self_fix 工具）──
+ // 鈹€鈹€ 鍖哄潡4锛氫慨澶嶆彁妗堝鏍革紙宸插簾寮冿紝鏀圭敤瀵硅瘽涓?self_fix 宸ュ叿锛夆攢鈹€
  // html+=renderSelfRepairReviewSection(config,selfRepairStatus,selfRepairReports,isLight);
 
  box.innerHTML=html;
@@ -534,8 +534,7 @@ function refreshSettingsData(isLight, noticeText){
 function loadSettingsPage(isLight){
  var chat=document.getElementById('chat');
  setInputVisible(false);
- chat.innerHTML='<div class="settings-page" style="position:relative;z-index:1;"><div id="settingsBox">'+t('loading')+'</div></div>';
- settingsPanelState.notice='';
+ if(chat) chat.innerHTML='<div class="settings-page" style="position:relative;z-index:1;"><div id="settingsBox">'+t('loading')+'</div></div>'; settingsPanelState.notice='';
  settingsPanelState.error='';
  loadSettingsModels();
  refreshSettingsData(isLight).catch(function(){
@@ -547,7 +546,7 @@ function loadSettingsPage(isLight){
 function saveAutolearnConfigPatch(patch, noticeText){
  var isLight=document.body.classList.contains('light');
  settingsPanelState.error='';
- settingsPanelState.notice='正在保存...';
+ settingsPanelState.notice='姝ｅ湪淇濆瓨...';
  renderSettingsPage(isLight);
  fetch('/autolearn/config',{
   method:'POST',
@@ -555,9 +554,9 @@ function saveAutolearnConfigPatch(patch, noticeText){
   body:JSON.stringify(patch||{})
  }).then(function(r){return r.json();}).then(function(data){
   settingsPanelState.config=mergeAutolearnConfig((data&&data.config)||settingsPanelState.config||{});
-  return refreshSettingsData(isLight,noticeText||'已保存');
+  return refreshSettingsData(isLight,noticeText||'宸蹭繚瀛?);
  }).catch(function(){
-  settingsPanelState.error='保存失败，请稍后再试';
+  settingsPanelState.error='淇濆瓨澶辫触锛岃绋嶅悗鍐嶈瘯';
   renderSettingsPage(isLight);
  });
 }
@@ -578,9 +577,9 @@ function toggleAutolearnSetting(key){
   body:JSON.stringify(patch)
  }).then(function(r){return r.json();}).then(function(data){
   settingsPanelState.config=mergeAutolearnConfig((data&&data.config)||settingsPanelState.config||{});
-  return refreshSettingsData(isLight,next?'已开启':'已关闭');
+  return refreshSettingsData(isLight,next?'宸插紑鍚?:'宸插叧闂?);
  }).catch(function(){
-  settingsPanelState.error='保存失败';
+  settingsPanelState.error='淇濆瓨澶辫触';
   renderSettingsPage(isLight);
  });
 }
@@ -590,7 +589,7 @@ function applyAutolearnPreset(key){
  if(!presets[key]) return;
  var patch={};
  Object.keys(presets[key].patch).forEach(function(field){patch[field]=presets[key].patch[field];});
- saveAutolearnConfigPatch(patch,'已切换到「'+presets[key].label+'」');
+ saveAutolearnConfigPatch(patch,'宸插垏鎹㈠埌銆?+presets[key].label+'銆?);
 }
 
 function saveAutolearnAdvancedSettings(){
@@ -601,12 +600,13 @@ function saveAutolearnAdvancedSettings(){
   max_summary_length:clampSettingNumber((document.getElementById('autolearnSummaryLimit')||{}).value,120,800,360),
   self_repair_test_timeout_sec:clampSettingNumber((document.getElementById('selfRepairTestTimeout')||{}).value,10,120,30)
  };
- saveAutolearnConfigPatch(patch,'底层参数已更新');
+ saveAutolearnConfigPatch(patch,'搴曞眰鍙傛暟宸叉洿鏂?);
 }
 
 function saveSelfRepairMode(){
  var el=document.getElementById('selfRepairApplyMode');
  if(!el) return;
- saveAutolearnConfigPatch({self_repair_apply_mode:el.value},'审批节奏已更新');
+ saveAutolearnConfigPatch({self_repair_apply_mode:el.value},'瀹℃壒鑺傚宸叉洿鏂?);
 }
+
 

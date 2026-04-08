@@ -133,10 +133,10 @@ function show(n){
    overview+='<div style="background:'+overviewCardBg+';border:1px solid '+overviewCardBorder+';padding:14px 14px 13px;border-radius:16px;min-width:0;"><div style="font-size:11px;color:'+labelColor+';margin-bottom:8px;letter-spacing:0.2px;">'+t('mem.card.days.title')+'</div><div style="font-size:20px;font-weight:700;color:'+textColor+';line-height:1.05;">'+days+'</div><div style="font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.6;">'+t('mem.card.days.desc')+'</div></div>';
    document.getElementById('memoryOverview').innerHTML=overview;
 
-   // 存全量事件，交给分页模块处理
-   window._memAllEvents=events; // 后端已按时间降序排好
+   // 瀛樺叏閲忎簨浠讹紝浜ょ粰鍒嗛〉妯″潡澶勭悊
+   window._memAllEvents=events; // 鍚庣宸叉寜鏃堕棿闄嶅簭鎺掑ソ
    _memCurrentPage=1;
-   // 恢复之前的筛选状态
+   // 鎭㈠涔嬪墠鐨勭瓫閫夌姸鎬?
    var targetFilter=_savedMemFilter||'all';
    var chips=document.querySelectorAll('.mem-chip');
    var matched=null;
@@ -146,7 +146,7 @@ function show(n){
    });
    if(matched) setMemoryFilter(targetFilter, matched);
    else { currentMemoryFilter='all'; _memFilteredItems=window._memAllEvents; _memRenderPage(); }
-   // fetch 完成后恢复滚动位置
+   // fetch 瀹屾垚鍚庢仮澶嶆粴鍔ㄤ綅缃?
    var ms=document.getElementById('memScroll');
    if(ms && window._memScrollTop) ms.scrollTop=window._memScrollTop;
   }).catch(function(){
@@ -164,4 +164,5 @@ function show(n){
   return;
  }
 }
+
 

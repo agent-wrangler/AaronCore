@@ -62,6 +62,19 @@ function toggleTheme(){
  }
 }
 
+function setThemeMode(theme){
+ var normalized=_applyTheme(theme);
+ var currentTab=window._currentTab||1;
+ if(currentTab!==1 && _themeNeedsViewRerender(currentTab)){
+  setTimeout(function(){
+   if(typeof show==='function' && window._currentTab===currentTab){
+    show(currentTab);
+   }
+  },0);
+ }
+ return normalized;
+}
+
 /* ===== 侧边栏拉伸功能 ===== */
 function initSidebarResize(){
  var sidebar=document.querySelector('.sidebar');

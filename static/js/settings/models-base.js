@@ -27,8 +27,21 @@ function _classifyModelToProvider(mid, cfg, catalog){
  return null;
 }
 
-function _toggleProviderGroup(pkey){
- _settingsExpandedProviders[pkey]=!_settingsExpandedProviders[pkey];
+function _toggleProviderGroup(pkey, currentExpanded){
+ var effectiveExpanded;
+ if(typeof currentExpanded==='boolean'){
+  effectiveExpanded=currentExpanded;
+ }else if(_settingsExpandedProviders[pkey]!==undefined){
+  effectiveExpanded=!!_settingsExpandedProviders[pkey];
+ }else{
+  var currentProvider=null;
+  if(_settingsCurrentModel){
+   var currentCfg=(_settingsModels&&_settingsModels[_settingsCurrentModel])||{};
+   currentProvider=_classifyModelToProvider(_settingsCurrentModel, currentCfg, _settingsCatalog||{});
+  }
+  effectiveExpanded=(pkey==='_other')?!currentProvider:(pkey===currentProvider);
+ }
+ _settingsExpandedProviders[pkey]=!effectiveExpanded;
  renderSettingsPage(document.body.classList.contains('light'));
 }
 
