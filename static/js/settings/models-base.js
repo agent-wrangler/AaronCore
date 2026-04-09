@@ -237,7 +237,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
 }
 
 function loadSettingsModels(){
- Promise.all([
+ return Promise.all([
   fetch('/models/config').then(function(r){return r.json();}),
   fetch('/models/catalog').then(function(r){return r.json();}).catch(function(){return {catalog:{}};})
  ]).then(function(values){
@@ -259,8 +259,10 @@ function loadSettingsModels(){
   var _curCfg=unlockedModels[_settingsCurrentModel]||_settingsModels[_settingsCurrentModel];
   if(el) el.textContent=_curCfg?_getModelDisplayName(_settingsCurrentModel, _curCfg, unlockedModels, nameCounts):(_settingsCurrentModel||t('unknown'));
   if(typeof updateImageBtnState==='function') updateImageBtnState();
- renderSettingsPage(document.body.classList.contains('light'));
- }).catch(function(){});
+  renderSettingsPage(document.body.classList.contains('light'));
+ }).catch(function(){
+  return null;
+ });
 }
 
 function _isVisibleSettingsModel(cfg){

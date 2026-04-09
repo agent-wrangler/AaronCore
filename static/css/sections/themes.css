@@ -266,7 +266,8 @@ body.light .inp-wrap:focus-within{
 }
 
 body.light .settings-notice,
-body.light .settings-model-shell{
+body.light .settings-model-shell,
+body.light .settings-control-card{
   background:var(--surface-panel);
   border-color:var(--border-panel);
   box-shadow:none;
@@ -306,6 +307,51 @@ body.light .settings-segment-btn:hover:not(.is-active){
 body.light .settings-segment-btn.is-active{
   background:var(--surface-selected);
   color:var(--surface-selected-text);
+}
+
+body.light .settings-select{
+  background:#efebe4;
+  border-color:var(--border-panel);
+  color:var(--text-primary);
+}
+
+body.light .settings-select:hover:not(:disabled),
+body.light .settings-select:focus-visible{
+  background:#f7f5ef;
+  border-color:var(--border-panel-strong);
+}
+
+body.light .settings-select-caret{
+  color:var(--text-label);
+}
+
+body.light .settings-preset-trigger{
+  background:#f7f5ef;
+  border-color:var(--border-panel);
+}
+
+body.light .settings-preset-trigger:hover,
+body.light .settings-preset-picker[open] .settings-preset-trigger{
+  background:#fbfaf7;
+  border-color:var(--border-panel-strong);
+}
+
+body.light .settings-preset-menu{
+  background:#fbfaf7;
+  border-color:var(--border-panel);
+  box-shadow:0 18px 36px rgba(21,21,20,0.10);
+}
+
+body.light .settings-preset-option:hover:not(:disabled){
+  background:rgba(21,21,20,0.035);
+}
+
+body.light .settings-preset-option.is-active{
+  background:rgba(21,21,20,0.05);
+}
+
+body.light .settings-preset-option-check{
+  color:#708264;
 }
 
 /* ===== Dark Theme (Claude-like Brand Coal) ===== */
@@ -1435,7 +1481,8 @@ body.dark .settings-page > *{
 }
 
 body.dark .settings-notice,
-body.dark .settings-model-shell{
+body.dark .settings-model-shell,
+body.dark .settings-control-card{
   background:var(--surface-panel);
   border-color:var(--border-panel);
   box-shadow:none;
@@ -1480,6 +1527,51 @@ body.dark .settings-segment-btn:hover:not(.is-active){
 body.dark .settings-segment-btn.is-active{
   background:#111111;
   color:#FFFFFF;
+}
+
+body.dark .settings-select{
+  background:#2A2A2A;
+  border-color:var(--border-panel);
+  color:var(--text-primary);
+}
+
+body.dark .settings-select:hover:not(:disabled),
+body.dark .settings-select:focus-visible{
+  background:#232323;
+  border-color:var(--border-panel-strong);
+}
+
+body.dark .settings-select-caret{
+  color:var(--text-label);
+}
+
+body.dark .settings-preset-trigger{
+  background:#2A2A2A;
+  border-color:var(--border-panel);
+}
+
+body.dark .settings-preset-trigger:hover,
+body.dark .settings-preset-picker[open] .settings-preset-trigger{
+  background:#2f2f2c;
+  border-color:var(--border-panel-strong);
+}
+
+body.dark .settings-preset-menu{
+  background:#242421;
+  border-color:var(--border-panel-strong);
+  box-shadow:0 18px 40px rgba(0,0,0,0.30);
+}
+
+body.dark .settings-preset-option:hover:not(:disabled){
+  background:rgba(255,255,255,0.05);
+}
+
+body.dark .settings-preset-option.is-active{
+  background:rgba(255,255,255,0.07);
+}
+
+body.dark .settings-preset-option-check{
+  color:#97ab89;
 }
 
 body.light .image-upload-btn,

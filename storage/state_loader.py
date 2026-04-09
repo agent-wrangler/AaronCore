@@ -9,6 +9,7 @@ from storage.json_store import load_json, write_json
 from storage.model_config import load_current_model as _default_load_current_model
 from storage.paths import (
     AUTOLEARN_CONFIG_FILE,
+    CHAT_CONFIG_FILE,
     CONTENT_STORE_DIR,
     CONTENT_PROJECTS_FILE,
     CONTENT_TOPIC_REGISTRY_FILE,
@@ -60,6 +61,15 @@ _nova_core_ready = False
 
 # Keep this as a module variable so tests can monkeypatch it on the compatibility facade.
 load_current_model = _default_load_current_model
+
+
+CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS = {
+    "save": 2000,
+    "balanced": 4000,
+    "deep": 6000,
+    "immersive": 8000,
+}
+DEFAULT_CHAT_L1_RECENT_TOKEN_BUDGET_PRESET = "balanced"
 
 
 def init(*, debug_write=None, get_all_skills=None, nova_core_ready=False):
@@ -244,6 +254,48 @@ def load_msg_history():
 def save_msg_history(history):
     _sync_history_store()
     return _history_store.save_msg_history(history)
+
+
+def _normalize_chat_config(data: dict | None) -> dict:
+    payload = data if isinstance(data, dict) else {}
+    preset = str(payload.get("l1_recent_token_budget_preset") or "").strip().lower()
+    budget = payload.get("l1_recent_token_budget")
+    if preset not in CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS:
+        matched_preset = ""
+        try:
+            parsed_budget = int(budget)
+        except Exception:
+            parsed_budget = 0
+        for preset_id, preset_budget in CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS.items():
+            if preset_budget == parsed_budget:
+                matched_preset = preset_id
+                break
+        preset = matched_preset or DEFAULT_CHAT_L1_RECENT_TOKEN_BUDGET_PRESET
+    resolved_budget = CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS.get(
+        preset,
+        DEFAULT_L1_RECENT_TOKEN_BUDGET,
+    )
+    return {
+        "l1_recent_token_budget_preset": preset,
+        "l1_recent_token_budget": resolved_budget,
+    }
+
+
+def load_chat_config() -> dict:
+    return _normalize_chat_config(load_json(CHAT_CONFIG_FILE, {}))
+
+
+def save_chat_config(data: dict | None) -> dict:
+    current = load_chat_config()
+    patch = data if isinstance(data, dict) else {}
+    normalized = _normalize_chat_config({**current, **patch})
+    write_json(CHAT_CONFIG_FILE, normalized)
+    return normalized
+
+
+def get_current_chat_l1_recent_token_budget() -> int:
+    config = load_chat_config()
+    return int(config.get("l1_recent_token_budget") or DEFAULT_L1_RECENT_TOKEN_BUDGET)
 
 
 def get_recent_messages(history, limit=6, max_tokens=None):

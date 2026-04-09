@@ -4,11 +4,156 @@
 function _settingsPageState(){
  if(typeof window!=='undefined'){
   if(!window.settingsPanelState || typeof window.settingsPanelState!=='object'){
-   window.settingsPanelState={notice:'',error:''};
+   window.settingsPanelState={notice:'',error:'',chatPresetSaving:'',chatPresetPending:''};
+  }
+  if(typeof window.settingsPanelState.chatPresetSaving!=='string'){
+   window.settingsPanelState.chatPresetSaving='';
+  }
+  if(typeof window.settingsPanelState.chatPresetPending!=='string'){
+   window.settingsPanelState.chatPresetPending='';
   }
   return window.settingsPanelState;
  }
- return {notice:'',error:''};
+ return {notice:'',error:'',chatPresetSaving:'',chatPresetPending:''};
+}
+
+var _settingsChatConfig=null;
+var _settingsChatPresets=[];
+
+function _getSettingsChatPresetMeta(){
+ var isZh=(typeof getLang==='function'?getLang():'zh')==='zh';
+ return [
+  {
+   id:'save',
+   budget:2000,
+   label:isZh?'省流':'Lean',
+   desc:isZh?'更省消耗，适合短问短答。':'Lower cost for quick exchanges.'
+  },
+  {
+   id:'balanced',
+   budget:4000,
+   label:isZh?'平衡':'Balanced',
+   desc:isZh?'兼顾连续性和消耗。':'Balances continuity and cost.'
+  },
+  {
+   id:'deep',
+   budget:6000,
+   label:isZh?'深聊':'Deep',
+   desc:isZh?'带入更多前文，适合连续讨论。':'Brings in more recent history for ongoing discussions.'
+  },
+  {
+   id:'immersive',
+   budget:8000,
+   label:isZh?'沉浸':'Immersive',
+   desc:isZh?'尽量保留更多前文，适合长任务，但消耗更高。':'Keeps more context for long-running tasks at a higher cost.'
+  }
+ ];
+}
+
+function _getSettingsChatPresetById(presetId){
+ var options=_getSettingsChatPresetMeta();
+ for(var i=0;i<options.length;i++){
+  if(options[i].id===presetId) return options[i];
+ }
+ return options[1];
+}
+
+function _getSettingsChatConfig(){
+ var fallback={
+  l1_recent_token_budget_preset:'balanced',
+  l1_recent_token_budget:4000
+ };
+ var cfg=(_settingsChatConfig&&typeof _settingsChatConfig==='object')?_settingsChatConfig:{};
+ var presetId=String(cfg.l1_recent_token_budget_preset||fallback.l1_recent_token_budget_preset).trim().toLowerCase();
+ var preset=_getSettingsChatPresetById(presetId);
+ var budget=Number(cfg.l1_recent_token_budget||preset.budget||fallback.l1_recent_token_budget);
+ if(!budget||budget<1) budget=preset.budget||fallback.l1_recent_token_budget;
+ return {
+  l1_recent_token_budget_preset:preset.id,
+  l1_recent_token_budget:budget
+ };
+}
+
+function loadSettingsChatConfig(){
+ return fetch('/chat/config').then(function(r){return r.json();}).then(function(data){
+  _settingsChatConfig=(data&&data.config&&typeof data.config==='object')?data.config:null;
+  _settingsChatPresets=Array.isArray(data&&data.presets)?data.presets.slice():[];
+  return data||{};
+ });
+}
+
+function refreshSettingsData(isLight){
+ var state=_settingsPageState();
+ return Promise.all([
+  (typeof loadSettingsModels==='function' ? Promise.resolve(loadSettingsModels()) : Promise.resolve(null)),
+  loadSettingsChatConfig().catch(function(){
+   _settingsChatConfig=null;
+   _settingsChatPresets=[];
+   state.error=(typeof getLang==='function'&&getLang()==='en')
+    ? 'Failed to load conversation continuity settings'
+    : '对话连续性设置加载失败';
+   return null;
+  })
+ ]).then(function(){
+  renderSettingsPage(isLight);
+ });
+}
+
+function _saveSettingsChatPreset(presetId){
+ var state=_settingsPageState();
+ var target=String(presetId||'').trim().toLowerCase();
+ if(!target || state.chatPresetSaving===target) return Promise.resolve(null);
+ state.notice='';
+ state.error='';
+ state.chatPresetSaving=target;
+  state.chatPresetPending=target;
+ renderSettingsPage(document.body.classList.contains('light'));
+ return fetch('/chat/config',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({l1_recent_token_budget_preset:target})
+ }).then(function(r){return r.json();}).then(function(data){
+  if(!data||!data.ok){
+   throw new Error((data&&data.error)||'save_failed');
+  }
+  _settingsChatConfig=(data.config&&typeof data.config==='object')?data.config:null;
+  _settingsChatPresets=Array.isArray(data.presets)?data.presets.slice():_settingsChatPresets;
+  state.notice=(typeof getLang==='function'&&getLang()==='en')
+   ? 'Conversation continuity updated.'
+   : '对话连续性已更新。';
+  return data;
+ }).catch(function(err){
+  state.error=(typeof getLang==='function'&&getLang()==='en')
+   ? 'Failed to update conversation continuity.'
+   : '更新对话连续性失败。';
+  throw err;
+ }).finally(function(){
+  state.chatPresetSaving='';
+  state.chatPresetPending='';
+  renderSettingsPage(document.body.classList.contains('light'));
+ });
+}
+
+function _chooseSettingsChatPreset(presetId){
+ var picker=document.getElementById('settingsChatPresetPicker');
+ if(picker&&typeof picker.removeAttribute==='function'){
+  picker.removeAttribute('open');
+ }
+ var current=_getSettingsChatConfig();
+ if(String((current&&current.l1_recent_token_budget_preset)||'').trim().toLowerCase()===String(presetId||'').trim().toLowerCase()){
+  return Promise.resolve(null);
+ }
+ return _saveSettingsChatPreset(presetId);
+}
+
+if(typeof document!=='undefined' && typeof window!=='undefined' && !window.__settingsPresetPickerBound){
+ document.addEventListener('click',function(evt){
+  var picker=document.getElementById('settingsChatPresetPicker');
+  if(!picker || !picker.hasAttribute('open')) return;
+  if(picker.contains(evt.target)) return;
+  picker.removeAttribute('open');
+ });
+ window.__settingsPresetPickerBound=true;
 }
 
 function _settingsPageTheme(isLight){
@@ -89,6 +234,19 @@ function renderSettingsPage(isLight){
   var themeTitle=(typeof t==='function'?t('settings.theme'):'')||(isZh?'外观主题':'Appearance');
   var themeDesc=isZh?'把浅色和深色主题放在设置里切换，让顶栏更干净。':'Switch light and dark themes here so the title bar stays cleaner.';
   var themeRowDesc=isZh?'改变应用整体的浅色或深色外观。':'Change the overall light or dark appearance of the app.';
+  var chatConfig=_getSettingsChatConfig();
+  var pendingChatPresetId=String(state.chatPresetPending||'').trim().toLowerCase();
+  var effectiveChatPresetId=pendingChatPresetId||chatConfig.l1_recent_token_budget_preset;
+  var chatPreset=_getSettingsChatPresetById(effectiveChatPresetId);
+  var chatTitle=isZh?'对话连续性':'Conversation continuity';
+  var chatDesc=isZh?'控制每轮聊天会带入多少最近历史。更高会更连贯，但也更耗 token。':'Control how much recent history each reply carries. Higher settings feel more continuous, but cost more tokens.';
+  var chatRowTitle=isZh?'历史带入强度':'Recent history depth';
+  var chatRowDesc=isZh?'控制每轮会带入多少最近历史。更高更连贯，也更耗 token。':'Choose how much recent history each reply keeps. Higher settings feel more continuous, but cost more tokens.';
+  var chatBudget=Number(chatPreset.budget||chatConfig.l1_recent_token_budget||4000);
+  if(!chatBudget||chatBudget<1) chatBudget=4000;
+  var chatBudgetText=isZh?('约 '+chatBudget+' tokens'):('About '+chatBudget+' tokens');
+  var chatSavingPreset=String(state.chatPresetSaving||'').trim().toLowerCase();
+  var chatSavingText=isZh?'正在保存...':'Saving...';
   var modelTitle=isZh?'模型管理':'Model access';
   var modelDesc=isZh?'按厂家分组，只展示已经对接过的模型。':'Grouped by provider. Only connected models are shown here.';
 
@@ -140,6 +298,50 @@ function renderSettingsPage(isLight){
   html+='</div>';
   html+='</section>';
 
+  html+='<section id="settings-chat-context" class="settings-pane">';
+  html+='<div class="settings-pane-head">';
+  html+='<h2 class="settings-pane-title">'+escapeHtml(chatTitle)+'</h2>';
+  html+='<p class="settings-pane-desc">'+escapeHtml(chatDesc)+'</p>';
+  html+='</div>';
+  html+='<div class="settings-control-card">';
+  html+='<div class="settings-control-row">';
+  html+='<div class="settings-row-copy">';
+  html+='<div class="settings-row-title">'+escapeHtml(chatRowTitle)+'</div>';
+  html+='<div class="settings-row-desc">'+escapeHtml(chatRowDesc)+'</div>';
+  html+='</div>';
+  html+='<div class="settings-chat-controls">';
+  html+='<details id="settingsChatPresetPicker" class="settings-preset-picker'+(chatSavingPreset?' is-saving':'')+'">';
+  html+='<summary class="settings-preset-trigger" aria-label="'+escapeHtml(chatRowTitle)+'">';
+  html+='<div class="settings-preset-copy">';
+  html+='<div class="settings-preset-head">';
+  html+='<span class="settings-preset-label">'+escapeHtml(chatPreset.label)+'</span>';
+  html+='<span class="settings-preset-meta">'+escapeHtml(chatSavingPreset?chatSavingText:chatBudgetText)+'</span>';
+  html+='</div>';
+  html+='<div class="settings-preset-desc">'+escapeHtml(chatPreset.desc)+'</div>';
+  html+='</div>';
+  html+='<span class="settings-preset-caret">▾</span>';
+  html+='</summary>';
+  html+='<div class="settings-preset-menu">';
+  _getSettingsChatPresetMeta().forEach(function(option){
+   var isSelected=option.id===chatPreset.id;
+   html+='<button type="button" class="settings-preset-option'+(isSelected?' is-active':'')+'" onclick="_chooseSettingsChatPreset(\''+escapeHtml(option.id)+'\');return false;"'+(chatSavingPreset?' disabled':'')+'>';
+   html+='<div class="settings-preset-option-head">';
+   html+='<span class="settings-preset-option-label">'+escapeHtml(option.label)+'</span>';
+   html+='<span class="settings-preset-option-meta">'+escapeHtml((isZh?'约 ':'About ')+String(option.budget)+' tokens')+'</span>';
+   html+='</div>';
+   html+='<div class="settings-preset-option-desc">'+escapeHtml(option.desc)+'</div>';
+   if(isSelected){
+    html+='<span class="settings-preset-option-check">✓</span>';
+   }
+   html+='</button>';
+  });
+  html+='</div>';
+  html+='</details>';
+  html+='</div>';
+  html+='</div>';
+  html+='</div>';
+  html+='</section>';
+
   html+='<section id="settings-models" class="settings-pane">';
   html+='<div class="settings-pane-head">';
   html+='<h2 class="settings-pane-title">'+escapeHtml(modelTitle)+'</h2>';
@@ -171,9 +373,6 @@ function loadSettingsPage(isLight){
  var state=_settingsPageState();
  state.notice='';
  state.error='';
- if(typeof loadSettingsModels==='function'){
-  try{ loadSettingsModels(); }catch(e){ console.warn('[AaronCore] load settings models failed', e); }
- }
  if(typeof refreshSettingsData==='function'){
   try{
    refreshSettingsData(isLight).catch(function(){
@@ -184,6 +383,9 @@ function loadSettingsPage(isLight){
   }catch(e){
    console.warn('[AaronCore] refresh settings data failed', e);
   }
+ }
+ if(typeof loadSettingsModels==='function'){
+  try{ loadSettingsModels(); }catch(e){ console.warn('[AaronCore] load settings models failed', e); }
  }
  renderSettingsPage(isLight);
 }

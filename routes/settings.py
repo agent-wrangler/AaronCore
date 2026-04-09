@@ -2,9 +2,25 @@
 import json
 from fastapi import APIRouter, Request
 from core import shared as S
-from core.runtime_state.state_loader import TOOL_CALL_CONFIG_FILE
+from core.runtime_state.state_loader import (
+    CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS,
+    TOOL_CALL_CONFIG_FILE,
+    load_chat_config as _load_chat_config,
+    save_chat_config as _save_chat_config,
+)
 
 router = APIRouter()
+
+
+def _build_chat_config_payload(config: dict | None = None) -> dict:
+    resolved = config if isinstance(config, dict) else _load_chat_config()
+    return {
+        "config": resolved,
+        "presets": [
+            {"id": preset_id, "budget": budget}
+            for preset_id, budget in CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS.items()
+        ],
+    }
 
 
 @router.get("/autolearn/config")
@@ -17,6 +33,24 @@ async def set_autolearn_config(request: dict):
     patch = request if isinstance(request, dict) else {}
     config = S.update_autolearn_config(patch)
     return {"ok": True, "config": config}
+
+
+@router.get("/chat/config")
+async def get_chat_config():
+    return _build_chat_config_payload()
+
+
+@router.post("/chat/config")
+async def set_chat_config(request: Request):
+    body = await request.json()
+    patch = {}
+    if isinstance(body, dict):
+        if "l1_recent_token_budget_preset" in body:
+            patch["l1_recent_token_budget_preset"] = body.get("l1_recent_token_budget_preset")
+        elif "preset" in body:
+            patch["l1_recent_token_budget_preset"] = body.get("preset")
+    config = _save_chat_config(patch)
+    return {"ok": True, **_build_chat_config_payload(config)}
 
 
 @router.get("/autolearn/diagnose")

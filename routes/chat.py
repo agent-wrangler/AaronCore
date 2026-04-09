@@ -15,7 +15,7 @@ from core.process_history import (
     trim_persisted_process_steps_for_stream_reset as _trim_process_history_steps_for_reset,
 )
 from core.runtime_state.state_loader import (
-    DEFAULT_L1_RECENT_TOKEN_BUDGET as _L1_RECENT_TOKEN_BUDGET,
+    get_current_chat_l1_recent_token_budget as _get_current_chat_l1_recent_token_budget,
 )
 from routes.chat_tool_steps import (
     build_tool_done_label,
@@ -240,10 +240,11 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         # L1 recent dialogue should be budget-driven instead of stopping at the
         # helper's default six-message cap. Keep the existing token budget and
         # let the history store trim by budget from the newest messages.
+        _l1_recent_budget = _get_current_chat_l1_recent_token_budget()
         l1 = S.get_recent_messages(
             _history_for_context,
             limit=None,
-            max_tokens=_L1_RECENT_TOKEN_BUDGET,
+            max_tokens=_l1_recent_budget,
         )
         l2 = S.extract_session_context(_history_for_context, msg)
         _use_light_chat_bundle = not _use_tool_call
@@ -321,6 +322,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 "elapsed_ms": round((asyncio.get_running_loop().time() - _pre_context_started_at) * 1000, 2),
                 "use_cod": _use_cod,
                 "tool_call": _use_tool_call,
+                "l1_budget": _l1_recent_budget,
                 "l2_memories": len(l2_memories or []),
                 "l3": len(l3 or []),
                 "l8": len(l8 or []),
@@ -367,6 +369,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         S.debug_write("context_bundle", {
             "l1": len(l1), "l2": len(l2), "l2_memories": len(l2_memories),
             "l3": len(l3),
+            "l1_budget": _l1_recent_budget,
             "l4_keys": list(l4.keys()) if isinstance(l4, dict) else [],
             "l5_skill_count": skill_count, "l8": len(l8 or []),
         })
