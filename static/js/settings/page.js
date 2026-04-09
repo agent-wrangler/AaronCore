@@ -43,14 +43,17 @@ function _settingsPageTheme(isLight){
   pathBg:'var(--surface-panel-soft)',
   pathText:'var(--text-secondary)',
   headerBg:'var(--surface-panel-soft)',
-  currentRowBg:'var(--tone-amber-soft)',
-  currentRowBorder:'var(--tone-amber-border)',
+  providerCardBg:'var(--surface-panel)',
+  currentRowBg:isLight?'rgba(112,130,100,0.10)':'rgba(151,171,137,0.12)',
+  currentRowBorder:isLight?'rgba(112,130,100,0.24)':'rgba(151,171,137,0.26)',
   softRowBg:'var(--surface-panel-soft)',
   softDashedBg:'var(--surface-panel-soft)',
   softDashedBorder:'var(--border-panel)',
   successBg:'var(--tone-sage-soft)',
   successText:'var(--tone-sage)',
   modelDialogSuccessText:isLight?'#708264':'#97ab89',
+  modelDialogSuccessBg:isLight?'rgba(112,130,100,0.10)':'rgba(151,171,137,0.12)',
+  modelDialogSuccessBorder:isLight?'rgba(112,130,100,0.22)':'rgba(151,171,137,0.24)',
   inactiveTagBg:'var(--surface-panel-soft)',
   inactiveTagText:'var(--text-label)',
   actionBorder:'var(--tone-amber-border)',
@@ -206,12 +209,12 @@ function _renderSettingsModelRow(rowId, cfg, allModels, displayCounts, currentMo
  options=options||{};
  var isCurrent=rowId===currentModel;
  var showEdit=!!options.showEdit;
- var rowBg=isCurrent?theme.currentRowBg:theme.softRowBg;
- var rowBorder=isCurrent?theme.currentRowBorder:theme.border;
+ var withDivider=!!options.withDivider;
+ var rowBg=isCurrent?theme.currentRowBg:'transparent';
  var primaryLabel=_getModelDisplayName(rowId, cfg, allModels, displayCounts);
  var metaLabel=_settingsModelEndpointMeta(rowId, cfg);
  var html='';
- html+='<div style="display:flex;align-items:center;gap:10px;padding:11px 12px;background:'+rowBg+';border:1px solid '+rowBorder+';border-radius:10px;">';
+ html+='<div style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:'+rowBg+';'+(withDivider?'border-top:1px solid '+theme.border+';':'')+'">';
  if(isCurrent) html+='<span style="color:'+theme.currentCheck+';font-size:14px;">\u2713</span>';
  html+='<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;">';
  html+='<span style="font-size:13px;font-weight:'+(isCurrent?'700':'600')+';color:'+theme.text+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(primaryLabel)+'</span>';
@@ -236,7 +239,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
  var displayCounts=_buildModelNameCounts(unlockedModels);
  var html='';
 
- html+='<div class="settings-model-shell" style="background:'+theme.cardBg+';border:1px solid '+theme.border+';">';
+ html+='<div class="settings-model-shell" style="background:transparent;border:none;padding:0;box-shadow:none;">';
  html+='<div class="settings-model-topbar">';
  html+='<div class="settings-model-copy">';
  html+='<span style="font-size:15px;font-weight:700;color:'+theme.text+';">'+escapeHtml((typeof t==='function'?t('settings.models'):'')||'Models')+'</span>';
@@ -268,7 +271,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
     activeModelName=_getModelDisplayName(_settingsCurrentModel, currentCfg, unlockedModels, displayCounts);
    }
 
-   html+='<div class="settings-provider-group" style="border:1px solid '+theme.border+';">';
+   html+='<div class="settings-provider-group" style="border:1px solid '+theme.border+';background:'+theme.providerCardBg+';">';
    html+='<div onclick="_toggleProviderGroup(\''+escapeHtml(providerKey)+'\','+isExpanded+')" class="settings-provider-header" style="background:'+(isExpanded?theme.headerBg:'transparent')+';">';
    html+='<span style="font-size:11px;color:'+theme.sub+';width:14px;text-align:center;">'+chevron+'</span>';
    html+='<span style="font-size:14px;font-weight:600;color:'+theme.text+';flex:1;">'+escapeHtml(providerLabel)+'</span>';
@@ -284,7 +287,8 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    html+='</div>';
 
    if(isExpanded){
-    html+='<div class="settings-provider-body">';
+    html+='<div class="settings-provider-body" style="display:flex;flex-direction:column;gap:0;padding:4px 0 8px;">';
+    var providerRowCount=0;
     var matchedSaved={};
     var actualLookup={};
     Object.keys(savedVisibleModels).forEach(function(mid){
@@ -303,7 +307,8 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      var rowCfg=matchedId?(savedVisibleModels[matchedId]||{}):(unlockedModels[modelId]||{});
      if(!rowCfg||!Object.keys(rowCfg).length) return;
      shownIds[rowId]=true;
-     html+=_renderSettingsModelRow(rowId, rowCfg, unlockedModels, displayCounts, _settingsCurrentModel, theme, {providerKey:providerKey,showEdit:false});
+     html+=_renderSettingsModelRow(rowId, rowCfg, unlockedModels, displayCounts, _settingsCurrentModel, theme, {providerKey:providerKey,showEdit:false,withDivider:providerRowCount>0});
+     providerRowCount+=1;
     });
 
     var extraSaved=Object.keys(savedVisibleModels).filter(function(mid){
@@ -317,7 +322,8 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
     });
     extraSaved.forEach(function(mid){
      shownIds[mid]=true;
-     html+=_renderSettingsModelRow(mid, savedVisibleModels[mid]||{}, unlockedModels, displayCounts, _settingsCurrentModel, theme, {providerKey:providerKey,showEdit:false});
+     html+=_renderSettingsModelRow(mid, savedVisibleModels[mid]||{}, unlockedModels, displayCounts, _settingsCurrentModel, theme, {providerKey:providerKey,showEdit:false,withDivider:providerRowCount>0});
+     providerRowCount+=1;
     });
     html+='</div>';
    }
@@ -333,21 +339,23 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   if(others.length>0){
    var uncExpanded=_settingsExpandedProviders._other!==undefined?_settingsExpandedProviders._other:true;
    var uncChevron=uncExpanded?'\u25BC':'\u25B6';
-   html+='<div class="settings-provider-group" style="border:1px solid '+theme.border+';">';
+   html+='<div class="settings-provider-group" style="border:1px solid '+theme.border+';background:'+theme.providerCardBg+';">';
    html+='<div onclick="_toggleProviderGroup(\'_other\','+uncExpanded+')" class="settings-provider-header">';
    html+='<span style="font-size:11px;color:'+theme.sub+';width:14px;text-align:center;">'+uncChevron+'</span>';
    html+='<span style="font-size:14px;font-weight:600;color:'+theme.text+';flex:1;">Other</span>';
    html+='<span style="padding:3px 10px;border-radius:999px;background:'+theme.inactiveTagBg+';color:'+theme.inactiveTagText+';font-size:11px;">'+others.length+' models</span>';
    html+='</div>';
    if(uncExpanded){
-    html+='<div class="settings-provider-body">';
+    html+='<div class="settings-provider-body" style="display:flex;flex-direction:column;gap:0;padding:4px 0 8px;">';
+    var otherRowCount=0;
     others.sort(function(a,b){
      var aLabel=_getModelDisplayName(a, savedVisibleModels[a]||{}, unlockedModels, displayCounts).toLowerCase();
      var bLabel=_getModelDisplayName(b, savedVisibleModels[b]||{}, unlockedModels, displayCounts).toLowerCase();
      return aLabel.localeCompare(bLabel);
     });
     others.forEach(function(mid){
-     html+=_renderSettingsModelRow(mid, savedVisibleModels[mid]||{}, unlockedModels, displayCounts, _settingsCurrentModel, theme, {providerKey:'_other',showEdit:true});
+     html+=_renderSettingsModelRow(mid, savedVisibleModels[mid]||{}, unlockedModels, displayCounts, _settingsCurrentModel, theme, {providerKey:'_other',showEdit:true,withDivider:otherRowCount>0});
+     otherRowCount+=1;
     });
     html+='</div>';
    }

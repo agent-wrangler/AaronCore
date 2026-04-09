@@ -389,6 +389,8 @@ function _setModelDialogStatus(kind, message){
       dangerText:'#b91c1c',
       dangerBg:'rgba(239,68,68,0.12)',
       modelDialogSuccessText:isLight?'#708264':'#97ab89',
+      modelDialogSuccessBg:isLight?'rgba(112,130,100,0.10)':'rgba(151,171,137,0.12)',
+      modelDialogSuccessBorder:isLight?'rgba(112,130,100,0.22)':'rgba(151,171,137,0.24)',
       text:'#111827'
      });
  var text=_formatModelDialogStatusMessage(kind, message);
@@ -406,11 +408,11 @@ function _setModelDialogStatus(kind, message){
  box.style.overflowY='auto';
   box.style.background=kind==='error'
    ? (theme.dangerBg||theme.actionSecondary)
-   : theme.actionSecondary;
+   : (kind==='success' ? (theme.modelDialogSuccessBg||theme.actionSecondary) : theme.actionSecondary);
   box.style.border='1px solid '+(
    kind==='error'
     ? (theme.dangerSoftBorder||theme.border)
-    : theme.border
+    : (kind==='success' ? (theme.modelDialogSuccessBorder||theme.border) : theme.border)
   );
   box.style.color=kind==='error'
    ? theme.dangerText
