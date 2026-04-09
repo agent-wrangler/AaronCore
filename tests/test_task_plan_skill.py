@@ -304,6 +304,34 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertEqual(prompt, casual_query)
         self.assertNotIn("Current task goal in this turn", prompt)
 
+    def test_generic_project_reference_does_not_resume_old_task_plan(self):
+        task_store_module.save_task_plan_snapshot(
+            "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题",
+            {
+                "goal": "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题",
+                "summary": "正在推进：分析当前文件结构问题",
+                "items": [
+                    {"id": "1", "title": "分析当前文件结构问题", "status": "done"},
+                    {"id": "2", "title": "检查记忆系统文件", "status": "done"},
+                    {"id": "3", "title": "检查技能系统文件", "status": "done"},
+                    {"id": "4", "title": "整理和修复", "status": "done"},
+                    {"id": "5", "title": "验证修复结果", "status": "running"},
+                ],
+                "current_item_id": "5",
+                "phase": "verify",
+            },
+        )
+
+        query = "就是我们这个项目啊"
+        resumed = task_store_module.get_active_task_plan_snapshot(query)
+        session_context = session_context_module.extract_session_context([], query)
+        prompt = reply_formatter_module._build_tool_call_user_prompt({"user_input": query})
+
+        self.assertIsNone(resumed)
+        self.assertFalse(bool(session_context.get("working_state")))
+        self.assertEqual(prompt, query)
+        self.assertNotIn("Current task goal in this turn", prompt)
+
     def test_build_active_task_context_uses_working_state_without_bundle_task_plan(self):
         _task, snapshot = task_store_module.save_task_plan_snapshot(
             "continue NovaNotes",

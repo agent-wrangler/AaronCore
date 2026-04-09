@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from core.process_history import normalize_process_payload
+from storage.history_store import is_transient_assistant_notice
 
 
 class ChatHistoryTransaction:
@@ -89,6 +90,11 @@ def persist_assistant_history_entry(
     add_to_history=None,
     debug_write=None,
 ) -> bool:
+    if is_transient_assistant_notice({"role": role, "content": content}):
+        if callable(debug_write):
+            debug_write("history_skip_transient_notice", {"role": str(role or "").strip()})
+        return False
+
     entry = {
         "role": str(role or "").strip(),
         "content": content,

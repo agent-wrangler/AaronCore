@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from core import task_store as _task_store
+from storage.history_store import is_transient_assistant_notice
 
 
 def build_l1_messages(
@@ -22,6 +23,8 @@ def build_l1_messages(
     messages: list[dict] = []
     for item in recent:
         if not isinstance(item, dict):
+            continue
+        if is_transient_assistant_notice(item):
             continue
         role = item.get("role", "")
         content = str(item.get("content") or "").strip()

@@ -36,6 +36,27 @@ class ChatHistoryTransactionTests(unittest.TestCase):
         self.assertEqual(history[-1]["role"], "nova")
         self.assertEqual(remembered, [("nova", "done")])
 
+    def test_persist_assistant_entry_skips_transient_model_error_notice(self):
+        history = []
+        saved = []
+        remembered = []
+        tx = ChatHistoryTransaction(
+            history,
+            save_msg_history=lambda items: saved.append([dict(item) for item in items]),
+            add_to_history=lambda role, text: remembered.append((role, text)),
+        )
+
+        ok = tx.persist_assistant_entry(
+            "nova",
+            "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。",
+        )
+
+        self.assertFalse(ok)
+        self.assertFalse(tx.assistant_history_saved)
+        self.assertEqual(history, [])
+        self.assertEqual(saved, [])
+        self.assertEqual(remembered, [])
+
     def test_rollback_pending_user_only_removes_orphan_user_turn(self):
         saved = []
         history = []

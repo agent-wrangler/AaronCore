@@ -5,7 +5,7 @@ var CHAT_HISTORY_SNAPSHOT_KEY='aaroncore_chat_history';
 var CHAT_HISTORY_SESSION_SNAPSHOT_KEY='aaroncore_chat_history_session';
 var _LEGACY_CHAT_HISTORY_SNAPSHOT_KEY='nova_chat_history';
 var _LEGACY_CHAT_HISTORY_SESSION_SNAPSHOT_KEY='nova_chat_history_session';
-var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412e';
+var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260409f';
 var CHAT_HISTORY_RENDER_VERSION_KEY='aaroncore_chat_history_render_version';
 var CHAT_HISTORY_SESSION_RENDER_VERSION_KEY='aaroncore_chat_history_session_render_version';
 var _LEGACY_CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
@@ -181,8 +181,6 @@ function assistantReplyLooksStructured(text, renderedHtml){
       html=normalizeRenderedAssistantHtml(html);
     }
     if (/<(h[1-6]|pre|code|blockquote|table|hr)\b/i.test(html)) return true;
-    var htmlListItems=(html.match(/<li\b/gi)||[]).length;
-    if(htmlListItems>=3) return true;
   }
   var raw=String(text||'').replace(/\r/g,'').trim();
   if(!raw) return false;
@@ -190,14 +188,6 @@ function assistantReplyLooksStructured(text, renderedHtml){
   if(/^\s{0,3}(?:#{1,6}\s+|>\s+)/m.test(raw)) return true;
   if(/^\s*\|.+\|\s*$/m.test(raw)) return true;
   if(/^\s*[-*_]{3,}\s*$/m.test(raw)) return true;
-  var listCount=0;
-  var lines=raw.split('\n');
-  for(var i=0;i<lines.length;i++){
-    if(/^\s{0,3}(?:[-*+]\s+|\d+[.)]\s+)/.test(lines[i]||'')){
-      listCount++;
-      if(listCount>=3) return true;
-    }
-  }
   return false;
 }
 

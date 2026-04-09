@@ -2,11 +2,42 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import queue
 import re
 import threading
 import time
+
+
+_RUNTIME_UI_LANG = contextvars.ContextVar("nova_runtime_ui_lang", default="zh")
+
+
+def _normalize_ui_lang(value: str | None) -> str:
+    raw = str(value or "").strip().lower()
+    return "en" if raw.startswith("en") else "zh"
+
+
+def set_runtime_ui_lang(value: str | None):
+    return _RUNTIME_UI_LANG.set(_normalize_ui_lang(value))
+
+
+def reset_runtime_ui_lang(token) -> None:
+    try:
+        _RUNTIME_UI_LANG.reset(token)
+    except Exception:
+        pass
+
+
+def _runtime_ui_lang() -> str:
+    try:
+        return _normalize_ui_lang(_RUNTIME_UI_LANG.get())
+    except Exception:
+        return "zh"
+
+
+def _localized_runtime_text(zh: str, en: str) -> str:
+    return en if _runtime_ui_lang() == "en" else zh
 
 
 def llm_call_stream(
@@ -187,11 +218,17 @@ def _build_visible_provider_error_text(
             http_code = 0
 
     if "insufficient_balance" in error_type or "insufficient balance" in lowered:
-        return "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。"
+        return _localized_runtime_text(
+            "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。",
+            "Current model API balance is insufficient. Unable to continue for now. Please top up and try again, or switch to another model first.",
+        )
     if "context window exceeds limit" in lowered or "invalid chat setting" in lowered or (
         http_code == 400 and "2013" in lowered
     ):
-        return "当前模型请求失败：上下文太长，超过了该模型的限制。请重试，或切换到上下文更大的模型。"
+        return _localized_runtime_text(
+            "当前模型请求失败：上下文太长，超过了该模型的限制。请重试，或切换到上下文更大的模型。",
+            "Current model request failed: the context is too long and exceeded this model's limit. Please retry, or switch to a model with a larger context window.",
+        )
     if any(
         token in lowered
         for token in (
@@ -204,18 +241,35 @@ def _build_visible_provider_error_text(
             "timed out",
         )
     ):
-        return "当前模型连接失败，请检查网络或代理设置后重试。"
+        return _localized_runtime_text(
+            "当前模型连接失败，请检查网络或代理设置后重试。",
+            "Current model connection failed. Please check your network or proxy settings and try again.",
+        )
     if http_code == 429:
-        return "当前模型请求过于频繁，或该账户额度已不足。请稍后重试，或先切换到其他模型。"
+        return _localized_runtime_text(
+            "当前模型请求过于频繁，或该账户额度已不足。请稍后重试，或先切换到其他模型。",
+            "Current model requests are too frequent, or the account balance/quota is insufficient. Please try again later, or switch to another model first.",
+        )
     if http_code in (401, 403):
-        return "当前模型鉴权失败，请检查 API Key 或权限配置。"
+        return _localized_runtime_text(
+            "当前模型鉴权失败，请检查 API Key 或权限配置。",
+            "Current model authentication failed. Please check the API key or permission settings.",
+        )
     if http_code == 400:
         if message:
-            return f"当前模型请求失败：{message}"
-        return "当前模型请求参数无效，暂时无法继续。请检查模型配置后重试。"
+            prefix = "Current model request failed: " if _runtime_ui_lang() == "en" else "当前模型请求失败："
+            return f"{prefix}{message}"
+        return _localized_runtime_text(
+            "当前模型请求参数无效，暂时无法继续。请检查模型配置后重试。",
+            "Current model request parameters are invalid. Unable to continue for now. Please check the model configuration and try again.",
+        )
     if message and message.lower() != "unknown error":
-        return f"当前模型请求失败：{message}"
+        prefix = "Current model request failed: " if _runtime_ui_lang() == "en" else "当前模型请求失败："
+        return f"{prefix}{message}"
     if http_code:
+        if _runtime_ui_lang() == "en":
+            provider_name = "model API" if provider == "openai" else f"{provider} API"
+            return f"Current {provider_name} request failed (HTTP {http_code}). Please try again later, or switch to another model."
         provider_name = "模型接口" if provider == "openai" else f"{provider} 接口"
         return f"当前{provider_name}请求失败（HTTP {http_code}）。请稍后重试，或切换到其他模型。"
     return ""
@@ -247,6 +301,7 @@ def _yield_stream_recovery_from_blocking_call(
         "reset_reason": reset_reason,
         "emitted_visible": emitted_visible,
         "emitted_tool_calls": emitted_tool_calls,
+        "ui_lang": _runtime_ui_lang(),
     }
     if isinstance(debug_payload, dict):
         payload.update(debug_payload)

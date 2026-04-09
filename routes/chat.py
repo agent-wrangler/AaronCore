@@ -1,5 +1,6 @@
 """核心对话路由：/chat SSE 流式"""
 import asyncio
+import contextvars
 import json
 import requests
 from datetime import datetime
@@ -110,6 +111,19 @@ def _build_reply_payload(reply: str, **extra) -> dict:
 router = APIRouter()
 
 
+def _start_context_thread(target, *, daemon: bool = True):
+    import threading
+
+    run_ctx = contextvars.copy_context()
+
+    def _runner():
+        run_ctx.run(target)
+
+    worker = threading.Thread(target=_runner, daemon=daemon)
+    worker.start()
+    return worker
+
+
 def _get_pending_awareness_events() -> list[dict]:
     pull_fn = getattr(S, "awareness_pull", None)
     if callable(pull_fn):
@@ -128,6 +142,7 @@ class ChatRequest(BaseModel):
     message: str
     image: str | None = None
     images: list[str] | None = None
+    ui_lang: str | None = None
 
 
 class ChatAnswerRequest(BaseModel):
@@ -140,7 +155,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     msg = request.message
     user_image = request.image
     user_images = request.images or ([user_image] if user_image else [])
-    S.debug_write("input", {"message": msg, "has_image": bool(user_images)})
+    _ui_lang = request.ui_lang
+    S.debug_write("input", {"message": msg, "has_image": bool(user_images), "ui_lang": _ui_lang})
     S.add_to_history("user", msg)
 
     # 通知视觉模块：用户活跃
@@ -156,7 +172,19 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     _history_for_context = list(history)  # 不含当前消息的副本
 
     async def event_stream():
+      _ui_lang_token = None
+      _reset_runtime_ui_lang = None
       try:
+        try:
+            from brain.stream_runtime import (
+                reset_runtime_ui_lang as _reset_runtime_ui_lang,
+                set_runtime_ui_lang as _set_runtime_ui_lang,
+            )
+            _ui_lang_token = _set_runtime_ui_lang(_ui_lang)
+        except Exception:
+            _ui_lang_token = None
+            _reset_runtime_ui_lang = None
+
         _comp.activity = "thinking"
         bundle = {}
 
@@ -482,7 +510,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                             yield event
 
                 try:
-                    import queue, threading
+                    import queue
                     _q = queue.Queue()
                     _last_ask_user_id = ""
                     def _tc_stream_worker():
@@ -493,8 +521,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                             _q.put(("__error__", _e))
                         finally:
                             _q.put(None)
-                    _t = threading.Thread(target=_tc_stream_worker, daemon=True)
-                    _t.start()
+                    _t = _start_context_thread(_tc_stream_worker)
 
                     while True:
                         try:
@@ -1174,6 +1201,12 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         S.debug_write("event_stream_cancelled", {"error": str(_base), "type": type(_base).__name__})
         _history_tx.rollback_pending_user("event_stream_cancelled")
         raise
+      finally:
+        if _ui_lang_token is not None and callable(_reset_runtime_ui_lang):
+            try:
+                _reset_runtime_ui_lang(_ui_lang_token)
+            except Exception:
+                pass
 
     return EventSourceResponse(event_stream(), ping=2)
 

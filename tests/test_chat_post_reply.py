@@ -96,6 +96,27 @@ class ChatPostReplyTests(unittest.TestCase):
         self.assertEqual(saved["process"]["plan"]["goal"], "finish")
         self.assertEqual(remembered, ["最终答案"])
 
+    def test_persist_reply_artifacts_skips_transient_model_error_notice(self):
+        saved = []
+        remembered = []
+        text = "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。"
+        result = persist_reply_artifacts(
+            text,
+            [],
+            steps=[{"step_key": "a"}],
+            normalize_steps=lambda steps: steps,
+            persist_assistant_history_entry=lambda role, reply, process=None: saved.append(
+                {"role": role, "text": reply, "process": process}
+            ),
+            debug_write=lambda *_args, **_kwargs: None,
+            add_memory=lambda reply: remembered.append(reply),
+            task_plan={"goal": "finish"},
+            include_empty_steps_with_plan=True,
+        )
+        self.assertEqual(result, text)
+        self.assertEqual(saved, [])
+        self.assertEqual(remembered, [])
+
     def test_build_repair_payload_uses_agent_final(self):
         original = sys.modules.get("agent_final")
         sys.modules["agent_final"] = types.SimpleNamespace(

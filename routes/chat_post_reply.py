@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from storage.history_store import is_transient_assistant_notice
+
 
 def update_companion_reply_state(companion, response: str, *, detect_emotion) -> None:
     companion.activity = "idle"
@@ -108,6 +110,11 @@ def persist_reply_artifacts(
             debug_write("l1_hygiene", {"removed": toxic})
     except Exception:
         pass
+
+    if is_transient_assistant_notice({"role": "nova", "content": text}):
+        if callable(debug_write):
+            debug_write("reply_skip_transient_notice_persist", {"content": text[:120]})
+        return text
 
     process = build_process_payload(
         steps,

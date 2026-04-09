@@ -549,6 +549,9 @@ function _ensureTraceDetached(){
 function _renderPendingPlan(plan){
   pendingState.plan=null;
   var host=pendingState.planStrip;
+  var shouldRenderInChat=typeof window._isTaskPlanBoardEnabled==='function'
+   ? window._isTaskPlanBoardEnabled()
+   : true;
   if(host){
    host.style.display='none';
    host.innerHTML='';
@@ -560,7 +563,7 @@ function _renderPendingPlan(plan){
    return;
   }
   pendingState.plan=plan;
-  if(host){
+  if(host && shouldRenderInChat){
    host.style.display='';
    var goal=document.createElement('div');
    goal.className='plan-goal';
@@ -693,7 +696,7 @@ function _collapseSteps(){
   var resp=await fetch('/chat',{
    method:'POST',
    headers:{'Content-Type':'application/json; charset=utf-8','Accept':'text/event-stream'},
-   body:JSON.stringify({message:String(text||t('chat.describe.image')),image:imagesBase64?imagesBase64[0]:null,images:imagesBase64}),
+   body:JSON.stringify({message:String(text||t('chat.describe.image')),image:imagesBase64?imagesBase64[0]:null,images:imagesBase64,ui_lang:(typeof getLang==='function'?String(getLang()||'zh'):'zh')}),
    signal:_abortController.signal
   });
 

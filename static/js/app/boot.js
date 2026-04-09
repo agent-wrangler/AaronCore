@@ -313,7 +313,10 @@ window._reloadChatFromServer=_reloadChatFromServer;
 
  var _restoredTimelineSnapshot=_restoreTimelineSnapshot();
 
- window._renderHistoryItems=function(items){
+window._renderHistoryItems=function(items){
+ var shouldRenderTaskPlanInChat=typeof window._isTaskPlanBoardEnabled==='function'
+  ? window._isTaskPlanBoardEnabled()
+  : true;
  function _processMarkerText(label, status){
    var text=String(label||'');
    if(status==='error') return '!';
@@ -622,12 +625,12 @@ window._reloadChatFromServer=_reloadChatFromServer;
    html+='<div class="avatar" style="background:'+avBg+'">'+avTxt+'</div>';
    if(role==='user'){
     html+='<div class="msg-content">';
-   }else if(plan&&plan.items&&plan.items.length){
-    html+='<div class="msg-content-wrap">';
-    if(plan&&plan.items&&plan.items.length){
-     html+=_renderPlanStrip(plan);
-    }
-    html+='<div class="msg-content">';
+  }else if(shouldRenderTaskPlanInChat && plan&&plan.items&&plan.items.length){
+   html+='<div class="msg-content-wrap">';
+   if(plan&&plan.items&&plan.items.length){
+    html+=_renderPlanStrip(plan);
+   }
+   html+='<div class="msg-content">';
    }else{
     html+='<div class="msg-content">';
    }

@@ -315,6 +315,32 @@ class BrainStreamTests(unittest.TestCase):
         self.assertIn("余额不足", visible)
         self.assertEqual(chunks[-1].get("_usage", {}), {})
 
+    def test_openai_stream_surfaces_balance_errors_in_english_when_ui_lang_is_en(self):
+        cfg = {"model": "MiniMax-M2.7", "base_url": "https://api.minimaxi.com/v1", "api_key": "test"}
+        messages = [{"role": "user", "content": "hello"}]
+        error_payload = {
+            "type": "error",
+            "error": {
+                "type": "insufficient_balance_error",
+                "message": "insufficient balance",
+                "http_code": "429",
+            },
+        }
+
+        stream_resp = _FakeStreamResponse(status_code=429, text=json.dumps(error_payload, ensure_ascii=False))
+        retry_resp = _FakeJsonResponse(error_payload, status_code=429)
+        token = brain_module._stream_runtime.set_runtime_ui_lang("en")
+        try:
+            with patch.object(brain_module, "_post_with_network_strategy", side_effect=[stream_resp, retry_resp]):
+                chunks = list(brain_module._llm_stream_openai(cfg, messages, tools=[]))
+        finally:
+            brain_module._stream_runtime.reset_runtime_ui_lang(token)
+
+        visible = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+
+        self.assertIn("Current model API balance is insufficient", visible)
+        self.assertEqual(chunks[-1].get("_usage", {}), {})
+
     def test_openai_stream_surfaces_context_limit_errors_as_visible_reply(self):
         cfg = {"model": "MiniMax-M2.7", "base_url": "https://api.minimaxi.com/v1", "api_key": "test"}
         messages = [{"role": "user", "content": "hello"}]

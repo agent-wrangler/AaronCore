@@ -64,6 +64,10 @@ function _scheduleTaskPlanClear(delayMs){
 
 var _TASK_PLAN_BOARD_ENABLED=false;
 
+window._isTaskPlanBoardEnabled=function(){
+ return !!_TASK_PLAN_BOARD_ENABLED;
+};
+
 function _renderSessionTaskPlan(){
  var board=document.getElementById('taskPlanBoard');
  if(!board) return;

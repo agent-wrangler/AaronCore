@@ -51,6 +51,17 @@ class RecentMessagesTests(unittest.TestCase):
         self.assertEqual(recent[0], history[0])
         self.assertEqual(recent[-1], history[-1])
 
+    def test_get_recent_messages_ignores_transient_model_error_notices(self):
+        history = [
+            {"role": "user", "content": "before"},
+            {"role": "nova", "content": "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。"},
+            {"role": "assistant", "content": "after"},
+        ]
+
+        recent = state_loader_module.get_recent_messages(history, limit=6)
+
+        self.assertEqual(recent, [history[0], history[2]])
+
     def test_build_l1_messages_uses_all_budget_trimmed_history_by_default(self):
         history = []
         for idx in range(25):
@@ -62,6 +73,17 @@ class RecentMessagesTests(unittest.TestCase):
         self.assertEqual(len(messages), 50)
         self.assertEqual(messages[0]["content"], "user-0")
         self.assertEqual(messages[-1]["content"], "assistant-24")
+
+    def test_build_l1_messages_ignores_transient_model_error_notices(self):
+        history = [
+            {"role": "user", "content": "before"},
+            {"role": "nova", "content": "当前模型接口余额不足，暂时无法继续。请充值后重试，或先切换到其他模型。"},
+            {"role": "assistant", "content": "after"},
+        ]
+
+        messages = reply_formatter_module._build_l1_messages({"l1": history, "user_input": "new-input"})
+
+        self.assertEqual(messages, [{"role": "user", "content": "before"}, {"role": "assistant", "content": "after"}])
 
 
 if __name__ == "__main__":

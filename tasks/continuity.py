@@ -180,12 +180,10 @@ def looks_like_long_referential_followup(query: str) -> bool:
         "目录",
         "路径",
         "位置",
-        "项目",
         "where",
         "folder",
         "directory",
         "path",
-        "project",
     )
     return any(marker in raw for marker in followup_markers)
 
