@@ -734,12 +734,13 @@ body.dark .scroll-to-bottom-btn{
   background:#2A2A2A;
   border-color:#333333;
   color:#B0B0B0;
-  box-shadow:0 10px 20px rgba(0,0,0,0.2);
+  box-shadow:0 2px 8px rgba(0,0,0,0.14);
 }
 
 body.dark .scroll-to-bottom-btn:hover{
   background:#313131;
   color:#FFFFFF;
+  box-shadow:0 3px 10px rgba(0,0,0,0.16);
 }
 
 body.dark .skill-card,
