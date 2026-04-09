@@ -38,10 +38,16 @@
 #memScroll,
 #docsBox,
 .runtime-graph-page {
-  padding: 20px 28px;
+  padding: 20px 28px 56px;
   box-sizing: border-box;
   min-height: 100%;
   width: 100%;
+}
+
+#settingsBox,
+#statsBox {
+  padding-bottom: 88px;
+  box-sizing: border-box;
 }
 
 .settings-shell {

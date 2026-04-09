@@ -134,7 +134,10 @@ body.light .ask-user-card {
 }
 
 /* ── 统计页面（驾驶舱） ───────────────────────────── */
-.stats-page { }
+.stats-page {
+  padding-bottom: 56px;
+  box-sizing: border-box;
+}
 .stats-page .page-title { margin-bottom: 6px; }
 
 /* 顶部摘要卡 4 列 */
@@ -168,6 +171,7 @@ body.light .ask-user-card {
 
 /* 通用 section */
 .stats-section { margin-bottom: 24px; }
+.stats-section-model-usage { margin-top: 18px; }
 .stats-section-title {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 600; color: var(--text-label);
@@ -271,10 +275,10 @@ body.light .ask-user-card {
   border-radius: 4px 4px 0 0; overflow: hidden;
 }
 .stats-bar-fill { height: 100%; border-radius: 4px 4px 0 0; transition: width 0.6s ease; }
-.stats-bar-fill.chat   { background: linear-gradient(90deg, var(--tone-mauve), var(--tone-steel)); }
-.stats-bar-fill.route  { background: linear-gradient(90deg, var(--tone-steel-strong), var(--tone-steel)); }
-.stats-bar-fill.skill  { background: linear-gradient(90deg, var(--tone-amber-strong), var(--tone-amber)); }
-.stats-bar-fill.learn  { background: linear-gradient(90deg, var(--tone-sage-strong), var(--tone-sage)); }
+.stats-bar-fill.stats-scene-chat  { background: linear-gradient(90deg, var(--tone-mauve), var(--tone-steel)); }
+.stats-bar-fill.stats-scene-route { background: linear-gradient(90deg, var(--tone-steel-strong), var(--tone-steel)); }
+.stats-bar-fill.stats-scene-skill { background: linear-gradient(90deg, var(--tone-amber-strong), var(--tone-amber)); }
+.stats-bar-fill.stats-scene-learn { background: linear-gradient(90deg, var(--tone-sage-strong), var(--tone-sage)); }
 .stats-bar-pct { width: 120px; font-size: 11px; color: var(--text-secondary); text-align: left; flex-shrink: 0; white-space: nowrap; }
 .stats-highlight { color: var(--tone-sage); }
 

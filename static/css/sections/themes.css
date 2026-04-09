@@ -1423,7 +1423,7 @@ body.dark .chat:has(.settings-page){
 body.dark .settings-page{
   width:100%;
   margin:0;
-  padding:20px 28px;
+  padding:20px 28px 56px;
   background:transparent;
   border:none;
   box-shadow:none;

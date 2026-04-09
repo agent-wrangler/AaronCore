@@ -209,7 +209,6 @@ function renderStats(s){
   h+=buildSceneModule(s);
   h+=buildTrendModule(s);
   h+=buildDiagModule(s);
-  h+='<div class="stats-footer"><div class="stats-footer-info">'+t('dash.lastUsed')+': '+(s.last_used||'-')+'</div></div>';
   return h;
 }
 
@@ -220,7 +219,7 @@ function buildModelModule(s){
   var title=t('dash.model.title');
   if(title==='dash.model.title') title=(getLang&&getLang()==='zh')?'\u6a21\u578b\u6d88\u8017\u5206\u5e03':'Model Usage';
   if(keys.length===0) return '';
-  var h='<div class="stats-section"><div class="stats-section-title">'+title+'</div><div class="stats-module">';
+  var h='<div class="stats-section stats-section-model-usage"><div class="stats-section-title">'+title+'</div><div class="stats-module">';
   var totalT=0;
   keys.forEach(function(k){ totalT+=(bm[k].input||0)+(bm[k].output||0); });
   keys.sort(function(a,b){ return ((bm[b].input||0)+(bm[b].output||0))-((bm[a].input||0)+(bm[a].output||0)); });
@@ -643,7 +642,7 @@ function buildSceneModule(s){
       var pct=totalSceneTokens>0?Math.round(tokens/totalSceneTokens*100):0;
       var barW=pct>0?Math.max(pct,4):0;
       h+='<div class="stats-bar-row"><div class="stats-bar-label">'+sc.n+'</div>';
-      h+='<div class="stats-bar-track"><div class="stats-bar-fill '+sc.k+'" style="width:'+barW+'%"></div></div>';
+      h+='<div class="stats-bar-track"><div class="stats-bar-fill stats-scene-'+sc.k+'" style="width:'+barW+'%"></div></div>';
       h+='<div class="stats-bar-pct">'+pct+'% <span style="opacity:0.5;font-size:11px;">'+req+' · '+fmtN(tokens)+'t</span></div></div>';
     });
     h+='</div></div>';
