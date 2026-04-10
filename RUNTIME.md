@@ -1,9 +1,9 @@
-# AaronCore 当前真实流程文档
+# AaronCore 当前运行态
 
-> 最后更新：2026-03-30
-> 定位：**当前运行态补充文档**。用于快速理解 AaronCore 现在真正怎么跑。
+> 最后更新：2026-04-10
+> 定位：**当前运行态权威文档**。用于快速理解和核对 AaronCore 现在真正怎么跑。
 > 适用场景：以后新对话开始时，如果要碰 AaronCore，建议先读这份，再去看具体代码。
-> 说明：遇到和代码不一致时，**以当前代码为准**；遇到和根目录 `CLAUDE.md` 冲突时，优先按代码核对后再判断。
+> 说明：遇到和代码不一致时，**以当前代码为准**；遇到和根目录 `CLAUDE.md` 冲突时，优先按本文和代码核对。`CLAUDE.md` 现在更偏项目手册与约束汇总。
 
 ---
 
@@ -376,7 +376,7 @@ LLM 停止调工具后输出最终文本
 
 这点很关键：
 
-> NovaCore 现在不是“单轮 tool_call”，而是**多轮 tool_call 主链**。
+> AaronCore 现在不是“单轮 tool_call”，而是**多轮 tool_call 主链**。
 
 ---
 
@@ -421,7 +421,7 @@ tool_call 跑完后，当前主链会继续做这些事：
 
 关键位置：`routes/chat.py:842-909`
 
-所以 NovaCore 现在是一个真正的闭环：
+所以 AaronCore 现在是一个真正的闭环：
 
 ```text
 输入 → 理解 → 工具 → 回复 → 记忆回写 → 下次复用
@@ -601,34 +601,47 @@ executor 统一执行
 
 ## 6.5 L5
 - 成功执行经验 / 工作方法记忆
-- 不再承担“技能列表”职责；当前技能表由 tool list 直接暴露给 LLM
-- 旧版 `L2 -> L5` 技能需求链已经退役；当前 L5 主要来自 L6 成功执行经验的沉淀
-- 现在更适合沉淀经过验证的成功执行路径，供复杂任务按需召回
-- CoD 下默认不预装全量，只在复杂任务/规划层按需读取
+- 当前加载入口是 `storage/state_loader.load_l5_knowledge()`
+- 它现在混合两类内容：
+  - `knowledge.json` 最近 10 条条目
+  - 已注册技能的轻量元数据（`name` + `keywords`）
+- 真正代表当前 L5 语义的，是 `source="l6_success_path"` 这类成功经验
+- 这些条目由 `memory.evolve() -> _maybe_promote_success_path()` 在 **success + verified + 无 drift** 时上浮
+- 所以现在的 L5 更像“正向方法经验库”，回答的是“什么做法成功过”
+- 它不再承担技能列表职责；当前技能表由 tool list 直接暴露给 LLM
+- CoD 下默认不预装全量，只在复杂任务或按需上下文里读取
 
 ## 6.6 L6
 - 原始执行轨迹 / 素材层
-- 记录真实 tool run 的 success / verified / drift / observed_state 等执行事实
+- 主要落在 `evolution.json`
+- 写入入口是 `memory.evolve(user_input, skill_used, run_event)`
+- 记录真实 tool run 的 `success` / `verified` / `expected_state` / `observed_state` / `drift_reason` / `verification_mode` / `verification_detail` 等执行事实
+- 同时保留 `skills_used` 聚合统计和 `skill_runs` 逐次轨迹
 - 它不是 prompt 主体，更像 L5 成功经验和后续 L7 纠偏的源数据层
 - 主要在回复后更新，负责留下“这次到底怎么跑的”
 
 ## 6.7 L7
 - 反馈纠偏规则
 - 当前主链会预装少量 relevant rules
+- 记录入口是 `feedback/classifier.py::record_feedback_rule()`，回复后由 `S.l7_record_feedback_v2(...)` 挂回主链
+- 当前更适合把它理解成“负向约束 / 失败提醒层”
+- 它回答的是“别再怎么做”，不是“该怎么做”
+- `_extract_routing_constraint()` 当前已经退役，所以 L7 不再是结构化路由约束主通道
+- `feedback_relearn` 仍会作为反馈链里的补学动作存在，但不再转成 L8 正式知识卡片
 
 ## 6.8 L8
 - 已学知识
 - 定义：真正可复用的知识卡片层，不再混入口语抱怨、对话分析或系统自指内容
 - CoD 下默认按需查询，不预装全量
 - 当前只有两条正式入库路径：
-  - 自主学习：`core/l8_learn.py` 的 `explicit_search_and_learn()` 与 `run_l8_autolearn_task -> save_learned_knowledge()`
-  - 对话结晶：`core/l2_memory.py` 的 `_to_l8() -> save_learned_knowledge(source="l2_crystallize")`
+  - 自主 / 显式学习：`memory/l8_learning.py` 的 `auto_learn()` / `explicit_search_and_learn()` -> `save_learned_knowledge()`
+  - 对话结晶：`memory/l2_memory.py` 的 `_to_l8() -> save_learned_knowledge(source="l2_crystallize")`
 - 记忆页中会显示为两类事件：`自主学习` 和 `对话结晶`
 - `feedback_relearn` 属于 L7 的补学动作，当前只保留在反馈链路里，不再作为 L8 已学知识入库、检索或展示
 - 核心文件与数据：
-  - `core/l8_learn.py`
-  - `core/l2_memory.py`
-  - `memory_db/knowledge_base.json`
+  - `memory/l8_learning.py`
+  - `memory/l2_memory.py`
+  - `state_data/memory_store/knowledge_base.json`
 
 ---
 
@@ -654,7 +667,7 @@ executor 统一执行
 
 ## 7.3 不要退回 keyword matching（关键词匹配）
 
-这是当前 NovaCore 很重要的一条设计原则：
+这是当前 AaronCore 很重要的一条设计原则：
 
 > **系统已经从 keyword matching（关键词匹配）阶段爬出来了，后面不能再把它做回去。**
 
@@ -715,7 +728,7 @@ executor 统一执行
 
 ### 第一层：总说明
 1. 根目录 `CLAUDE.md`
-2. 本文：`docs/10-架构-architecture/NovaCore_当前真实流程文档.md`
+2. 本文：`RUNTIME.md`
 
 ### 第二层：主链关键文件
 3. `routes/chat.py`
@@ -726,8 +739,8 @@ executor 统一执行
 ### 第三层：上下文与记忆
 7. `core/context_builder.py`
 8. `core/flashback.py`
-9. `core/l2_memory.py`
-10. `core/l8_learn.py`
+9. `memory/l2_memory.py`
+10. `memory/l8_learning.py`
 
 ### 第四层：电脑操作底座
 11. `core/fs_protocol.py`
@@ -739,7 +752,7 @@ executor 统一执行
 
 ---
 
-## 9. 以后继续改 NovaCore 时，默认应该带着哪些判断
+## 9. 以后继续改 AaronCore 时，默认应该带着哪些判断
 
 ### 先判断：这是哪一层的问题？
 - LLM 主链问题？
@@ -766,7 +779,7 @@ executor 统一执行
 
 那就应该先怀疑：
 
-> **是不是在把 NovaCore 从 LLM 主导重新拉回 keyword matching。**
+> **是不是在把 AaronCore 从 LLM 主导重新拉回 keyword matching。**
 
 ### 最后判断：这个改动会不会让 L1、dialogue_context、flashback 重新打架？
 这是最近很容易踩的点。
@@ -777,7 +790,7 @@ executor 统一执行
 
 如果以后只允许记住一句话，那就记这句：
 
-> **NovaCore 当前的真实运行态是：LLM/tool_call 主导，CoD 自动启用，默认预装 L1 + L4 + 少量结构化上下文，其余记忆按需拉取；电脑操作能力是 LLM 之下的通用底座，不是压在 LLM 上面的总控层。**
+> **AaronCore 当前的真实运行态是：LLM/tool_call 主导，CoD 自动启用，默认预装 L1 + L4 + 少量结构化上下文，其余记忆按需拉取；电脑操作能力是 LLM 之下的通用底座，不是压在 LLM 上面的总控层。**
 
 如果允许记住第二句，再加这句：
 

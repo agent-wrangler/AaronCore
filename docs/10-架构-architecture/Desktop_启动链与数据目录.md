@@ -18,7 +18,7 @@
 
 桌面启动链是：
 
-1. `NovaCore.exe`
+1. `AaronCore.exe`（兼容回退到 `NovaCore.exe`）
 2. `desktop_runtime_35/main.js`
 3. `shell/main.js`
 4. `agent_final.py`

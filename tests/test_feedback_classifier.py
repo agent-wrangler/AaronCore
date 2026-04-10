@@ -27,7 +27,7 @@ class FeedbackClassifierTests(unittest.TestCase):
     @staticmethod
     def _fake_llm(prompt: str) -> str:
         text = str(prompt)
-        if "你是 NovaCore 的反馈分类器" in text:
+        if "反馈分类器" in text and "当前用户输入" in text:
             current_input_match = re.search(r"当前用户输入:\s*(.+)", text)
             current_input = current_input_match.group(1).strip() if current_input_match else text
 
@@ -190,6 +190,91 @@ class FeedbackClassifierTests(unittest.TestCase):
 
         self.assertIsNone(second)
         self.assertEqual(len(stored_rules), 1)
+
+    def test_format_l7_context_rewrites_list_feedback_into_positive_preference(self):
+        formatted = feedback_classifier.format_l7_context(
+            [
+                {
+                    "category": "交互风格",
+                    "fix": "当用户指出格式问题时，不要继续使用列表回复，应该改用自然句式直接回应内容。",
+                    "user_feedback": "你怎么又用列表啊",
+                }
+            ]
+        )
+
+        self.assertIn("普通聊天默认写成自然、连贯的短正文。", formatted)
+        self.assertNotIn("列表回复", formatted)
+
+    def test_format_l7_context_rewrites_list_feedback_without_fix(self):
+        formatted = feedback_classifier.format_l7_context(
+            [
+                {
+                    "category": "交互风格",
+                    "last_question": "正常聊天好吧",
+                    "user_feedback": "你怎么又开始用列表了",
+                }
+            ]
+        )
+
+        self.assertEqual(formatted, "交互风格：普通聊天默认写成自然、连贯的短正文。")
+
+    def test_normalize_rules_data_rewrites_list_style_fixes(self):
+        rules = [
+            {
+                "fix": "当用户指出格式问题时，不要继续使用列表回复，应该改用自然句式直接回应内容。",
+                "user_feedback": "你怎么又用列表啊",
+                "last_question": "对啊 为什么还是用列表",
+                "category": "交互风格",
+                "type": "user_pref",
+                "scene": "general",
+            },
+            {
+                "fix": "当用户抱怨界面卡顿时，不要机械罗列原因和解决方法，应该直接提供最可能的核心解决方案。",
+                "user_feedback": "能不能不要又用列表解释了",
+                "last_question": "就是感觉好卡 不知道为什么",
+                "category": "交互风格",
+                "type": "user_pref",
+                "scene": "general",
+            },
+            {
+                "fix": "先核实工具结果再下结论。",
+                "user_feedback": "你都没搜就说搜了",
+                "last_question": "能不能先查一下",
+                "category": "路由调度",
+                "type": "skill_route",
+                "scene": "routing",
+            },
+            {
+                "fix": "当用户询问操作结果时，不要罗列技术排查步骤，应直接说明当前界面状态并提供后续操作选项。",
+                "user_feedback": "又没成功啊 你说话可以根据目前的界面说吗 一直很短 感觉看着不舒服",
+                "last_question": "修好了吗",
+                "category": "意图理解",
+                "type": "user_pref",
+                "scene": "general",
+            },
+        ]
+
+        changed = feedback_classifier.normalize_rules_data(rules)
+
+        self.assertEqual(changed, 2)
+        self.assertEqual(rules[0]["fix"], "普通聊天默认写成自然、连贯的短正文。")
+        self.assertEqual(rules[1]["fix"], "用户抱怨界面卡顿时，先直接给最可能的核心解决方案。")
+        self.assertEqual(rules[2]["fix"], "先核实工具结果再下结论。")
+        self.assertEqual(
+            rules[3]["fix"],
+            "当用户询问操作结果时，不要罗列技术排查步骤，应直接说明当前界面状态并提供后续操作选项。",
+        )
+
+    def test_record_feedback_rule_compacts_verbose_fix_into_short_action(self):
+        item = feedback_classifier.record_feedback_rule(
+            "检查下这个路径 只要对话里出现代码就会出现个小游戏到窗口。感觉有问题",
+            "帮我看看为什么一提代码就会乱触发",
+            "我帮你打开了一个小游戏窗口",
+        )
+
+        self.assertIsNotNone(item)
+        self.assertEqual(item["fix"], "按纠正后的方向处理。")
+        self.assertNotIn("当用户指出", item["fix"])
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from unittest.mock import patch
 import core.executor as executor_module
 import core.reply_formatter as reply_formatter_module
 import core.tool_adapter as tool_adapter_module
+import tools.agent.game_templates as game_templates_module
 import core.skills.run_code as run_code_module
 import core.skills.run_command as run_command_module
 
@@ -182,11 +183,79 @@ class RunCommandSkillTests(unittest.TestCase):
 
 class RunCodeGuardTests(unittest.TestCase):
     def test_run_code_rejects_packaging_requests(self):
-        result = run_code_module.execute("把 notes_gui.py 打包成 exe 放到桌面")
+        result = run_code_module.execute("鎶?notes_gui.py 鎵撳寘鎴?exe 鏀惧埌妗岄潰")
 
         self.assertEqual(result.get("drift", {}).get("reason"), "wrong_tool_selected")
         self.assertEqual(result.get("drift", {}).get("repair_hint"), "use_run_command")
         self.assertFalse(result.get("verification", {}).get("verified"))
+
+    def test_run_code_builds_browser_game_for_generic_request(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir).resolve()
+            with patch.object(run_code_module, "_resolve_output_dir", return_value=output_dir), patch.object(
+                run_code_module.webbrowser,
+                "open",
+                return_value=True,
+            ), patch.object(
+                run_code_module,
+                "execute_ask_user",
+                return_value={"success": True, "response": "用户选择了：贪吃蛇"},
+            ):
+                result = run_code_module.execute("给我搞个小游戏玩玩")
+            target = Path(result.get("action", {}).get("target", ""))
+            self.assertTrue(result.get("verification", {}).get("verified"))
+            self.assertEqual(result.get("verification", {}).get("observed_state"), "browser_opened")
+            self.assertEqual(target.suffix, ".html")
+            self.assertTrue(target.exists())
+            content = target.read_text(encoding="utf-8")
+            self.assertIn("snake", content)
+            self.assertIn("重新开始", content)
+            self.assertIn("<canvas", content)
+            self.assertEqual((result.get("task_plan") or {}).get("phase"), "done")
+
+    def test_run_code_prefers_requested_template_and_theme(self):
+        spec = run_code_module._build_game_spec("做个赛博风贪吃蛇")
+
+        self.assertEqual(spec.get("template"), "snake")
+        self.assertEqual(spec.get("theme"), "neon")
+        self.assertIn("贪吃蛇", spec.get("title", ""))
+
+    def test_run_code_uses_external_template_registry(self):
+        script = game_templates_module.get_template_script("snake")
+
+        self.assertIn("function createGame", script)
+        self.assertIn("长度 3", script)
+
+    def test_run_code_skips_template_choice_for_explicit_request(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir).resolve()
+            with patch.object(run_code_module, "_resolve_output_dir", return_value=output_dir), patch.object(
+                run_code_module.webbrowser,
+                "open",
+                return_value=True,
+            ), patch.object(
+                run_code_module,
+                "execute_ask_user",
+                side_effect=AssertionError("explicit template should not trigger ask_user"),
+            ):
+                result = run_code_module.execute("做个贪吃蛇")
+
+        self.assertTrue(result.get("verification", {}).get("verified"))
+        self.assertEqual((result.get("task_plan") or {}).get("phase"), "done")
+
+    def test_run_code_surfaces_waiting_plan_when_template_choice_times_out(self):
+        with patch.object(
+            run_code_module,
+            "execute_ask_user",
+            return_value={"success": False, "response": ""},
+        ):
+            result = run_code_module.execute("给我来个小游戏")
+
+        plan = result.get("task_plan") or {}
+        statuses = {item.get("id"): item.get("status") for item in plan.get("items") or []}
+        self.assertFalse(result.get("verification", {}).get("verified"))
+        self.assertEqual(plan.get("current_item_id"), "choose_approach")
+        self.assertEqual(statuses.get("choose_approach"), "running")
 
 
 class ToolingPromptTests(unittest.TestCase):
@@ -220,6 +289,25 @@ class ToolingPromptTests(unittest.TestCase):
 
         self.assertIn("run_command", prompt)
         self.assertIn("Do not use run_code", prompt)
+
+    def test_build_tool_call_system_prompt_uses_prose_instruction_blocks(self):
+        prompt = reply_formatter_module._build_tool_call_system_prompt(
+            {
+                "l3": [],
+                "l4": {},
+                "l5": {},
+                "l7": [],
+                "l8": [],
+                "l2_memories": [],
+                "current_model": "test-model",
+            }
+        )
+
+        self.assertIn("回复要求（优先级最高，必须遵守）：\n你拥有完整的记忆系统", prompt)
+        self.assertNotIn("回复要求（优先级最高，必须遵守）：\n1.", prompt)
+        self.assertNotIn("\n- 工具使用的主判断", prompt)
+        self.assertNotIn("列表/分点/编号", prompt)
+        self.assertIn("普通聊天默认直接接话", prompt)
 
     def test_build_tools_list_cod_includes_run_command(self):
         with patch.object(

@@ -1,7 +1,7 @@
 # 8 层 Brain 架构详解
 
-> 基于代码实际实现整理，非设计文档。最后更新：2026-03-16 16:20
-> 重要提示：这份文档主要保留 8 层记忆系统的分层说明，其中包含较早时期的路由表达。理解 AaronCore 当前真实运行链路时，请优先阅读 `NovaCore_当前真实流程文档.md`，不要再按“先路由、再技能、最后 LLM 兜底”的旧模型理解主链。
+> 基于代码实际实现整理，非设计文档。最后更新：2026-04-10 03:30
+> 重要提示：这份文档保留 8 层记忆系统的分层说明，其中部分 L1-L4 历史描述仍偏设计视角；当前主链请优先阅读根目录 `RUNTIME.md`。本文已按当前代码更新 L5-L8 语义和主要回流口径。
 
 ## 架构总览
 
@@ -18,23 +18,24 @@
   │   ├─ tool_call 模式 → tool_adapter / executor / 内部工具执行
   │   └─ 结果回喂 LLM → 继续多轮工具调用或输出最终回复
   └─ 回复后
-      ├─ L2 评分入库 → 自动结晶分发到 L3/L4/L5/L7/L8（L8 需通过二次验证）
-      ├─ L7 检测负反馈 → 记录纠偏规则 → 触发 L8 补学
-      └─ L8 闭环：未命中时触发 auto_learn → web 搜索 → LLM 凝结摘要+精准关键词 → 沉淀知识卡片 → 下次同类问题直接命中复用
+      ├─ 写回 L1/L2，执行轨迹落到 L6
+      ├─ 已验证成功的 L6 run 可上浮为 L5 成功方法经验
+      ├─ L7 检测负反馈 → 记录纠偏规则 / 补学线索
+      └─ L8 正式知识由对话结晶与自主学习沉淀
 ```
 
 ## 回流机制
 
-1. **L2 中枢分发**：每轮对话评分入库 → 自动结晶到 L3/L4/L5/L7/L8（L8 需通过 `_is_real_knowledge_query()` 二次验证）
-2. **回答后回流**：用户反馈"不对" → L7 检测 → L8 搜索 → 知识沉淀
-3. **技能失败回流**：技能执行失败 → L7 检测 → L8 找备用方案
-4. **L8 知识闭环**：学到知识 → LLM 凝结成中文摘要 → 精准关键词双重提取 → 存入知识卡片 → 下次检索命中直接复用
+1. **L2 中枢分发**：每轮对话评分入库 → 自动结晶到 L3/L4/L7/L8（L8 仍需 `_is_real_knowledge_query()` 二次验证）
+2. **执行回流**：技能执行后的 run_event 落到 L6；满足 `success + verified + 无 drift` 时，L6 经验可上浮成 L5 成功方法经验
+3. **反馈回流**：用户反馈"不对" → L7 记录纠偏规则；补学仍可触发，但不再自动变成 L8 正式知识卡片
+4. **L8 知识闭环**：自主/显式学习或 L2 对话结晶 → 生成可复用知识卡片 → 下次检索命中直接复用
 
 ---
 
 ## L1 记忆粒子
 
-- 文件：`memory_db/msg_history.json`
+- 文件：`state_data/memory_store/msg_history.json`
 - 加载：`get_recent_messages(history, 6)`
 - 作用：存储原始对话消息，给当前对话提供最近上下文
 - 自动清理 7 天以上的消息
@@ -47,8 +48,8 @@
 
 8 层架构的**中枢调度站**，每轮对话都经过 L2 评分，重要信息自动结晶到下游层级。
 
-- 文件：`memory_db/l2_short_term.json`（记忆存储，不设上限）+ `memory_db/l2_config.json`（轮次统计）
-- 代码：`core/l2_memory.py`（评分入库 + 关键词检索 + 自动结晶 + 每 20 轮摘要）
+- 文件：`state_data/memory_store/l2_short_term.json`（记忆存储，不设上限）+ `state_data/memory_store/l2_config.json`（轮次统计）
+- 代码：`memory/l2_memory.py`（评分入库 + 关键词检索 + 自动结晶 + 每 20 轮摘要）
 - 辅助：`core/session_context.py`（当前主要是兼容占位层，不再承担主链规则路由）
 
 ### 评分系统
@@ -71,7 +72,7 @@
 | 类型 | 触发关键词 | 结晶去向 |
 |------|-----------|---------|
 | correction（纠正） | 不对、错了、不好、太短、太长 | → L7 |
-| skill_demand（技能需求） | 帮我做、能不能、你会不会 | → L5 |
+| skill_demand（技能需求） | 帮我做、能不能、你会不会 | 保留为信号，但当前不再直接结晶到 L5 |
 | knowledge（知识） | 精确短语匹配：什么是、为什么、怎么回事、是谁、什么意思、什么原理等 + `_is_real_knowledge_query()` 二次验证 | → L8 |
 | preference（偏好） | 喜欢、偏好、讨厌 | → L4 |
 | goal（目标） | 想要、目标、计划 | → L4 |
@@ -94,7 +95,7 @@
 | **L2 → L3** | 事件/里程碑/决策，imp > 0.7 | 写入 `long_term.json` |
 | **L2 → L4** | 用户事实/偏好/规则，imp > 0.7 | 更新 `persona.json` |
 | **L2 → L4 城市** | 检测到"我在X""我住X" | **不受分数限制**，直接更新 `user_profile.city` |
-| **L2 → L5** | 技能需求信号 | 不要求高分，记录到 `knowledge.json` |
+| **L2 → L5** | 当前无直接结晶链 | L5 主要改由 L6 成功执行经验上浮 |
 | **L2 → L7** | 纠正/不满 | 不要求高分，带上下文推到 `feedback_rules.json` |
 | **L2 → L8** | 知识类问答 + `_is_real_knowledge_query()` 二次验证通过 + ai_response > 20 字 | 不要求高分，沉淀到 `knowledge_base.json` |
 
@@ -126,7 +127,7 @@
 
 ## L3 经历记忆
 
-- 文件：`memory_db/long_term.json`
+- 文件：`state_data/memory_store/long_term.json`
 - 加载：`load_l3_long_term(limit=8)`，白名单只加载 `event` / `milestone` / `general` 类型
 - 注入方式：最后 N 条**全量塞进** prompt（无检索过滤）
 - 作用：让 Nova 记得和用户之间发生过什么，有情感温度的共同经历
@@ -152,7 +153,7 @@
 
 ## L4 人格图谱
 
-- 文件：`memory_db/persona.json`
+- 文件：`state_data/memory_store/persona.json`
 - 加载：`load_l4_persona()` — 只读 persona.json，不交叉读其他文件
 - 写入：`memory.update_persona()`
 - 作用：定义 Nova 的身份、语气、用户画像、交互规则，传给回复生成
@@ -171,80 +172,79 @@
 
 ---
 
-## L5 技能矩阵
+## L5 成功方法经验
 
-- 文件：`memory_db/knowledge.json`
-- 加载：`load_l5_knowledge()`
-- 写入：`memory.evolve()` 更新使用次数
-- 作用：记录已注册技能的场景分类和触发词，传给路由判断
+- 文件：`state_data/memory_store/knowledge.json`
+- 加载：`storage/state_loader.load_l5_knowledge()`
+- 结构：当前返回 `knowledge.json` 最近 10 条条目 + 已注册技能的轻量元数据（`name` + `keywords`）
+- 当前最重要的条目来源：`memory.evolve() -> _maybe_promote_success_path()` 产出的 `source="l6_success_path"`
+- 作用：沉淀“什么做法被验证有效”的正向方法经验，供复杂任务与按需上下文复用
 
-### 当前已注册技能
+### 典型成功经验字段
 
-| 一级场景 | 二级场景 | 核心技能 | 触发词 |
-|----------|----------|----------|--------|
-| 工具应用 | 天气查询 | weather | 天气、气温、温度、下雨、晴天 |
-| 工具应用 | 股票查询 | stock | 股票、股价、A股、美股、大盘、行情、指数 |
-| 工具应用 | 新闻聚合 | news | 新闻、头条、今日新闻、热点 |
-| 工具应用 | 编程游戏 | run_code | 做个游戏、写个游戏、小游戏、贪吃蛇、俄罗斯方块 |
-| 内容创作 | 故事创作 | story | 故事、讲故事、讲个 |
-| 内容创作 | 写文章 | article | 写文章、写篇、文章 |
-| 内容创作 | AI画图 | draw | 海报、画图、生成图片、做图、AI画图 |
+| 字段 | 说明 |
+|------|------|
+| `experience_key` | 去重键，通常由技能名 + action/target/outcome 组成 |
+| `name` | 展示名，例如 `open_target / open_url / url` |
+| `action_kind` / `target_kind` | 行为类型与目标类型 |
+| `outcome` / `observed_state` | 结果与观察到的状态 |
+| `verification_mode` / `verification_detail` | 如何验证、验证到什么 |
+| `summary` / `success_count` | 成功经验摘要与累计命中次数 |
 
-每条还包含：辅助技能、应用示例、使用次数、最近使用时间。
+L5 现在回答的是“什么方法成功过”，而不是“当前有哪些技能”。
 
 ---
 
-## L6 技能执行追踪
+## L6 执行轨迹
 
-- 文件：`memory_db/evolution.json`
+- 文件：`state_data/memory_store/evolution.json`
 - 加载：`memory.get_evolution()`
-- 写入：`memory.evolve()`（每次技能执行后自动调用）
-- 作用：追踪技能使用频率和用户偏好趋势
+- 写入：`memory.evolve(user_input, skill_used, run_event)`
+- 作用：记录真实执行事实，是 L5 上浮和后续纠偏分析的素材层
 
 ### 板块（按 JSON 顶层 key 分）
 
 | 板块 | 说明 |
 |------|------|
-| skills_used（技能使用统计） | 每个技能的 count（调用次数）+ last_used（最后使用时间） |
-| user_preferences（用户兴趣计数） | 从用户输入中提取关键词累加（天气:58、编程:3、画图:4） |
-| learning（学习记录） | 预留，当前为空数组（学习职责已由 L8 承担） |
+| `skills_used` | 聚合统计：`count` / `verified_count` / `failure_count` / `drift_count` / `last_outcome` |
+| `skill_runs` | 逐次执行事实：`success` / `verified` / `expected_state` / `observed_state` / `drift_reason` / `repair_hint` / `repair_succeeded` / `verification_mode` / `verification_detail` |
 
-关键词检测规则："天气/温度" → 天气、"游戏/做个/写个" → 编程、"画/海报/图" → 画图
-
----
-
-## L7 经验沉淀
-
-- 文件：`memory_db/feedback_rules.json`
-- 写入：`feedback_classifier.record_feedback_rule()`
-- 触发：每次回复后检测负面关键词（"不对"、"错了"、"不好用"等）
-- 作用：记录用户的负反馈，分类存储，供后续回复参考
-
-### 板块（`category` 字段）
-
-| 板块 | 覆盖场景 |
-|------|----------|
-| 内容生成 | 笑话不好笑、故事太短、创作内容不达标 |
-| 路由调度 | 走错技能、误触发、不该调用 |
-| 意图理解 | 答偏了、没听懂、理解错了 |
-| 交互风格 | 太空泛、模板话、不够个性化 |
-
-每条规则包含：category、scene、problem、fix、level（session / short_term）。
-
-L7 产出的规则会触发 L8 的补学流程。
+L6 不是 prompt 主体，而是“这次到底怎么跑的”的事实账本。
 
 ---
 
-## L8 能力进化
+## L7 反馈纠偏
 
-- 文件：`memory_db/knowledge_base.json` + `memory_db/autolearn_config.json`
-- 代码：`core/l8_learn.py`（依赖注入 `init(llm_call, debug_write)`，由 `agent_final.py` 启动时注入）
-- 搜索：`l8_learn.find_relevant_knowledge()`（按关键词评分匹配，只推送相关的，不全量注入）
-- 写入：`l8_learn.save_learned_knowledge()`
-- 触发入口：
-  - `auto_learn()` — 用户问了知识类问题且本地没有相关知识时，后台搜索 Bing 并沉淀
-  - `auto_learn_from_feedback()` — L7 记录负反馈后，提取纠偏经验存入知识库
-  - `explicit_search_and_learn()` — 用户主动要求"去学/去查"时，同步搜索并沉淀
+- 文件：`state_data/memory_store/feedback_rules.json`
+- 记录入口：`feedback/classifier.py::record_feedback_rule()`
+- 主链写回：`routes/chat.py` 回复后调用 `S.l7_record_feedback_v2(...)`
+- 作用：记录用户负反馈、失败提醒和纠偏约束，供后续回复少量 relevant 注入
+
+### 当前更准确的理解
+
+| 角色 | 说明 |
+|------|------|
+| 负向约束 | 告诉系统“别再怎么做” |
+| 失败规格 | 记录答偏、走错技能、风格不对等失败信号 |
+| 反馈链输入 | 可继续触发补学或修复流程，但自己不是修复状态机 |
+
+每条规则通常包含：`category`、`scene`、`problem`、`fix`、`last_question`、`user_feedback`、`feedback_count`。
+
+`_extract_routing_constraint()` 当前已经退役，所以不要再把 L7 理解成结构化路由表。
+
+---
+
+## L8 已学知识
+
+- 文件：`state_data/memory_store/knowledge_base.json` + `state_data/memory_store/autolearn_config.json`
+- 主实现：`memory/l8_learning.py`（`core/l8_learn.py` 只是兼容 shim）
+- 搜索：`query_knowledge` / `find_relevant_knowledge()` 按需检索
+- 写入：`save_learned_knowledge()`
+- 作用：保存真正可复用的事实 / 概念 / 原理 / 方法性知识卡片
+- 当前正式入库来源：
+  - `auto_learn()` / `explicit_search_and_learn()` 的自主或显式学习
+  - `memory/l2_memory.py::_to_l8()` 的对话结晶（`source="l2_crystallize"`）
+- `feedback_relearn` 只保留在反馈链路里，不再参与正式检索或时间线展示
 
 ### 三层防污染机制
 
@@ -310,13 +310,13 @@ L2 既是 L8 的原料供应商（结晶知识类对话到 L8），也是 L8 的
 | L1 → L2 | L2 从 L1 原始对话中提炼场景理解（session_context） |
 | L2 → L3 | 事件/里程碑/决策（imp > 0.7）结晶写入 long_term.json |
 | L2 → L4 | 用户事实/偏好/规则结晶写入 persona.json；城市提取不受分数限制 |
-| L2 → L5 | 技能需求信号（"帮我做…"）记录到 knowledge.json |
+| L2 → L5 | 当前无直接结晶链；L5 主要由 L6 成功执行经验上浮 |
 | L2 → L7 | 纠正/不满信号带上下文推到 feedback_rules.json |
 | L2 → L8 | 知识类问答经二次验证后沉淀到 knowledge_base.json |
 | L8 → L2/回复 | L8 知识在每次对话时被检索，命中则注入路由和回复上下文（L2 既供料又消费） |
-| L5 ↔ L6 | L5 定义技能配置，L6 记录技能执行统计，evolve() 同时更新两者 |
+| L5 ↔ L6 | L6 记录执行事实，满足 `success + verified + 无 drift` 时可把成功路径上浮成 L5 |
 | L5 → executor | executor 从 L4 读取用户上下文（如城市），传给技能 execute() |
-| L7 → L8 | L7 记录负反馈后触发 L8 补学，纠偏经验按场景分类存入知识库 |
+| L7 → L8 | L7 可触发补学或反馈预览，但 `feedback_relearn` 不再进入 L8 正式知识检索 |
 
 ---
 
@@ -330,7 +330,7 @@ L2 既是 L8 的原料供应商（结晶知识类对话到 L8），也是 L8 的
 "MCP是什么"             → L8 knowledge_base.json           ✅
 "甜心守护直接执行"       → L4 interaction_rules             ✅
 "我在常州"              → L2 评分入库 → L4 user_profile.city ✅
-"帮我做个XX"            → L2 检测 skill_demand → L5        ✅
+"帮我做个XX"            → LLM 直接看 tool list 决定是否调工具；skill_demand 只保留为 L2 signal ✅
 "你说错了"              → L2 检测 correction → L7          ✅
 "什么是量子计算"         → L2 检测 knowledge → L8          ✅
 ```

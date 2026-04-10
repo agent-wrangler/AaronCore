@@ -249,12 +249,12 @@ def _condense_fix(user_feedback: str, last_question: str, last_answer: str, raw_
             f"用户上一次问：「{last_question[:100]}」\n"
             f"AI 回复：「{last_answer[:150]}」\n"
             f"用户纠正说：「{user_feedback[:100]}」\n\n"
-            "请用一句话总结这次纠偏的核心教训，格式："
-            "「当用户问XX时，不要YY，应该ZZ」\n"
+            "请用一句话总结这次纠偏后的执行偏好，尽量写成正向、可直接执行的提醒。\n"
             "要求：\n"
             "1. 只输出一句话，不超过50字\n"
             "2. 具体可执行，不要笼统的“注意用户感受”\n"
-            "3. 去掉表情、语气词和角色扮演"
+            "3. 去掉表情、语气词和角色扮演\n"
+            "4. 优先写成类似“普通聊天默认写成自然短正文”或“先核实工具结果再下结论”的表达"
         )
         result = _llm_call(prompt)
         if result and len(str(result).strip()) >= 6:
@@ -409,7 +409,15 @@ def record_feedback_rule(user_feedback: str, last_question: str = "", last_answe
     rule = {key: value for key, value in inspected.items() if key != "is_feedback"}
     raw_fix = rule.get("fix", "")
     if raw_fix and raw_fix != "keep_observing_and_refine":
-        rule["fix"] = _condense_fix(user_feedback, last_question, last_answer, raw_fix)
+        condensed_fix = _condense_fix(user_feedback, last_question, last_answer, raw_fix)
+        rule["fix"] = _compact_fix_text_for_storage(
+            condensed_fix,
+            user_feedback=user_feedback,
+            last_question=last_question,
+            category=str(rule.get("category", "")),
+            scene=str(rule.get("scene", "")),
+            rule_type=str(rule.get("type", "")),
+        )
 
     constraint = _extract_routing_constraint(user_feedback, last_question, last_answer, rule)
     rules = _load_rules()
@@ -563,6 +571,137 @@ def search_relevant_rules(user_input: str, limit: int = 3) -> list[dict]:
     return matched
 
 
+_LIST_STYLE_HINTS = ("列表", "分点", "编号", "清单", "项目符号", "格式化", "罗列")
+_DEFAULT_CHAT_PROSE_FIX = "普通聊天默认写成自然、连贯的短正文。"
+_DIRECT_CORE_SOLUTION_FIX = "用户抱怨界面卡顿时，先直接给最可能的核心解决方案。"
+_STRUCTURE_DECISION_FIX = "先判断当前表达是否真的需要更清晰的结构，再决定格式。"
+_COMPACT_FIX_PATTERNS = (
+    re.compile(r"^(?:当)?用户[^，。]{0,36}时，不要[^，。]{0,80}，(?:应该|应)(.+?)[。！？!?]*$"),
+    re.compile(r"^(?:当)?用户[^，。]{0,36}时，(?:应该|应)(.+?)[。！？!?]*$"),
+    re.compile(r"^(?:当)?用户[^，。]{0,36}时，直接(.+?)[。！？!?]*$"),
+    re.compile(r"^(?:当)?用户[^，。]{0,36}时，先(.+?)[。！？!?]*$"),
+)
+
+
+def _looks_like_list_style_feedback(*parts: str) -> bool:
+    text = " ".join(str(part or "") for part in parts)
+    return any(token in text for token in _LIST_STYLE_HINTS)
+
+
+def _ensure_prompt_sentence(text: str) -> str:
+    sentence = str(text or "").strip()
+    if not sentence:
+        return ""
+    if sentence[-1] not in "。！？!?.":
+        sentence += "。"
+    return sentence
+
+
+def _normalize_fix_for_prompt(fix: str, *, user_feedback: str = "", category: str = "") -> str:
+    text = str(fix or "").strip()
+    if not text:
+        return ""
+    if _looks_like_list_style_feedback(text, user_feedback):
+        return _DEFAULT_CHAT_PROSE_FIX
+    return _ensure_prompt_sentence(text)
+
+
+def _compact_fix_text_for_storage(
+    fix: str,
+    *,
+    user_feedback: str = "",
+    last_question: str = "",
+    category: str = "",
+    scene: str = "",
+    rule_type: str = "",
+) -> str:
+    text = str(fix or "").strip()
+    if not text or text == "keep_observing_and_refine":
+        return text
+    if re.fullmatch(r"[a-z0-9_]+", text):
+        return text
+
+    normalized = _normalize_stored_rule_fix(
+        {
+            "fix": text,
+            "user_feedback": user_feedback,
+            "last_question": last_question,
+            "category": category,
+            "scene": scene,
+            "type": rule_type,
+        }
+    )
+    if normalized:
+        return normalized
+
+    for pattern in _COMPACT_FIX_PATTERNS:
+        match = pattern.match(text)
+        if not match:
+            continue
+        action = match.group(1).strip("，, ")
+        if len(action) >= 4:
+            return _ensure_prompt_sentence(action)
+
+    return _ensure_prompt_sentence(text)
+
+
+def _normalize_stored_rule_fix(rule: dict) -> str | None:
+    if not isinstance(rule, dict):
+        return None
+
+    fix = str(rule.get("fix", "")).strip()
+    user_feedback = str(rule.get("user_feedback", "")).strip()
+    category = str(rule.get("category", "")).strip()
+    scene = str(rule.get("scene", "")).strip()
+    rule_type = str(rule.get("type", "")).strip()
+    feedback_has_list_signal = _looks_like_list_style_feedback(user_feedback)
+    fix_has_strong_list_signal = any(
+        token in fix for token in ("列表", "分点", "编号", "清单", "项目符号", "格式化", "程序化汇报")
+    )
+    if not feedback_has_list_signal and not fix_has_strong_list_signal:
+        return None
+    if rule_type == "skill_route" or scene == "routing":
+        return None
+    if category not in {"交互风格", "意图理解", "内容生成"} and scene not in {"general", "chat"}:
+        return None
+
+    blob = " ".join(part for part in (fix, user_feedback) if part)
+    if "卡顿" in blob and ("原因" in fix or "解决" in fix or "罗列" in fix):
+        return _DIRECT_CORE_SOLUTION_FIX
+    if "什么地方必须用列表" in blob or "必须要你用列表" in blob:
+        return _STRUCTURE_DECISION_FIX
+    return _DEFAULT_CHAT_PROSE_FIX
+
+
+def normalize_rules_data(rules: list[dict]) -> int:
+    changed = 0
+    for rule in rules or []:
+        normalized_fix = _normalize_stored_rule_fix(rule)
+        if not normalized_fix:
+            continue
+        if str(rule.get("fix", "")).strip() == normalized_fix:
+            continue
+        rule["fix"] = normalized_fix
+        changed += 1
+    return changed
+
+
+def normalize_rules_file(path=None) -> int:
+    target = path or RULES_FILE
+    if not target.exists():
+        return 0
+    try:
+        rules = json.loads(target.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+    if not isinstance(rules, list):
+        return 0
+    changed = normalize_rules_data(rules)
+    if changed:
+        target.write_text(json.dumps(rules, ensure_ascii=False, indent=2), encoding="utf-8")
+    return changed
+
+
 def format_l7_context(rules: list[dict]) -> str:
     if not rules:
         return ""
@@ -572,8 +711,13 @@ def format_l7_context(rules: list[dict]) -> str:
         category = rule.get("category", "")
         last_question = str(rule.get("last_question", ""))[:40]
         feedback = str(rule.get("user_feedback", ""))[:40]
+        normalized_fix = _normalize_fix_for_prompt(fix, user_feedback=feedback, category=category)
         if fix and fix != "keep_observing_and_refine":
-            lines.append(f"· [{category}] {fix}")
+            prefix = f"{category}：" if category else ""
+            lines.append(f"{prefix}{normalized_fix}")
         elif last_question and feedback:
-            lines.append(f"· 用户问「{last_question}」时说过「{feedback}」，注意避免同样的问题")
+            if _looks_like_list_style_feedback(last_question, feedback):
+                lines.append(f"交互风格：{_DEFAULT_CHAT_PROSE_FIX}")
+            else:
+                lines.append(f"用户在「{last_question}」后做过纠偏，当前话题注意延续用户刚刚校正的方向。")
     return "\n".join(lines)

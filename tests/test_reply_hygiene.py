@@ -121,6 +121,27 @@ class ReplyHygieneTests(unittest.TestCase):
 
         self.assertEqual(cleaned, "Use `**/*.py` and carefully.")
 
+    def test_clean_visible_reply_text_flattens_simple_chat_list(self):
+        reply = "核心建议：\n1. 先清理\n2. 再分类"
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertEqual(cleaned, "核心建议：先清理；再分类。")
+
+    def test_clean_visible_reply_text_keeps_explicit_step_list(self):
+        reply = "步骤如下：\n1. 先运行测试\n2. 再改配置\n3. 最后重启"
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertEqual(cleaned, reply)
+
+    def test_clean_visible_reply_text_keeps_code_list(self):
+        reply = "- `npm test`\n- `npm run build`"
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertEqual(cleaned, reply)
+
 
 if __name__ == "__main__":
     unittest.main()

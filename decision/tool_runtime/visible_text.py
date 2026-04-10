@@ -170,5 +170,6 @@ def clean_visible_reply_text(
     cleaned = prefer_tool_grounded_tail(cleaned)
     cleaned, _ = strip_mid_reply_restart(cleaned)
     cleaned = _reply_hygiene.strip_chat_emphasis_markdown(cleaned, re_mod=re_mod)
+    cleaned = _reply_hygiene.flatten_simple_chat_list(cleaned, re_mod=re_mod)
     cleaned = re_mod.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()

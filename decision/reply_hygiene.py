@@ -26,6 +26,84 @@ def _strip_decorative_markdown(response: str, *, re_mod) -> str:
     return strip_chat_emphasis_markdown(response, re_mod=re_mod)
 
 
+def _strip_trailing_list_punctuation(text: str) -> str:
+    return str(text or "").strip().rstrip(" \t\uff0c,\uff1b;\u3002.!?\uff01\uff1f")
+
+
+def _looks_like_explicit_structure_label(text: str) -> bool:
+    label = str(text or "").strip()
+    if not label:
+        return False
+    explicit_markers = (
+        "\u6b65\u9aa4",
+        "\u6e05\u5355",
+        "\u5217\u8868",
+        "\u5bf9\u6bd4",
+        "\u5982\u4e0b",
+        "\u5206\u4e3a",
+        "\u5206\u6210",
+        "\u5305\u62ec",
+        "\u8ba1\u5212",
+    )
+    return any(marker in label for marker in explicit_markers)
+
+
+def flatten_simple_chat_list(response: str, *, re_mod) -> str:
+    text = str(response or "").strip()
+    if not text or "```" in text or "`" in text or "|" in text:
+        return text
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 2 or len(lines) > 5:
+        return text
+
+    list_item_re = re_mod.compile(r"^\s*(?:[-*•]\s+|(?:\d+|[A-Za-z]|[一二三四五六七八九十]+)[\.\)\u3001]\s+)(.+?)\s*$")
+    first_list_index = next((index for index, line in enumerate(lines) if list_item_re.match(line)), None)
+    if first_list_index is None:
+        return text
+
+    prefix_lines = lines[:first_list_index]
+    list_lines = lines[first_list_index:]
+    if len(prefix_lines) > 1:
+        return text
+
+    prefix = prefix_lines[0] if prefix_lines else ""
+    if prefix:
+        if len(prefix) > 24:
+            return text
+        if not prefix.endswith(("\uff1a", ":")):
+            return text
+        if _looks_like_explicit_structure_label(prefix):
+            return text
+
+    items: list[str] = []
+    for line in list_lines:
+        match = list_item_re.match(line)
+        if not match:
+            return text
+        item = match.group(1).strip()
+        if (
+            not item
+            or len(item) > 28
+            or "`" in item
+            or "http://" in item
+            or "https://" in item
+            or "|" in item
+            or item.endswith(("\uff1a", ":"))
+        ):
+            return text
+        items.append(_strip_trailing_list_punctuation(item))
+
+    if len(items) < 2 or len(items) > 4 or any(not item for item in items):
+        return text
+
+    flattened = "\uff1b".join(items) + "\u3002"
+    if prefix:
+        prefix_label = prefix.rstrip("\uff1a: ")
+        return f"{prefix_label}\uff1a{flattened}"
+    return flattened
+
+
 def l1_hygiene_clean(
     response: str,
     history: list,
@@ -40,6 +118,7 @@ def l1_hygiene_clean(
     response = prefer_tool_grounded_tail(response)
     response, restart_removed = strip_mid_reply_restart(response)
     response = _strip_decorative_markdown(response, re_mod=re_mod).strip()
+    response = flatten_simple_chat_list(response, re_mod=re_mod).strip()
 
     if not response or not history:
         return response, restart_removed

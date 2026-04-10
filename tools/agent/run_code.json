@@ -1,8 +1,8 @@
 {
-  "name": "Python game runner",
+  "name": "Local mini game delivery",
   "keywords": [],
   "anti_keywords": [],
-  "description": "Generate and launch a small local Python game. Only use this when the user actually wants a game to play. Never use it for packaging, installers, build commands, tests, dependency installation, or codebase repair tasks.",
+  "description": "Generate and launch a small local browser mini game from built-in templates. Only use this when the user actually wants a game to play. Never use it for packaging, installers, build commands, tests, dependency installation, or codebase repair tasks.",
   "priority": 6,
   "category": "Creative",
   "icon": "Game",

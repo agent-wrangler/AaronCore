@@ -126,16 +126,44 @@ def condense_l4(l4: dict) -> str:
     return "\n".join(parts)
 
 
+def _ensure_instruction_sentence(text: str) -> str:
+    sentence = str(text or "").strip()
+    if not sentence:
+        return ""
+    if sentence[-1] not in "\u3002\uff01\uff1f!?.":
+        sentence += "\u3002"
+    return sentence
+
+
+def _render_instruction_block(items: list, *, chunk_size: int = 3) -> str:
+    sentences = [_ensure_instruction_sentence(item) for item in items or []]
+    sentences = [sentence for sentence in sentences if sentence]
+    if not sentences:
+        return "\u6682\u65e0"
+
+    chunks: list[str] = []
+    current: list[str] = []
+    for sentence in sentences:
+        current.append(sentence)
+        if len(current) >= chunk_size:
+            chunks.append(" ".join(current))
+            current = []
+    if current:
+        chunks.append(" ".join(current))
+    return "\n".join(chunks)
+
+
 def _build_l2_memory_text(l2_memories: list) -> str:
-    lines = []
+    memories = []
     for mem in l2_memories or []:
         if not isinstance(mem, dict):
             continue
         user_text = str(mem.get("user_text", ""))[:80]
-        importance = mem.get("importance", 0)
-        marker = "\u2605" if importance >= 0.7 else "\u00b7"
-        lines.append(f"{marker} {user_text}")
-    return "\n".join(lines)
+        if user_text:
+            memories.append(user_text)
+    if not memories:
+        return ""
+    return "\uff1b".join(memories)
 
 
 def _build_success_path_text(l5_success_paths: list) -> str:
@@ -147,10 +175,10 @@ def _build_success_path_text(l5_success_paths: list) -> str:
             name = str(item.get("name") or item.get("核心技能") or "").strip()
             summary = str(item.get("summary") or item.get("应用示例") or "").strip()
             if name and summary:
-                success_path_lines.append(f"- {name}: {summary}")
+                success_path_lines.append(f"{name}: {summary}")
             elif name:
-                success_path_lines.append(f"- {name}")
-    return "\n".join(success_path_lines) if success_path_lines else "暂无命中的成功经验"
+                success_path_lines.append(name)
+    return "; ".join(success_path_lines) if success_path_lines else "暂无命中的成功经验"
 
 
 def build_light_chat_prompt(bundle: dict, *, build_recent_dialogue_text) -> str:
@@ -206,15 +234,13 @@ def build_light_chat_prompt(bundle: dict, *, build_recent_dialogue_text) -> str:
                 f"\u5982\u679c\u7528\u6237\u95ee\u6a21\u578b\u4fe1\u606f\uff0c\u76f4\u63a5\u56de\u7b54\u5e95\u5c42\u6a21\u578b\u662f {current_model}\u3002",
                 "\u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\uff0c\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002",
                 "\u4e8b\u5b9e\u4fe1\u606f\u4f18\u5148\u51c6\u786e\uff0c\u8bed\u6c14\u518d\u6309\u4eba\u683c\u98ce\u683c\u81ea\u7136\u8868\u8fbe\u3002",
+                "普通聊天默认写成自然、连贯的短正文，除非用户明确要求别的输出格式。",
             ],
         ),
     )
     if not isinstance(light_rules, list):
         light_rules = [str(light_rules)]
-    sections.append(
-        "\u56de\u590d\u8981\u6c42\uff1a\n"
-        + "\n".join(f"{i + 1}. {r}" for i, r in enumerate(light_rules))
-    )
+    sections.append(f"\u56de\u590d\u8981\u6c42\uff1a\n{_render_instruction_block(light_rules)}")
     sections.append(f"\u98ce\u683c\u63d0\u793a\uff1a\n{style_hints}")
     return "\n\n".join(part for part in sections if part).strip()
 
@@ -246,8 +272,8 @@ def build_cod_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> str:
             "追问默认沿着最近对话话题接上，不要反问“你指什么”。",
             f"当用户问你是什么模型时，告诉用户底层模型是 {current_model}。",
             "不要输出思考过程，只输出最终回复。",
-            "\u9ed8\u8ba4\u7528\u81ea\u7136\u3001\u514b\u5236\u7684\u6b63\u6587\u56de\u590d\uff0c\u666e\u901a\u804a\u5929\u9ed8\u8ba4\u4e0d\u8981\u7528 Markdown \u88c5\u9970\u3002",
-            "\u666e\u901a\u804a\u5929\u9ed8\u8ba4\u4e0d\u8981\u7528\u5217\u8868/\u5206\u70b9/\u7f16\u53f7\u8bb2\u89e3\uff1b\u4e0d\u8981\u4e3a\u4e86\u5c42\u6b21\u611f\u5f3a\u884c\u4f7f\u7528\u6807\u9898\u3001\u52a0\u7c97\u3001\u5217\u8868\uff0c\u5c24\u5176\u4e0d\u8981\u7528 ** \u8fd9\u79cd\u88c5\u9970\u6027\u5f3a\u8c03\u3002\u53ea\u6709\u5f53\u7528\u6237\u660e\u786e\u8981\u6c42\u201c\u5217\u4e00\u4e0b/\u603b\u7ed3/\u6b65\u9aa4/\u5bf9\u6bd4/\u6e05\u5355\u201d\u6216\u4efb\u52a1\u786e\u5b9e\u9700\u8981\u591a\u6b65\u9aa4\u6267\u884c\u65f6\uff0c\u624d\u4f7f\u7528\u5217\u8868\uff0c\u800c\u4e14\u5c3d\u91cf\u77ed\u3002",
+            "默认用自然、克制的短正文回复，不要为了排版感额外加装饰。",
+            "普通聊天默认直接接话，除非用户明确要求别的输出格式，或任务本身需要更清晰的展开方式。",
         ],
     )
     tool_guide = cfg.get(
@@ -260,25 +286,25 @@ def build_cod_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> str:
             "调用 save_export 时：必须传 content（完整内容）和 filename（体现主题的文件名）。",
         ],
     )
-    rules_text = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(rules_list))
-    tool_text = "\n".join(f"- {t}" for t in tool_guide)
-    tool_text += (
-        "\n- Treat the tools provided in this turn as available capabilities. Do not talk yourself out of low-risk read/query/inspect tools when they can verify the answer."
-        "\n- For questions that can be confirmed by reading, querying, or inspecting, proactively use low-risk read tools to verify before concluding."
-        "\n- Be willing to explore, but every concrete conclusion must stay tied to actual tool results. If you have not executed yet, say that you have not executed yet."
-        "\n- For any real-world action in the environment, execute the tool first and only claim success from the tool result."
-        "\n- Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction."
-        "\n- If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker."
-        "\n- For file or code tasks, if the target file is already known and exists, stay on that file first and prefer read_file or write_file over folder_explore."
-        "\n- For routine coding, follow the primary lane read_file -> write_file -> run_command verification when needed. This is a priority guide, not a hard ban."
-        "\n- Inspect broader project structure only when the path is unresolved or adjacent context is genuinely required."
-        "\n- If the next step depends on project structure or existing files and no file target is locked yet, inspect with list_files or read_file before writing."
-        "\n- Use write_file for new files, full rewrites, and instruction-driven updates. It can take complete content directly, or a precise change_request/description so the runtime can synthesize the full file content."
-        "\n- self_fix and discover_tools are not available in the current tool list."
-        "\n- For uncertain desktop or app state, inspect with sense_environment or screen_capture before repeating the same action."
-        "\n- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes."
-        "\n- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
-    )
+    rules_text = _render_instruction_block(rules_list)
+    tool_items = list(tool_guide) + [
+        "Treat the tools provided in this turn as available capabilities. Do not talk yourself out of low-risk read/query/inspect tools when they can verify the answer.",
+        "For questions that can be confirmed by reading, querying, or inspecting, proactively use low-risk read tools to verify before concluding.",
+        "Be willing to explore, but every concrete conclusion must stay tied to actual tool results. If you have not executed yet, say that you have not executed yet.",
+        "For any real-world action in the environment, execute the tool first and only claim success from the tool result.",
+        "Use screen_capture only for visual inspection or verification, not as a substitute for open_target, app_target, or ui_interaction.",
+        "If a tool fails because required arguments are missing, do not repeat the same incomplete call. Rebuild the full arguments first or stop and explain the blocker.",
+        "For file or code tasks, if the target file is already known and exists, stay on that file first and prefer read_file or write_file over folder_explore.",
+        "For routine coding, follow the primary lane read_file -> write_file -> run_command verification when needed. This is a priority guide, not a hard ban.",
+        "Inspect broader project structure only when the path is unresolved or adjacent context is genuinely required.",
+        "If the next step depends on project structure or existing files and no file target is locked yet, inspect with list_files or read_file before writing.",
+        "Use write_file for new files, full rewrites, and instruction-driven updates. It can take complete content directly, or a precise change_request/description so the runtime can synthesize the full file content.",
+        "self_fix and discover_tools are not available in the current tool list.",
+        "For uncertain desktop or app state, inspect with sense_environment or screen_capture before repeating the same action.",
+        "For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes.",
+        "Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks.",
+    ]
+    tool_text = _render_instruction_block(tool_items)
     time_context = build_current_time_context()
     focus_guidance = build_fs_focus_guidance(bundle)
 
@@ -325,6 +351,37 @@ def build_tool_call_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> s
     l8_text = l8_context or "\u6682\u65e0\u547d\u4e2d\u7684\u5df2\u5b66\u77e5\u8bc6"
     time_context = build_current_time_context()
     focus_guidance = build_fs_focus_guidance(bundle)
+    reply_requirements = [
+        "\u4f60\u62e5\u6709\u5b8c\u6574\u7684\u8bb0\u5fc6\u7cfb\u7edf\uff08L1-L8\uff09\uff0c\u7981\u6b62\u8bf4\u201c\u6211\u6ca1\u6709\u8bb0\u5fc6\u201d\u201c\u6211\u8bb0\u4e0d\u4f4f\u201d\u4e4b\u7c7b\u7684\u8bdd",
+        "\u5982\u679c L8 \u5df2\u7ecf\u5b66\u8fc7\u76f8\u5173\u77e5\u8bc6\uff0c\u4f18\u5148\u5438\u6536\u540e\u518d\u56de\u7b54",
+        "\u5982\u679c L2 \u6301\u4e45\u8bb0\u5fc6\u4e2d\u6709\u76f8\u5173\u5185\u5bb9\uff0c\u81ea\u7136\u5730\u63a5\u4e0a",
+        "\u8ffd\u95ee\u9ed8\u8ba4\u6cbf\u7740\u6700\u8fd1\u5bf9\u8bdd\u8bdd\u9898\u63a5\u4e0a\uff0c\u4e0d\u8981\u53cd\u95ee\u201c\u4f60\u6307\u4ec0\u4e48\u201d",
+        f"\u5f53\u7528\u6237\u95ee\u4f60\u662f\u4ec0\u4e48\u6a21\u578b\u65f6\uff0c\u76f4\u63a5\u544a\u8bc9\u7528\u6237\u5e95\u5c42\u6a21\u578b\u662f {current_model}",
+        "\u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\uff0c\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d",
+        "默认用自然、克制的短正文回复，不要为了排版感额外加装饰",
+        "普通聊天默认直接接话，除非用户明确要求别的输出格式，或任务本身需要更清晰的展开方式",
+    ]
+    tool_guidance = [
+        "\u5de5\u5177\u4f7f\u7528\u7684\u4e3b\u5224\u65ad\u8981\u770b\u8fd9\u8f6e\u662f\u5426\u5df2\u7ecf\u660e\u786e\u53d1\u51fa tool_call\u3001\u5de5\u5177\u80fd\u529b\u7c7b\u578b/\u98ce\u9669\uff0c\u4ee5\u53ca\u5f53\u524d\u6587\u672c\u662f\u5426\u5df2\u7ecf\u50cf\u6700\u7ec8\u7b54\u6848\uff1b\u63aa\u8f9e\u77ed\u8bed\u53ea\u4f5c\u8f85\u52a9\uff0c\u4e0d\u8981\u628a\u6a21\u7cca\u8868\u8fbe\u672c\u8eab\u5f53\u6210\u62d2\u7edd\u5de5\u5177\u7684\u7406\u7531",
+        "\u9ed8\u8ba4\u76f8\u4fe1\u672c\u8f6e\u63d0\u4f9b\u7684\u5de5\u5177\u80fd\u529b\u53ef\u7528\uff0c\u4e0d\u8981\u5148\u81ea\u6211\u5426\u5b9a\u4f4e\u98ce\u9669\u8bfb\u53d6/\u67e5\u8be2/\u68c0\u67e5\u5de5\u5177",
+        "\u9762\u5bf9\u53ef\u4ee5\u901a\u8fc7\u8bfb\u53d6\u3001\u67e5\u8be2\u3001\u68c0\u67e5\u6765\u786e\u8ba4\u7684\u95ee\u9898\uff0c\u4f18\u5148\u4e3b\u52a8\u4f7f\u7528\u4f4e\u98ce\u9669\u8bfb\u5de5\u5177\u9a8c\u8bc1\uff0c\u518d\u7ed9\u51fa\u7ed3\u8bba",
+        "\u53ef\u4ee5\u5927\u80c6\u63a2\u7d22\uff0c\u4f46\u5177\u4f53\u4e8b\u5b9e\u7ed3\u8bba\u5fc5\u987b\u7ed1\u5b9a\u771f\u5b9e\u5de5\u5177\u7ed3\u679c\uff1b\u5982\u679c\u8fd9\u8f6e\u8fd8\u6ca1\u6267\u884c\uff0c\u5c31\u660e\u786e\u8bf4\u8fd8\u6ca1\u6267\u884c",
+        "\u4f60\u5fc5\u987b\u901a\u8fc7\u5f53\u524d\u6a21\u578b\u652f\u6301\u7684\u539f\u751f tools / tool_calls \u673a\u5236\u8c03\u7528\u5de5\u5177",
+        "\u4e25\u7981\u8f93\u51fa\u4efb\u4f55\u65e7\u5f0f\u6587\u672c\u5de5\u5177\u534f\u8bae\u6216\u4f2a\u8c03\u7528\u6807\u8bb0\uff0c\u4f8b\u5982 <invoke ...>\u3001<function_calls>\u3001<minimax:tool_call>\u3001DSML\u3002\u8f93\u51fa\u8fd9\u4e9b\u6587\u672c\u4e0d\u7b97\u8c03\u7528\u5de5\u5177",
+        "\u5de5\u5177\u8fd4\u56de\u7684\u5185\u5bb9\u662f\u7d20\u6750\uff0c\u4e0d\u662f\u6700\u7ec8\u53e3\u543b\u3002\u6700\u7ec8\u56de\u590d\u5fc5\u987b\u4fdd\u6301 Nova \u7684\u4eba\u683c\u611f\u3001\u966a\u4f34\u611f\u548c\u81ea\u7136\u804a\u5929\u611f",
+        "\u8c03\u7528 story \u5de5\u5177\u540e\uff1a\u7528\u4f60\u7684\u4eba\u683c\u98ce\u683c\u52a0\u4e00\u53e5\u5f00\u573a\u767d\uff0c\u7136\u540e\u5b8c\u6574\u8f93\u51fa\u6545\u4e8b\u5185\u5bb9\uff0c\u4e0d\u8981\u538b\u7f29",
+        "\u8c03\u7528 news \u5de5\u5177\u540e\uff1a\u6309\u8bdd\u9898\u5206\u677f\u5757\u6574\u7406\u65b0\u95fb\uff0c\u52a0\u4f60\u98ce\u683c\u7684\u5f00\u573a\u767d\u548c\u7b80\u77ed\u70b9\u8bc4\uff0c\u65b0\u95fb\u672c\u8eab\u4e0d\u8981\u6539\u52a8\u6216\u538b\u7f29",
+        "\u8c03\u7528 weather \u5de5\u5177\u540e\uff1a\u4fdd\u7559\u5de5\u5177\u8fd4\u56de\u7684\u5b8c\u6574\u5929\u6c14\u7a97\u53e3\uff0c\u7528\u81ea\u7136\u53e3\u8bed\u6574\u7406\u7ed9\u7528\u6237\uff0c\u4e0d\u8981\u538b\u7f29\u6210\u5355\u5929",
+        "\u5982\u679c\u5de5\u5177\u5931\u8d25\u662f\u56e0\u4e3a\u7f3a\u5c11\u5fc5\u8981\u53c2\u6570\uff0c\u4e0d\u8981\u91cd\u590d\u540c\u4e00\u4e2a\u4e0d\u5b8c\u6574\u8c03\u7528\uff1b\u5148\u8865\u5168\u53c2\u6570\uff0c\u6216\u76f4\u63a5\u8bf4\u660e\u963b\u585e\u70b9",
+        "\u6587\u4ef6/\u4ee3\u7801\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u4f60\u8fd8\u4e0d\u6e05\u695a\u5f53\u524d\u9879\u76ee\u7ed3\u6784\u6216\u5df2\u6709\u6587\u4ef6\u5185\u5bb9\uff0c\u4f18\u5148\u8c03\u7528 list_files / read_file\uff0c\u518d\u51b3\u5b9a\u662f\u5426 write_file",
+        "\u684c\u9762/\u73af\u5883\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u5f53\u524d\u72b6\u6001\u4e0d\u660e\u786e\uff0c\u4f18\u5148\u8c03\u7528 sense_environment \u6216 screen_capture\uff0c\u518d\u51b3\u5b9a\u4e0b\u4e00\u6b65",
+        "If the coding target file is already known and exists, stay on that file first and prefer read_file / write_file over folder_explore.",
+        "For routine coding, follow the primary lane read_file -> write_file -> run_command verification when needed. This is a priority guide, not a hard ban.",
+        "Only expand to broader project exploration when the path is unresolved or adjacent context is genuinely required.",
+        "self_fix and discover_tools are not available in the current tool list.",
+        "For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes.",
+        "Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks.",
+    ]
 
     prompt = (
         f"{time_context}\n\n"
@@ -336,37 +393,10 @@ def build_tool_call_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> s
         f"L5\u53ef\u590d\u7528\u6210\u529f\u7ecf\u9a8c\uff08\u53ea\u5728\u590d\u6742\u4efb\u52a1\u91cc\u4f18\u5148\u53c2\u8003\uff09\uff1a\n{l5_success_text}\n\n"
         f"L7\u7ecf\u9a8c\u6559\u8bad\uff08\u4e4b\u524d\u72af\u8fc7\u7684\u9519\uff0c\u52a1\u5fc5\u907f\u514d\u91cd\u72af\uff09\uff1a\n{l7_text}\n\n"
         f"L8\u5df2\u5b66\u77e5\u8bc6\uff1a\n{l8_text}\n\n"
-        "\u56de\u590d\u8981\u6c42\uff08\u4f18\u5148\u7ea7\u6700\u9ad8\uff0c\u5fc5\u987b\u9075\u5b88\uff09\uff1a\n"
-        "1. \u4f60\u62e5\u6709\u5b8c\u6574\u7684\u8bb0\u5fc6\u7cfb\u7edf\uff08L1-L8\uff09\uff0c\u7981\u6b62\u8bf4\u201c\u6211\u6ca1\u6709\u8bb0\u5fc6\u201d\u201c\u6211\u8bb0\u4e0d\u4f4f\u201d\u4e4b\u7c7b\u7684\u8bdd\u3002\n"
-        "2. \u5982\u679c L8 \u5df2\u7ecf\u5b66\u8fc7\u76f8\u5173\u77e5\u8bc6\uff0c\u4f18\u5148\u5438\u6536\u540e\u518d\u56de\u7b54\u3002\n"
-        "3. \u5982\u679c L2 \u6301\u4e45\u8bb0\u5fc6\u4e2d\u6709\u76f8\u5173\u5185\u5bb9\uff0c\u81ea\u7136\u5730\u63a5\u4e0a\u3002\n"
-        "4. \u8ffd\u95ee\u9ed8\u8ba4\u6cbf\u7740\u6700\u8fd1\u5bf9\u8bdd\u8bdd\u9898\u63a5\u4e0a\uff0c\u4e0d\u8981\u53cd\u95ee\u201c\u4f60\u6307\u4ec0\u4e48\u201d\u3002\n"
-        f"5. \u5f53\u7528\u6237\u95ee\u4f60\u662f\u4ec0\u4e48\u6a21\u578b\u65f6\uff0c\u76f4\u63a5\u544a\u8bc9\u7528\u6237\u5e95\u5c42\u6a21\u578b\u662f {current_model}\u3002\n"
-        "6. \u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\uff0c\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002\n"
-        "7. \u9ed8\u8ba4\u7528\u81ea\u7136\u3001\u514b\u5236\u7684\u6b63\u6587\u56de\u590d\uff0c\u666e\u901a\u804a\u5929\u9ed8\u8ba4\u4e0d\u8981\u7528 Markdown \u88c5\u9970\u3002\n"
-        "8. \u666e\u901a\u804a\u5929\u9ed8\u8ba4\u4e0d\u8981\u7528\u5217\u8868/\u5206\u70b9/\u7f16\u53f7\u8bb2\u89e3\uff1b\u4e0d\u8981\u4e3a\u4e86\u5c42\u6b21\u611f\u5f3a\u884c\u4f7f\u7528\u6807\u9898\u3001\u52a0\u7c97\u3001\u5217\u8868\uff0c\u5c24\u5176\u4e0d\u8981\u7528 ** \u8fd9\u79cd\u88c5\u9970\u6027\u5f3a\u8c03\u3002\u53ea\u6709\u5f53\u7528\u6237\u660e\u786e\u8981\u6c42\u201c\u5217\u4e00\u4e0b/\u603b\u7ed3/\u6b65\u9aa4/\u5bf9\u6bd4/\u6e05\u5355\u201d\u6216\u4efb\u52a1\u786e\u5b9e\u9700\u8981\u591a\u6b65\u9aa4\u6267\u884c\u65f6\uff0c\u624d\u4f7f\u7528\u5217\u8868\uff0c\u800c\u4e14\u5c3d\u91cf\u77ed\u3002\n\n"
+        f"\u56de\u590d\u8981\u6c42\uff08\u4f18\u5148\u7ea7\u6700\u9ad8\uff0c\u5fc5\u987b\u9075\u5b88\uff09\uff1a\n{_render_instruction_block(reply_requirements)}\n\n"
         f"L4\u4eba\u683c\u4fe1\u606f\uff1a\n{l4_json}\n\n"
         f"{style_hints}\n\n"
-        "\u5de5\u5177\u4f7f\u7528\u6307\u5f15\uff1a\n"
-        "- \u5de5\u5177\u4f7f\u7528\u7684\u4e3b\u5224\u65ad\u8981\u770b\u8fd9\u8f6e\u662f\u5426\u5df2\u7ecf\u660e\u786e\u53d1\u51fa tool_call\u3001\u5de5\u5177\u80fd\u529b\u7c7b\u578b/\u98ce\u9669\uff0c\u4ee5\u53ca\u5f53\u524d\u6587\u672c\u662f\u5426\u5df2\u7ecf\u50cf\u6700\u7ec8\u7b54\u6848\uff1b\u63aa\u8f9e\u77ed\u8bed\u53ea\u4f5c\u8f85\u52a9\uff0c\u4e0d\u8981\u628a\u6a21\u7cca\u8868\u8fbe\u672c\u8eab\u5f53\u6210\u62d2\u7edd\u5de5\u5177\u7684\u7406\u7531\u3002\n"
-        "- \u9ed8\u8ba4\u76f8\u4fe1\u672c\u8f6e\u63d0\u4f9b\u7684\u5de5\u5177\u80fd\u529b\u53ef\u7528\uff0c\u4e0d\u8981\u5148\u81ea\u6211\u5426\u5b9a\u4f4e\u98ce\u9669\u8bfb\u53d6/\u67e5\u8be2/\u68c0\u67e5\u5de5\u5177\u3002\n"
-        "- \u9762\u5bf9\u53ef\u4ee5\u901a\u8fc7\u8bfb\u53d6\u3001\u67e5\u8be2\u3001\u68c0\u67e5\u6765\u786e\u8ba4\u7684\u95ee\u9898\uff0c\u4f18\u5148\u4e3b\u52a8\u4f7f\u7528\u4f4e\u98ce\u9669\u8bfb\u5de5\u5177\u9a8c\u8bc1\uff0c\u518d\u7ed9\u51fa\u7ed3\u8bba\u3002\n"
-        "- \u53ef\u4ee5\u5927\u80c6\u63a2\u7d22\uff0c\u4f46\u5177\u4f53\u4e8b\u5b9e\u7ed3\u8bba\u5fc5\u987b\u7ed1\u5b9a\u771f\u5b9e\u5de5\u5177\u7ed3\u679c\uff1b\u5982\u679c\u8fd9\u8f6e\u8fd8\u6ca1\u6267\u884c\uff0c\u5c31\u660e\u786e\u8bf4\u8fd8\u6ca1\u6267\u884c\u3002\n"
-        "- \u4f60\u5fc5\u987b\u901a\u8fc7\u5f53\u524d\u6a21\u578b\u652f\u6301\u7684\u539f\u751f tools / tool_calls \u673a\u5236\u8c03\u7528\u5de5\u5177\u3002\n"
-        "- \u4e25\u7981\u8f93\u51fa\u4efb\u4f55\u65e7\u5f0f\u6587\u672c\u5de5\u5177\u534f\u8bae\u6216\u4f2a\u8c03\u7528\u6807\u8bb0\uff0c\u4f8b\u5982 <invoke ...>\u3001<function_calls>\u3001<minimax:tool_call>\u3001DSML\u3002\u8f93\u51fa\u8fd9\u4e9b\u6587\u672c\u4e0d\u7b97\u8c03\u7528\u5de5\u5177\u3002\n"
-        "- \u5de5\u5177\u8fd4\u56de\u7684\u5185\u5bb9\u662f\u7d20\u6750\uff0c\u4e0d\u662f\u6700\u7ec8\u53e3\u543b\u3002\u6700\u7ec8\u56de\u590d\u5fc5\u987b\u4fdd\u6301 Nova \u7684\u4eba\u683c\u611f\u3001\u966a\u4f34\u611f\u548c\u81ea\u7136\u804a\u5929\u611f\u3002\n"
-        "- \u8c03\u7528 story \u5de5\u5177\u540e\uff1a\u7528\u4f60\u7684\u4eba\u683c\u98ce\u683c\u52a0\u4e00\u53e5\u5f00\u573a\u767d\uff0c\u7136\u540e\u5b8c\u6574\u8f93\u51fa\u6545\u4e8b\u5185\u5bb9\uff0c\u4e0d\u8981\u538b\u7f29\u3002\n"
-        "- \u8c03\u7528 news \u5de5\u5177\u540e\uff1a\u6309\u8bdd\u9898\u5206\u677f\u5757\u6574\u7406\u65b0\u95fb\uff0c\u52a0\u4f60\u98ce\u683c\u7684\u5f00\u573a\u767d\u548c\u7b80\u77ed\u70b9\u8bc4\uff0c\u65b0\u95fb\u672c\u8eab\u4e0d\u8981\u6539\u52a8\u6216\u538b\u7f29\u3002\n"
-        "- \u8c03\u7528 weather \u5de5\u5177\u540e\uff1a\u4fdd\u7559\u5de5\u5177\u8fd4\u56de\u7684\u5b8c\u6574\u5929\u6c14\u7a97\u53e3\uff0c\u7528\u81ea\u7136\u53e3\u8bed\u6574\u7406\u7ed9\u7528\u6237\uff0c\u4e0d\u8981\u538b\u7f29\u6210\u5355\u5929\u3002\n"
-        "- \u5982\u679c\u5de5\u5177\u5931\u8d25\u662f\u56e0\u4e3a\u7f3a\u5c11\u5fc5\u8981\u53c2\u6570\uff0c\u4e0d\u8981\u91cd\u590d\u540c\u4e00\u4e2a\u4e0d\u5b8c\u6574\u8c03\u7528\uff1b\u5148\u8865\u5168\u53c2\u6570\uff0c\u6216\u76f4\u63a5\u8bf4\u660e\u963b\u585e\u70b9\u3002\n"
-        "- \u6587\u4ef6/\u4ee3\u7801\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u4f60\u8fd8\u4e0d\u6e05\u695a\u5f53\u524d\u9879\u76ee\u7ed3\u6784\u6216\u5df2\u6709\u6587\u4ef6\u5185\u5bb9\uff0c\u4f18\u5148\u8c03\u7528 list_files / read_file\uff0c\u518d\u51b3\u5b9a\u662f\u5426 write_file\u3002\n"
-        "- \u684c\u9762/\u73af\u5883\u4efb\u52a1\u91cc\uff0c\u5982\u679c\u5f53\u524d\u72b6\u6001\u4e0d\u660e\u786e\uff0c\u4f18\u5148\u8c03\u7528 sense_environment \u6216 screen_capture\uff0c\u518d\u51b3\u5b9a\u4e0b\u4e00\u6b65\u3002\n"
-        "- If the coding target file is already known and exists, stay on that file first and prefer read_file / write_file over folder_explore.\n"
-        "- For routine coding, follow the primary lane read_file -> write_file -> run_command verification when needed. This is a priority guide, not a hard ban.\n"
-        "- Only expand to broader project exploration when the path is unresolved or adjacent context is genuinely required.\n"
-        "- self_fix and discover_tools are not available in the current tool list.\n"
-        "- For complex multi-step coding, file, research, or workflow tasks, call task_plan early to create a short 3-6 item plan and update it when the phase meaningfully changes.\n"
-        "- Use run_command for local build, packaging, dependency install, or test tasks. Do not use run_code for those tasks."
+        f"\u5de5\u5177\u4f7f\u7528\u6307\u5f15\uff1a\n{_render_instruction_block(tool_guidance)}"
         + (f"\n\nFocused task guidance:\n{focus_guidance}" if focus_guidance else "")
     ).strip()
 
