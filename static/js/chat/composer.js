@@ -97,15 +97,30 @@ function removeImagePreview(){
 
 function _enterStopMode(){
  var btn=document.getElementById('sendBtn');
+ if(!btn) return;
  btn.disabled=false;
  btn.classList.add('stop-mode');
  btn.innerHTML=_stopSvg;
+ _setSendButtonA11yState(btn, 'input.stop', 'Stop response');
+}
+
+function _setSendButtonA11yState(btn, titleKey, fallback){
+ if(!btn) return;
+ if(titleKey){
+  btn.setAttribute('data-i18n-title', titleKey);
+ }
+ var label=(typeof t==='function' && titleKey) ? t(titleKey) : String(fallback||'');
+ if(!label && titleKey) label=titleKey;
+ btn.title=label;
+ btn.setAttribute('aria-label', label);
 }
 
 function _exitStopMode(){
  var btn=document.getElementById('sendBtn');
+ if(!btn) return;
  btn.classList.remove('stop-mode');
  btn.innerHTML=_sendSvg;
+ _setSendButtonA11yState(btn, 'input.send', 'Send message');
  updateSendButton();
 }
 

@@ -128,3 +128,69 @@ def persist_reply_artifacts(
         add_memory(text)
     return text
 
+
+def run_deferred_post_reply_tasks(
+    *,
+    shared,
+    msg: str,
+    history: list,
+    response: str,
+    route: dict | None,
+    l8: list | None,
+    forbid_missing_skill_intent: bool = False,
+) -> None:
+    if shared is None:
+        return
+
+    try:
+        shared.l2_add_memory(msg, response)
+    except Exception as exc:
+        try:
+            shared.debug_write("post_reply_error", {"stage": "l2_add_memory", "error": str(exc)})
+        except Exception:
+            pass
+
+    feedback_rule = None
+    try:
+        feedback_rule = shared.l7_record_feedback_v2(msg, history, None)
+    except Exception as exc:
+        try:
+            shared.debug_write("feedback_rule_error", {"error": str(exc)})
+        except Exception:
+            pass
+
+    if feedback_rule:
+        record_feedback_memory_hit(feedback_rule)
+        awareness_evt = build_feedback_awareness_event(feedback_rule)
+        if awareness_evt:
+            try:
+                shared.awareness_push(awareness_evt)
+            except Exception as exc:
+                try:
+                    shared.debug_write("post_reply_error", {"stage": "awareness", "error": str(exc)})
+                except Exception:
+                    pass
+
+    try:
+        shared.l8_touch()
+        l8_config = shared.load_autolearn_config()
+        if should_schedule_autolearn(
+            l8_config,
+            feedback_rule=feedback_rule,
+            l8=l8,
+            route=route,
+            forbid_missing_skill_intent=forbid_missing_skill_intent,
+        ):
+            shared.run_l8_autolearn_task(msg, response, route, bool(l8))
+    except Exception as exc:
+        try:
+            shared.debug_write("post_reply_error", {"stage": "l8", "error": str(exc)})
+        except Exception:
+            pass
+
+    repair_payload = build_repair_payload(route, feedback_rule)
+    try:
+        shared.debug_write("final_response", {"reply": response, "repair": repair_payload})
+    except Exception:
+        pass
+

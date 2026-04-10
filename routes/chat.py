@@ -53,11 +53,8 @@ from routes.chat_tool_call_gate import (
 )
 from routes.chat_model_switch import detect_model_switch as _detect_model_switch
 from routes.chat_post_reply import (
-    build_feedback_awareness_event as _build_feedback_awareness_event,
-    build_repair_payload as _build_repair_payload,
     persist_reply_artifacts as _persist_reply_artifacts,
-    record_feedback_memory_hit as _record_feedback_memory_hit,
-    should_schedule_autolearn as _should_schedule_autolearn,
+    run_deferred_post_reply_tasks as _run_deferred_post_reply_tasks,
     update_companion_reply_state as _update_companion_reply_state,
 )
 from routes.chat_trace_semantics import (
@@ -1067,36 +1064,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     _detect_emotion = None
                 _update_companion_reply_state(_comp, response, detect_emotion=_detect_emotion)
 
-                # 后台任务
-                feedback_rule = None
-                try:
-                    feedback_rule = S.l7_record_feedback_v2(msg, history, background_tasks)
-                except Exception:
-                    pass
-                # ── L7 埋点 ──
-                if feedback_rule:
-                    _record_feedback_memory_hit(feedback_rule)
-                    awareness_evt = _build_feedback_awareness_event(feedback_rule)
-                    if awareness_evt:
-                        S.awareness_push(awareness_evt)
-                        yield {"event": "awareness", "data": json.dumps(awareness_evt, ensure_ascii=False)}
-                try:
-                    S.l8_touch()
-                    l8_config = S.load_autolearn_config()
-                    if _should_schedule_autolearn(
-                        l8_config,
-                        feedback_rule=feedback_rule,
-                        l8=l8,
-                    ):
-                        background_tasks.add_task(S.run_l8_autolearn_task, msg, response, route, bool(l8))
-                except Exception:
-                    pass
-
-                repair_payload = _build_repair_payload(route, feedback_rule)
-                if repair_payload.get("show"):
-                    yield {"event": "repair", "data": json.dumps(repair_payload, ensure_ascii=False)}
-
-                S.debug_write("final_response", {"reply": response, "repair": repair_payload})
                 try:
                     # L1 卫生检查：防止自我强化的毒教材
                     response = _persist_reply_artifacts(
@@ -1106,12 +1073,20 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         normalize_steps=_normalize_persisted_process_steps,
                         persist_assistant_history_entry=_history_tx.persist_assistant_entry,
                         debug_write=S.debug_write,
-                        add_memory=lambda text: S.l2_add_memory(msg, text),
                         task_plan=_task_plan,
                         include_empty_steps_with_plan=True,
                     )
                 except Exception:
                     pass
+                background_tasks.add_task(
+                    _run_deferred_post_reply_tasks,
+                    shared=S,
+                    msg=msg,
+                    history=history,
+                    response=response,
+                    route=route,
+                    l8=l8,
+                )
                 return
 
         except Exception as exc:
@@ -1138,38 +1113,6 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             _detect_emotion = None
         _update_companion_reply_state(_comp, response, detect_emotion=_detect_emotion)
 
-        # 后台任务
-        feedback_rule = None
-        try:
-            feedback_rule = S.l7_record_feedback_v2(msg, history, background_tasks)
-        except Exception:
-            pass
-        # ── L7 埋点 ──
-        if feedback_rule:
-            _record_feedback_memory_hit(feedback_rule)
-        if feedback_rule:
-            awareness_evt = _build_feedback_awareness_event(feedback_rule)
-            S.awareness_push(awareness_evt)
-            yield {"event": "awareness", "data": json.dumps(awareness_evt, ensure_ascii=False)}
-        try:
-            S.l8_touch()
-            l8_config = S.load_autolearn_config()
-            if _should_schedule_autolearn(
-                l8_config,
-                feedback_rule=feedback_rule,
-                l8=l8,
-                route=route,
-                forbid_missing_skill_intent=True,
-            ):
-                background_tasks.add_task(S.run_l8_autolearn_task, msg, response, route, bool(l8))
-        except Exception as _post_exc:
-            S.debug_write("post_reply_error", {"stage": "l8", "error": str(_post_exc)})
-
-        repair_payload = _build_repair_payload(route, feedback_rule)
-        if repair_payload.get("show"):
-            yield {"event": "repair", "data": json.dumps(repair_payload, ensure_ascii=False)}
-
-        S.debug_write("final_response", {"reply": response, "repair": repair_payload})
         try:
             # L1 卫生检查：防止自我强化的毒教材
             response = _persist_reply_artifacts(
@@ -1179,10 +1122,19 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 normalize_steps=_normalize_persisted_process_steps,
                 persist_assistant_history_entry=_history_tx.persist_assistant_entry,
                 debug_write=S.debug_write,
-                add_memory=lambda text: S.l2_add_memory(msg, text),
             )
         except Exception as _post_exc:
             S.debug_write("post_reply_error", {"stage": "save", "error": str(_post_exc)})
+        background_tasks.add_task(
+            _run_deferred_post_reply_tasks,
+            shared=S,
+            msg=msg,
+            history=history,
+            response=response,
+            route=route,
+            l8=l8,
+            forbid_missing_skill_intent=True,
+        )
 
       except Exception as _fatal:
         S.debug_write("event_stream_fatal", {"error": str(_fatal), "type": type(_fatal).__name__})
@@ -1211,7 +1163,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             except Exception:
                 pass
 
-    return EventSourceResponse(event_stream(), ping=2)
+    return EventSourceResponse(event_stream(), ping=2, background=background_tasks)
 
 
 @router.post("/chat/answer")
