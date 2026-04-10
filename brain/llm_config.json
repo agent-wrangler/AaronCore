@@ -1,11 +1,11 @@
 {
   "models": {
     "deepseek-chat": {
-      "api_key": "sk-e5cbede8b15f454dad0e48273e8eb4e3",
-      "base_url": "https://api.deepseek.com/v1",
       "model": "deepseek-chat",
       "vision": false,
-      "transport": "openai_api"
+      "transport": "openai_api",
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "sk-e5cbede8b15f454dad0e48273e8eb4e3"
     },
     "gpt-4o": {
       "base_url": "codex://local",
@@ -58,6 +58,26 @@
     },
     "MiniMax-M2.5": {
       "model": "MiniMax-M2.5",
+      "vision": false,
+      "transport": "openai_api",
+      "base_url": "https://api.minimaxi.com/anthropic/v1",
+      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "derived": true,
+      "source_model": "minimax",
+      "provider_key": "minimax"
+    },
+    "MiniMax-M2.5-highspeed": {
+      "model": "MiniMax-M2.5-highspeed",
+      "vision": false,
+      "transport": "openai_api",
+      "base_url": "https://api.minimaxi.com/anthropic/v1",
+      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "derived": true,
+      "source_model": "minimax",
+      "provider_key": "minimax"
+    },
+    "MiniMax-M2": {
+      "model": "MiniMax-M2",
       "vision": false,
       "transport": "openai_api",
       "base_url": "https://api.minimaxi.com/anthropic/v1",

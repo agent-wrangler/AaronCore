@@ -300,6 +300,24 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual((context.get("context_data") or {}).get("fs_target", {}).get("path"), "C:/Users/36459/NovaNotes")
         self.assertEqual((context.get("task_plan") or {}).get("goal"), "检查目录结构")
 
+    def test_build_tool_exec_context_includes_working_state(self):
+        bundle = {
+            "l2": {
+                "working_state": {
+                    "goal": "Continue AaronCore development",
+                    "current_step": "Inspect memory recall behavior",
+                    "summary": "Current agent work",
+                }
+            },
+            "l4": {},
+            "context_data": {},
+        }
+
+        context = reply_formatter_module._build_tool_exec_context(bundle)
+
+        self.assertEqual((context.get("working_state") or {}).get("goal"), "Continue AaronCore development")
+        self.assertEqual((context.get("working_state") or {}).get("current_step"), "Inspect memory recall behavior")
+
     def test_ensure_tool_call_failure_reply_replaces_preamble_with_failure_summary(self):
         reply = chat_module._ensure_tool_call_failure_reply(
             "好！开始执行\n\n先看看项目现在的文件结构和后端API",
@@ -1131,6 +1149,154 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("success"), False)
         self.assertEqual(done.get("synthetic"), True)
         self.assertEqual(done.get("reason"), "stream_signal_dropped")
+
+    def test_unified_reply_with_tools_stream_retries_missing_execution_direct_reply(self):
+        executed = []
+        call_count = {"value": 0}
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "recall_memory",
+                    "description": "Recall memory",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            call_count["value"] += 1
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if call_count["value"] == 1:
+                yield "我刚刚查看了 `RUNTIME.md`，在 `RUNTIME.md` 里看到这个 agent 应该做了一个多月。"
+                yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 5}}
+                return
+            if not has_tool_result:
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_memory_retry_1",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_memory",
+                                "arguments": json.dumps({"query": "我们做这个agent多久了"}, ensure_ascii=False),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 4}}
+                return
+
+            yield "按记忆锚点看，至少三月上旬就已经在做了。"
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 3}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "[长期记忆]\n- 到 2026-03-09 时 NovaCore 已经本地启动成功。",
+            }
+
+        bundle = {
+            "user_input": "我们做这个agent多久了",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, tools, fake_tool_executor))
+
+        self.assertEqual(executed, [("recall_memory", {"query": "我们做这个agent多久了", "user_input": "我们做这个agent多久了"})])
+        reset_event = next(
+            chunk
+            for chunk in chunks
+            if isinstance(chunk, dict) and chunk.get("_stream_reset")
+        )
+        self.assertEqual(reset_event.get("_stream_reset", {}).get("reason"), "missing_execution_retry")
+        self.assertIn("至少三月上旬就已经在做了", "".join(chunk for chunk in chunks if isinstance(chunk, str)))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "recall_memory")
+        self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_uses_llm_closeout_after_missing_execution_exhausted(self):
+        call_count = {"value": 0}
+
+        def fake_stream(_cfg, messages, **kwargs):
+            call_count["value"] += 1
+            tools = kwargs.get("tools")
+            if call_count["value"] == 1:
+                yield "我刚刚查看了 `RUNTIME.md`，在 `RUNTIME.md` 里看到这个 agent 应该做了一个多月。"
+                yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 5}}
+                return
+            if tools:
+                yield "刚才那段先别当结果，我还是没有真正查到。"
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 4}}
+                return
+            yield "刚才那段不能当结果，这轮实际上没有完成真正的读取；要确认的话，我需要重新执行那次检查。"
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 3}}
+
+        bundle = {
+            "user_input": "我们做这个agent多久了",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], lambda *_a: {}))
+
+        visible_text = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+        self.assertIn("刚才那段不能当结果", visible_text)
+        self.assertIn("重新执行那次检查", visible_text)
+        self.assertNotIn("还没有实际调用读取文件或目录的工具", visible_text)
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertIsNone(done.get("tool_used"))
+
+    def test_unified_reply_with_tools_stream_keeps_natural_non_action_followup_reply(self):
+        natural_reply = (
+            "主人说得对！😊\n\n"
+            "我确实有问题，事情都说完了还纠结，没理解好上下文。\n\n"
+            "下次我会注意：认真理解指令，不重复确认已经完成的事情；直接执行，不多废话；理解错了就承认，不找借口。"
+        )
+
+        def fake_stream(_cfg, _messages, **_kwargs):
+            yield natural_reply
+            yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 5}}
+
+        bundle = {
+            "user_input": "是啊 下次好好理解",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+        tools = [{"function": {"name": "list_files"}}]
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, tools, lambda *_a: {}))
+
+        visible_text = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+        self.assertEqual(visible_text, natural_reply)
+        self.assertNotIn("刚才那段不能当结果", visible_text)
+        self.assertNotIn("重新执行真实的检查", visible_text)
+        self.assertFalse(any(isinstance(chunk, dict) and chunk.get("_stream_reset") for chunk in chunks))
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertIsNone(done.get("tool_used"))
 
     def test_unified_reply_with_tools_stream_closes_tool_executor_exception_as_terminal_failure(self):
         def fake_stream(_cfg, messages, **_kwargs):
@@ -3273,6 +3439,116 @@ class InitialToolHandoffRetryRegressionTests(unittest.TestCase):
         self.assertIsNone(result.get("tool_used"))
         self.assertIn("I will update the file directly now.", result.get("reply", ""))
         self.assertTrue(str(result.get("reply") or "").strip())
+
+    def test_unified_reply_with_tools_non_stream_retries_missing_execution_direct_reply(self):
+        executed = []
+        call_count = {"value": 0}
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "recall_memory",
+                    "description": "Recall memory",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
+
+        def fake_llm_call(_cfg, messages, tools=None, **_kwargs):
+            call_count["value"] += 1
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if call_count["value"] == 1:
+                return {
+                    "content": "我刚刚查看了 `RUNTIME.md`，在 `RUNTIME.md` 里看到这个 agent 应该做了一个多月。",
+                    "usage": {"prompt_tokens": 6, "completion_tokens": 5},
+                }
+            if not has_tool_result:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_memory_retry_non_stream_1",
+                            "type": "function",
+                            "function": {
+                                "name": "recall_memory",
+                                "arguments": json.dumps({"query": "我们做这个agent多久了"}, ensure_ascii=False),
+                            },
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 4},
+                }
+            return {
+                "content": "按记忆锚点看，至少三月上旬就已经在做了。",
+                "usage": {"prompt_tokens": 4, "completion_tokens": 3},
+            }
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "[长期记忆]\n- 到 2026-03-09 时 NovaCore 已经本地启动成功。",
+                "meta": {
+                    "action": {
+                        "action_kind": "recall_memory",
+                        "target_kind": "memory",
+                    }
+                },
+            }
+
+        bundle = {
+            "user_input": "我们做这个agent多久了",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, tools, fake_tool_executor)
+
+        self.assertEqual(call_count["value"], 3)
+        self.assertEqual(executed, [("recall_memory", {"query": "我们做这个agent多久了", "user_input": "我们做这个agent多久了"})])
+        self.assertEqual(result.get("tool_used"), "recall_memory")
+        self.assertEqual(result.get("success"), True)
+        self.assertIn("至少三月上旬就已经在做了", result.get("reply", ""))
+
+    def test_unified_reply_with_tools_non_stream_uses_llm_closeout_after_missing_execution_exhausted(self):
+        call_count = {"value": 0}
+
+        def fake_llm_call(_cfg, messages, tools=None, **_kwargs):
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                return {
+                    "content": "我刚刚查看了 `RUNTIME.md`，在 `RUNTIME.md` 里看到这个 agent 应该做了一个多月。",
+                    "usage": {"prompt_tokens": 6, "completion_tokens": 5},
+                }
+            if tools:
+                return {
+                    "content": "刚才那段先别当结果，我还是没有真正查到。",
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 4},
+                }
+            return {
+                "content": "刚才那段不能当结果，这轮实际上没有完成真正的读取；要确认的话，我需要重新执行那次检查。",
+                "usage": {"prompt_tokens": 4, "completion_tokens": 3},
+            }
+
+        bundle = {
+            "user_input": "我们做这个agent多久了",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
+            result = reply_formatter_module.unified_reply_with_tools(bundle, [], lambda *_a: {})
+
+        self.assertEqual(call_count["value"], 2)
+        self.assertIsNone(result.get("tool_used"))
+        self.assertIn("刚才那段不能当结果", result.get("reply", ""))
+        self.assertNotIn("还没有实际调用读取文件或目录的工具", result.get("reply", ""))
 
 
 class StructuredToolHandoffRegressionTests(unittest.TestCase):

@@ -32,8 +32,13 @@ def build_feedback_awareness_event(feedback_rule: dict | None) -> dict | None:
     if not isinstance(feedback_rule, dict):
         return None
     event = dict(feedback_rule)
+    category = str(event.get("category") or event.get("kind") or "general").strip() or "general"
+    problem = str(event.get("problem") or "").strip()
     event["event_type"] = "feedback_awareness"
-    event["kind"] = str(event.get("kind") or "general").strip() or "general"
+    event["kind"] = category
+    event["type"] = "l7_feedback"
+    event["detail"] = dict(feedback_rule)
+    event["summary"] = " / ".join(part for part in [category, problem] if part).strip() or category
     return event
 
 
@@ -76,16 +81,44 @@ def build_process_payload(
     *,
     normalize_steps,
     task_plan: dict | None = None,
+    tool_results: list | None = None,
     include_empty_steps_with_plan: bool = False,
 ) -> dict | None:
+    normalized_tool_results = []
+    for item in tool_results or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        row = {"name": name}
+        if "success" in item:
+            row["success"] = item.get("success")
+        if "synthetic" in item:
+            row["synthetic"] = bool(item.get("synthetic"))
+        reason = str(item.get("reason") or "").strip()
+        if reason:
+            row["reason"] = reason
+        call_id = str(item.get("call_id") or "").strip()
+        if call_id:
+            row["call_id"] = call_id
+        normalized_tool_results.append(row)
+
     normalized_steps = normalize_steps(steps) if callable(normalize_steps) else list(steps or [])
     if task_plan:
         process = {"plan": task_plan}
         if normalized_steps or include_empty_steps_with_plan:
             process["steps"] = normalized_steps
+        if normalized_tool_results:
+            process["tool_results"] = normalized_tool_results
         return process
     if normalized_steps:
-        return {"steps": normalized_steps}
+        process = {"steps": normalized_steps}
+        if normalized_tool_results:
+            process["tool_results"] = normalized_tool_results
+        return process
+    if normalized_tool_results:
+        return {"tool_results": normalized_tool_results}
     return None
 
 
@@ -99,6 +132,7 @@ def persist_reply_artifacts(
     debug_write=None,
     add_memory=None,
     task_plan: dict | None = None,
+    tool_results: list | None = None,
     include_empty_steps_with_plan: bool = False,
 ) -> str:
     text = str(response or "")
@@ -120,6 +154,7 @@ def persist_reply_artifacts(
         steps,
         normalize_steps=normalize_steps,
         task_plan=task_plan,
+        tool_results=tool_results,
         include_empty_steps_with_plan=include_empty_steps_with_plan,
     )
     if callable(persist_assistant_history_entry):

@@ -9,6 +9,34 @@ from storage.paths import PRIMARY_STATE_DIR
 
 _LOW_SIGNAL_TEXTS = {"好", "嗯", "行", "可以", "好的", "哈哈", "收到", "知道了"}
 L2_FILE = PRIMARY_STATE_DIR / "l2_short_term.json"
+L3_FILE = PRIMARY_STATE_DIR / "long_term.json"
+_TIMELINE_QUERY_MARKERS = (
+    "多久",
+    "多长时间",
+    "什么时候",
+    "何时",
+    "开始",
+    "起步",
+    "激活",
+    "诞生",
+    "创建",
+    "开发时长",
+    "项目开始时间",
+)
+_TIMELINE_EVENT_MARKERS = (
+    "最近",
+    "开始",
+    "起步",
+    "激活",
+    "启动",
+    "诞生",
+    "创建",
+    "上旬",
+    "下旬",
+    "前后",
+    "时长",
+    "端口8090",
+)
 
 
 def _is_low_signal_text(text: str) -> bool:
@@ -23,11 +51,24 @@ def _is_low_signal_text(text: str) -> bool:
 def _load_l3() -> list:
     """直接读 L3 长期记忆。"""
     try:
-        path = PRIMARY_STATE_DIR / "long_term.json"
-        data = json.loads(path.read_text("utf-8"))
+        data = json.loads(L3_FILE.read_text("utf-8"))
         return data if isinstance(data, list) else []
     except Exception:
         return []
+
+
+def _clean_l3_event_text(mem: dict) -> str:
+    if not isinstance(mem, dict):
+        return ""
+    text = str(mem.get("event") or mem.get("summary") or mem.get("content") or "").strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
+    if text.lower().startswith("<think>"):
+        return ""
+    if not text:
+        return ""
+    if any(marker in text for marker in ("根据对话上下文", "作为AI助手", "系统提示中可能有时间信息", "让我检查", "用户让我提炼", "让我分析用户的行为")):
+        return ""
+    return text
 
 
 def _load_l2_recent(limit: int = 240) -> list:
@@ -129,8 +170,24 @@ def _should_use_backstop(user_input: str, query_profile: set[str], query_anchor:
     return False
 
 
+def _query_has_timeline_intent(user_input: str) -> bool:
+    text = str(user_input or "").strip()
+    if not text:
+        return False
+    if any(marker in text for marker in _TIMELINE_QUERY_MARKERS):
+        return True
+    return bool(re.search(r"(20\d{2}|[01]?\d月[0-3]?\d[号日]?|今天|昨天|前天|上周|这周)", text))
+
+
+def _event_has_timeline_evidence(event: str, mem: dict) -> bool:
+    text = f"{event} {str(mem.get('raw_ref') or '').strip()}".strip()
+    if any(marker in text for marker in _TIMELINE_EVENT_MARKERS):
+        return True
+    return bool(re.search(r"(20\d{2}|[01]?\d月[0-3]?\d[号日]?|8090)", text))
+
+
 def _score_l3_candidate(user_input: str, query_profile: set[str], mem: dict) -> float:
-    event = str(mem.get("event") or mem.get("summary") or "").strip()
+    event = _clean_l3_event_text(mem)
     if not event or _is_low_signal_text(event):
         return 0.0
     try:
@@ -148,8 +205,48 @@ def _score_l3_candidate(user_input: str, query_profile: set[str], mem: dict) -> 
         return 0.0
     if _has_strong_theme(query_profile) and resonance < 0.28 and lexical < 0.42:
         return 0.0
-    source_bonus = 0.08 if str(mem.get("source") or "").strip() == "l2_crystallize" else 0.03
-    return resonance * 0.62 + lexical * 0.18 + freshness * 0.08 + source_bonus
+    source = str(mem.get("source") or "").strip()
+    source_bonus = 0.08 if source == "l2_crystallize" else 0.03
+    timeline_bonus = 0.0
+    if _query_has_timeline_intent(user_input):
+        is_milestone = str(mem.get("type") or "").strip() == "milestone"
+        has_timeline_evidence = _event_has_timeline_evidence(event, mem)
+        if not is_milestone and not has_timeline_evidence:
+            return 0.0
+        if has_timeline_evidence:
+            timeline_bonus += 0.28
+        if is_milestone:
+            timeline_bonus += 0.22
+        if source == "timeline_backfill":
+            timeline_bonus += 0.18
+    return resonance * 0.54 + lexical * 0.16 + freshness * 0.08 + source_bonus + timeline_bonus
+
+
+def search_relevant_long_term(user_input: str, limit: int = 4, min_score: float = 0.30) -> list[dict]:
+    user_input = str(user_input or "").strip()
+    if not user_input or len(user_input) < 2:
+        return []
+    try:
+        from .l2_memory import build_signal_profile, _normalize_signature_anchor
+
+        query_profile = build_signal_profile(user_input)
+        query_anchor = _normalize_signature_anchor(user_input)
+    except Exception:
+        query_profile = set()
+        query_anchor = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", user_input.lower())[:8]
+    if not query_profile and not query_anchor:
+        return []
+
+    scored = []
+    for mem in _load_l3():
+        if not isinstance(mem, dict):
+            continue
+        score = _score_l3_candidate(user_input, query_profile, mem)
+        if score >= min_score:
+            scored.append((score, mem))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [mem for _, mem in scored[: max(int(limit or 0), 0)]]
 
 
 def _score_l2_candidate(user_input: str, query_profile: set[str], mem: dict) -> float:
@@ -250,7 +347,7 @@ def detect_flashback(user_input: str) -> str | None:
         return None
 
     if best_source == "l3":
-        event = str(best.get("event") or best.get("summary") or "").strip()
+        event = _clean_l3_event_text(best)
         date = str(best.get("created_at") or "")[:10]
         return (
             f"[联想] 你的记忆里闪过一段画面（{date}）：{event}\n"

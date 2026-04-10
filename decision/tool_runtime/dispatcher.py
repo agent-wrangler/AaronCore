@@ -126,7 +126,7 @@ def execute_tool_call_legacy(
     if name == "ask_user":
         return execute_ask_user(arguments)
     if name in memory_tools:
-        return execute_memory_tool(name, arguments)
+        return execute_memory_tool(name, arguments, context=context)
 
     user_input = str(arguments.get("user_input") or "").strip()
     skill_route = {"skill": name}

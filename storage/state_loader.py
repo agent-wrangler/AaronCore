@@ -86,9 +86,11 @@ def event_text(item: dict) -> str:
         return ""
     text = str(item.get("event") or item.get("summary") or item.get("content") or "").strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
+    if text.lower().startswith("<think>"):
+        return ""
     if not text:
         return ""
-    if any(marker in text for marker in ("根据对话上下文", "作为AI助手", "系统提示中可能有时间信息", "让我们检查")):
+    if any(marker in text for marker in ("根据对话上下文", "作为AI助手", "系统提示中可能有时间信息", "让我们检查", "用户让我提炼", "让我分析用户的行为")):
         return ""
     return text
 
@@ -352,10 +354,19 @@ def save_task_relations(relations):
     return _task_files.save_task_relations(relations)
 
 
-def load_l3_long_term(limit=8):
+def load_l3_long_term(limit=8, query: str | None = None):
     ensure_long_term_clean()
     items = load_json(LONG_TERM_FILE, [])
     allowed_types = {"event", "milestone", "general"}
+    if isinstance(query, str) and query.strip():
+        try:
+            from memory.flashback import search_relevant_long_term
+
+            relevant = search_relevant_long_term(query, limit=limit)
+        except Exception:
+            relevant = []
+        if relevant:
+            items = relevant
     out = []
     for item in items[-limit:]:
         if is_legacy_l3_skill_log(item):

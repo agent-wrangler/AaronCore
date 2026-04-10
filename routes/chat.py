@@ -465,6 +465,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _task_plan = None
                 _tool_action_summary = ""
                 _tool_response_text = ""
+                _tool_results = []
                 _think_carry = ""
                 _inside_think_block = False
                 _tool_trace_started = False
@@ -845,6 +846,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                 async for _evt in _emit_thinking_trace(force=True):
                                     yield _evt
                                 _tool_used = _item.get("tool_used")
+                                _tool_results = _item.get("tool_results") if isinstance(_item.get("tool_results"), list) else []
                                 _tool_inflight_name = ""
                                 if "run_meta" in _item and isinstance(_item.get("run_meta"), dict):
                                     _tool_run_meta = _item.get("run_meta") or {}
@@ -978,6 +980,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 # 记录技能使用统计
                 _direct_tool_gap = _classify_missing_tool_execution(
                     response,
+                    history=history,
                     user_input=msg,
                     tool_used=_tool_used or "",
                     stream_had_output=bool(_stream_chunks),
@@ -1074,6 +1077,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         persist_assistant_history_entry=_history_tx.persist_assistant_entry,
                         debug_write=S.debug_write,
                         task_plan=_task_plan,
+                        tool_results=_tool_results,
                         include_empty_steps_with_plan=True,
                     )
                 except Exception:

@@ -9,6 +9,10 @@ def build_tool_exec_context(
     resolve_active_task_plan,
 ) -> dict:
     skill_context = {}
+    l2_session = bundle.get("l2") if isinstance(bundle.get("l2"), dict) else {}
+    working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
+    if working_state:
+        skill_context["working_state"] = dict(working_state)
     l4 = bundle.get("l4") or {}
     if isinstance(l4, dict):
         up = l4.get("user_profile") or {}

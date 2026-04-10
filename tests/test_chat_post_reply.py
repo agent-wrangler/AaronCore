@@ -117,6 +117,31 @@ class ChatPostReplyTests(unittest.TestCase):
         self.assertEqual(saved, [])
         self.assertEqual(remembered, [])
 
+    def test_persist_reply_artifacts_skips_missing_execution_closeout_notice(self):
+        saved = []
+        remembered = []
+        text = (
+            "主人，刚才那个说桌面没有临时文档文件夹的回复不可靠，我并没有实际完成检查操作。😅\n\n"
+            "我需要重新执行真实的检查，看看临时文档文件夹到底还在不在。\n\n"
+            "让我重新检查一下！😊"
+        )
+        result = persist_reply_artifacts(
+            text,
+            [],
+            steps=[{"step_key": "a"}],
+            normalize_steps=lambda steps: steps,
+            persist_assistant_history_entry=lambda role, reply, process=None: saved.append(
+                {"role": role, "text": reply, "process": process}
+            ),
+            debug_write=lambda *_args, **_kwargs: None,
+            add_memory=lambda reply: remembered.append(reply),
+            task_plan={"goal": "finish"},
+            include_empty_steps_with_plan=True,
+        )
+        self.assertEqual(result, text)
+        self.assertEqual(saved, [])
+        self.assertEqual(remembered, [])
+
     def test_build_repair_payload_uses_agent_final(self):
         original = sys.modules.get("agent_final")
         sys.modules["agent_final"] = types.SimpleNamespace(

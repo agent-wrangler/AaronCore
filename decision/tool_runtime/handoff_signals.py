@@ -358,6 +358,8 @@ def resolve_stream_tool_calls_signal(
         keep_phrase_assist = phrase_handoff and _allows_phrase_handoff_assist(tool_name)
         keep_mixed = should_keep_stream_tool_call_with_visible_text(tool_calls_signal, visible_joined)
         keep_short_preface = (
+            _prefers_explicit_tool_call(tool_name)
+            and
             len(visible_joined) <= 120
             and not _looks_like_answer_payload(
                 visible_joined,

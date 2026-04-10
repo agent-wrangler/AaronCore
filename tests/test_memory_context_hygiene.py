@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from memory import flashback
 from memory import l2_memory
 from storage import state_loader
 
@@ -96,6 +97,39 @@ class MemoryContextHygieneTests(unittest.TestCase):
 
         self.assertEqual(loaded, ["用户强调了 memory=代码，state_data=数据总仓 这个边界。"])
 
+    def test_load_l3_long_term_query_prefers_relevant_project_milestone(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            long_term_file = tmp / "long_term.json"
+            long_term_file.write_text(
+                json.dumps(
+                    [
+                        {
+                            "event": "用户明确说 novacore 是最近搞出来的 agent 框架。",
+                            "type": "milestone",
+                            "source": "timeline_backfill",
+                            "created_at": "2026-03-25T02:16:00",
+                        },
+                        {
+                            "event": "用户随口聊了天气和出行。",
+                            "type": "event",
+                            "source": "l2_auto_summary",
+                            "created_at": "2026-04-01T10:00:00",
+                        },
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(state_loader, "LONG_TERM_FILE", long_term_file), patch.object(
+                state_loader, "_LONG_TERM_CLEANUP_DONE", False
+            ), patch.object(
+                flashback, "L3_FILE", long_term_file
+            ):
+                loaded = state_loader.load_l3_long_term(limit=2, query="我们这个agent做了多久")
+
+        self.assertEqual(loaded, ["用户明确说 novacore 是最近搞出来的 agent 框架。"])
 
 if __name__ == "__main__":
     unittest.main()

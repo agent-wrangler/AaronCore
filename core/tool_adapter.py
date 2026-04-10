@@ -267,10 +267,11 @@ def _format_recall(l2_results, l3_events):
 def _format_knowledge(hits):
     return _memory_tool_runtime.format_knowledge(hits)
 
-def _execute_memory_tool(name: str, arguments: dict) -> dict:
+def _execute_memory_tool(name: str, arguments: dict, context: dict = None) -> dict:
     return _memory_tool_runtime.execute_memory_tool(
         name,
         arguments,
+        context=context,
         debug_write=_debug_write,
         l2_search_relevant=_l2_search_relevant,
         load_l3_long_term=_load_l3_long_term,

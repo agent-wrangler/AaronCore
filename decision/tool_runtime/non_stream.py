@@ -23,6 +23,17 @@ _CONTINUATION_RETRY_GUIDANCE = (
     "Do not stop with a handoff or generic promise. Either emit the next tool call now, "
     "or, if the task is truly complete, give a grounded final answer that directly reflects the latest tool result."
 )
+_MISSING_EXECUTION_RETRY_GUIDANCE = (
+    "The previous assistant text answered from prior context or claimed checking without an actual tool result. "
+    "In this tool-call turn, do not answer from stale memory, prior guesses, or claimed local inspection. "
+    "If the user is asking you to verify, inspect, read, list, search, or check something and suitable tools are available, emit the concrete tool call now."
+)
+_MISSING_EXECUTION_CLOSEOUT_GUIDANCE = (
+    "The previous answer did not produce a real tool result and must not be treated as verified. "
+    "Do not call tools in this closeout. Briefly tell the user in natural language that the previous answer should not be treated as a confirmed result, "
+    "that the actual check/open/read/search did not complete successfully in this turn, and that the next correct move is to re-run the real action rather than rely on that answer. "
+    "Do not mention internal classifiers, server fallback copy, or hidden runtime details."
+)
 
 
 def _build_non_stream_result(
@@ -67,6 +78,7 @@ def _build_non_stream_result(
 def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor) -> dict:
     from brain import LLM_CONFIG
     from decision import reply_formatter as formatter
+    from routes.chat_reply_closeout import classify_missing_tool_execution
 
     max_turns = resolve_max_turns(bundle)
     turns_used = 0
@@ -89,6 +101,30 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             ledger,
             turn_meta=_turn_meta(),
         )
+
+    def _missing_execution_closeout(prior_reply: str, *, reasoning_details=None) -> dict:
+        final_messages = list(messages)
+        if str(prior_reply or "").strip() or reasoning_details:
+            final_messages.append(
+                formatter._build_assistant_history_message(
+                    prior_reply,
+                    reasoning_details=reasoning_details,
+                )
+            )
+        formatter._append_runtime_guidance(final_messages, _MISSING_EXECUTION_CLOSEOUT_GUIDANCE)
+        closeout_result = formatter._llm_call(
+            cfg,
+            final_messages,
+            temperature=0.7,
+            max_tokens=500,
+            timeout=25,
+        )
+        formatter._merge_tool_call_usage_totals(usage, closeout_result.get("usage", {}))
+        formatter._record_tool_call_usage_stats(cfg, closeout_result.get("usage", {}))
+        reply = str(closeout_result.get("content", "") or "").strip()
+        if not reply:
+            reply = "刚才那段不能算结果，这轮没有真正跑到可确认的执行结果。"
+        return _result(reply, None)
 
     def _max_turns_closeout(*, terminal_record, success: bool | None) -> dict:
         nonlocal turn_limit_reached, turn_reason
@@ -130,6 +166,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
     usage = {}
     ledger = ToolCallTurnLedger()
     batch_state = create_tool_call_batch_state(tools)
+    missing_execution_retry_budget = 1
 
     try:
         system_prompt = (
@@ -158,8 +195,68 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
         tool_calls = formatter._resolve_tool_calls_from_result(result, bundle, mode="non_stream_initial")
         if not tool_calls:
             reply = result.get("content", "")
-            formatter._debug_write("tool_call_direct_reply", {"reply_len": len(reply)})
-            return _result(reply, None)
+            missing_execution_gap = classify_missing_tool_execution(
+                reply,
+                history=bundle.get("l1") if isinstance(bundle.get("l1"), list) else [],
+                user_input=str(bundle.get("user_input") or ""),
+                tool_used="",
+                stream_had_output=bool(str(reply or "").strip()),
+            )
+            if (
+                missing_execution_retry_budget > 0
+                and missing_execution_gap
+                and tools
+                and turns_used < max_turns
+            ):
+                formatter._debug_write(
+                    "tool_call_missing_execution_retry",
+                    {
+                        "reason": missing_execution_gap.get("reason"),
+                        "summary": missing_execution_gap.get("summary", ""),
+                    },
+                )
+                reasoning_details = result.get("reasoning_details")
+                if str(reply or "").strip() or reasoning_details:
+                    messages.append(
+                        formatter._build_assistant_history_message(
+                            reply,
+                            reasoning_details=reasoning_details,
+                        )
+                    )
+                formatter._append_runtime_guidance(messages, _MISSING_EXECUTION_RETRY_GUIDANCE)
+                missing_execution_retry_budget -= 1
+                turns_used += 1
+                retry_result = formatter._llm_call(
+                    cfg,
+                    messages,
+                    tools=tools,
+                    temperature=0.7,
+                    max_tokens=2000,
+                    timeout=25,
+                )
+                formatter._merge_tool_call_usage_totals(usage, retry_result.get("usage", {}))
+                formatter._record_tool_call_usage_stats(cfg, retry_result.get("usage", {}))
+                result = retry_result
+                tool_calls = formatter._resolve_tool_calls_from_result(
+                    result,
+                    bundle,
+                    mode="non_stream_initial_retry",
+                )
+                if not tool_calls:
+                    reply = str(result.get("content", "") or "")
+                    formatter._debug_write("tool_call_direct_reply", {"reply_len": len(reply)})
+                    return _missing_execution_closeout(
+                        reply,
+                        reasoning_details=result.get("reasoning_details"),
+                    )
+            else:
+                formatter._debug_write("tool_call_direct_reply", {"reply_len": len(reply)})
+                if missing_execution_gap:
+                    return _missing_execution_closeout(
+                        reply,
+                        reasoning_details=result.get("reasoning_details"),
+                    )
+                return _result(reply, None)
 
         skill_context = formatter._build_tool_exec_context(bundle)
         raise_if_cancelled(bundle, skill_context, detail="tool_call non-stream cancelled before initial tool batch")

@@ -24,6 +24,31 @@ _TRANSIENT_ASSISTANT_NOTICE_PATTERNS = (
     re.compile(r"^Current .+ request failed \(HTTP \d{3}\)\..*$", re.I),
 )
 
+_TRANSIENT_MISSING_EXECUTION_PREFIX_PATTERNS = (
+    re.compile(r"这一轮我还没有实际调用读取文件或目录的工具", re.I),
+    re.compile(r"刚才那段带本地文件或目录结论的答复不可靠", re.I),
+    re.compile(r"刚才那段不能算结果", re.I),
+    re.compile(r"主人，刚才那个说.+?的回复不可靠", re.I),
+    re.compile(r"主人，我刚才的回复有问题", re.I),
+)
+
+_TRANSIENT_MISSING_EXECUTION_FOLLOWUP_PATTERNS = (
+    re.compile(r"我需要先真实读取相关目标", re.I),
+    re.compile(r"我需要重新执行真实的检查", re.I),
+    re.compile(r"我需要重新发起真实的读取或检查", re.I),
+    re.compile(r"让我重新检查一下", re.I),
+    re.compile(r"再回来给你总结", re.I),
+)
+
+
+def _is_transient_missing_execution_notice(normalized_text: str) -> bool:
+    text = str(normalized_text or "").strip()
+    if not text:
+        return False
+    if not any(pattern.search(text) for pattern in _TRANSIENT_MISSING_EXECUTION_PREFIX_PATTERNS):
+        return False
+    return any(pattern.search(text) for pattern in _TRANSIENT_MISSING_EXECUTION_FOLLOWUP_PATTERNS)
+
 
 def is_transient_assistant_notice(item_or_text) -> bool:
     if isinstance(item_or_text, dict):
@@ -34,12 +59,14 @@ def is_transient_assistant_notice(item_or_text) -> bool:
     else:
         text = str(item_or_text or "")
 
-    text = re.sub(r"\s+", " ", text).strip()
-    if not text or len(text) > 180:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
         return False
-    if "\n" in text or "\r" in text:
+    if _is_transient_missing_execution_notice(normalized):
+        return True
+    if len(normalized) > 180:
         return False
-    return any(pattern.match(text) for pattern in _TRANSIENT_ASSISTANT_NOTICE_PATTERNS)
+    return any(pattern.match(normalized) for pattern in _TRANSIENT_ASSISTANT_NOTICE_PATTERNS)
 
 
 def load_msg_history():

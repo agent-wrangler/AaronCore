@@ -235,6 +235,7 @@ def build_light_chat_prompt(bundle: dict, *, build_recent_dialogue_text) -> str:
                 "\u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\uff0c\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d\u3002",
                 "\u4e8b\u5b9e\u4fe1\u606f\u4f18\u5148\u51c6\u786e\uff0c\u8bed\u6c14\u518d\u6309\u4eba\u683c\u98ce\u683c\u81ea\u7136\u8868\u8fbe\u3002",
                 "普通聊天默认写成自然、连贯的短正文，除非用户明确要求别的输出格式。",
+                "对轻建议、随口追问和闲聊式推荐，优先直接把判断和建议写进 2 到 4 句正文里。",
             ],
         ),
     )
@@ -273,7 +274,8 @@ def build_cod_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> str:
             f"当用户问你是什么模型时，告诉用户底层模型是 {current_model}。",
             "不要输出思考过程，只输出最终回复。",
             "默认用自然、克制的短正文回复，不要为了排版感额外加装饰。",
-            "普通聊天默认直接接话，除非用户明确要求别的输出格式，或任务本身需要更清晰的展开方式。",
+            "普通聊天默认直接接话，除非用户明确要求别的输出格式。",
+            "对轻建议、随口追问和闲聊式推荐，优先直接把判断和建议写进 2 到 4 句正文里。",
         ],
     )
     tool_guide = cfg.get(
@@ -359,7 +361,8 @@ def build_tool_call_system_prompt(bundle: dict, *, build_fs_focus_guidance) -> s
         f"\u5f53\u7528\u6237\u95ee\u4f60\u662f\u4ec0\u4e48\u6a21\u578b\u65f6\uff0c\u76f4\u63a5\u544a\u8bc9\u7528\u6237\u5e95\u5c42\u6a21\u578b\u662f {current_model}",
         "\u4e0d\u8981\u8f93\u51fa\u601d\u8003\u8fc7\u7a0b\uff0c\u53ea\u8f93\u51fa\u6700\u7ec8\u56de\u590d",
         "默认用自然、克制的短正文回复，不要为了排版感额外加装饰",
-        "普通聊天默认直接接话，除非用户明确要求别的输出格式，或任务本身需要更清晰的展开方式",
+        "普通聊天默认直接接话，除非用户明确要求别的输出格式",
+        "对轻建议、随口追问和闲聊式推荐，优先直接把判断和建议写进 2 到 4 句正文里",
     ]
     tool_guidance = [
         "\u5de5\u5177\u4f7f\u7528\u7684\u4e3b\u5224\u65ad\u8981\u770b\u8fd9\u8f6e\u662f\u5426\u5df2\u7ecf\u660e\u786e\u53d1\u51fa tool_call\u3001\u5de5\u5177\u80fd\u529b\u7c7b\u578b/\u98ce\u9669\uff0c\u4ee5\u53ca\u5f53\u524d\u6587\u672c\u662f\u5426\u5df2\u7ecf\u50cf\u6700\u7ec8\u7b54\u6848\uff1b\u63aa\u8f9e\u77ed\u8bed\u53ea\u4f5c\u8f85\u52a9\uff0c\u4e0d\u8981\u628a\u6a21\u7cca\u8868\u8fbe\u672c\u8eab\u5f53\u6210\u62d2\u7edd\u5de5\u5177\u7684\u7406\u7531",

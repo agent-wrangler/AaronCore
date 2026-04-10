@@ -111,6 +111,20 @@ def _load_task_plan_fs_target(bundle: dict) -> str:
     return _chat_context.load_task_plan_fs_target(bundle)
 
 
+def _load_runtime_task_plan_fs_target(bundle: dict) -> str:
+    task_plan = bundle.get("task_plan") if isinstance(bundle.get("task_plan"), dict) else {}
+    if task_plan:
+        try:
+            from core.task_store import get_structured_fs_target_for_task_plan
+
+            target = get_structured_fs_target_for_task_plan(task_plan)
+        except Exception:
+            target = None
+        if isinstance(target, dict):
+            return str(target.get("path") or "").strip()
+    return _load_task_plan_fs_target(bundle)
+
+
 def _load_context_fs_target(bundle: dict) -> str:
     return _chat_context.load_context_fs_target(bundle)
 
@@ -130,7 +144,7 @@ def _reply_already_contains_location(reply_text: str) -> bool:
 def _pick_directory_resolution_target(bundle: dict, *, allow_global_fallback: bool = True) -> str:
     return _directory_resolution.pick_directory_resolution_target(
         bundle,
-        load_task_plan_fs_target=_load_task_plan_fs_target,
+        load_task_plan_fs_target=_load_runtime_task_plan_fs_target,
         load_context_fs_target=_load_context_fs_target,
         load_latest_structured_fs_target=_load_latest_structured_fs_target,
         allow_global_fallback=allow_global_fallback,
@@ -141,7 +155,7 @@ def _infer_directory_resolution_tool_call(bundle: dict, reply_text: str = "") ->
         bundle,
         reply_text=reply_text,
         clean_visible_reply_text=_clean_visible_reply_text,
-        load_task_plan_fs_target=_load_task_plan_fs_target,
+        load_task_plan_fs_target=_load_runtime_task_plan_fs_target,
         load_context_fs_target=_load_context_fs_target,
         load_latest_structured_fs_target=_load_latest_structured_fs_target,
     )
@@ -151,7 +165,7 @@ def _repair_tool_args_from_context(tool_name: str, tool_args: dict, bundle: dict
         tool_name,
         tool_args,
         bundle,
-        load_task_plan_fs_target=_load_task_plan_fs_target,
+        load_task_plan_fs_target=_load_runtime_task_plan_fs_target,
         load_context_fs_target=_load_context_fs_target,
         load_latest_structured_fs_target=_load_latest_structured_fs_target,
     )
@@ -236,7 +250,7 @@ def _resolve_known_fs_focus_target(bundle: dict | None = None, tool_args: dict |
         bundle,
         tool_args,
         load_context_fs_target=_load_context_fs_target,
-        load_task_plan_fs_target=_load_task_plan_fs_target,
+        load_task_plan_fs_target=_load_runtime_task_plan_fs_target,
         extract_recent_file_paths=_directory_resolution.extract_recent_file_paths,
         resolve_protocol_user_file_target=_resolve_protocol_user_file_target,
     )
