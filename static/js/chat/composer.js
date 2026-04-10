@@ -255,12 +255,28 @@ function addChatEventNote(kind, label, text, detail){
  return row;
 }
 
-function _snapshotChatHistory(){
+function _snapshotChatHistory(options){
+ options=options||{};
  var chat=document.getElementById('chat');
- if(!chat) return;
- chatHistory=chat.innerHTML;
+ if(!chat) return false;
+ var currentHtml=String(chat.innerHTML||'');
+ if(!currentHtml.trim()){
+  if(options.allowEmpty===true){
+   chatHistory='';
+   persistChatHistorySnapshot();
+   return true;
+  }
+  return false;
+ }
+ var looksLikeChat=(typeof window._looksLikeChatSnapshot==='function')
+  ? window._looksLikeChatSnapshot(currentHtml)
+  : /class="msg\b|class="welcome\b|thinking-msg|process-msg|reply-part-msg/.test(currentHtml);
+ if(!looksLikeChat) return false;
+ chatHistory=currentHtml;
  persistChatHistorySnapshot();
+ return true;
 }
+window._snapshotChatHistory=_snapshotChatHistory;
 
 function _stickChatToBottom(options){
  if(typeof window._maybePinChatToBottom==='function'){

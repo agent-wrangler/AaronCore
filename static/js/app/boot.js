@@ -254,6 +254,45 @@ var _chatAutoStickToBottom=true;
   return /class="msg\b|class="welcome\b|thinking-msg|process-msg|reply-part-msg/.test(text);
  }
 
+ function _restoreChatFromSnapshot(chat, keepScroll){
+  var host=chat||document.getElementById('chat');
+  if(!host) return false;
+  var snapshot='';
+  var currentHtml=String(host.innerHTML||'');
+  if(_looksLikeChatSnapshot(currentHtml)){
+   snapshot=currentHtml;
+  }else if(_looksLikeChatSnapshot(chatHistory)){
+   snapshot=chatHistory;
+  }else{
+   var stored='';
+   if(typeof getStoredChatHistorySnapshot==='function'){
+    stored=(getStoredChatHistorySnapshot({
+     preferSession:true,
+     recentTurns:CHAT_HISTORY_BOOT_TURNS
+    })||{}).html||'';
+   }else{
+    try{
+     stored=localStorage.getItem('aaroncore_chat_history')
+      || localStorage.getItem('nova_chat_history')
+      || '';
+    }catch(e){
+     stored='';
+    }
+   }
+   if(_looksLikeChatSnapshot(stored)) snapshot=stored;
+  }
+  if(!snapshot.trim()) return false;
+  host.innerHTML=snapshot;
+  chatHistory=snapshot;
+  if(typeof window._rebindStepToggles==='function'){
+   window._rebindStepToggles(host);
+  }
+  if(!(keepScroll&&_restoreChatScroll())){
+   _schedulePinChatToBottom();
+  }
+  return true;
+ }
+
  function _reloadChatFromServer(keepScroll){
   var chat=document.getElementById('chat');
   if(!chat) return;
@@ -284,10 +323,12 @@ var _chatAutoStickToBottom=true;
     }
     return;
    }
-   chat.innerHTML='';
-   chatHistory='';
-   if(typeof persistChatHistorySnapshot==='function'){
-    persistChatHistorySnapshot();
+   if(!_restoreChatFromSnapshot(chat, keepScroll)){
+    chat.innerHTML='';
+    chatHistory='';
+    if(typeof persistChatHistorySnapshot==='function'){
+     persistChatHistorySnapshot();
+    }
    }
    if(typeof window._flushPendingModelSwitchNote==='function'){
     setTimeout(function(){
@@ -725,11 +766,6 @@ fetch('/history?limit='+CHAT_HISTORY_BOOT_TURNS+'&offset=0').then(function(r){re
   window._historyOffset=Math.max(items.length, renderedTurns);
   if(items.length===0){
    if(_restoredTimelineSnapshot){
-    chat.innerHTML='';
-    chatHistory='';
-    if(typeof persistChatHistorySnapshot==='function'){
-     persistChatHistorySnapshot();
-    }
     _rebindStepToggles(chat);
    }
    return;

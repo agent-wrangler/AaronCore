@@ -3,6 +3,10 @@
 
 function show(n){
  var chat = document.getElementById('chat');
+ var previousTab=window._currentTab||1;
+ if(previousTab===1 && n!==1 && typeof window._snapshotChatHistory==='function'){
+  window._snapshotChatHistory();
+ }
  window._currentTab=n;
  try{
   _closeSkillModal(true);
