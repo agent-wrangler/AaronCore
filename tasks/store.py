@@ -401,6 +401,22 @@ def _looks_like_long_referential_followup(query: str) -> bool:
 def _looks_like_direct_task_resume_command(query: str) -> bool:
     return _continuity.looks_like_direct_task_resume_command(query)
 
+def _query_clearly_refers_to_active_task(
+    query: str,
+    *,
+    last_ref: str = "",
+    goal: str = "",
+    current_step: str = "",
+    task_status: str = "",
+) -> bool:
+    return _continuity.query_clearly_refers_to_active_task(
+        query,
+        last_ref=last_ref,
+        goal=goal,
+        current_step=current_step,
+        task_status=task_status,
+    )
+
 def _goal_overlap(a: str, b: str) -> float:
     return _continuity.goal_overlap(a, b)
 
@@ -432,6 +448,7 @@ def _find_matching_task_plan_task(user_input: str = "", preferred_fs_target: str
         has_task_fs_target=_has_task_fs_target,
         looks_like_task_plan_continuation=_looks_like_task_plan_continuation,
         looks_like_direct_task_resume_command=_looks_like_direct_task_resume_command,
+        query_clearly_refers_to_active_task=_query_clearly_refers_to_active_task,
         goal_overlap=_goal_overlap,
         looks_like_short_referential_followup=_looks_like_short_referential_followup,
         looks_like_long_referential_followup=_looks_like_long_referential_followup,

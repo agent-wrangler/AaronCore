@@ -259,6 +259,66 @@ def looks_like_direct_task_resume_command(query: str) -> bool:
     return False
 
 
+def query_clearly_refers_to_active_task(
+    query: str,
+    *,
+    last_ref: str = "",
+    goal: str = "",
+    current_step: str = "",
+    task_status: str = "",
+) -> bool:
+    raw = str(query or "").strip()
+    if not raw:
+        return False
+
+    refs = [
+        str(goal or "").strip(),
+        str(current_step or "").strip(),
+        str(last_ref or "").strip(),
+    ]
+    refs = [item for item in refs if item]
+
+    if looks_like_task_plan_continuation(raw):
+        if looks_like_direct_task_resume_command(raw):
+            return True
+        return any(ref in raw or raw in ref or goal_overlap(raw, ref) >= 0.2 for ref in refs)
+
+    if looks_like_short_referential_followup(raw):
+        compact = re.sub(r"\s+", "", raw).strip()
+        taskish_tokens = (
+            "任务",
+            "项目",
+            "计划",
+            "步骤",
+            "文件",
+            "文件夹",
+            "目录",
+            "路径",
+            "task",
+            "project",
+            "plan",
+            "step",
+            "file",
+            "folder",
+            "directory",
+            "path",
+        )
+        if len(compact) <= 12:
+            return True
+        if any(token in raw.lower() for token in taskish_tokens):
+            return True
+        return any(ref in raw or raw in ref or goal_overlap(raw, ref) >= 0.45 for ref in refs)
+
+    if looks_like_long_referential_followup(raw):
+        return True
+
+    if any(ref in raw or raw in ref or goal_overlap(raw, ref) >= 0.45 for ref in refs):
+        return True
+
+    if str(task_status or "").strip() in {"blocked", "waiting"}:
+        return False
+    return False
+
 
 def resolve_task_for_goal(kind: str, user_input: str, *, get_latest_active_task_by_kind):
     raw = str(user_input or "").strip()

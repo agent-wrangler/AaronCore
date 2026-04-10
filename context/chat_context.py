@@ -85,16 +85,17 @@ def build_recent_dialogue_text(
 
 
 def resolve_active_task_plan(bundle: dict) -> dict:
-    task_plan = bundle.get("task_plan") if isinstance(bundle.get("task_plan"), dict) else {}
-    if task_plan:
-        return task_plan
+    query = str(bundle.get("user_input") or "").strip()
+    if not query:
+        return bundle.get("task_plan") if isinstance(bundle.get("task_plan"), dict) else {}
     try:
-        inferred = _task_store.get_active_task_plan_snapshot(str(bundle.get("user_input") or ""))
+        inferred = _task_store.get_active_task_plan_snapshot(query)
     except Exception:
         inferred = None
     if isinstance(inferred, dict) and inferred:
         bundle["task_plan"] = inferred
         return inferred
+    bundle.pop("task_plan", None)
     return {}
 
 
@@ -133,9 +134,10 @@ def resolve_active_working_state(
     load_task_plan_fs_target: Callable[[dict], str] | None = None,
     load_context_fs_target: Callable[[dict], str] | None = None,
 ) -> dict:
+    query = str(bundle.get("user_input") or "").strip()
     l2_session = bundle.get("l2") if isinstance(bundle.get("l2"), dict) else {}
     working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
-    if working_state:
+    if not query:
         return working_state
 
     preferred_fs_target = ""
@@ -152,7 +154,7 @@ def resolve_active_working_state(
 
     try:
         inferred = _task_store.get_active_task_working_state(
-            str(bundle.get("user_input") or ""),
+            query,
             preferred_fs_target=preferred_fs_target,
         )
     except Exception:
@@ -163,6 +165,10 @@ def resolve_active_working_state(
             updated_l2["working_state"] = inferred
             bundle["l2"] = updated_l2
         return inferred
+    if working_state and isinstance(l2_session, dict):
+        updated_l2 = dict(l2_session)
+        updated_l2.pop("working_state", None)
+        bundle["l2"] = updated_l2
     return {}
 
 
@@ -223,14 +229,11 @@ def build_active_task_context(
     build_fs_focus_guidance: Callable[[dict | None, dict | None], str] | None = None,
 ) -> str:
     task_plan = resolve_active_task_plan(bundle)
-    l2_session = bundle.get("l2") if isinstance(bundle.get("l2"), dict) else {}
-    working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
-    if not working_state and not task_plan:
-        working_state = resolve_active_working_state(
-            bundle,
-            load_task_plan_fs_target=load_task_plan_fs_target,
-            load_context_fs_target=load_context_fs_target,
-        )
+    working_state = resolve_active_working_state(
+        bundle,
+        load_task_plan_fs_target=load_task_plan_fs_target,
+        load_context_fs_target=load_context_fs_target,
+    )
     if not task_plan and not working_state:
         return ""
 

@@ -332,6 +332,95 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertEqual(prompt, query)
         self.assertNotIn("Current task goal in this turn", prompt)
 
+    def test_explicit_release_message_does_not_resume_active_task_plan(self):
+        task_store_module.save_task_plan_snapshot(
+            "整理桌面文件，清理临时文件，创建分类文件夹",
+            {
+                "goal": "整理桌面文件，清理临时文件，创建分类文件夹",
+                "summary": "刚处理完临时文件夹的误删问题",
+                "items": [
+                    {"id": "inspect", "title": "检查桌面临时文件夹", "status": "done"},
+                    {"id": "review", "title": "确认用户后续需求", "status": "running"},
+                ],
+                "current_item_id": "review",
+                "phase": "active",
+            },
+        )
+
+        query = "不用了 删就删了 我回收站也没找到"
+        resumed = task_store_module.get_active_task_plan_snapshot(query)
+        session_context = session_context_module.extract_session_context([], query)
+        prompt = reply_formatter_module._build_tool_call_user_prompt({"user_input": query})
+
+        self.assertIsNone(resumed)
+        self.assertFalse(bool(session_context.get("working_state")))
+        self.assertEqual(prompt, query)
+        self.assertNotIn("Current task goal in this turn", prompt)
+
+    def test_generic_agent_duration_question_does_not_resume_old_desktop_task(self):
+        task_store_module.save_task_plan_snapshot(
+            "整理桌面文件，清理临时文件，创建分类文件夹",
+            {
+                "goal": "整理桌面文件，清理临时文件，创建分类文件夹",
+                "summary": "刚处理完临时文件夹的误删问题",
+                "items": [
+                    {"id": "inspect", "title": "检查桌面临时文件夹", "status": "done"},
+                    {"id": "review", "title": "确认用户后续需求", "status": "running"},
+                ],
+                "current_item_id": "review",
+                "phase": "active",
+            },
+        )
+
+        query = "我又来了 现在你知道这个agent做了多久了吗"
+        resumed = task_store_module.get_active_task_plan_snapshot(query)
+        session_context = session_context_module.extract_session_context([], query)
+        prompt = reply_formatter_module._build_tool_call_user_prompt({"user_input": query})
+
+        self.assertIsNone(resumed)
+        self.assertFalse(bool(session_context.get("working_state")))
+        self.assertEqual(prompt, query)
+        self.assertNotIn("Current task goal in this turn", prompt)
+
+    def test_build_active_task_context_ignores_stale_working_state_after_release(self):
+        context = reply_formatter_module._build_active_task_context(
+            {
+                "user_input": "别说了 我都没让你操作啊",
+                "l2": {
+                    "working_state": {
+                        "goal": "整理桌面文件，清理临时文件，创建分类文件夹",
+                        "summary": "刚处理完临时文件夹的误删问题",
+                        "current_step": "确认用户后续需求",
+                        "recent_progress": "检查桌面临时文件夹",
+                        "task_status": "active",
+                    }
+                },
+                "l5_success_paths": [],
+            }
+        )
+
+        self.assertEqual(context, "")
+
+    def test_build_active_task_context_ignores_stale_bundle_task_plan_when_query_unrelated(self):
+        context = reply_formatter_module._build_active_task_context(
+            {
+                "user_input": "我又来了 现在你知道这个agent做了多久了吗",
+                "task_plan": {
+                    "goal": "整理桌面文件，清理临时文件，创建分类文件夹",
+                    "summary": "刚处理完临时文件夹的误删问题",
+                    "items": [
+                        {"id": "inspect", "title": "检查桌面临时文件夹", "status": "done"},
+                        {"id": "review", "title": "确认用户后续需求", "status": "running"},
+                    ],
+                    "current_item_id": "review",
+                    "phase": "active",
+                },
+                "l5_success_paths": [],
+            }
+        )
+
+        self.assertEqual(context, "")
+
     def test_build_active_task_context_uses_working_state_without_bundle_task_plan(self):
         _task, snapshot = task_store_module.save_task_plan_snapshot(
             "continue NovaNotes",

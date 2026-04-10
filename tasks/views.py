@@ -12,6 +12,7 @@ def find_matching_task_plan_task(
     has_task_fs_target,
     looks_like_task_plan_continuation,
     looks_like_direct_task_resume_command,
+    query_clearly_refers_to_active_task,
     goal_overlap,
     looks_like_short_referential_followup,
     looks_like_long_referential_followup,
@@ -51,16 +52,33 @@ def find_matching_task_plan_task(
         or latest.get("title")
         or ""
     ).strip()
-    if looks_like_task_plan_continuation(raw):
-        if looks_like_direct_task_resume_command(raw):
-            return latest
-        if last_ref and (last_ref in raw or raw in last_ref or goal_overlap(raw, last_ref) >= 0.2):
-            return latest
-        return None
+    plan = latest.get("plan") if isinstance(latest.get("plan"), dict) else {}
+    snapshot = plan.get("snapshot") if isinstance(plan.get("snapshot"), dict) else plan
+    goal = str(
+        (snapshot.get("goal") if isinstance(snapshot, dict) else "")
+        or (latest.get("input") or {}).get("query")
+        or latest.get("title")
+        or ""
+    ).strip()
+    current_item_id = str((snapshot.get("current_item_id") if isinstance(snapshot, dict) else "") or "").strip()
+    current_step = ""
+    items = snapshot.get("items") if isinstance(snapshot.get("items"), list) else []
+    if current_item_id and items:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("id") or "").strip() == current_item_id:
+                current_step = str(item.get("title") or "").strip()
+                if current_step:
+                    break
 
-    if looks_like_short_referential_followup(raw) or looks_like_long_referential_followup(raw):
-        return latest
-    if last_ref and (last_ref in raw or raw in last_ref or goal_overlap(raw, last_ref) >= 0.45):
+    if query_clearly_refers_to_active_task(
+        raw,
+        last_ref=last_ref,
+        goal=goal,
+        current_step=current_step,
+        task_status=str(latest.get("status") or ""),
+    ):
         return latest
     return None
 
