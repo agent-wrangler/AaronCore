@@ -6,7 +6,7 @@
 #
 # 当前 AaronCore 的主流程不是在这里！
 # 当前主流程是 LLM/tool_call 主导，详见：
-#   docs/10-架构-architecture/NovaCore_当前真实流程文档.md
+#   docs/10-架构-architecture/AaronCore_当前真实流程文档.md
 #
 # 关键结论：
 # - 当前默认预装：L1（对话历史）+ L4（人格图谱）+ session_context（L2轻量会话态）+ 少量L7

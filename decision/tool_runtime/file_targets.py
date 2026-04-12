@@ -10,7 +10,7 @@ _SYSTEM_PROTECTED_PREFIXES = (
     "C:/Program Files (x86)",
     "C:/ProgramData",
 )
-_NOVACORE_PROTECTED_ROOTS = (
+_AARONCORE_PROTECTED_ROOTS = (
     Path("brain"),
     Path("core"),
     Path("routes"),
@@ -19,7 +19,7 @@ _NOVACORE_PROTECTED_ROOTS = (
     Path("static/css"),
     Path("configs"),
 )
-_NOVACORE_PROTECTED_FILES = (
+_AARONCORE_PROTECTED_FILES = (
     Path("agent_final.py"),
     Path("output.html"),
     Path("start_nova.bat"),
@@ -94,7 +94,7 @@ def is_system_protected_target(target) -> bool:
     return any(target_str.startswith(prefix) for prefix in _SYSTEM_PROTECTED_PREFIXES)
 
 
-def is_novacore_protected_write_target(target, *, project_root=None) -> bool:
+def is_aaroncore_protected_write_target(target, *, project_root=None) -> bool:
     if not target:
         return True
     try:
@@ -108,9 +108,13 @@ def is_novacore_protected_write_target(target, *, project_root=None) -> bool:
     except Exception:
         return False
 
-    if rel in _NOVACORE_PROTECTED_FILES:
+    if rel in _AARONCORE_PROTECTED_FILES:
         return True
-    return any(rel == protected_root or protected_root in rel.parents for protected_root in _NOVACORE_PROTECTED_ROOTS)
+    return any(rel == protected_root or protected_root in rel.parents for protected_root in _AARONCORE_PROTECTED_ROOTS)
+
+
+def is_novacore_protected_write_target(target, *, project_root=None) -> bool:
+    return is_aaroncore_protected_write_target(target, project_root=project_root)
 
 
 def is_allowed_read_target(target) -> bool:
@@ -125,7 +129,7 @@ def is_allowed_read_target(target) -> bool:
 def is_allowed_write_target(target, *, project_root=None) -> bool:
     if not target:
         return False
-    return not is_system_protected_target(target) and not is_novacore_protected_write_target(
+    return not is_system_protected_target(target) and not is_aaroncore_protected_write_target(
         target,
         project_root=project_root,
     )

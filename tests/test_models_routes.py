@@ -15,7 +15,7 @@ from routes.models import (
 
 class ModelRoutesTests(unittest.TestCase):
     def _install_fake_brain(self, models_config, *, current="deepseek-chat", llm_result=None):
-        temp_path = str(Path(tempfile.gettempdir()) / "novacore-test-model-config.json")
+        temp_path = str(Path(tempfile.gettempdir()) / "aaroncore-test-model-config.json")
         state = {"current": current}
 
         def _llm_call(_cfg, _messages, **_kwargs):

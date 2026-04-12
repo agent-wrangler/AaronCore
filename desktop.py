@@ -267,10 +267,26 @@ def _on_shown():
 
 window.events.shown += _on_shown
 
-print("AaronCore 启动中...")
-_c = os.path.join(os.environ.get("APPDATA",""), "NovaCore", "EBWebView", "Default", "Cache")
+print("AaronCore starting...")
+def _resolve_webview_storage():
+    appdata_dir = os.environ.get("APPDATA", "")
+    if not appdata_dir:
+        return "AaronCore"
+
+    aaron_dir = os.path.join(appdata_dir, "AaronCore")
+    legacy_profile_dir = os.path.join(appdata_dir, "NovaCore")
+
+    # Keep using the pre-rename webview profile so theme/localStorage/session
+    # state survive the legacy NovaCore -> AaronCore rename.
+    if os.path.isdir(legacy_profile_dir) and not os.path.isdir(aaron_dir):
+        print(f"[desktop] reusing legacy webview storage: {legacy_profile_dir}", flush=True)
+        return legacy_profile_dir
+    return aaron_dir
+
+_webview_storage = _resolve_webview_storage()
+_c = os.path.join(_webview_storage, "EBWebView", "Default", "Cache")
 if os.path.isdir(_c):
     import shutil
     try: shutil.rmtree(_c, ignore_errors=True)
     except: pass
-webview.start(private_mode=False, storage_path=os.path.join(os.environ.get("APPDATA",""), "NovaCore"))
+webview.start(private_mode=False, storage_path=_webview_storage)

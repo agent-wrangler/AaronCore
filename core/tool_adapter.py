@@ -71,8 +71,8 @@ def _is_allowed_user_target(target) -> bool:
 def _is_system_protected_target(target) -> bool:
     return _file_target_runtime.is_system_protected_target(target)
 
-def _is_novacore_protected_write_target(target) -> bool:
-    return _file_target_runtime.is_novacore_protected_write_target(
+def _is_aaroncore_protected_write_target(target) -> bool:
+    return _file_target_runtime.is_aaroncore_protected_write_target(
         target,
         project_root=_Path(__file__).resolve().parent.parent,
     )
@@ -292,3 +292,8 @@ def _execute_ask_user(arguments: dict) -> dict:
 def get_ask_user_tool_def() -> dict:
     return _ask_user_runtime.get_ask_user_tool_def()
 
+
+
+
+def _is_novacore_protected_write_target(target) -> bool:
+    return _is_aaroncore_protected_write_target(target)

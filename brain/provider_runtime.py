@@ -9,7 +9,9 @@ _DOMESTIC_HOSTS = {"minimaxi.com", "dashscope.aliyuncs.com", "open.bigmodel.cn",
 
 
 def extract_network_meta(resp) -> dict:
-    meta = getattr(resp, "_novacore_network_meta", None)
+    meta = getattr(resp, "_aaroncore_network_meta", None)
+    if not isinstance(meta, dict):
+        meta = getattr(resp, "_novacore_network_meta", None)
     return dict(meta) if isinstance(meta, dict) else {}
 
 

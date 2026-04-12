@@ -1,5 +1,5 @@
 {
-  "name": "novacore-desktop-runtime-35",
+  "name": "aaroncore-desktop-runtime-35",
   "version": "1.0.0",
   "private": true,
   "description": "Desktop packaging wrapper for AaronCore",
@@ -16,9 +16,9 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "com.novacore.desktop",
+    "appId": "com.aaroncore.desktop",
     "productName": "AaronCore",
-    "icon": "../static/icon/nova.ico",
+    "icon": "../static/icon/aaroncore.ico",
     "asar": true,
     "npmRebuild": false,
     "files": [
@@ -28,31 +28,31 @@
     "extraResources": [
       {
         "from": "../agent_final.py",
-        "to": "novacore/agent_final.py"
+        "to": "aaroncore/agent_final.py"
       },
       {
         "from": "../output.html",
-        "to": "novacore/output.html"
+        "to": "aaroncore/output.html"
       },
       {
         "from": "../brain",
-        "to": "novacore/brain"
+        "to": "aaroncore/brain"
       },
       {
         "from": "../configs",
-        "to": "novacore/configs"
+        "to": "aaroncore/configs"
       },
       {
         "from": "../core",
-        "to": "novacore/core"
+        "to": "aaroncore/core"
       },
       {
         "from": "../routes",
-        "to": "novacore/routes"
+        "to": "aaroncore/routes"
       },
       {
         "from": "../shell",
-        "to": "novacore/shell",
+        "to": "aaroncore/shell",
         "filter": [
           "**/*",
           "!node_modules{,/**}"
@@ -60,30 +60,30 @@
       },
       {
         "from": "../skills",
-        "to": "novacore/skills"
+        "to": "aaroncore/skills"
       },
       {
         "from": "../static",
-        "to": "novacore/static"
+        "to": "aaroncore/static"
       },
       {
         "from": "../tools",
-        "to": "novacore/tools"
+        "to": "aaroncore/tools"
       },
       {
         "from": "../memory/.gitkeep",
-        "to": "novacore/memory/.gitkeep"
+        "to": "aaroncore/memory/.gitkeep"
       },
       {
         "from": "../state_data/.gitkeep",
-        "to": "novacore/state_data/.gitkeep"
+        "to": "aaroncore/state_data/.gitkeep"
       }
     ],
     "directories": {
-      "output": "../../NovaCoreDesktop"
+      "output": "../../AaronCoreDesktop"
     },
     "win": {
-      "icon": "../static/icon/nova.ico",
+      "icon": "../static/icon/aaroncore.ico",
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,
       "target": [

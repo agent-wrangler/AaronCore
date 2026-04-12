@@ -9,6 +9,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parents[2]
 ICON_DIR = ROOT / "static" / "icon"
 MIRROR_DIRS = [
+    ROOT / "desktop_runtime_35" / "dist" / "win-unpacked" / "resources" / "aaroncore" / "static" / "icon",
     ROOT / "desktop_runtime_35" / "dist" / "win-unpacked" / "resources" / "novacore" / "static" / "icon",
 ]
 SIZES = [16, 32, 48, 64, 128, 256]

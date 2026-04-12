@@ -7,9 +7,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
-ROOT = Path(r"C:\Users\36459\NovaCore")
+ROOT = Path(__file__).resolve().parents[1]
 SVG_PATH = ROOT / "website" / "official" / "assets" / "aaroncore-logo-mark-bracket.svg"
-OUT_ICO = ROOT / "static" / "icon" / "nova.ico"
+OUT_ICO = ROOT / "static" / "icon" / "nova.ico"  # legacy compatibility output
 OUT_ICO_AARON = ROOT / "static" / "icon" / "aaroncore.ico"
 OUT_ICO_DESKTOP = ROOT / "static" / "icon" / "aaroncore-desktop.ico"
 OUT_ICO_DESKTOP_MATCH = ROOT / "static" / "icon" / "aaroncore-desktop-svg.ico"

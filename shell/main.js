@@ -13,7 +13,21 @@ Menu.setApplicationMenu(null);
 
 let win;
 const WINDOW_CONTROLS_MODE = 'custom-html';
-function isNovaCoreRoot(candidate) {
+function resolveExistingRoot(candidate) {
+  if (!candidate) return '';
+  try {
+    const realpathSync = fs.realpathSync.native || fs.realpathSync;
+    return path.resolve(realpathSync(candidate));
+  } catch (_err) {
+    try {
+      return path.resolve(candidate);
+    } catch (__err) {
+      return '';
+    }
+  }
+}
+
+function isAaronCoreRepoRoot(candidate) {
   if (!candidate) return false;
   const required = ['agent_final.py', 'core', 'routes', 'static', 'shell', 'brain', 'state_data'];
   try {
@@ -25,43 +39,52 @@ function isNovaCoreRoot(candidate) {
 
 function resolvePackagedDevRoot() {
   const candidates = [];
-  if (process.env.NOVACORE_DEV_ROOT) {
-    candidates.push(process.env.NOVACORE_DEV_ROOT);
+  const explicitDevRoot = process.env.AARONCORE_DEV_ROOT || process.env.NOVACORE_DEV_ROOT;
+  if (explicitDevRoot) {
+    candidates.push(explicitDevRoot);
   }
 
   if (process.platform === 'win32') {
     const exeDir = path.dirname(process.execPath);
     const desktopDir = path.dirname(exeDir);
+    const desktopParentDir = path.dirname(desktopDir);
     const desktopName = path.basename(desktopDir);
     if (desktopName.toLowerCase().endsWith('desktop')) {
       const repoName = desktopName.slice(0, -'Desktop'.length);
       if (repoName) {
-        candidates.push(path.join(path.dirname(desktopDir), repoName));
+        candidates.push(path.join(desktopParentDir, repoName));
       }
     }
+
+    // Compatibility for repo/app renames such as NovaCore -> AaronCore.
+    candidates.push(path.join(desktopParentDir, 'AaronCore'));
+    candidates.push(path.join(desktopParentDir, 'NovaCore'));
   }
 
   for (const candidate of candidates) {
-    const resolved = path.resolve(candidate);
-    if (isNovaCoreRoot(resolved)) return resolved;
+    const resolved = resolveExistingRoot(candidate);
+    if (isAaronCoreRepoRoot(resolved)) return resolved;
   }
   return '';
 }
 
 function resolveRootDir() {
-  if (process.env.NOVACORE_ROOT && isNovaCoreRoot(process.env.NOVACORE_ROOT)) {
-    return process.env.NOVACORE_ROOT;
+  const explicitRoot = resolveExistingRoot(process.env.AARONCORE_ROOT || process.env.NOVACORE_ROOT);
+  if (explicitRoot && isAaronCoreRepoRoot(explicitRoot)) {
+    return explicitRoot;
   }
   if (app.isPackaged) {
     const devRoot = resolvePackagedDevRoot();
     if (devRoot) return devRoot;
   }
-  return path.resolve(__dirname, '..');
+  return resolveExistingRoot(path.resolve(__dirname, '..'));
 }
 
 const ROOT_DIR = resolveRootDir();
+process.env.AARONCORE_ROOT = ROOT_DIR;
 process.env.NOVACORE_ROOT = ROOT_DIR;
-const BACKEND_ENTRY = process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
+const BACKEND_ENTRY = process.env.AARONCORE_BACKEND_ENTRY || process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
+process.env.AARONCORE_BACKEND_ENTRY = BACKEND_ENTRY;
 process.env.NOVACORE_BACKEND_ENTRY = BACKEND_ENTRY;
 const WINDOW_ICON = path.join(ROOT_DIR, 'static', 'icon', 'aaroncore.ico');
 const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
@@ -123,6 +146,7 @@ function openBackendLogFd(logFile) {
 }
 
 function resolvePythonCommand() {
+  if (process.env.AARONCORE_PYTHON) return process.env.AARONCORE_PYTHON;
   if (process.env.NOVACORE_PYTHON) return process.env.NOVACORE_PYTHON;
   if (process.platform === 'win32' && fs.existsSync(LOCAL_PYTHON)) return LOCAL_PYTHON;
   return 'python';
@@ -228,7 +252,7 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.novacore.desktop');
+    app.setAppUserModelId('com.aaroncore.desktop');
   }
   app.on('second-instance', () => {
     focusExistingWindow();

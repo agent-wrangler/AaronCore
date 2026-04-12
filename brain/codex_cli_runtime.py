@@ -473,7 +473,7 @@ def _codex_app_server_stream(
         init_request_id = send_request(
             "initialize",
             {
-                "clientInfo": {"name": "novacore", "title": "AaronCore", "version": "1.0"},
+                "clientInfo": {"name": "aaroncore", "title": "AaronCore", "version": "1.0"},
                 "capabilities": {"experimentalApi": False},
             },
         )

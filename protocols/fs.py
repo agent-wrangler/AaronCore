@@ -331,7 +331,7 @@ def is_system_protected_target(target: str | Path | None) -> bool:
     return any(target_str.startswith(prefix) for prefix in protected_prefixes)
 
 
-def is_novacore_protected_write_target(target: str | Path | None) -> bool:
+def is_aaroncore_protected_write_target(target: str | Path | None) -> bool:
     if not target:
         return True
     try:
@@ -366,10 +366,14 @@ def is_novacore_protected_write_target(target: str | Path | None) -> bool:
     return any(rel == p or p in rel.parents for p in protected_roots)
 
 
+def is_novacore_protected_write_target(target: str | Path | None) -> bool:
+    return is_aaroncore_protected_write_target(target)
+
+
 def is_allowed_write_target(target: str | Path | None) -> bool:
     if not target:
         return False
-    return not is_system_protected_target(target) and not is_novacore_protected_write_target(target)
+    return not is_system_protected_target(target) and not is_aaroncore_protected_write_target(target)
 
 
 def missing_required_protocol_fields(tool_name: str, tool_args: dict | None) -> list[str]:

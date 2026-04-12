@@ -291,6 +291,7 @@ def _attach_network_meta(resp, *, url: str, method_name: str, target: dict, deci
     }
     meta.update(_extract_response_debug_meta(resp))
     try:
+        setattr(resp, "_aaroncore_network_meta", meta)
         setattr(resp, "_novacore_network_meta", meta)
     except Exception:
         pass
