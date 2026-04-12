@@ -16,14 +16,10 @@ This directory contains the static official homepage for `AaronCore`.
 The current page follows this sequence:
 
 1. Hero
-2. How it works
-3. Core capabilities
-4. Product proof
-5. Use cases
-6. Differentiators
-7. Trust layer
-8. Docs teaser
-9. Final CTA
+2. Memory thesis
+3. Memory proof
+4. Memory highlights
+5. Beta CTA
 
 ## Where to edit public-facing values
 
@@ -51,14 +47,14 @@ Release-state values stay in `releaseConfig`:
 - Primary domain: `aaroncore.com`
 - Reserved mailbox: `hi@aaroncore.com`
 - Current state: official site first, no public build yet
-- Current tone: memory-first, execution-oriented, built to evolve
+- Current tone: memory, flashback, continuity
 
 ## Local preview
 
 Run a static file server from this directory:
 
 ```powershell
-cd C:\Users\36459\NovaCore\website\official
+cd C:\Users\36459\AaronCore\website\official
 python -m http.server 8080
 ```
 

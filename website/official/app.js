@@ -1,19 +1,19 @@
 const siteConfig = {
   productName: "AaronCore",
-  brandSubline: "Memory-first execution, built to continue",
+  brandSubline: "Memory that comes back naturally",
   primaryDomain: "aaroncore.com",
   contactEmail: "hi@aaroncore.com",
   contactStatus: "setup pending",
   launchState: "Official site first",
-  footerTagline: "Built for people who need more than chat.",
+  footerTagline: "For people who want AI to remember, not restart.",
   releaseRoute: "aaroncore.com / future download channel",
   metaDescription:
-    "AaronCore is a memory-first AI execution core built for local execution, tool calls, layered memory, and work that actually continues.",
+    "AaronCore is a local-first AI assistant with flashback memory, time recall, persona continuity, and memory hygiene.",
   ogDescription:
-    "A local-first desktop agent runtime with memory, execution, self-repair, and a product surface designed to ship.",
+    "A memory-first desktop AI that can naturally flash back old threads, recall prior conversations by time, and keep your style continuous.",
   betaUrl: "#join-beta",
-  betaLabel: "Download AaronCore",
-  earlyAccessLabel: "Download AaronCore",
+  betaLabel: "Join Beta",
+  earlyAccessLabel: "Join Beta",
   demoUrl: "./product.html#proof",
   demoLabel: "See proof",
   docsUrl: "./docs.html",
@@ -52,7 +52,7 @@ function applySiteState() {
         ? "Docs"
         : page === "changelog"
           ? "Changelog"
-          : "Calm, local-first agent runtime";
+          : "AI that remembers you";
 
   document.title = `${siteConfig.productName} | ${titleSuffix}`;
   setMeta('meta[name="description"]', siteConfig.metaDescription);
@@ -83,49 +83,54 @@ const LANGS = ["en", "zh", "ja", "ko"];
 
 const I18N = {
   en: {
-    "brand.subline": "Memory-first execution, built to continue",
+    "brand.subline": "Memory that comes back naturally",
     "nav.home": "Home",
     "nav.product": "Product",
     "nav.docs": "Docs",
     "nav.changelog": "Changelog",
-    "cta.joinBeta": "Download AaronCore",
-    "cta.earlyAccess": "Download AaronCore",
+    "screen.hero.label": "First Screen",
+    "screen.arch.label": "Second Screen",
+    "screen.heroIntro.label": "Brand Opening",
+    "screen.runtime.label": "Memory Runtime",
+    "cta.joinBeta": "Join Beta",
+    "cta.earlyAccess": "Join Beta",
     "cta.seeProof": "See product proof",
-    "hero.h1": "A calm runtime where AI work actually continues.",
-    "hero.title": "Memory, tool calling, and continuity — without the theatrics.",
-    "hero.subtitle": "Turn one request into an execution chain that survives files, tools, and sessions.",
-    "hero.lede": "AaronCore is built for the moments chat products drop: repo changes, tool calls, verification, and the next step that should already be queued.",
-    "footer.tagline": "Built for people who need more than chat.",
-    "hero.note": "Local-first · Memory-first · Continuity-first",
+    "hero.h1Line1": "The real core",
+    "hero.h1Line2": "starts with",
+    "hero.h1Line3": "memory.",
+    "hero.title": "When AI remembers you, everything that follows can continue naturally.",
+    "hero.subtitle": "Familiarity, context, and task state should not be wiped clean every turn.",
+    "hero.lede": "AaronCore does not treat memory as a standalone feature. It turns memory into the starting point for understanding, continuity, and action.",
+    "footer.tagline": "For people who want AI to remember, not restart.",
+    "hero.note": "Memory · Continuity · Action",
+    "home.stage.kicker": "Memory runtime",
+    "home.stage.h": "Memory that shows up in conversation, not just in storage.",
+    "home.stage.p": "AaronCore can surface old threads as natural flashbacks, answer what you talked about today, and keep your preferences in the loop.",
+    "home.panel.exec.label": "What you feel",
+    "home.panel.exec.h": "The assistant can naturally pick up old threads without making you repeat yourself.",
+    "home.panel.exec.p": "Flashback hints, time recall, and persona memory all feed back into the reply.",
+    "home.panel.posture.label": "Why it lands",
+    "home.panel.posture.h": "Chat feels remembered, not restarted",
+    "home.panel.posture.p": "Preferences, relationship tone, and ongoing work stay attached instead of resetting every session.",
+    "home.rail.1.h": "Remember",
+    "home.rail.1.p": "keep preferences, rules, and relationship posture attached",
+    "home.rail.2.h": "Flash back",
+    "home.rail.2.p": "surface old threads through state resonance",
+    "home.rail.3.h": "Recall",
+    "home.rail.3.p": "answer what you talked about today, yesterday, or last week",
+    "home.rail.4.h": "Stay consistent",
+    "home.rail.4.p": "keep tone and continuity steady across turns",
 
-    "home.stage.kicker": "Desktop runtime",
-    "home.stage.h": "One surface for memory, execution, and ongoing task state.",
-    "home.stage.p": "A calmer product shell for the parts that matter most: understanding intent, loading memory, calling tools, verifying changes, and keeping continuity intact.",
-    "home.panel.exec.label": "Execution layer",
-    "home.panel.exec.h": "Requests become task chains — not polished dead ends.",
-    "home.panel.exec.p": "Files, shell, memory, and verification stay connected inside one runtime surface.",
-    "home.panel.posture.label": "System posture",
-    "home.panel.posture.h": "Built to carry work forward",
-    "home.panel.posture.p": "State stays visible, outcomes are reviewable, and the next step stays ready.",
-    "home.rail.1.h": "Understand",
-    "home.rail.1.p": "turn intent into a real target",
-    "home.rail.2.h": "Plan",
-    "home.rail.2.p": "form a chain instead of a guess",
-    "home.rail.3.h": "Execute",
-    "home.rail.3.p": "move through files, shell, and state",
-    "home.rail.4.h": "Stabilize",
-    "home.rail.4.p": "verify, repair, and carry forward",
-
-    "home.how.h": "From one request to one execution chain",
-    "home.how.p": "The runtime keeps the flow simple: load relevant memory, form a chain, execute through tools, verify outcomes, and carry state forward.",
-    "home.how.step1.h": "Remember",
-    "home.how.step1.p": "load constraints, preferences, history, and long-term signals",
-    "home.how.step2.h": "Plan",
-    "home.how.step2.p": "turn intent into a concrete chain with a next step",
-    "home.how.step3.h": "Act",
-    "home.how.step3.p": "call tools, change real artifacts, and keep the state attached",
-    "home.how.step4.h": "Improve",
-    "home.how.step4.p": "close the loop with feedback, repair, and compounding experience",
+    "home.how.h": "Why the conversations feel different",
+    "home.how.p": "AaronCore does not just keep more context. It separates memory into layers, filters noise, and feeds the right memory back at the right moment.",
+    "home.how.step1.h": "Flashback feels natural",
+    "home.how.step1.p": "old threads resurface through state resonance, not crude keyword spam",
+    "home.how.step2.h": "Time recall is built in",
+    "home.how.step2.p": "you can ask what you talked about today, yesterday, or last week",
+    "home.how.step3.h": "Persona keeps showing up",
+    "home.how.step3.p": "preferences, dislikes, city, relationship, and rules feed back into replies",
+    "home.how.step4.h": "Memory stays clean",
+    "home.how.step4.p": "low-signal turns and polluted context are filtered before they become memory",
 
     "home.cap.h": "Built for execution, not just answers",
     "home.cap.p": "Memory, execution, routing, and verification live inside one runtime designed to move work forward.",
@@ -138,8 +143,8 @@ const I18N = {
     "home.cap.repair.h": "Correct through evidence, not prettier retries",
     "home.cap.repair.p": "When something slips, the loop narrows the failure, repairs the path, and verifies again.",
 
-    "home.signal.h": "Proof without theater",
-    "home.signal.p": "AaronCore is opinionated about one thing: the work should leave a trail. Here is a compact example of how a request becomes a chain you can audit.",
+    "home.signal.h": "A memory proof",
+    "home.signal.p": "These features are implemented in the stack already. The point is not bigger storage. The point is better conversation.",
 
     "home.use.h": "Who AaronCore is for",
     "home.use.p": "AaronCore is for people who want AI to carry real work across sessions instead of resetting at every prompt.",
@@ -148,11 +153,11 @@ const I18N = {
     "home.use.b3": "Remember habits, follow tasks, and cut repetitive overhead",
     "home.use.b4": "Push AI from sounding smart toward doing real work",
 
-    "home.diff.h": "Why AaronCore feels different",
-    "home.diff.p": "Other products package intelligence as style. AaronCore is designed to carry state, tools, and forward motion through a real runtime loop.",
-    "home.diff.c1": "Not temporary context, but recall that accumulates and returns",
-    "home.diff.c2": "Not prettier answers, but forward progress",
-    "home.diff.c3": "Feedback, repair, and experience compound over time",
+    "home.diff.h": "What makes the memory feel stronger",
+    "home.diff.p": "AaronCore is built around memory the user can actually feel: natural flashback, time recall, and cleaner long-term continuity.",
+    "home.diff.c1": "Old threads can come back like memory, not search results",
+    "home.diff.c2": "You can ask what you talked about today, yesterday, or last week",
+    "home.diff.c3": "Noise is filtered so continuity stays sharp instead of bloated",
 
     "home.trust.h": "Transparent by design",
     "home.trust.p": "AaronCore is built to make the path from request to result understandable, reviewable, and dependable.",
@@ -166,45 +171,45 @@ const I18N = {
     "home.trust.i4.p": "The system makes clear what it can do now and what can expand later.",
 
     "home.docs.h": "Go deeper when you want the runtime model, memory system, and execution details",
-    "home.cta.h": "Give your AI a real core",
-    "home.cta.p": "The public build is not attached yet, but the beta path, the release route, and the official entry surface are already in place.",
-    "product.title": "A runtime that keeps work alive",
-    "product.subtitle": "AaronCore is designed for execution chains: memory, tool calls, verification, and continuity — in one calm surface.",
-    "product.card.continuity.h": "State survives the next prompt",
-    "product.card.continuity.p": "Tasks, constraints, and the next action remain visible and reusable instead of resetting into chat history.",
-    "product.card.tools.h": "Tool calls are first-class",
-    "product.card.tools.p": "Files, shell, and runtime actions stay attached to the conversation, with a traceable chain from request to result.",
-    "product.card.verify.h": "Outcomes are reviewable",
-    "product.card.verify.p": "Completion is not a vibe. The runtime makes it clear what changed, what was checked, and what remains.",
-    "product.card.repair.h": "Feedback becomes sharper runs",
-    "product.card.repair.p": "When failures happen, AaronCore narrows the issue, repairs the path, and compounds experience over time.",
-    "product.proof.h": "What an execution chain looks like",
-    "product.proof.p": "Short, human-readable, and easy to audit. This is the default posture: do the work, show the trail.",
-    "product.proof.side.h": "Designed to avoid “polished dead ends”",
-    "product.proof.side.p": "The chain keeps the next step explicit. It stays attached to artifacts (files, state, verification) rather than evaporating into a final paragraph.",
+    "home.cta.h": "If you want AI that remembers, start here",
+    "home.cta.p": "AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.",
+    "product.title": "Memory that comes back when it matters",
+    "product.subtitle": "AaronCore turns memory into a live part of conversation: flashback, time recall, persona continuity, and memory hygiene.",
+    "product.card.continuity.h": "Flashback can feel natural",
+    "product.card.continuity.p": "When the current state resonates with an older thread, AaronCore can bring it back without making the user restate everything.",
+    "product.card.tools.h": "You can ask for time recall",
+    "product.card.tools.p": "It can answer questions like what you talked about today, yesterday, or last week using history plus relevant memory snippets.",
+    "product.card.verify.h": "It remembers how to talk to you",
+    "product.card.verify.p": "Preferences, dislikes, relationship posture, and interaction rules are condensed back into the reply path.",
+    "product.card.repair.h": "Memory stays sharp, not bloated",
+    "product.card.repair.p": "Low-signal turns, think blocks, and polluted context are filtered so continuity gets cleaner over time.",
+    "product.proof.h": "What memory looks like in practice",
+    "product.proof.p": "The memory system is not just storage. It comes back into the reply as flashback, recap, and persona continuity.",
+    "product.proof.side.h": "Designed to feel remembered, not artificially stuffed",
+    "product.proof.side.p": "The goal is not to dump a search result into chat. The goal is to bring back the right memory at the right moment, naturally.",
 
-    "docs.title": "A map, not a wall of text",
-    "docs.subtitle": "This page is a calm index. Deep dives can link out later — the goal is orientation and trust.",
-    "docs.terms.h": "Terms (kept consistent)",
-    "docs.terms.p": "Memory = persistent constraints and preferences. Chain = explicit next steps. Verification = evidence of done. Repair = narrow failures and stabilize the path.",
-    "docs.card.overview.h": "What AaronCore is",
-    "docs.card.overview.p": "A local-first runtime focused on continuity: memory, tools, verification, and repair in one loop.",
-    "docs.card.memory.h": "What persists (and why)",
-    "docs.card.memory.p": "Preferences, constraints, project context, and long-running task posture — written deliberately, not magically.",
-    "docs.card.exec.h": "Chains vs replies",
-    "docs.card.exec.p": "Turn requests into explicit next steps with artifacts attached: files, shell, and runtime state.",
-    "docs.card.tools.h": "Tool calling model",
-    "docs.card.tools.p": "Tools are first-class citizens with traceable inputs/outputs and reviewable outcomes.",
-    "docs.card.verify.h": "What counts as done",
-    "docs.card.verify.p": "Completion is defined by checks and evidence — not by confidence or tone.",
-    "docs.card.repair.h": "Feedback loops",
-    "docs.card.repair.p": "Failures narrow, paths repair, and experience compounds — without hiding the trail.",
+    "docs.title": "A map to the memory system",
+    "docs.subtitle": "Start with the parts users can feel: flashback, time recall, persona continuity, and memory hygiene.",
+    "docs.terms.h": "Core terms",
+    "docs.terms.p": "Flashback = old-thread resonance. Recall = summarize conversation by time. Persona = preferences, relationship, and style continuity. Hygiene = filter noisy memory before it sticks.",
+    "docs.card.overview.h": "What the memory system is",
+    "docs.card.overview.p": "A layered memory stack that writes, filters, recalls, and reinjects memory back into conversation.",
+    "docs.card.memory.h": "Flashback",
+    "docs.card.memory.p": "Old repair threads, emotional cues, or project states can resurface as natural hints instead of keyword dumps.",
+    "docs.card.exec.h": "Time recall",
+    "docs.card.exec.p": "Ask what you talked about today, yesterday, or last week and get a recap from chat history plus memory snippets.",
+    "docs.card.tools.h": "Persona continuity",
+    "docs.card.tools.p": "Preferences, dislikes, city, relationship posture, and interaction rules feed back into how AaronCore replies.",
+    "docs.card.verify.h": "Memory hygiene",
+    "docs.card.verify.p": "Think blocks, low-signal turns, and polluted context are filtered so long-term continuity stays cleaner.",
+    "docs.card.repair.h": "Retrieval posture",
+    "docs.card.repair.p": "Flashback is driven by resonance and continuity, not just plain keyword hits.",
     "docs.card.bounds.h": "Boundaries",
-    "docs.card.bounds.p": "Local-first posture, explicit permissions, and clear limits on what automation can touch.",
+    "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
     "docs.card.release.h": "Beta + download",
     "docs.card.release.p": "Public builds attach when ready. Until then, the beta mailbox is the honest path.",
-    "docs.deep.h": "Want the deep runtime write-up?",
-    "docs.deep.p": "When the public docs host is wired, this index becomes the front door.",
+    "docs.deep.h": "Want the deeper architecture write-up?",
+    "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
     "changelog.title": "What changed (public surface)",
     "changelog.subtitle": "A lightweight timeline for the official site and early milestones. Honest beats hype.",
@@ -222,49 +227,54 @@ const I18N = {
     "lang.ko": "한국어"
   },
   zh: {
-    "brand.subline": "记忆优先的执行内核，让工作继续",
+    "brand.subline": "让 AI 真正记住你",
     "nav.home": "首页",
     "nav.product": "产品",
     "nav.docs": "文档",
     "nav.changelog": "更新",
-    "cta.joinBeta": "下载 AaronCore",
-    "cta.earlyAccess": "下载 AaronCore",
+    "screen.hero.label": "第一屏",
+    "screen.arch.label": "第二屏",
+    "screen.heroIntro.label": "品牌开场",
+    "screen.runtime.label": "记忆运行时",
+    "cta.joinBeta": "加入内测",
+    "cta.earlyAccess": "加入内测",
     "cta.seeProof": "查看产品证明",
-    "hero.h1": "一个冷静的运行时，让 AI 的工作真正继续。",
-    "hero.title": "记忆、工具调用、连续性——不演戏。",
-    "hero.subtitle": "把一次需求变成可持续的执行链，跨文件、跨工具、跨会话。",
-    "hero.lede": "AaronCore 为聊天产品常掉链子的时刻而生：改仓库、跑工具、做验证，以及下一步本该自动排好队。",
-    "footer.tagline": "为需要不止聊天的人而做。",
-    "hero.note": "本地优先 · 记忆优先 · 连续性优先",
+    "hero.h1Line1": "真正的核心",
+    "hero.h1Line2": "从记忆",
+    "hero.h1Line3": "开始",
+    "hero.title": "当 AI 记得你，后面的延续都会变得自然。",
+    "hero.subtitle": "关系感、上下文、任务状态，不该每一轮都被清空。",
+    "hero.lede": "AaronCore 不把记忆当成一个孤立功能，而是把它变成理解、延续与行动的起点。",
+    "footer.tagline": "给不想让 AI 一直重开的人。",
+    "hero.note": "记忆 · 延续 · 行动",
+    "home.stage.kicker": "记忆运行时",
+    "home.stage.h": "记忆不是躺在存储里，而是会重新出现在聊天里。",
+    "home.stage.p": "AaronCore 能自然闪回旧线程，回答“我们今天聊了什么”，还会把你的偏好持续带进回复里。",
+    "home.panel.exec.label": "你能感受到的是",
+    "home.panel.exec.h": "它会自然接上旧话题，而不是每次都让你重说一遍。",
+    "home.panel.exec.p": "闪回提示、时间回忆和人格记忆都会重新流回回复链路。",
+    "home.panel.posture.label": "为什么有感觉",
+    "home.panel.posture.h": "聊天像被记住，而不是一轮轮重启",
+    "home.panel.posture.p": "偏好、关系语气和当前任务都会继续挂着，不会每次会话都清空。",
+    "home.rail.1.h": "记住你",
+    "home.rail.1.p": "偏好、规则和关系姿态持续挂着",
+    "home.rail.2.h": "自然闪回",
+    "home.rail.2.p": "通过状态共振把旧线程带回来",
+    "home.rail.3.h": "按时间回忆",
+    "home.rail.3.p": "回答今天、昨天、上周都聊了什么",
+    "home.rail.4.h": "保持一致",
+    "home.rail.4.p": "让语气和连续性跨轮稳定",
 
-    "home.stage.kicker": "桌面运行时",
-    "home.stage.h": "一个面板，承载记忆、执行与持续任务状态。",
-    "home.stage.p": "把最重要的部分做得更冷静：理解意图、加载记忆、调用工具、验证改动，并保持连续性。",
-    "home.panel.exec.label": "执行层",
-    "home.panel.exec.h": "需求会变成任务链，而不是漂亮的死胡同。",
-    "home.panel.exec.p": "文件、Shell、记忆与验证在同一个运行时面板里保持连接。",
-    "home.panel.posture.label": "系统姿态",
-    "home.panel.posture.h": "为把工作往前推而设计",
-    "home.panel.posture.p": "状态可见、结果可复核、下一步随时就绪。",
-    "home.rail.1.h": "理解",
-    "home.rail.1.p": "把意图变成真实目标",
-    "home.rail.2.h": "规划",
-    "home.rail.2.p": "形成任务链，而不是猜测",
-    "home.rail.3.h": "执行",
-    "home.rail.3.p": "穿过文件、Shell 与状态",
-    "home.rail.4.h": "稳定",
-    "home.rail.4.p": "验证、修复并继续前行",
-
-    "home.how.h": "从一句需求到一条执行链",
-    "home.how.p": "流程很简单：加载相关记忆 → 形成链路 → 通过工具执行 → 验证结果 → 把状态带到下一轮。",
-    "home.how.step1.h": "记住",
-    "home.how.step1.p": "加载约束、偏好、历史与长期信号",
-    "home.how.step2.h": "规划",
-    "home.how.step2.p": "把意图变成带下一步的具体链路",
-    "home.how.step3.h": "行动",
-    "home.how.step3.p": "调用工具，改真实产物，并保持状态绑定",
-    "home.how.step4.h": "进化",
-    "home.how.step4.p": "用反馈与修复闭环，让经验复利",
+    "home.how.h": "为什么聊起来不一样",
+    "home.how.p": "AaronCore 不是单纯塞更多上下文，而是把记忆分层、过滤噪音，再在合适的时候把合适的记忆送回回复里。",
+    "home.how.step1.h": "闪回是自然的",
+    "home.how.step1.p": "旧线程靠状态共振回来，不是粗暴关键词拼接",
+    "home.how.step2.h": "时间回忆是内建的",
+    "home.how.step2.p": "你可以直接问今天、昨天、上周聊了什么",
+    "home.how.step3.h": "人格会持续出现",
+    "home.how.step3.p": "偏好、反感、城市、关系和规则都会重新影响回复",
+    "home.how.step4.h": "记忆是干净的",
+    "home.how.step4.p": "低信号对话和污染上下文会在写入前被过滤",
 
     "home.cap.h": "为执行而生，而不只是回答",
     "home.cap.p": "记忆、执行、路由与验证收在同一个运行时里，专为把工作推进而设计。",
@@ -277,8 +287,8 @@ const I18N = {
     "home.cap.repair.h": "用证据纠正，而不是更好看的重试",
     "home.cap.repair.p": "一旦偏差出现，闭环会收窄失败、修复路径、再验证。",
 
-    "home.signal.h": "不演的证明",
-    "home.signal.p": "AaronCore 只坚持一件事：工作要留下轨迹。这里是一段紧凑示例，展示请求如何变成可审计的链路。",
+    "home.signal.h": "一个记忆证明",
+    "home.signal.p": "这些不是想象中的功能，而是已经接进系统里的能力。重点不是存得更多，而是聊得更像记得你。",
 
     "home.use.h": "AaronCore 适合谁",
     "home.use.p": "适合希望 AI 把真实工作跨会话扛起来的人，而不是每次 prompt 都从零开始。",
@@ -287,11 +297,11 @@ const I18N = {
     "home.use.b3": "记住习惯、跟进任务，减少重复开销",
     "home.use.b4": "把 AI 从“像很聪明”推向“真的在做事”",
 
-    "home.diff.h": "为什么 AaronCore 不一样",
-    "home.diff.p": "很多产品把智能包装成风格；AaronCore 把状态、工具与前进动能放进真实运行时闭环里。",
-    "home.diff.c1": "不是临时上下文，而是可回来的累积记忆",
-    "home.diff.c2": "不是更漂亮的答案，而是持续前进",
-    "home.diff.c3": "反馈、修复与经验会随时间复利",
+    "home.diff.h": "为什么这套记忆更有感觉",
+    "home.diff.p": "AaronCore 做的是用户真的能感知到的记忆：自然闪回、按时间回忆，以及更干净的长期连续性。",
+    "home.diff.c1": "旧话题回来时更像想起一段经历，而不是贴一条搜索结果",
+    "home.diff.c2": "你可以直接问今天、昨天、上周聊过什么",
+    "home.diff.c3": "噪音会被过滤，连续性越用越清晰，而不是越用越糊",
 
     "home.trust.h": "透明是默认",
     "home.trust.p": "AaronCore 让从请求到结果的路径可理解、可复核、可信赖。",
@@ -305,45 +315,45 @@ const I18N = {
     "home.trust.i4.p": "清楚说明现在能做什么、以后能扩到哪里。",
 
     "home.docs.h": "当你想看运行时模型、记忆系统与执行细节时，再深入",
-    "home.cta.h": "给你的 AI 一个真正的核心",
-    "home.cta.p": "公开构建还没挂上，但内测路径、发布路由与官方入口面已经准备好了。",
-    "product.title": "让工作继续的运行时",
-    "product.subtitle": "AaronCore 面向执行链而设计：记忆、工具调用、验证与连续性，收在同一个冷静的工作面里。",
-    "product.card.continuity.h": "状态跨 prompt 保持",
-    "product.card.continuity.p": "任务、约束和下一步会一直可见且可复用，不会每次都退化成聊天记录里的重来。",
-    "product.card.tools.h": "工具调用是第一公民",
-    "product.card.tools.p": "文件、Shell 和运行时动作都和对话绑在一起，从需求到结果有可追溯的链路。",
-    "product.card.verify.h": "结果可复核",
-    "product.card.verify.p": "完成不是“感觉”。运行时会说清楚改了什么、检查了什么、还剩什么。",
-    "product.card.repair.h": "反馈让下一次更锋利",
-    "product.card.repair.p": "出错时会收窄问题、修复路径、再验证，让经验逐步复利。",
-    "product.proof.h": "执行链长什么样",
-    "product.proof.p": "短、可读、易审计。默认姿态：做事，并留下证据。",
-    "product.proof.side.h": "避免“漂亮的死胡同”",
-    "product.proof.side.p": "执行链把下一步写死在台面上，绑定真实产物（文件/状态/验证），而不是最后变成一段话就蒸发。",
+    "home.cta.h": "如果你想要一个真的会记住你的 AI，就从这里开始",
+    "home.cta.p": "AaronCore 想做的是一件事：让对话能积累、能回来、能越来越像认识你，而不是最后变成一锅记忆糊。",
+    "product.title": "会在需要时想起你的记忆",
+    "product.subtitle": "AaronCore 让记忆真正参与对话：记忆闪回、时间回忆、人格连续性，以及记忆卫生。",
+    "product.card.continuity.h": "闪回可以很自然",
+    "product.card.continuity.p": "当当前状态和旧线程产生共振时，AaronCore 会把它自然带回来，而不是让用户把前情重讲一遍。",
+    "product.card.tools.h": "你可以直接让它按时间回忆",
+    "product.card.tools.p": "像“我们今天聊了什么”“昨天说到哪了”“上周讨论过什么”这类问题，它会用历史记录加相关记忆片段来回答。",
+    "product.card.verify.h": "它记得该怎么和你说话",
+    "product.card.verify.p": "偏好、反感、关系姿态和交互规则会被压回回复链路，聊天不会每轮都陌生。",
+    "product.card.repair.h": "记忆会越来越锋利，不会越积越脏",
+    "product.card.repair.p": "低信号对话、think 污染和脏上下文会被过滤掉，让连续性保持清爽。",
+    "product.proof.h": "记忆在真实对话里长什么样",
+    "product.proof.p": "这套记忆不是存档柜，而是会作为闪回、回顾和人格连续性重新进入回复。",
+    "product.proof.side.h": "目标是被记住，不是被硬塞满",
+    "product.proof.side.p": "重点不是把检索结果生硬塞进聊天，而是在对的时候自然把对的记忆带回来。",
 
-    "docs.title": "一张地图，而不是一堵墙",
-    "docs.subtitle": "这是一个冷静的索引页。深挖内容后面再接出去——先让你快速定位与建立信任。",
-    "docs.terms.h": "术语（保持一致）",
-    "docs.terms.p": "Memory=持久化的约束与偏好；Chain=明确的下一步；Verification=完成证据；Repair=收窄失败并稳定路径。",
-    "docs.card.overview.h": "AaronCore 是什么",
-    "docs.card.overview.p": "一个本地优先的运行时循环：记忆、工具、验证、修复与连续性合在一起。",
-    "docs.card.memory.h": "哪些东西会被记住（为什么）",
-    "docs.card.memory.p": "偏好、约束、项目上下文与长期任务姿态——有意写入，而不是神秘自动。",
-    "docs.card.exec.h": "执行链 vs 回复",
-    "docs.card.exec.p": "把请求变成明确的下一步，并把产物绑定回来：文件、Shell、运行时状态。",
-    "docs.card.tools.h": "工具调用模型",
-    "docs.card.tools.p": "工具是第一公民：输入/输出可追踪，结果可复核。",
-    "docs.card.verify.h": "什么算完成",
-    "docs.card.verify.p": "完成由检查与证据定义，不由语气或自信度定义。",
-    "docs.card.repair.h": "反馈闭环",
-    "docs.card.repair.p": "失败收窄、路径修复、经验复利——不隐藏轨迹。",
+    "docs.title": "记忆系统地图",
+    "docs.subtitle": "先看用户能直接感知到的部分：记忆闪回、时间回忆、人格连续性和记忆卫生。",
+    "docs.terms.h": "核心术语",
+    "docs.terms.p": "Flashback=旧线程共振联想；Recall=按时间总结对话；Persona=偏好、关系与说话风格连续；Hygiene=在写入前过滤脏记忆。",
+    "docs.card.overview.h": "这套记忆系统是什么",
+    "docs.card.overview.p": "一个分层记忆系统：会写入、过滤、召回，并把记忆重新送回对话。",
+    "docs.card.memory.h": "记忆闪回",
+    "docs.card.memory.p": "旧的修复线程、情绪线索或项目状态会自然浮上来，而不是变成关键词命中清单。",
+    "docs.card.exec.h": "时间回忆",
+    "docs.card.exec.p": "你可以直接问今天、昨天或上周聊过什么，它会结合聊天历史和相关记忆片段来回顾。",
+    "docs.card.tools.h": "人格连续性",
+    "docs.card.tools.p": "偏好、反感、城市、关系姿态和交互规则会重新影响 AaronCore 的回复方式。",
+    "docs.card.verify.h": "记忆卫生",
+    "docs.card.verify.p": "think 块、低信号对话和污染上下文会被过滤，让长期连续性保持更干净。",
+    "docs.card.repair.h": "召回姿态",
+    "docs.card.repair.p": "flashback 的主体是状态共振和任务连续性，不是普通关键词检索。",
     "docs.card.bounds.h": "边界",
-    "docs.card.bounds.p": "本地优先姿态、显式权限，以及清晰的自动化触达范围。",
+    "docs.card.bounds.p": "各层记忆职责分开，事实、经历、规则和知识不会混成一个桶。",
     "docs.card.release.h": "内测与下载",
     "docs.card.release.p": "公开构建准备好才挂。现在的诚实路径是邮箱内测。",
-    "docs.deep.h": "想看更完整的运行时说明？",
-    "docs.deep.p": "当公开文档站接好后，这页会成为入口地图。",
+    "docs.deep.h": "想看更深的架构写法？",
+    "docs.deep.p": "公开文档以后可以继续展开，这里先做一张用户能快速理解的记忆地图。",
 
     "changelog.title": "更新记录（对外表面）",
     "changelog.subtitle": "官网与里程碑的轻量时间线。诚实胜过夸张。",
@@ -361,47 +371,53 @@ const I18N = {
     "lang.ko": "한국어"
   },
   ja: {
-    "brand.subline": "記憶優先の実行コア。仕事を続けるために。",
+    "brand.subline": "Memory that comes back naturally",
     "nav.home": "ホーム",
     "nav.product": "製品",
     "nav.docs": "ドキュメント",
     "nav.changelog": "更新履歴",
-    "cta.joinBeta": "AaronCore をダウンロード",
-    "cta.earlyAccess": "AaronCore をダウンロード",
+    "screen.hero.label": "First Screen",
+    "screen.arch.label": "Second Screen",
+    "screen.heroIntro.label": "Brand Opening",
+    "screen.runtime.label": "Memory Runtime",
+    "cta.joinBeta": "ベータに参加",
+    "cta.earlyAccess": "ベータに参加",
     "cta.seeProof": "プロダクトの証拠を見る",
-    "hero.h1": "AIの仕事を“続ける”ための、落ち着いたランタイム。",
-    "hero.title": "記憶・ツール呼び出し・継続性。演出は不要。",
-    "hero.subtitle": "1つの依頼を、ファイル/ツール/セッションを越える実行チェーンへ。",
-    "hero.lede": "AaronCoreは、チャットが途切れがちな瞬間（リポジトリ変更、ツール実行、検証、次の一手）を支えるために作られました。",
-    "footer.tagline": "チャット以上を求める人へ。",
-    "hero.note": "LOCAL-FIRST · MEMORY-FIRST · CONTINUITY-FIRST",
-    "home.stage.kicker": "Desktop runtime",
-    "home.stage.h": "One surface for memory, execution, and ongoing task state.",
-    "home.stage.p": "A calmer product shell for the parts that matter most: understanding intent, loading memory, calling tools, verifying changes, and keeping continuity intact.",
-    "home.panel.exec.label": "Execution layer",
-    "home.panel.exec.h": "Requests become task chains — not polished dead ends.",
-    "home.panel.exec.p": "Files, shell, memory, and verification stay connected inside one runtime surface.",
-    "home.panel.posture.label": "System posture",
-    "home.panel.posture.h": "Built to carry work forward",
-    "home.panel.posture.p": "State stays visible, outcomes are reviewable, and the next step stays ready.",
-    "home.rail.1.h": "Understand",
-    "home.rail.1.p": "turn intent into a real target",
-    "home.rail.2.h": "Plan",
-    "home.rail.2.p": "form a chain instead of a guess",
-    "home.rail.3.h": "Execute",
-    "home.rail.3.p": "move through files, shell, and state",
-    "home.rail.4.h": "Stabilize",
-    "home.rail.4.p": "verify, repair, and carry forward",
-    "home.how.h": "From one request to one execution chain",
-    "home.how.p": "Load relevant memory, form a chain, execute through tools, verify outcomes, and carry state forward.",
-    "home.how.step1.h": "Remember",
-    "home.how.step1.p": "load constraints, preferences, history, and long-term signals",
-    "home.how.step2.h": "Plan",
-    "home.how.step2.p": "turn intent into a concrete chain with a next step",
-    "home.how.step3.h": "Act",
-    "home.how.step3.p": "call tools, change real artifacts, and keep the state attached",
-    "home.how.step4.h": "Improve",
-    "home.how.step4.p": "close the loop with feedback, repair, and compounding experience",
+    "hero.h1Line1": "本当のコアは",
+    "hero.h1Line2": "記憶から",
+    "hero.h1Line3": "始まる。",
+    "hero.title": "When AI remembers you, everything that follows can continue naturally.",
+    "hero.subtitle": "Familiarity, context, and task state should not be wiped clean every turn.",
+    "hero.lede": "AaronCore does not treat memory as a standalone feature. It turns memory into the starting point for understanding, continuity, and action.",
+    "footer.tagline": "For people who want AI to remember, not restart.",
+    "hero.note": "Memory · Continuity · Action",
+    "home.stage.kicker": "Memory runtime",
+    "home.stage.h": "Memory that shows up in conversation, not just in storage.",
+    "home.stage.p": "AaronCore can surface old threads as natural flashbacks, answer what you talked about today, and keep preferences in the loop.",
+    "home.panel.exec.label": "What you feel",
+    "home.panel.exec.h": "The assistant can naturally pick up old threads without making you repeat yourself.",
+    "home.panel.exec.p": "Flashback hints, time recall, and persona memory all feed back into the reply.",
+    "home.panel.posture.label": "Why it lands",
+    "home.panel.posture.h": "Chat feels remembered, not restarted",
+    "home.panel.posture.p": "Preferences, relationship tone, and ongoing work stay attached instead of resetting every session.",
+    "home.rail.1.h": "Remember",
+    "home.rail.1.p": "keep preferences, rules, and relationship posture attached",
+    "home.rail.2.h": "Flash back",
+    "home.rail.2.p": "surface old threads through state resonance",
+    "home.rail.3.h": "Recall",
+    "home.rail.3.p": "answer what you talked about today, yesterday, or last week",
+    "home.rail.4.h": "Stay consistent",
+    "home.rail.4.p": "keep tone and continuity steady across turns",
+    "home.how.h": "Why the conversations feel different",
+    "home.how.p": "AaronCore separates memory into layers, filters noise, and feeds the right memory back at the right moment.",
+    "home.how.step1.h": "Flashback feels natural",
+    "home.how.step1.p": "old threads resurface through state resonance, not crude keyword spam",
+    "home.how.step2.h": "Time recall is built in",
+    "home.how.step2.p": "you can ask what you talked about today, yesterday, or last week",
+    "home.how.step3.h": "Persona keeps showing up",
+    "home.how.step3.p": "preferences, dislikes, city, relationship, and rules feed back into replies",
+    "home.how.step4.h": "Memory stays clean",
+    "home.how.step4.p": "low-signal turns and polluted context are filtered before they become memory",
     "home.cap.h": "Built for execution, not just answers",
     "home.cap.p": "Memory, execution, routing, and verification live inside one runtime designed to move work forward.",
     "home.cap.exec.h": "The point is not to answer beautifully. The point is to move the work.",
@@ -412,19 +428,19 @@ const I18N = {
     "home.cap.route.p": "The runtime activates the right surface at the right time — without noisy keyword theatrics.",
     "home.cap.repair.h": "Correct through evidence, not prettier retries",
     "home.cap.repair.p": "When something slips, the loop narrows the failure, repairs the path, and verifies again.",
-    "home.signal.h": "Proof without theater",
-    "home.signal.p": "The work should leave a trail. Here is a compact example of how a request becomes a chain you can audit.",
+    "home.signal.h": "A memory proof",
+    "home.signal.p": "These features are already implemented. The point is not bigger storage. The point is better conversation.",
     "home.use.h": "Who AaronCore is for",
     "home.use.p": "For people who want AI to carry real work across sessions instead of resetting at every prompt.",
     "home.use.b1": "Plan development work, connect tools, and keep execution moving",
     "home.use.b2": "Organize materials, shape scripts, and carry a production flow",
     "home.use.b3": "Remember habits, follow tasks, and cut repetitive overhead",
     "home.use.b4": "Push AI from sounding smart toward doing real work",
-    "home.diff.h": "Why AaronCore feels different",
-    "home.diff.p": "AaronCore carries state, tools, and forward motion through a real runtime loop.",
-    "home.diff.c1": "Recall that accumulates and returns",
-    "home.diff.c2": "Forward progress over prettier answers",
-    "home.diff.c3": "Feedback and repair compound over time",
+    "home.diff.h": "What makes the memory feel stronger",
+    "home.diff.p": "AaronCore is built around memory the user can actually feel: natural flashback, time recall, and cleaner long-term continuity.",
+    "home.diff.c1": "Old threads can come back like memory, not search results",
+    "home.diff.c2": "You can ask what you talked about today, yesterday, or last week",
+    "home.diff.c3": "Noise is filtered so continuity stays sharp instead of bloated",
     "home.trust.h": "Transparent by design",
     "home.trust.p": "Make the path from request to result understandable, reviewable, and dependable.",
     "home.trust.i1.h": "Traceable steps",
@@ -436,45 +452,45 @@ const I18N = {
     "home.trust.i4.h": "Extendable boundaries",
     "home.trust.i4.p": "Clear on what it can do now and what can expand later.",
     "home.docs.h": "Go deeper when you want the runtime model, memory system, and execution details",
-    "home.cta.h": "Give your AI a real core",
-    "home.cta.p": "Public build is not attached yet, but the beta path and official entry surface are in place.",
-    "product.title": "仕事を続けるためのランタイム",
-    "product.subtitle": "記憶・ツール呼び出し・検証・継続性を、落ち着いた1つの面にまとめた実行チェーン設計。",
-    "product.card.continuity.h": "状態が次のプロンプトに残る",
-    "product.card.continuity.p": "タスク、制約、次の一手が可視で再利用可能。毎回チャット履歴に埋もれてリセットしない。",
-    "product.card.tools.h": "ツール呼び出しが第一級",
-    "product.card.tools.p": "ファイル、Shell、ランタイム操作が会話に紐づき、依頼から結果まで追跡可能なチェーンを保つ。",
-    "product.card.verify.h": "結果はレビューできる",
-    "product.card.verify.p": "完了は雰囲気ではない。何が変わり、何を確認し、何が残るかが見える。",
-    "product.card.repair.h": "フィードバックで次が鋭くなる",
-    "product.card.repair.p": "失敗を絞り込み、経路を修復し、再検証して経験を積み上げる。",
-    "product.proof.h": "実行チェーンの形",
-    "product.proof.p": "短く、人間が読めて監査できる。基本姿勢：仕事をして、証跡を残す。",
-    "product.proof.side.h": "“磨かれた行き止まり”を避ける",
-    "product.proof.side.p": "次の一手を明示し、成果物（ファイル/状態/検証）に結びつける。最後の段落で蒸発しない。",
+    "home.cta.h": "If you want AI that remembers, start here",
+    "home.cta.p": "AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.",
+    "product.title": "Memory that comes back when it matters",
+    "product.subtitle": "AaronCore turns memory into a live part of conversation: flashback, time recall, persona continuity, and memory hygiene.",
+    "product.card.continuity.h": "Flashback can feel natural",
+    "product.card.continuity.p": "When the current state resonates with an older thread, AaronCore can bring it back without making the user restate everything.",
+    "product.card.tools.h": "You can ask for time recall",
+    "product.card.tools.p": "It can answer questions like what you talked about today, yesterday, or last week using history plus relevant memory snippets.",
+    "product.card.verify.h": "It remembers how to talk to you",
+    "product.card.verify.p": "Preferences, dislikes, relationship posture, and interaction rules are condensed back into the reply path.",
+    "product.card.repair.h": "Memory stays sharp, not bloated",
+    "product.card.repair.p": "Low-signal turns, think blocks, and polluted context are filtered so continuity gets cleaner over time.",
+    "product.proof.h": "What memory looks like in practice",
+    "product.proof.p": "The memory system is not just storage. It comes back into the reply as flashback, recap, and persona continuity.",
+    "product.proof.side.h": "Designed to feel remembered, not artificially stuffed",
+    "product.proof.side.p": "The goal is to bring back the right memory at the right moment, naturally.",
 
-    "docs.title": "壁ではなく、地図",
-    "docs.subtitle": "落ち着いた索引ページ。深掘りは後でリンクし、まずは把握と信頼を。",
-    "docs.terms.h": "用語（統一）",
-    "docs.terms.p": "Memory=永続的な制約と好み。Chain=明確な次の一手。Verification=完了の証拠。Repair=失敗を絞り込み経路を安定化。",
-    "docs.card.overview.h": "AaronCoreとは",
-    "docs.card.overview.p": "継続性のためのローカルファースト・ランタイム：記憶、ツール、検証、修復を1つのループに。",
-    "docs.card.memory.h": "何が残る（なぜ）",
-    "docs.card.memory.p": "好み、制約、プロジェクト文脈、長期タスク姿勢。意図的に書き込まれ、勝手に増えない。",
-    "docs.card.exec.h": "チェーン vs 返信",
-    "docs.card.exec.p": "依頼を明確な次の一手へ。成果物（ファイル/Shell/状態）を紐づける。",
-    "docs.card.tools.h": "ツール呼び出しモデル",
-    "docs.card.tools.p": "入出力が追跡でき、結果がレビューできる“第一級”のツール。",
-    "docs.card.verify.h": "何が完了か",
-    "docs.card.verify.p": "完了はチェックと証拠で定義される。自信や口調ではない。",
-    "docs.card.repair.h": "フィードバックループ",
-    "docs.card.repair.p": "失敗を絞り込み、修復し、経験を積み上げる。証跡は隠さない。",
+    "docs.title": "A map to the memory system",
+    "docs.subtitle": "Start with the parts users can feel: flashback, time recall, persona continuity, and memory hygiene.",
+    "docs.terms.h": "Core terms",
+    "docs.terms.p": "Flashback = old-thread resonance. Recall = summarize conversation by time. Persona = preferences, relationship, and style continuity. Hygiene = filter noisy memory before it sticks.",
+    "docs.card.overview.h": "What the memory system is",
+    "docs.card.overview.p": "A layered memory stack that writes, filters, recalls, and reinjects memory back into conversation.",
+    "docs.card.memory.h": "Flashback",
+    "docs.card.memory.p": "Old repair threads, emotional cues, or project states can resurface as natural hints instead of keyword dumps.",
+    "docs.card.exec.h": "Time recall",
+    "docs.card.exec.p": "Ask what you talked about today, yesterday, or last week and get a recap from chat history plus memory snippets.",
+    "docs.card.tools.h": "Persona continuity",
+    "docs.card.tools.p": "Preferences, dislikes, city, relationship posture, and interaction rules feed back into how AaronCore replies.",
+    "docs.card.verify.h": "Memory hygiene",
+    "docs.card.verify.p": "Think blocks, low-signal turns, and polluted context are filtered so long-term continuity stays cleaner.",
+    "docs.card.repair.h": "Retrieval posture",
+    "docs.card.repair.p": "Flashback is driven by resonance and continuity, not just plain keyword hits.",
     "docs.card.bounds.h": "境界",
-    "docs.card.bounds.p": "ローカルファースト、明示的な権限、触れられる範囲の透明性。",
+    "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
     "docs.card.release.h": "ベータとダウンロード",
     "docs.card.release.p": "公開ビルドは準備が整ってから。今はメールボックスが正直な導線。",
-    "docs.deep.h": "より詳しいランタイム解説が必要？",
-    "docs.deep.p": "公開ドキュメントが整ったら、この索引が入口になります。",
+    "docs.deep.h": "Want the deeper architecture write-up?",
+    "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
     "changelog.title": "変更履歴（公開面）",
     "changelog.subtitle": "公式サイトと初期マイルストーンの軽量タイムライン。誇張より誠実。",
@@ -492,47 +508,53 @@ const I18N = {
     "lang.ko": "한국어"
   },
   ko: {
-    "brand.subline": "메모리 우선 실행 코어. 일을 계속 이어가게.",
+    "brand.subline": "Memory that comes back naturally",
     "nav.home": "홈",
     "nav.product": "제품",
     "nav.docs": "문서",
     "nav.changelog": "업데이트",
-    "cta.joinBeta": "AaronCore 다운로드",
-    "cta.earlyAccess": "AaronCore 다운로드",
+    "screen.hero.label": "First Screen",
+    "screen.arch.label": "Second Screen",
+    "screen.heroIntro.label": "Brand Opening",
+    "screen.runtime.label": "Memory Runtime",
+    "cta.joinBeta": "베타 참여",
+    "cta.earlyAccess": "베타 참여",
     "cta.seeProof": "제품 증거 보기",
-    "hero.h1": "AI 작업이 ‘계속’ 이어지도록 하는 차분한 런타임.",
-    "hero.title": "메모리, 툴 호출, 연속성 — 과장은 없이.",
-    "hero.subtitle": "한 번의 요청을 파일/툴/세션을 넘는 실행 체인으로.",
-    "hero.lede": "AaronCore는 채팅 제품이 끊기기 쉬운 순간(레포 변경, 툴 실행, 검증, 다음 단계)을 위해 만들어졌습니다.",
-    "footer.tagline": "채팅 이상의 무언가가 필요한 사람을 위해.",
-    "hero.note": "LOCAL-FIRST · MEMORY-FIRST · CONTINUITY-FIRST",
-    "home.stage.kicker": "Desktop runtime",
-    "home.stage.h": "One surface for memory, execution, and ongoing task state.",
-    "home.stage.p": "A calmer product shell: understand intent, load memory, call tools, verify changes, and keep continuity intact.",
-    "home.panel.exec.label": "Execution layer",
-    "home.panel.exec.h": "Requests become task chains — not polished dead ends.",
-    "home.panel.exec.p": "Files, shell, memory, and verification stay connected inside one runtime surface.",
-    "home.panel.posture.label": "System posture",
-    "home.panel.posture.h": "Built to carry work forward",
-    "home.panel.posture.p": "State stays visible, outcomes are reviewable, and the next step stays ready.",
-    "home.rail.1.h": "Understand",
-    "home.rail.1.p": "turn intent into a real target",
-    "home.rail.2.h": "Plan",
-    "home.rail.2.p": "form a chain instead of a guess",
-    "home.rail.3.h": "Execute",
-    "home.rail.3.p": "move through files, shell, and state",
-    "home.rail.4.h": "Stabilize",
-    "home.rail.4.p": "verify, repair, and carry forward",
-    "home.how.h": "From one request to one execution chain",
-    "home.how.p": "Load relevant memory, form a chain, execute through tools, verify outcomes, and carry state forward.",
-    "home.how.step1.h": "Remember",
-    "home.how.step1.p": "load constraints, preferences, history, and long-term signals",
-    "home.how.step2.h": "Plan",
-    "home.how.step2.p": "turn intent into a concrete chain with a next step",
-    "home.how.step3.h": "Act",
-    "home.how.step3.p": "call tools, change real artifacts, and keep the state attached",
-    "home.how.step4.h": "Improve",
-    "home.how.step4.p": "close the loop with feedback, repair, and compounding experience",
+    "hero.h1Line1": "진짜 코어는",
+    "hero.h1Line2": "기억에서",
+    "hero.h1Line3": "시작된다.",
+    "hero.title": "When AI remembers you, everything that follows can continue naturally.",
+    "hero.subtitle": "Familiarity, context, and task state should not be wiped clean every turn.",
+    "hero.lede": "AaronCore does not treat memory as a standalone feature. It turns memory into the starting point for understanding, continuity, and action.",
+    "footer.tagline": "For people who want AI to remember, not restart.",
+    "hero.note": "Memory · Continuity · Action",
+    "home.stage.kicker": "Memory runtime",
+    "home.stage.h": "Memory that shows up in conversation, not just in storage.",
+    "home.stage.p": "AaronCore can surface old threads as natural flashbacks, answer what you talked about today, and keep preferences in the loop.",
+    "home.panel.exec.label": "What you feel",
+    "home.panel.exec.h": "The assistant can naturally pick up old threads without making you repeat yourself.",
+    "home.panel.exec.p": "Flashback hints, time recall, and persona memory all feed back into the reply.",
+    "home.panel.posture.label": "Why it lands",
+    "home.panel.posture.h": "Chat feels remembered, not restarted",
+    "home.panel.posture.p": "Preferences, relationship tone, and ongoing work stay attached instead of resetting every session.",
+    "home.rail.1.h": "Remember",
+    "home.rail.1.p": "keep preferences, rules, and relationship posture attached",
+    "home.rail.2.h": "Flash back",
+    "home.rail.2.p": "surface old threads through state resonance",
+    "home.rail.3.h": "Recall",
+    "home.rail.3.p": "answer what you talked about today, yesterday, or last week",
+    "home.rail.4.h": "Stay consistent",
+    "home.rail.4.p": "keep tone and continuity steady across turns",
+    "home.how.h": "Why the conversations feel different",
+    "home.how.p": "AaronCore separates memory into layers, filters noise, and feeds the right memory back at the right moment.",
+    "home.how.step1.h": "Flashback feels natural",
+    "home.how.step1.p": "old threads resurface through state resonance, not crude keyword spam",
+    "home.how.step2.h": "Time recall is built in",
+    "home.how.step2.p": "you can ask what you talked about today, yesterday, or last week",
+    "home.how.step3.h": "Persona keeps showing up",
+    "home.how.step3.p": "preferences, dislikes, city, relationship, and rules feed back into replies",
+    "home.how.step4.h": "Memory stays clean",
+    "home.how.step4.p": "low-signal turns and polluted context are filtered before they become memory",
     "home.cap.h": "Built for execution, not just answers",
     "home.cap.p": "Memory, execution, routing, and verification live inside one runtime designed to move work forward.",
     "home.cap.exec.h": "Not beautiful answers. Forward progress.",
@@ -543,19 +565,19 @@ const I18N = {
     "home.cap.route.p": "Activate the right surface at the right time — without noisy keyword theatrics.",
     "home.cap.repair.h": "Correct through evidence",
     "home.cap.repair.p": "Narrow failures, repair the path, and verify again.",
-    "home.signal.h": "Proof without theater",
-    "home.signal.p": "The work should leave a trail. A compact example shows how requests become auditable chains.",
+    "home.signal.h": "A memory proof",
+    "home.signal.p": "These features are already implemented. The point is not bigger storage. The point is better conversation.",
     "home.use.h": "Who AaronCore is for",
     "home.use.p": "For people who want AI to carry real work across sessions instead of resetting at every prompt.",
     "home.use.b1": "Plan development work, connect tools, and keep execution moving",
     "home.use.b2": "Organize materials, shape scripts, and carry a production flow",
     "home.use.b3": "Remember habits, follow tasks, and cut repetitive overhead",
     "home.use.b4": "Push AI from sounding smart toward doing real work",
-    "home.diff.h": "Why AaronCore feels different",
-    "home.diff.p": "Carry state, tools, and forward motion through a real runtime loop.",
-    "home.diff.c1": "Recall that accumulates and returns",
-    "home.diff.c2": "Forward progress over prettier answers",
-    "home.diff.c3": "Feedback and repair compound over time",
+    "home.diff.h": "What makes the memory feel stronger",
+    "home.diff.p": "AaronCore is built around memory the user can actually feel: natural flashback, time recall, and cleaner long-term continuity.",
+    "home.diff.c1": "Old threads can come back like memory, not search results",
+    "home.diff.c2": "You can ask what you talked about today, yesterday, or last week",
+    "home.diff.c3": "Noise is filtered so continuity stays sharp instead of bloated",
     "home.trust.h": "Transparent by design",
     "home.trust.p": "Make the path from request to result understandable, reviewable, and dependable.",
     "home.trust.i1.h": "Traceable steps",
@@ -567,45 +589,45 @@ const I18N = {
     "home.trust.i4.h": "Extendable boundaries",
     "home.trust.i4.p": "Clear on what it can do now and what can expand later.",
     "home.docs.h": "Go deeper when you want the runtime model, memory system, and execution details",
-    "home.cta.h": "Give your AI a real core",
-    "home.cta.p": "Public build is not attached yet, but the beta path and official entry surface are in place.",
-    "product.title": "일을 계속 이어가게 하는 런타임",
-    "product.subtitle": "메모리, 툴 호출, 검증, 연속성을 하나의 차분한 작업면에 묶은 실행 체인 중심 설계.",
-    "product.card.continuity.h": "상태가 다음 프롬프트까지 이어짐",
-    "product.card.continuity.p": "작업, 제약, 다음 단계가 계속 보이고 재사용 가능하며 매번 채팅 히스토리로 리셋되지 않습니다.",
-    "product.card.tools.h": "툴 호출은 1급 구성요소",
-    "product.card.tools.p": "파일, 셸, 런타임 액션이 대화에 붙어 있어 요청→결과 체인이 추적 가능합니다.",
-    "product.card.verify.h": "결과는 검토 가능",
-    "product.card.verify.p": "완료는 분위기가 아닙니다. 무엇이 바뀌고 무엇을 확인했는지, 무엇이 남았는지 보여줍니다.",
-    "product.card.repair.h": "피드백으로 다음 실행이 날카로워짐",
-    "product.card.repair.p": "실패를 좁히고 경로를 수리한 뒤 다시 검증하며 경험을 축적합니다.",
-    "product.proof.h": "실행 체인은 이렇게 보입니다",
-    "product.proof.p": "짧고 읽기 쉽고 감사 가능합니다. 기본 자세: 일을 하고, 흔적을 남긴다.",
-    "product.proof.side.h": "“예쁜 막다른길”을 피하기 위해",
-    "product.proof.side.p": "다음 단계를 명시하고 산출물(파일/상태/검증)에 붙입니다. 마지막 문단으로 증발하지 않습니다.",
+    "home.cta.h": "If you want AI that remembers, start here",
+    "home.cta.p": "AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.",
+    "product.title": "Memory that comes back when it matters",
+    "product.subtitle": "AaronCore turns memory into a live part of conversation: flashback, time recall, persona continuity, and memory hygiene.",
+    "product.card.continuity.h": "Flashback can feel natural",
+    "product.card.continuity.p": "When the current state resonates with an older thread, AaronCore can bring it back without making the user restate everything.",
+    "product.card.tools.h": "You can ask for time recall",
+    "product.card.tools.p": "It can answer questions like what you talked about today, yesterday, or last week using history plus relevant memory snippets.",
+    "product.card.verify.h": "It remembers how to talk to you",
+    "product.card.verify.p": "Preferences, dislikes, relationship posture, and interaction rules are condensed back into the reply path.",
+    "product.card.repair.h": "Memory stays sharp, not bloated",
+    "product.card.repair.p": "Low-signal turns, think blocks, and polluted context are filtered so continuity gets cleaner over time.",
+    "product.proof.h": "What memory looks like in practice",
+    "product.proof.p": "The memory system is not just storage. It comes back into the reply as flashback, recap, and persona continuity.",
+    "product.proof.side.h": "Designed to feel remembered, not artificially stuffed",
+    "product.proof.side.p": "The goal is to bring back the right memory at the right moment, naturally.",
 
-    "docs.title": "벽이 아니라 지도",
-    "docs.subtitle": "차분한 인덱스 페이지입니다. 깊은 문서는 나중에 연결하고, 먼저 방향과 신뢰를 잡습니다.",
-    "docs.terms.h": "용어(일관 유지)",
-    "docs.terms.p": "Memory=지속되는 제약과 선호. Chain=명시적 다음 단계. Verification=완료 증거. Repair=실패를 좁혀 경로 안정화.",
-    "docs.card.overview.h": "AaronCore란",
-    "docs.card.overview.p": "연속성을 위한 로컬-퍼스트 런타임: 메모리, 툴, 검증, 수리를 하나의 루프로.",
-    "docs.card.memory.h": "무엇이 남는가(왜)",
-    "docs.card.memory.p": "선호, 제약, 프로젝트 맥락, 장기 작업 자세를 의도적으로 기록합니다.",
-    "docs.card.exec.h": "체인 vs 답변",
-    "docs.card.exec.p": "요청을 다음 단계로 바꾸고 산출물(파일/셸/상태)을 붙입니다.",
-    "docs.card.tools.h": "툴 호출 모델",
-    "docs.card.tools.p": "입출력이 추적되고 결과가 검토 가능한 1급 툴.",
-    "docs.card.verify.h": "무엇이 완료인가",
-    "docs.card.verify.p": "완료는 체크와 증거로 정의됩니다. 톤이나 자신감이 아닙니다.",
-    "docs.card.repair.h": "피드백 루프",
-    "docs.card.repair.p": "실패를 좁히고 수리하며 경험을 축적합니다. 흔적을 숨기지 않습니다.",
+    "docs.title": "A map to the memory system",
+    "docs.subtitle": "Start with the parts users can feel: flashback, time recall, persona continuity, and memory hygiene.",
+    "docs.terms.h": "Core terms",
+    "docs.terms.p": "Flashback = old-thread resonance. Recall = summarize conversation by time. Persona = preferences, relationship, and style continuity. Hygiene = filter noisy memory before it sticks.",
+    "docs.card.overview.h": "What the memory system is",
+    "docs.card.overview.p": "A layered memory stack that writes, filters, recalls, and reinjects memory back into conversation.",
+    "docs.card.memory.h": "Flashback",
+    "docs.card.memory.p": "Old repair threads, emotional cues, or project states can resurface as natural hints instead of keyword dumps.",
+    "docs.card.exec.h": "Time recall",
+    "docs.card.exec.p": "Ask what you talked about today, yesterday, or last week and get a recap from chat history plus memory snippets.",
+    "docs.card.tools.h": "Persona continuity",
+    "docs.card.tools.p": "Preferences, dislikes, city, relationship posture, and interaction rules feed back into how AaronCore replies.",
+    "docs.card.verify.h": "Memory hygiene",
+    "docs.card.verify.p": "Think blocks, low-signal turns, and polluted context are filtered so long-term continuity stays cleaner.",
+    "docs.card.repair.h": "Retrieval posture",
+    "docs.card.repair.p": "Flashback is driven by resonance and continuity, not just plain keyword hits.",
     "docs.card.bounds.h": "경계",
-    "docs.card.bounds.p": "로컬-퍼스트, 명시적 권한, 자동화가 닿는 범위의 투명성.",
+    "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
     "docs.card.release.h": "베타와 다운로드",
     "docs.card.release.p": "공개 빌드는 준비되면 연결합니다. 그전엔 메일 베타가 정직한 경로입니다.",
-    "docs.deep.h": "더 깊은 런타임 설명이 필요하신가요?",
-    "docs.deep.p": "공개 문서가 준비되면 이 인덱스가 입구가 됩니다.",
+    "docs.deep.h": "Want the deeper architecture write-up?",
+    "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
     "changelog.title": "변경 사항(공개 표면)",
     "changelog.subtitle": "공식 사이트와 초기 마일스톤의 가벼운 타임라인. 과장보다 정직.",
@@ -837,6 +859,686 @@ function initProofTabs() {
   }, 5200);
 }
 
+function initHeroMemoryParticles() {
+  const stages = Array.from(document.querySelectorAll("[data-neuron-stage]"));
+  if (!stages.length) {
+    return;
+  }
+
+  const prefersReducedMotion =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const supportsPathMotion =
+    typeof window.SVGPathElement !== "undefined" &&
+    "getPointAtLength" in window.SVGPathElement.prototype;
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const AGENT_X = 660;
+  const AGENT_Y = 344;
+  const LLM_X = 930;
+  const LLM_Y = 316;
+  const pt = (x, y) => ({ x, y });
+  const RADII = {
+    agentCore: 24,
+    agentInner: 42,
+    agentMid: 72,
+    agentPrimary: 112,
+    agentField: 148,
+    agentFar: 198,
+    llmCore: 24,
+    llmSat: 42,
+    llmOuter: 58
+  };
+  const polarPoint = (cx, cy, radius, angleDeg) => {
+    const angle = (angleDeg * Math.PI) / 180;
+    return {
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius
+    };
+  };
+  const branchSpecs = [
+    { id: "agent-core-ring", tone: "warm", width: 1.38, kind: "circle", cx: AGENT_X, cy: AGENT_Y, r: RADII.agentCore },
+    { id: "agent-inner", tone: "secondary", width: 1.08, kind: "circle", cx: AGENT_X, cy: AGENT_Y, r: RADII.agentInner },
+    { id: "agent-mid", tone: "main", width: 1.56, kind: "circle", cx: AGENT_X, cy: AGENT_Y, r: RADII.agentMid },
+    { id: "agent-primary", tone: "main", width: 2.04, kind: "circle", cx: AGENT_X, cy: AGENT_Y, r: RADII.agentPrimary },
+    { id: "agent-field", tone: "secondary", width: 0.76, kind: "circle", cx: AGENT_X, cy: AGENT_Y, r: RADII.agentField },
+    { id: "agent-far", tone: "faint", width: 0.34, kind: "circle", cx: AGENT_X, cy: AGENT_Y, r: RADII.agentFar },
+    { id: "llm-core-ring", tone: "secondary", width: 0.94, kind: "circle", cx: LLM_X, cy: LLM_Y, r: RADII.llmCore }
+  ];
+  const nodeSpecs = [
+    { x: AGENT_X, y: AGENT_Y, kind: "agent-core", size: 6.8 },
+    {
+      x: AGENT_X - 112,
+      y: AGENT_Y + 52,
+      kind: "spark",
+      size: 0.98,
+      motion: {
+        cx: AGENT_X - 110,
+        cy: AGENT_Y + 54,
+        radius: 12,
+        angleDeg: 148,
+        durationMs: 5600,
+        delayMs: 240,
+        radiusWobble: 1.8,
+        wobbleMs: 2200,
+        reverse: true
+      }
+    },
+    {
+      x: AGENT_X + 142,
+      y: AGENT_Y - 84,
+      kind: "satellite",
+      size: 1.96,
+      motion: {
+        cx: AGENT_X + 138,
+        cy: AGENT_Y - 86,
+        radius: 14,
+        angleDeg: 308,
+        durationMs: 6400,
+        delayMs: 1100,
+        radiusWobble: 1.6,
+        wobbleMs: 2600
+      }
+    },
+    {
+      x: AGENT_X + 176,
+      y: AGENT_Y + 74,
+      kind: "warm",
+      size: 1.88,
+      motion: {
+        cx: AGENT_X + 172,
+        cy: AGENT_Y + 72,
+        radius: 16,
+        angleDeg: 36,
+        durationMs: 5200,
+        delayMs: 1820,
+        radiusWobble: 2.2,
+        wobbleMs: 2400
+      }
+    },
+    {
+      x: AGENT_X - 18,
+      y: AGENT_Y - 138,
+      kind: "spark",
+      size: 0.92,
+      motion: {
+        cx: AGENT_X - 20,
+        cy: AGENT_Y - 136,
+        radius: 11,
+        angleDeg: 254,
+        durationMs: 6000,
+        delayMs: 760,
+        radiusWobble: 1.4,
+        wobbleMs: 2000,
+        reverse: true
+      }
+    },
+    {
+      x: LLM_X - 54,
+      y: LLM_Y - 72,
+      kind: "satellite",
+      size: 2.02,
+      motion: {
+        cx: LLM_X - 56,
+        cy: LLM_Y - 70,
+        radius: 16,
+        angleDeg: 228,
+        durationMs: 5600,
+        delayMs: 800,
+        radiusWobble: 2.2,
+        wobbleMs: 2200,
+        reverse: true
+      }
+    },
+    {
+      x: LLM_X + 46,
+      y: LLM_Y + 24,
+      kind: "spark",
+      size: 0.94,
+      motion: {
+        cx: LLM_X + 42,
+        cy: LLM_Y + 22,
+        radius: 20,
+        angleDeg: 18,
+        durationMs: 3600,
+        delayMs: 1600,
+        radiusWobble: 3.2,
+        wobbleMs: 1800
+      }
+    }
+  ];
+  const pulseSpecs = [];
+  const orbiterSpecs = [
+    { branchId: "agent-inner", tone: "cool", size: 1.74, glowSize: 3.8, durationMs: 7200, delayMs: 900 },
+    { branchId: "agent-mid", tone: "warm", size: 2.18, glowSize: 4.9, durationMs: 9800, delayMs: 1400 },
+    { branchId: "agent-primary", tone: "cool", size: 2.34, glowSize: 5.3, durationMs: 13200, delayMs: 5200, reverse: true },
+    { branchId: "agent-field", tone: "cool", size: 1.72, glowSize: 3.9, durationMs: 18600, delayMs: 8600 },
+    { branchId: "llm-core-ring", tone: "cool", size: 1.28, glowSize: 2.8, durationMs: 7200, delayMs: 3100 }
+  ];
+
+  const createSvgNode = (tagName, attrs = {}) => {
+    const node = document.createElementNS(SVG_NS, tagName);
+    Object.entries(attrs).forEach(([key, value]) => {
+      node.setAttribute(key, String(value));
+    });
+    return node;
+  };
+
+  const clearChildren = (node) => {
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  };
+
+  const smoothPath = (points) => {
+    if (points.length < 2) {
+      return "";
+    }
+    let d = `M ${points[0].x} ${points[0].y}`;
+    if (points.length === 2) {
+      return `${d} L ${points[1].x} ${points[1].y}`;
+    }
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const current = points[index];
+      const next = points[index + 1];
+      const midX = (current.x + next.x) / 2;
+      const midY = (current.y + next.y) / 2;
+      d += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
+    }
+    const penultimate = points[points.length - 2];
+    const last = points[points.length - 1];
+    d += ` Q ${penultimate.x} ${penultimate.y} ${last.x} ${last.y}`;
+    return d;
+  };
+
+  const circlePath = (cx, cy, r) =>
+    `M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy}`;
+
+  const normalizeAngleDelta = (value) => {
+    const twoPi = Math.PI * 2;
+    return ((value % twoPi) + twoPi) % twoPi;
+  };
+
+  const arcPath = (cx, cy, r, startAngle, endAngle, sweepFlagOverride = null, largeArcFlagOverride = null) => {
+    const start = {
+      x: cx + (Math.cos(startAngle) * r),
+      y: cy + (Math.sin(startAngle) * r)
+    };
+    const end = {
+      x: cx + (Math.cos(endAngle) * r),
+      y: cy + (Math.sin(endAngle) * r)
+    };
+    const clockwiseDelta = normalizeAngleDelta(endAngle - startAngle);
+    const counterClockwiseDelta = normalizeAngleDelta(startAngle - endAngle);
+    const sweepFlag = sweepFlagOverride === null ? (clockwiseDelta <= counterClockwiseDelta ? 1 : 0) : sweepFlagOverride;
+    const travel = sweepFlag === 1 ? clockwiseDelta : counterClockwiseDelta;
+    const largeArcFlag = largeArcFlagOverride === null ? (travel > Math.PI ? 1 : 0) : largeArcFlagOverride;
+    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${end.x} ${end.y}`;
+  };
+
+  const buildBranchPath = (spec) => {
+    if (spec.kind === "circle") {
+      return circlePath(spec.cx, spec.cy, spec.r);
+    }
+    if (spec.kind === "arc") {
+      return arcPath(spec.cx, spec.cy, spec.r, spec.startAngle, spec.endAngle, spec.sweepFlag, spec.largeArcFlag);
+    }
+    return smoothPath(spec.points || []);
+  };
+
+  const branchStroke = (tone) => {
+    if (tone === "warm") {
+      return "url(#neuron-branch-warm)";
+    }
+    if (tone === "secondary") {
+      return "url(#neuron-branch-secondary)";
+    }
+    if (tone === "faint") {
+      return "rgba(245, 244, 239, 0.085)";
+    }
+    return "url(#neuron-branch-main)";
+  };
+
+  const branchGlowStroke = (tone) => {
+    if (tone === "warm") {
+      return "rgba(217, 119, 87, 0.05)";
+    }
+    if (tone === "secondary") {
+      return "rgba(245, 244, 239, 0.055)";
+    }
+    if (tone === "faint") {
+      return "rgba(245, 244, 239, 0.028)";
+    }
+    return "rgba(245, 244, 239, 0.05)";
+  };
+
+  const branchHighlightStroke = (tone) => {
+    if (tone === "warm") {
+      return "rgba(255, 244, 236, 0.14)";
+    }
+    return "rgba(245, 244, 239, 0.18)";
+  };
+
+  stages.forEach((stage) => {
+    const svg = stage.querySelector("[data-neuron-field]");
+    const faintLayer = stage.querySelector("[data-neuron-faint]");
+    const branchLayer = stage.querySelector("[data-neuron-branches]");
+    const nodeLayer = stage.querySelector("[data-neuron-nodes]");
+    const pulseLayer = stage.querySelector("[data-neuron-pulses]");
+
+    if (!svg || !faintLayer || !branchLayer || !nodeLayer || !pulseLayer) {
+      return;
+    }
+
+    clearChildren(faintLayer);
+    clearChildren(branchLayer);
+    clearChildren(nodeLayer);
+    clearChildren(pulseLayer);
+
+    const branchPaths = new Map();
+    branchSpecs.forEach((spec) => {
+      const layer = spec.tone === "faint" ? faintLayer : branchLayer;
+      const d = buildBranchPath(spec);
+
+      const glow = createSvgNode("path", {
+        d,
+        class: `neuron-trace neuron-trace-glow neuron-trace-${spec.tone}`,
+        "data-tone": spec.tone
+      });
+      glow.setAttribute("stroke", branchGlowStroke(spec.tone));
+        glow.setAttribute("stroke-width", (spec.width * (spec.tone === "faint" ? 1.14 : 1.34)).toFixed(2));
+      layer.appendChild(glow);
+
+      const main = createSvgNode("path", {
+        d,
+        id: `neuron-path-${spec.id}`,
+        class: `neuron-trace neuron-trace-main neuron-trace-${spec.tone}`,
+        "data-tone": spec.tone
+      });
+      main.setAttribute("stroke", branchStroke(spec.tone));
+      main.setAttribute("stroke-width", spec.width.toFixed(2));
+      layer.appendChild(main);
+
+      if (spec.tone !== "faint") {
+        const highlight = createSvgNode("path", {
+          d,
+          class: `neuron-trace neuron-trace-highlight neuron-trace-${spec.tone}`,
+          "data-tone": spec.tone
+        });
+        highlight.setAttribute("stroke", branchHighlightStroke(spec.tone));
+        highlight.setAttribute("stroke-width", Math.max(0.52, spec.width * 0.1).toFixed(2));
+        layer.appendChild(highlight);
+      }
+
+      branchPaths.set(spec.id, main);
+    });
+
+    let coreVisual = null;
+    const movingNodes = [];
+    nodeSpecs.forEach((spec) => {
+      if (spec.kind === "core" || spec.kind === "agent-core") {
+        const isAgentCore = spec.kind === "agent-core";
+        const outer = createSvgNode("circle", {
+          cx: spec.x,
+          cy: spec.y,
+          r: (spec.size * (isAgentCore ? 4.45 : 4.0)).toFixed(2),
+          class: "neuron-node-glow"
+        });
+        outer.setAttribute("fill", isAgentCore ? "rgba(217, 119, 87, 0.05)" : "rgba(245, 244, 239, 0.025)");
+        nodeLayer.appendChild(outer);
+
+        const inner = createSvgNode("circle", {
+          cx: spec.x,
+          cy: spec.y,
+          r: (spec.size * (isAgentCore ? 2.72 : 2.25)).toFixed(2),
+          class: "neuron-node-glow"
+        });
+        inner.setAttribute("fill", isAgentCore ? "rgba(255, 228, 214, 0.11)" : "rgba(217, 119, 87, 0.08)");
+        nodeLayer.appendChild(inner);
+
+        const shell = isAgentCore ? createSvgNode("circle", {
+          cx: spec.x,
+          cy: spec.y,
+          r: (spec.size * 1.7).toFixed(2),
+          class: "neuron-node-glow"
+        }) : null;
+        if (shell) {
+          shell.setAttribute("fill", "none");
+          shell.setAttribute("stroke", "rgba(217, 119, 87, 0.18)");
+          shell.setAttribute("stroke-width", "1.02");
+          shell.style.opacity = "0.34";
+          nodeLayer.appendChild(shell);
+        }
+
+        const coreNode = createSvgNode("circle", {
+          cx: spec.x,
+          cy: spec.y,
+          r: (spec.size * (isAgentCore ? 1.28 : 1.18)).toFixed(2),
+          class: "neuron-node-core"
+        });
+        coreNode.setAttribute("fill", "url(#neuron-core-fill)");
+        nodeLayer.appendChild(coreNode);
+
+        const hotCenter = createSvgNode("circle", {
+          cx: spec.x,
+          cy: spec.y,
+          r: (spec.size * (isAgentCore ? 0.32 : 0.38)).toFixed(2),
+          class: "neuron-node-core"
+        });
+        hotCenter.setAttribute("fill", "rgba(255, 255, 255, 0.98)");
+        nodeLayer.appendChild(hotCenter);
+
+        coreVisual = {
+          size: spec.size,
+          isAgentCore,
+          outer,
+          inner,
+          shell,
+          coreNode,
+          hotCenter
+        };
+        return;
+      }
+
+      const glow = createSvgNode("circle", {
+        cx: spec.x,
+        cy: spec.y,
+        r: (spec.size * (spec.kind === "spark" ? 1.5 : 2.15)).toFixed(2),
+        class: "neuron-node-glow"
+      });
+      glow.setAttribute("fill", spec.kind === "warm" ? "rgba(217, 119, 87, 0.04)" : "rgba(245, 244, 239, 0.03)");
+      nodeLayer.appendChild(glow);
+
+      const node = createSvgNode("circle", {
+        cx: spec.x,
+        cy: spec.y,
+        r: spec.size.toFixed(2),
+        class: spec.kind === "spark" ? "neuron-node-spark" : "neuron-node-satellite"
+      });
+      node.setAttribute("fill", spec.kind === "warm" ? "rgba(255, 230, 214, 0.34)" : "url(#neuron-node-fill)");
+      nodeLayer.appendChild(node);
+
+      const center = createSvgNode("circle", {
+        cx: spec.x,
+        cy: spec.y,
+        r: Math.max(1.2, spec.size * 0.22).toFixed(2),
+        class: "neuron-node-spark"
+      });
+      center.setAttribute("fill", "rgba(255, 255, 255, 0.94)");
+      nodeLayer.appendChild(center);
+
+      if (spec.motion) {
+        const seededProgress = ((((spec.motion.delayMs || 0) % spec.motion.durationMs) + spec.motion.durationMs) % spec.motion.durationMs) / spec.motion.durationMs;
+        movingNodes.push({
+          spec,
+          glow,
+          node,
+          center,
+          phase: movingNodes.length * 0.74,
+          progress: spec.motion.reverse ? (1 - seededProgress + 1) % 1 : seededProgress
+        });
+      }
+    });
+
+    stage.dataset.neuronRendered = "true";
+
+    const pulses = supportsPathMotion ? pulseSpecs.map((spec, index) => {
+      const path = branchPaths.get(spec.branchId);
+      if (!path) {
+        return null;
+      }
+
+      const length = path.getTotalLength();
+      if (!length) {
+        return null;
+      }
+
+      const glow = createSvgNode("circle", {
+        cx: "0",
+        cy: "0",
+        r: spec.size.toFixed(2),
+        class: `neuron-pulse ${spec.tone === "warm" ? "neuron-pulse-warm" : "neuron-pulse-cool"}`
+      });
+      const coreNode = createSvgNode("circle", {
+        cx: "0",
+        cy: "0",
+        r: Math.max(0.9, spec.size * 0.22).toFixed(2),
+        class: "neuron-pulse"
+      });
+      coreNode.setAttribute("fill", "rgba(255, 255, 255, 0.96)");
+
+      pulseLayer.appendChild(glow);
+      pulseLayer.appendChild(coreNode);
+
+      const seededProgress = ((((spec.delayMs || 0) % spec.durationMs) + spec.durationMs) % spec.durationMs) / spec.durationMs;
+      return {
+        ...spec,
+        path,
+        length,
+        glow,
+        coreNode,
+        phase: index * 0.82,
+        progress: spec.reverse ? (1 - seededProgress + 1) % 1 : seededProgress
+      };
+    }).filter(Boolean) : [];
+    const orbiters = supportsPathMotion ? orbiterSpecs.map((spec, index) => {
+      const path = branchPaths.get(spec.branchId);
+      if (!path) {
+        return null;
+      }
+
+      const length = path.getTotalLength();
+      if (!length) {
+        return null;
+      }
+
+      const glow = createSvgNode("circle", {
+        cx: "0",
+        cy: "0",
+        r: spec.glowSize.toFixed(2),
+        class: "neuron-node-glow"
+      });
+      glow.setAttribute("fill", spec.tone === "warm" ? "rgba(217, 119, 87, 0.16)" : "rgba(245, 244, 239, 0.12)");
+      pulseLayer.appendChild(glow);
+
+      const shell = createSvgNode("circle", {
+        cx: "0",
+        cy: "0",
+        r: (spec.size * 1.55).toFixed(2),
+        class: "neuron-node-satellite"
+      });
+      shell.setAttribute("fill", "rgba(255, 255, 255, 0.12)");
+      pulseLayer.appendChild(shell);
+
+      const coreNode = createSvgNode("circle", {
+        cx: "0",
+        cy: "0",
+        r: spec.size.toFixed(2),
+        class: "neuron-node-satellite"
+      });
+      coreNode.setAttribute("fill", spec.tone === "warm" ? "rgba(255, 236, 224, 0.94)" : "rgba(255, 255, 255, 0.94)");
+      pulseLayer.appendChild(coreNode);
+
+      const hot = createSvgNode("circle", {
+        cx: "0",
+        cy: "0",
+        r: Math.max(0.9, spec.size * 0.34).toFixed(2),
+        class: "neuron-node-spark"
+      });
+      hot.setAttribute("fill", "rgba(255, 255, 255, 0.98)");
+      pulseLayer.appendChild(hot);
+
+      const seededProgress = ((((spec.delayMs || 0) % spec.durationMs) + spec.durationMs) % spec.durationMs) / spec.durationMs;
+      return {
+        ...spec,
+        path,
+        length,
+        glow,
+        shell,
+        coreNode,
+        hot,
+        phase: index * 1.14,
+        progress: spec.reverse ? (1 - seededProgress + 1) % 1 : seededProgress
+      };
+    }).filter(Boolean) : [];
+
+    const renderPulseFrame = (now) => {
+      if (coreVisual) {
+        const breath = (Math.sin(now / 2400) + 1) / 2;
+        const outerBase = coreVisual.isAgentCore ? 4.15 : 3.7;
+        const outerDrift = coreVisual.isAgentCore ? 0.22 : 0.16;
+        const innerBase = coreVisual.isAgentCore ? 2.56 : 2.04;
+        const innerDrift = coreVisual.isAgentCore ? 0.08 : 0.06;
+        const coreBase = coreVisual.isAgentCore ? 1.12 : 1.02;
+        const coreDrift = coreVisual.isAgentCore ? 0.014 : 0.01;
+        const centerBase = coreVisual.isAgentCore ? 0.24 : 0.28;
+        const centerDrift = coreVisual.isAgentCore ? 0.012 : 0.01;
+        coreVisual.outer.setAttribute("r", (coreVisual.size * (outerBase + breath * outerDrift)).toFixed(2));
+        coreVisual.inner.setAttribute("r", (coreVisual.size * (innerBase + breath * innerDrift)).toFixed(2));
+        if (coreVisual.shell) {
+          coreVisual.shell.setAttribute("r", (coreVisual.size * (1.62 + breath * 0.06)).toFixed(2));
+          coreVisual.shell.style.opacity = (0.26 + breath * 0.08).toFixed(3);
+        }
+        coreVisual.coreNode.setAttribute("r", (coreVisual.size * (coreBase + breath * coreDrift)).toFixed(2));
+        coreVisual.hotCenter.setAttribute("r", (coreVisual.size * (centerBase + breath * centerDrift)).toFixed(2));
+        coreVisual.outer.style.opacity = (coreVisual.isAgentCore ? 0.036 + breath * 0.018 : 0.02 + breath * 0.012).toFixed(3);
+        coreVisual.inner.style.opacity = (coreVisual.isAgentCore ? 0.06 + breath * 0.024 : 0.04 + breath * 0.016).toFixed(3);
+      }
+
+      pulses.forEach((pulse) => {
+        const shimmer = (Math.sin((now / 520) + pulse.phase) + 1) / 2;
+        const point = pulse.path.getPointAtLength(pulse.progress * pulse.length);
+        const opacity = pulse.tone === "warm"
+          ? 0.06 + shimmer * 0.04
+          : 0.05 + shimmer * 0.04;
+
+        pulse.glow.setAttribute("cx", point.x.toFixed(2));
+        pulse.glow.setAttribute("cy", point.y.toFixed(2));
+        pulse.glow.setAttribute("r", pulse.size.toFixed(2));
+        pulse.glow.style.opacity = opacity.toFixed(3);
+
+        pulse.coreNode.setAttribute("cx", point.x.toFixed(2));
+        pulse.coreNode.setAttribute("cy", point.y.toFixed(2));
+        pulse.coreNode.style.opacity = Math.min(0.18, opacity + 0.04).toFixed(3);
+      });
+
+      movingNodes.forEach((particle) => {
+        const motion = particle.spec.motion;
+        if (!motion) {
+          return;
+        }
+        const shimmer = (Math.sin((now / 680) + particle.phase) + 1) / 2;
+        const direction = motion.reverse ? -1 : 1;
+        const angle = motion.angleDeg + (particle.progress * 360 * direction);
+        const radiusOffset = motion.radiusWobble
+          ? Math.sin((now / (motion.wobbleMs || 2200)) + particle.phase) * motion.radiusWobble
+          : 0;
+        const point = polarPoint(motion.cx, motion.cy, motion.radius + radiusOffset, angle);
+
+        particle.glow.setAttribute("cx", point.x.toFixed(2));
+        particle.glow.setAttribute("cy", point.y.toFixed(2));
+        particle.glow.style.opacity = (particle.spec.kind === "spark" ? 0.12 + shimmer * 0.08 : 0.12 + shimmer * 0.08).toFixed(3);
+
+        particle.node.setAttribute("cx", point.x.toFixed(2));
+        particle.node.setAttribute("cy", point.y.toFixed(2));
+        particle.node.style.opacity = (particle.spec.kind === "spark" ? 0.62 + shimmer * 0.14 : 0.62 + shimmer * 0.14).toFixed(3);
+
+        particle.center.setAttribute("cx", point.x.toFixed(2));
+        particle.center.setAttribute("cy", point.y.toFixed(2));
+        particle.center.style.opacity = (0.74 + shimmer * 0.14).toFixed(3);
+      });
+
+      orbiters.forEach((orbiter) => {
+        const shimmer = (Math.sin((now / 720) + orbiter.phase) + 1) / 2;
+        const point = orbiter.path.getPointAtLength(orbiter.progress * orbiter.length);
+        const glowOpacity = orbiter.tone === "warm"
+          ? 0.16 + shimmer * 0.08
+          : 0.14 + shimmer * 0.08;
+
+        orbiter.glow.setAttribute("cx", point.x.toFixed(2));
+        orbiter.glow.setAttribute("cy", point.y.toFixed(2));
+        orbiter.glow.style.opacity = glowOpacity.toFixed(3);
+
+        orbiter.shell.setAttribute("cx", point.x.toFixed(2));
+        orbiter.shell.setAttribute("cy", point.y.toFixed(2));
+        orbiter.shell.style.opacity = (0.3 + shimmer * 0.1).toFixed(3);
+
+        orbiter.coreNode.setAttribute("cx", point.x.toFixed(2));
+        orbiter.coreNode.setAttribute("cy", point.y.toFixed(2));
+        orbiter.coreNode.style.opacity = (0.84 + shimmer * 0.08).toFixed(3);
+
+        orbiter.hot.setAttribute("cx", point.x.toFixed(2));
+        orbiter.hot.setAttribute("cy", point.y.toFixed(2));
+        orbiter.hot.style.opacity = (0.66 + shimmer * 0.12).toFixed(3);
+      });
+    };
+
+    if (prefersReducedMotion || !supportsPathMotion || (!pulses.length && !orbiters.length && !movingNodes.length)) {
+      renderPulseFrame(0);
+      return;
+    }
+
+    let rafId = 0;
+    let lastFrameTime = 0;
+
+    const render = (now) => {
+      if (!lastFrameTime) {
+        lastFrameTime = now;
+      }
+      const dt = Math.min(34, Math.max(12, now - lastFrameTime));
+      lastFrameTime = now;
+
+      pulses.forEach((pulse) => {
+        const direction = pulse.reverse ? -1 : 1;
+        const velocity = (dt / pulse.durationMs) * (pulse.tone === "warm" ? 1.18 : 1) * direction;
+        pulse.progress = (pulse.progress + velocity + 1) % 1;
+      });
+      movingNodes.forEach((particle) => {
+        const motion = particle.spec.motion;
+        if (!motion) {
+          return;
+        }
+        const direction = motion.reverse ? -1 : 1;
+        const velocity = (dt / motion.durationMs) * (particle.spec.kind === "spark" ? 0.92 : 1) * direction;
+        particle.progress = (particle.progress + velocity + 1) % 1;
+      });
+      orbiters.forEach((orbiter) => {
+        const direction = orbiter.reverse ? -1 : 1;
+        const velocity = (dt / orbiter.durationMs) * (orbiter.tone === "warm" ? 1.06 : 1) * direction;
+        orbiter.progress = (orbiter.progress + velocity + 1) % 1;
+      });
+
+      renderPulseFrame(now);
+      rafId = window.requestAnimationFrame(render);
+    };
+
+    const start = () => {
+      if (!rafId) {
+        rafId = window.requestAnimationFrame(render);
+      }
+    };
+
+    const stop = () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      lastFrameTime = 0;
+    };
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stop();
+        return;
+      }
+      start();
+    });
+
+    start();
+  });
+}
+
 function writeYear() {
   const yearSlot = document.getElementById("yearSlot");
   if (yearSlot) {
@@ -848,6 +1550,7 @@ applySiteState();
 initTopNavActiveState();
 applyReleaseState();
 initRevealAnimations();
+initHeroMemoryParticles();
 initRuntimeLoop();
 if (document.querySelector("[data-proof-tab]")) {
   initProofTabs();
