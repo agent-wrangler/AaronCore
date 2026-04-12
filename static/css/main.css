@@ -1,4 +1,4 @@
-/* NovaCore CSS entrypoint */
+/* AaronCore CSS entrypoint */
 /* Keep this file as the single linked stylesheet; section files hold the real rules. */
 @import url("/static/css/sections/shell.css?v=20260409theme94");
 @import url("/static/css/sections/chat.css?v=20260406theme105");

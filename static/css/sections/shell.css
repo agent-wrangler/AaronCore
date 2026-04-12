@@ -420,7 +420,7 @@ body{
  flex-shrink:0;
 }
 
-/* NovaCore标志 */
+/* AaronCore标志 */
 .top-bar-spacer{flex:1;}
 .nova-mark{
  display:flex;
@@ -533,7 +533,7 @@ body.light .top-btn:hover{
  border-color:rgba(180,180,190,0.24);
 }
 
-/* 亮色主题下的NovaCore标志 */
+/* 亮色主题下的AaronCore标志 */
 body.light .nova-logo{
  color:#4b5563;
 }

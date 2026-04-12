@@ -1,7 +1,10 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import core.skills.development_flow as development_flow_module
+
+TEST_REPO_ROOT = Path(__file__).resolve().parents[1].as_posix()
 
 
 def _fake_task(task_id: str, title: str, **extra):
@@ -29,7 +32,7 @@ class DevelopmentFlowDisambiguationTests(unittest.TestCase):
         ), patch.object(
             development_flow_module,
             "get_structured_fs_target_for_task_plan",
-            return_value={"path": "C:/Users/36459/NovaCore/app.py", "option": "inspect", "source": "task_plan"},
+            return_value={"path": f"{TEST_REPO_ROOT}/app.py", "option": "inspect", "source": "task_plan"},
         ), patch.object(
             development_flow_module,
             "get_active_task_working_state",
@@ -71,7 +74,7 @@ class DevelopmentFlowDisambiguationTests(unittest.TestCase):
         ), patch.object(
             development_flow_module,
             "get_structured_fs_target_for_task_plan",
-            return_value={"path": "C:/Users/36459/NovaCore/app.py", "option": "inspect", "source": "task_plan"},
+            return_value={"path": f"{TEST_REPO_ROOT}/app.py", "option": "inspect", "source": "task_plan"},
         ), patch.object(
             development_flow_module,
             "get_active_task_working_state",
@@ -123,7 +126,7 @@ class DevelopmentFlowDisambiguationTests(unittest.TestCase):
         ), patch.object(
             development_flow_module,
             "get_structured_fs_target_for_task_plan",
-            return_value={"path": "C:/Users/36459/NovaCore/app.py", "option": "inspect", "source": "task_plan"},
+            return_value={"path": f"{TEST_REPO_ROOT}/app.py", "option": "inspect", "source": "task_plan"},
         ), patch.object(
             development_flow_module,
             "get_active_task_working_state",

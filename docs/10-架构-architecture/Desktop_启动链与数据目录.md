@@ -8,9 +8,9 @@
 
 在你这台机器上，桌面版 `.exe` 当前优先连的是开发仓库：
 
-- 代码根：`C:\Users\36459\NovaCore`
-- 后端入口：`C:\Users\36459\NovaCore\agent_final.py`
-- 状态目录：`C:\Users\36459\NovaCore\memory_db`
+- 代码根：`C:\Users\36459\AaronCore`
+- 后端入口：`C:\Users\36459\AaronCore\agent_final.py`
+- 状态目录：`C:\Users\36459\AaronCore\memory_db`
 
 不是默认退回打包目录里的 `resources/novacore/memory_db`。
 
@@ -26,13 +26,13 @@
 
 对应文件：
 
-- [desktop_runtime_35/main.js](C:/Users/36459/NovaCore/desktop_runtime_35/main.js)
-- [shell/main.js](C:/Users/36459/NovaCore/shell/main.js)
-- [agent_final.py](C:/Users/36459/NovaCore/agent_final.py)
+- [desktop_runtime_35/main.js](C:/Users/36459/AaronCore/desktop_runtime_35/main.js)
+- [shell/main.js](C:/Users/36459/AaronCore/shell/main.js)
+- [agent_final.py](C:/Users/36459/AaronCore/agent_final.py)
 
 ## `.exe` 怎么决定代码根目录
 
-关键逻辑在 [desktop_runtime_35/main.js](C:/Users/36459/NovaCore/desktop_runtime_35/main.js)。
+关键逻辑在 [desktop_runtime_35/main.js](C:/Users/36459/AaronCore/desktop_runtime_35/main.js)。
 
 打包态下，`NOVACORE_ROOT` 的优先级是：
 
@@ -46,14 +46,14 @@
 
 当前目录关系是：
 
-- 桌面目录：`C:\Users\36459\NovaCoreDesktop`
-- 开发仓库：`C:\Users\36459\NovaCore`
+- 桌面目录：`C:\Users\36459\AaronCoreDesktop`
+- 开发仓库：`C:\Users\36459\AaronCore`
 
 `desktop_runtime_35/main.js` 会把 `NovaCoreDesktop` 去掉 `Desktop` 后缀，尝试找同级的 `NovaCore`。这一台机器刚好存在，所以 `.exe` 会优先命中开发仓库。
 
 ## 后端怎么读数据目录
 
-状态目录不是 shell 决定的，而是 [core/runtime_state/state_loader.py](C:/Users/36459/NovaCore/core/runtime_state/state_loader.py) 决定的。
+状态目录不是 shell 决定的，而是 [core/runtime_state/state_loader.py](C:/Users/36459/AaronCore/core/runtime_state/state_loader.py) 决定的。
 
 里面当前的主路径是：
 
@@ -63,7 +63,7 @@
 
 所以当 `.exe` 连的是开发仓库时，主状态目录自然就是：
 
-- `C:\Users\36459\NovaCore\memory_db`
+- `C:\Users\36459\AaronCore\memory_db`
 
 ## 为什么容易误判成“用了打包目录”
 
@@ -82,14 +82,14 @@
 
 先看这三件事：
 
-1. `desktop_runtime_35/main.js` 里的 `resolveNovaCoreRoot()`
+1. `desktop_runtime_35/main.js` 里的 `resolveAaronCoreRoot()`
 2. `shell/main.js` 里实际启动的 `BACKEND_ENTRY`
 3. `core/runtime_state/state_loader.py` 里的 `PRIMARY_STATE_DIR`
 
 如果还不确定，再看：
 
 - 当前 `8090` 是哪个 `python.exe` 在监听
-- 它的命令行是不是 `C:\Users\36459\NovaCore\agent_final.py`
+- 它的命令行是不是 `C:\Users\36459\AaronCore\agent_final.py`
 
 ## 一句话记忆
 

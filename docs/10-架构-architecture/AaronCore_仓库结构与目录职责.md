@@ -5,7 +5,7 @@
 这份文档只回答一件事：仓库里每个主要目录负责什么。
 
 相关专题：
-- [Desktop_启动链与数据目录.md](C:/Users/36459/NovaCore/docs/10-架构-architecture/Desktop_启动链与数据目录.md)
+- [Desktop_启动链与数据目录.md](C:/Users/36459/AaronCore/docs/10-架构-architecture/Desktop_启动链与数据目录.md)
 
 ## 根目录原则
 
@@ -88,7 +88,7 @@
 - `memory_db/` 和 `memory/` 不是一回事。
   前者是主状态目录，后者是旧接口层。
 - `.exe` 不一定直接吃打包资源。
-  这一点单独见 [Desktop_启动链与数据目录.md](C:/Users/36459/NovaCore/docs/10-架构-architecture/Desktop_启动链与数据目录.md)。
+  这一点单独见 [Desktop_启动链与数据目录.md](C:/Users/36459/AaronCore/docs/10-架构-architecture/Desktop_启动链与数据目录.md)。
 
 ## 后续整理方向
 

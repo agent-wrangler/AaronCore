@@ -1,6 +1,9 @@
 import unittest
+from pathlib import Path
 
 from decision.tool_runtime.memory_tools import execute_memory_tool, format_recall
+
+TEST_REPO_ROOT = Path(__file__).resolve().parents[1].as_posix()
 
 
 class MemoryToolRuntimeTests(unittest.TestCase):
@@ -119,7 +122,7 @@ class MemoryToolRuntimeTests(unittest.TestCase):
                 "summary": "Make recall_memory prefer the active project scope",
             },
             "fs_target": {
-                "path": "C:/Users/36459/NovaCore",
+                "path": TEST_REPO_ROOT,
                 "option": "inspect",
             },
         }
@@ -144,7 +147,7 @@ class MemoryToolRuntimeTests(unittest.TestCase):
         self.assertIn("how long have we been building this agent", effective_query)
         self.assertIn("Current project scope:", effective_query)
         self.assertIn("AaronCore", effective_query)
-        self.assertIn("C:/Users/36459/NovaCore", effective_query)
+        self.assertIn(TEST_REPO_ROOT, effective_query)
         self.assertEqual(seen.get("l2_kwargs"), {"limit": 5})
         self.assertEqual(seen.get("l3_kwargs"), {"limit": 5, "query": effective_query})
         self.assertIn("AaronCore milestone", recall["response"])

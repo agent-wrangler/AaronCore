@@ -20,6 +20,8 @@ import routes.data as data_module
 from agent_final import normalize_route_result, resolve_route, unified_chat_reply
 from core.context_builder import build_dialogue_context, render_dialogue_context
 
+TEST_REPO_ROOT = Path(__file__).resolve().parents[1].as_posix()
+
 
 class SkillFallbackTests(unittest.TestCase):
     def test_normalize_persisted_process_steps_keeps_running_steps_as_done(self):
@@ -149,7 +151,7 @@ class SkillFallbackTests(unittest.TestCase):
                 "action": {
                     "action_kind": "open_folder",
                     "target_kind": "folder",
-                    "target": "C:/Users/36459/NovaCore",
+                    "target": TEST_REPO_ROOT,
                     "outcome": "opened",
                     "display_hint": "已打开项目目录",
                     "verification_mode": "window_detected",
@@ -717,7 +719,7 @@ class RunEventMappingTests(unittest.TestCase):
         )
         env_note = reply_formatter_module._build_failed_tool_retry_note(
             "folder_explore",
-            {"path": "C:/Users/36459/NovaCore"},
+            {"path": TEST_REPO_ROOT},
             {"success": False, "error": "窗口未出现"},
         )
 
@@ -2552,12 +2554,12 @@ class RunEventMappingTests(unittest.TestCase):
         result = executor_module.execute(
             {"skill": "folder_explore"},
             "看看目录",
-            {"path": "c:/Users/36459/NovaCore"},
+            {"path": TEST_REPO_ROOT.lower()},
         )
 
         self.assertTrue(result.get("success"))
         self.assertEqual(result.get("skill"), "folder_explore")
-        self.assertIn("NovaCore", result.get("response", ""))
+        self.assertIn(Path(TEST_REPO_ROOT).name.lower(), result.get("response", "").lower())
         meta = result.get("meta") or {}
         action = meta.get("action") or {}
         self.assertEqual(action.get("action_kind"), "resolve_directory")
@@ -3723,7 +3725,7 @@ class StructuredToolHandoffRegressionTests(unittest.TestCase):
                             "function": {
                                 "name": "read_file",
                                 "arguments": json.dumps(
-                                    {"file_path": "C:/Users/36459/NovaCore/agent_final.py"},
+                                    {"file_path": f"{TEST_REPO_ROOT}/agent_final.py"},
                                     ensure_ascii=False,
                                 ),
                             },
@@ -3765,7 +3767,7 @@ class StructuredToolHandoffRegressionTests(unittest.TestCase):
             chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
 
         self.assertEqual(executed[0][0], "read_file")
-        self.assertEqual(executed[0][1].get("file_path"), "C:/Users/36459/NovaCore/agent_final.py")
+        self.assertEqual(executed[0][1].get("file_path"), f"{TEST_REPO_ROOT}/agent_final.py")
         self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
