@@ -459,8 +459,11 @@ body.light .win-close:hover {
 }
 .image-upload-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.1); border-radius: 10px; box-shadow: 0 0 0 1px rgba(255,255,255,0.06); }
 .image-upload-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.image-upload-btn.is-inactive { opacity: 0.5; }
+.image-upload-btn.is-inactive:hover { color: #e2e8f0; background: rgba(255,255,255,0.08); }
 body.light .image-upload-btn { color: #64748b; }
 body.light .image-upload-btn:hover { color: #1a1a1a; background: rgba(0,0,0,0.05); }
+body.light .image-upload-btn.is-inactive { opacity: 0.55; }
 
 /* ── 语音按钮 ── */
 .voice-btn {
@@ -619,9 +622,11 @@ body.light .model-dropdown {
 .model-dropdown-item:hover { background: rgba(255,255,255,0.08); color: var(--text-primary, #e5eefb); }
 .model-dropdown-item.active { color: var(--text-primary, #e5eefb); font-weight: 600; }
 .model-dropdown-item.active::before { content: '✓'; margin-right: 2px; }
-body.light .model-dropdown-item { color: #334155; }
-body.light .model-dropdown-item:hover { background: rgba(0,0,0,0.05); color: #0f172a; }
-body.light .model-dropdown-item.active { color: #0f172a; }
+body.light .model-dropdown-item { color: #676158; }
+body.light .model-dropdown-item:hover { background: rgba(21,21,20,0.05); color: #25231e; }
+body.light .model-dropdown-item.active { color: #25231e; }
+
+body.light .model-dropdown-header { color: #918b80; }
 body.dark .model-dropdown-item { color: var(--text-primary); }
 body.dark .model-dropdown-item:hover { background: rgba(255,255,255,0.06); color: var(--text-main); }
 body.dark .model-dropdown-item.active { color: var(--text-main); }

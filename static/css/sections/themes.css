@@ -121,7 +121,7 @@ body.light .menu:hover{
 }
 
 body.light .menu.active{
-  background:var(--surface-selected);
+  background:#e9e4dc;
   color:var(--surface-selected-text);
   box-shadow:none;
 }
@@ -240,29 +240,31 @@ body.light .thinking-bubble-text{
 }
 
 body.light .msg.user .bubble{
-  background:#efebe4;
+  background:#f2eee7;
   color:#151514;
   box-shadow:none;
 }
 
 body.light .inp-wrap{
-  background:rgba(255,255,255,0.60);
+  background:rgba(248,246,240,0.62);
   -webkit-backdrop-filter:saturate(118%) blur(22px);
   backdrop-filter:saturate(118%) blur(22px);
-  border-color:rgba(21,21,20,0.08);
+  border-color:rgba(255,255,255,0.46);
   box-shadow:
     0 10px 26px rgba(0,0,0,0.06),
-    0 1px 0 rgba(255,255,255,0.48) inset;
+    0 1px 0 rgba(255,255,255,0.58) inset,
+    0 0 0 1px rgba(21,21,20,0.04);
 }
 
 body.light .inp-wrap:focus-within{
-  background:rgba(252,251,248,0.68);
+  background:rgba(249,247,242,0.72);
   -webkit-backdrop-filter:saturate(118%) blur(22px);
   backdrop-filter:saturate(118%) blur(22px);
-  border-color:rgba(21,21,20,0.14);
+  border-color:rgba(255,255,255,0.60);
   box-shadow:
     0 12px 28px rgba(0,0,0,0.07),
-    0 1px 0 rgba(255,255,255,0.56) inset;
+    0 1px 0 rgba(255,255,255,0.66) inset,
+    0 0 0 1px rgba(21,21,20,0.05);
 }
 
 body.light .settings-notice,
@@ -657,23 +659,19 @@ body.dark .input::before{
 }
 
 body.dark .inp-wrap{
-  background:rgba(48,47,44,0.88);
-  -webkit-backdrop-filter:saturate(140%) blur(18px);
-  backdrop-filter:saturate(140%) blur(18px);
-  border-color:#3b3a36;
-  box-shadow:
-    0 12px 30px rgba(0,0,0,0.14),
-    0 1px 0 rgba(255,255,255,0.03) inset;
+  background:rgba(45,44,41,0.56);
+  -webkit-backdrop-filter:blur(16px);
+  backdrop-filter:blur(16px);
+  border-color:var(--border-soft);
+  box-shadow:0 4px 24px rgba(0,0,0,0.2);
 }
 
 body.dark .inp-wrap:focus-within{
-  background:rgba(54,53,49,0.94);
-  -webkit-backdrop-filter:saturate(140%) blur(18px);
-  backdrop-filter:saturate(140%) blur(18px);
-  border-color:#4a4843;
-  box-shadow:
-    0 14px 34px rgba(0,0,0,0.16),
-    0 1px 0 rgba(255,255,255,0.04) inset;
+  background:rgba(45,44,41,0.68);
+  -webkit-backdrop-filter:blur(16px);
+  backdrop-filter:blur(16px);
+  border-color:var(--border-panel-strong);
+  box-shadow:0 4px 24px rgba(0,0,0,0.2);
 }
 
 body.dark .input textarea{

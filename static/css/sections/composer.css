@@ -281,11 +281,59 @@ body.light .input textarea::-webkit-scrollbar-thumb:hover {
   padding: 6px 16px;
   border-top: none;
 }
+.composer-model-selector {
+  flex: 0 1 200px;
+  min-width: 132px;
+  max-width: 220px;
+  margin-right: 6px;
+  --model-selector-radius: 12px;
+}
+
+.composer-model-selector .model-selector-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.composer-model-selector .model-dropdown {
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(320px, calc(100vw - 48px));
+  min-width: 100%;
+  max-width: calc(100vw - 48px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+}
+
+.composer-model-selector.is-open .model-chevron {
+  opacity: 0.72;
+  transform: rotate(180deg);
+}
+
 .inp-actions-spacer {
   flex: 1;
 }
 body.light .inp-actions {
   border-top-color: transparent;
+}
+body.light .composer-model-selector .model-selector-btn {
+  background: rgba(239, 235, 228, 0.88);
+  border-color: rgba(21, 21, 20, 0.08);
+  color: #676158;
+}
+
+body.light .composer-model-selector .model-selector-btn:hover {
+  background: rgba(232, 228, 220, 0.96);
+  border-color: rgba(21, 21, 20, 0.14);
+  color: #25231e;
+}
+
+body.light .composer-model-selector .model-dropdown {
+  border-color: rgba(21, 21, 20, 0.08);
+  box-shadow: 0 14px 28px rgba(21, 21, 20, 0.08);
 }
 
 .send-btn {
@@ -399,6 +447,13 @@ body.light .inp-shortcut-hint {
 @media (max-width: 768px) {
   .input {
     padding: 16px;
+  }
+
+  .composer-model-selector {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 172px;
+    margin-right: 4px;
   }
   
   .input textarea {

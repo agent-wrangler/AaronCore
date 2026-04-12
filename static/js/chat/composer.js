@@ -4,6 +4,7 @@
 (function(){
  var inp=document.getElementById('inp');
  if(!inp)return;
+ var imageUploadBtn=document.getElementById('imageUploadBtn');
  function autoResize(){
   var maxH=Math.floor(window.innerHeight*0.4);
   // 先临时设 auto 让浏览器算出真实 scrollHeight，但用 overflow:hidden 防止闪烁
@@ -16,8 +17,16 @@
  }
  inp.addEventListener('input',function(){ autoResize(); updateSendButton(); });
 
+ if(imageUploadBtn){
+  imageUploadBtn.addEventListener('click',function(e){
+   e.preventDefault();
+   e.stopImmediatePropagation();
+   triggerImageUpload();
+  },true);
+ }
+
  // 动态 Placeholder 轮换
- var _placeholders=['与 Nova 对话...','向 Nova 提问...','粘贴代码进行分析...','聊聊你的想法...','描述你需要的帮助...'];
+ var _placeholders=['与 AaronCore 对话...','聊聊你的想法...','描述你需要的帮助...'];
  var _phIdx=0;
  setInterval(function(){
   if(inp===document.activeElement||inp.value.trim()) return;
@@ -31,16 +40,53 @@
   if(!items)return;
   for(var i=0;i<items.length;i++){
    if(items[i].type.indexOf('image')!==-1){
-    e.preventDefault();
-    var file=items[i].getAsFile();
-    if(file) readImageFile(file);
-    return;
-   }
+     e.preventDefault();
+     if(!_canUseVisionUpload()){
+      _notifyVisionUploadUnavailable();
+      return;
+     }
+     var file=items[i].getAsFile();
+     if(file) readImageFile(file);
+     return;
+    }
   }
  });
 })();
 
+function _canUseVisionUpload(){
+ var models=window._novaModels||{};
+ return Object.keys(models).some(function(key){
+  return !!(models[key]&&models[key].vision);
+ });
+}
+
+function _notifyVisionUploadUnavailable(){
+ var title=(typeof t==='function') ? t('model.no.vision') : 'No vision model available';
+ var detail=(typeof t==='function') ? t('model.no.vision.detail') : 'Configure a vision-capable model before uploading images.';
+ if(window._currentTab===1 && typeof addChatEventNote==='function'){
+  addChatEventNote('warning', 'IMAGE', title, detail);
+  return;
+ }
+ try{
+  alert(title+'\n'+detail);
+ }catch(_err){}
+}
+
+function triggerImageUpload(){
+ if(!_canUseVisionUpload()){
+  _notifyVisionUploadUnavailable();
+  return false;
+ }
+ var input=document.getElementById('imageFileInput');
+ if(input) input.click();
+ return false;
+}
+
 function readImageFile(file){
+ if(!_canUseVisionUpload()){
+  _notifyVisionUploadUnavailable();
+  return;
+ }
  if(!file||file.size>10*1024*1024)return;
  if(_pendingImages.length>=MAX_IMAGES) return;
  var reader=new FileReader();
@@ -53,6 +99,11 @@ function readImageFile(file){
 }
 
 function handleImageFile(input){
+ if(!_canUseVisionUpload()){
+  _notifyVisionUploadUnavailable();
+  if(input) input.value='';
+  return;
+ }
  if(input.files){
   for(var i=0;i<input.files.length&&_pendingImages.length<MAX_IMAGES;i++){
    readImageFile(input.files[i]);

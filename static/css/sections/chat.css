@@ -478,7 +478,7 @@ body.light .welcome-news-item:hover { color: #111; }
 /* ===== AI 输出结构化排版 ===== */
 .msg.assistant .assistant-reply-plain {
   font-family: var(--font-chat-reply-serif);
-  font-size: 15.5px;
+  font-size: 16px;
   line-height: 1.76;
   letter-spacing: 0;
   font-weight: 400;
@@ -504,7 +504,7 @@ body.light .welcome-news-item:hover { color: #111; }
 
 .msg.assistant .assistant-reply-markdown {
   font-family: var(--font-chat-reply-serif);
-  font-size: 15.4px;
+  font-size: 16px;
   line-height: 1.74;
   letter-spacing: 0;
   font-weight: 400;

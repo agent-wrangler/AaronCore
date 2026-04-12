@@ -62,7 +62,11 @@ document.write(String.raw`
     <div class="run-panel-stream" id="runPanelStream">
      <div class="run-panel-empty" id="runPanelEmpty">瀵偓婵绔存潪顔绘崲閸斺€虫倵閿涘矁绻栭柌宀€娈?Run Stream 娴兼艾鐤勯弮鑸垫▔缁€鐑樷偓婵娾偓鍐︹偓浣稿З娴ｆ粌鎷伴幍褑顢戞潻鍥┾柤閵?/div>
     </div>
-   </aside>`r`n  </div>`r`n  <div class="settings-page-host" id="settingsPageRoot" style="display:none;height:100%;overflow:auto;"></div>`r`n </div>`r`n <div class="input">
+   </aside>
+  </div>
+  <div class="settings-page-host" id="settingsPageRoot" style="display:none;height:100%;overflow:auto;"></div>
+ </div>
+ <div class="input">
   <div class="repair-bar" id="repairBar" style="display:none;">
    <div class="repair-bar-inner">
     <div class="repair-bar-icon">
@@ -86,6 +90,13 @@ document.write(String.raw`
     <div class="image-preview-bar" id="imagePreviewBar" style="display:none;"></div>
   <textarea id="inp" placeholder="与 AaronCore 对话..." data-i18n-placeholder="input.placeholder" onkeydown="if(event.keyCode==13&&!event.shiftKey){event.preventDefault();send();}"></textarea>
     <div class="inp-actions">
+      <div class="model-selector-wrap composer-model-selector">
+       <button class="model-selector-btn" id="modelSelectorBtn" type="button" onclick="toggleModelDropdown(event)" aria-haspopup="listbox" aria-expanded="false">
+        <span id="modelName" data-i18n="loading">Loading...</span>
+        <svg class="model-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+       </button>
+       <div class="model-dropdown" id="modelDropdown" style="display:none;"></div>
+      </div>
       <button class="image-upload-btn" id="imageUploadBtn" onclick="document.getElementById('imageFileInput').click()" title="上传图片" data-i18n-title="input.upload">
       <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
      </button>
