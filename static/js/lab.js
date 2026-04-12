@@ -1,3 +1,135 @@
+var _forgeLastData = null;
+var _forgeSkillDraftStoreKey = 'nova_forge_skill_drafts_v1';
+var _forgeSkillDraftState = _emptyForgeSkillDraft();
+var _forgeActiveDraftId = '';
+
+function _emptyForgeSkillDraft() {
+  return {
+    skill_name: '',
+    goal: '',
+    use_case: '',
+    boundary: '',
+    resources: ''
+  };
+}
+
+function _normalizeForgeSkillDraft(input) {
+  var base = _emptyForgeSkillDraft();
+  var data = input && typeof input === 'object' ? input : {};
+  Object.keys(base).forEach(function(key) {
+    base[key] = String(data[key] || '').trim();
+  });
+  return base;
+}
+
+function _mergeForgeSkillDraft(seed) {
+  var current = _normalizeForgeSkillDraft(_forgeSkillDraftState);
+  var next = _normalizeForgeSkillDraft(seed);
+  Object.keys(current).forEach(function(key) {
+    if (!next[key]) next[key] = current[key];
+  });
+  return next;
+}
+
+function _loadForgeSkillDraftIndex() {
+  try {
+    var raw = localStorage.getItem(_forgeSkillDraftStoreKey);
+    var parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function _saveForgeSkillDraftIndex(index) {
+  try {
+    localStorage.setItem(_forgeSkillDraftStoreKey, JSON.stringify(index || {}));
+  } catch (err) {}
+}
+
+function _rememberForgeSkillDraft(expId, draft) {
+  var id = String(expId || '').trim();
+  if (!id) return;
+  var index = _loadForgeSkillDraftIndex();
+  index[id] = Object.assign(_normalizeForgeSkillDraft(draft), {
+    saved_at: Date.now()
+  });
+
+  var keys = Object.keys(index);
+  if (keys.length > 80) {
+    keys.sort(function(a, b) {
+      var aTime = Number((index[a] || {}).saved_at || 0);
+      var bTime = Number((index[b] || {}).saved_at || 0);
+      return bTime - aTime;
+    });
+    var trimmed = {};
+    keys.slice(0, 80).forEach(function(key) {
+      trimmed[key] = index[key];
+    });
+    index = trimmed;
+  }
+
+  _saveForgeSkillDraftIndex(index);
+}
+
+function _getForgeSkillDraft(expId) {
+  var index = _loadForgeSkillDraftIndex();
+  return _normalizeForgeSkillDraft(index[String(expId || '').trim()] || {});
+}
+
+function _hasForgeSkillDraft(expId) {
+  var draft = _getForgeSkillDraft(expId);
+  return !!(draft.skill_name || draft.goal || draft.use_case || draft.boundary || draft.resources);
+}
+
+function _buildForgeQueueNeed(draft) {
+  var data = _normalizeForgeSkillDraft(draft);
+  if (data.skill_name && data.goal) return data.skill_name + ': ' + data.goal;
+  return data.goal || data.skill_name || '';
+}
+
+function _syncForgeSkillField(field, value) {
+  var key = String(field || '').trim();
+  if (!_forgeSkillDraftState || typeof _forgeSkillDraftState !== 'object') {
+    _forgeSkillDraftState = _emptyForgeSkillDraft();
+  }
+  if (!Object.prototype.hasOwnProperty.call(_forgeSkillDraftState, key)) return;
+  _forgeSkillDraftState[key] = String(value || '');
+}
+
+function _readForgeSkillComposerFromDom() {
+  var next = _emptyForgeSkillDraft();
+  [
+    ['skill_name', 'forgeSkillName'],
+    ['goal', 'forgeSkillGoal'],
+    ['use_case', 'forgeSkillUseCase'],
+    ['boundary', 'forgeSkillBoundary'],
+    ['resources', 'forgeSkillResources']
+  ].forEach(function(pair) {
+    var field = pair[0];
+    var id = pair[1];
+    var el = document.getElementById(id);
+    next[field] = String((el && el.value) || _forgeSkillDraftState[field] || '').trim();
+  });
+  _forgeSkillDraftState = next;
+  return next;
+}
+
+function _resetForgeDraftComposer() {
+  _forgeSkillDraftState = _emptyForgeSkillDraft();
+  _forgeActiveDraftId = '';
+}
+
+function _setForgeComposerMode(mode, seed) {
+  _forgeSkillDraftState = _mergeForgeSkillDraft(seed || {});
+  _forgeActiveDraftId = '';
+  if (window._currentTab === 6 && _forgeLastData) {
+    _renderForge(_forgeLastData);
+  }
+}
+
+window._setForgeComposerMode = _setForgeComposerMode;
+
 function loadLabPage() {
   var chat = document.getElementById('chat');
   setInputVisible(false);
@@ -13,7 +145,10 @@ function loadLabPage() {
 function _fetchForgeData() {
   fetch('/lab/status')
     .then(function(r) { return r.json(); })
-    .then(function(data) { _renderForge(data || {}); })
+    .then(function(data) {
+      _forgeLastData = data || {};
+      _renderForge(_forgeLastData);
+    })
     .catch(function() {
       var box = document.getElementById('labBox');
       if (box) {
@@ -26,131 +161,75 @@ function _renderForge(data) {
   var box = document.getElementById('labBox');
   if (!box) return;
 
-  var summary = data.summary || {};
-  var queue = data.queue || [];
-  var failedRuns = data.failed_runs || [];
-  var reports = data.reports || [];
-  var rules = data.rules || [];
+  var queue = Array.isArray(data.queue) ? data.queue : [];
+  var drafts = queue.filter(function(item) {
+    return _hasForgeSkillDraft(item && item.id);
+  });
 
   var html = '';
-
-  html += '<div class="forge-card forge-input-card">';
-  html += '<div class="forge-card-title">' + t('lab.input.title') + '</div>';
-  html += '<div class="forge-card-desc">' + t('lab.input.desc') + '</div>';
-  html += '<div class="forge-input-row">';
-  html += '<input id="forgeNeed" class="forge-input" placeholder="' + _escAttr(t('lab.input.placeholder')) + '">';
-  html += '<button class="forge-btn" onclick="submitForgeNeed()">' + t('lab.input.submit') + '</button>';
-  html += '</div>';
-  html += '</div>';
-
+  html += _renderForgeComposerCard();
   html += '<div class="forge-card">';
-  html += '<div class="forge-card-title">' + t('lab.overview.title') + '</div>';
-  html += '<div class="forge-history-stats">' + tf(
-    'lab.overview.summary',
-    summary.queued || 0,
-    summary.failed_runs || 0,
-    summary.repair_reports || 0,
-    summary.active_rules || 0
-  ) + '</div>';
+  html += '<div class="forge-card-title">' + t('lab.workspace.title') + '</div>';
+  html += '<div class="forge-card-desc">' + t('lab.workspace.desc') + '</div>';
+  html += '<div class="forge-history-stats">' + tf('lab.workspace.summary', drafts.length) + '</div>';
   html += '</div>';
-
-  html += _renderForgeSection(t('lab.section.queue'), queue, function(item) {
-    var text = '';
-    text += '<div class="forge-history-item">';
-    text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.need || item.query || t('lab.unnamed.need')) + '</div>';
-    text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
-    text += '</div>';
-    if (item.source) {
-      text += '<div class="forge-history-goal">' + t('lab.source') + ': ' + _esc(item.source) + '</div>';
-    }
-    text += '<div class="forge-history-stats">' + _esc(_fmtTime(item.updated_at || item.created_at)) + '</div>';
-    text += '<div class="forge-history-actions">';
-    if (item.status === 'queued') {
-      text += '<button class="forge-action-btn primary" onclick="startLabExperiment(\'' + _escAttr(item.id) + '\')">' + t('lab.action.start') + '</button>';
-    }
-    if (item.status !== 'promoted') {
-      text += '<button class="forge-action-btn" onclick="applyLabResult(\'' + _escAttr(item.id) + '\')">' + t('lab.action.promote') + '</button>';
-    }
-    text += '</div>';
-    text += '</div>';
-    return text;
-  });
-
-  html += _renderForgeSection(t('lab.section.failed'), failedRuns, function(item) {
-    var meta = item.meta || {};
-    var text = '';
-    text += '<div class="forge-history-item">';
-    text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.title || t('lab.unnamed.skill')) + '</div>';
-    text += '<div class="forge-status-badge danger">' + t('lab.status.queued') + '</div>';
-    text += '</div>';
-    if (item.goal) {
-      text += '<div class="forge-history-goal">' + t('lab.goal') + ': ' + _esc(item.goal) + '</div>';
-    }
-    text += '<div class="forge-history-stats">' + _esc(item.subtitle || t('lab.meta.noLoop')) + '</div>';
-    if (meta.repair_hint) {
-      text += '<div class="forge-history-goal">' + t('lab.meta.repairHint') + ': ' + _esc(meta.repair_hint) + '</div>';
-    }
-    text += '</div>';
-    return text;
-  });
-
-  html += _renderForgeSection(t('lab.section.reports'), reports, function(item) {
-    var meta = item.meta || {};
-    var previewText = '';
-    var text = '';
-
-    text += '<div class="forge-history-item">';
-    text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.title || t('lab.report.default')) + '</div>';
-    text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
-    text += '</div>';
-    if (item.goal) {
-      text += '<div class="forge-history-goal">' + t('lab.relatedIssue') + ': ' + _esc(item.goal) + '</div>';
-    }
-    text += '<div class="forge-history-stats">' + _esc(item.subtitle || item.summary || t('lab.meta.defaultReport')) + '</div>';
-    if (meta.risk_level) {
-      text += '<div class="forge-history-goal">' + t('lab.risk') + ': ' + _esc(meta.risk_level) + '</div>';
-    }
-    if (meta.preview_status || meta.preview_error || meta.preview_summary) {
-      previewText = meta.preview_summary || meta.preview_error || meta.preview_decision_reason || '';
-      if (!previewText && meta.preview_status) {
-        previewText = t('lab.preview.placeholder');
-      }
-      text += '<div class="forge-history-goal">' + t('lab.preview') + ': ' + _esc(meta.preview_status || t('unknown')) + (previewText ? ' / ' + _esc(_trimPreview(previewText)) : '') + '</div>';
-    }
-    text += '<div class="forge-history-actions">';
-    text += '<button class="forge-action-btn primary" onclick="previewForgeReport(\'' + _escAttr(item.id) + '\', this)">' + t('lab.action.preview') + '</button>';
-    text += '</div>';
-    text += '</div>';
-    return text;
-  });
-
-  html += _renderForgeSection(t('lab.section.rules'), rules, function(item) {
-    var meta = item.meta || {};
-    var text = '';
-    text += '<div class="forge-history-item">';
-    text += '<div class="forge-history-header">';
-    text += '<div class="forge-history-label">' + _esc(item.title || t('lab.rule.default')) + '</div>';
-    text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
-    text += '</div>';
-    text += '<div class="forge-history-stats">' + _esc(item.subtitle || item.summary || t('lab.meta.defaultRule')) + '</div>';
-    if (meta.hit_count) {
-      text += '<div class="forge-history-goal">' + _esc(tf('lab.meta.hitCount', String(meta.hit_count))) + '</div>';
-    }
-    text += '</div>';
-    return text;
-  });
+  html += _renderForgeSection(
+    t('lab.section.drafts'),
+    drafts,
+    _renderForgeDraftItem,
+    t('lab.section.drafts.empty')
+  );
 
   box.innerHTML = html;
 }
 
-function _renderForgeSection(title, rows, renderItem) {
+function _renderForgeComposerCard() {
+  var draft = _normalizeForgeSkillDraft(_forgeSkillDraftState);
+  var actionKey = _forgeActiveDraftId ? 'lab.action.updateSkill' : 'lab.action.saveSkill';
+  var html = '';
+
+  html += '<div class="forge-card forge-input-card">';
+  html += '<div class="forge-card-title">' + t('lab.skill.title') + '</div>';
+  html += '<div class="forge-card-desc">' + t('lab.skill.desc') + '</div>';
+  if (_forgeActiveDraftId) {
+    html += '<div class="forge-inline-tags"><span class="forge-mini-tag">' + _esc(t('lab.badge.editingDraft')) + '</span></div>';
+  }
+  html += '<div class="forge-form-grid">';
+  html += _renderForgeSkillField('skill_name', 'lab.skill.name', 'forgeSkillName', draft.skill_name, 'lab.skill.name.placeholder', false, false);
+  html += _renderForgeSkillField('goal', 'lab.skill.goal', 'forgeSkillGoal', draft.goal, 'lab.skill.goal.placeholder', true, true);
+  html += _renderForgeSkillField('use_case', 'lab.skill.useCase', 'forgeSkillUseCase', draft.use_case, 'lab.skill.useCase.placeholder', true, false);
+  html += _renderForgeSkillField('boundary', 'lab.skill.boundary', 'forgeSkillBoundary', draft.boundary, 'lab.skill.boundary.placeholder', true, false);
+  html += _renderForgeSkillField('resources', 'lab.skill.resources', 'forgeSkillResources', draft.resources, 'lab.skill.resources.placeholder', true, true);
+  html += '</div>';
+  html += '<div class="forge-card-tip">' + t('lab.skill.tip') + '</div>';
+  html += '<div class="forge-history-actions forge-composer-actions">';
+  html += '<button class="forge-btn" onclick="saveForgeSkillDraft(this)">' + t(actionKey) + '</button>';
+  if (_forgeActiveDraftId) {
+    html += '<button class="forge-action-btn" onclick="resetForgeSkillDraftComposer()">' + t('lab.action.newSkillDraft') + '</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function _renderForgeSkillField(field, labelKey, id, value, placeholderKey, multiline, fullWidth) {
+  var html = '';
+  html += '<label class="forge-field' + (fullWidth ? ' full' : '') + '">';
+  html += '<span class="forge-field-label">' + t(labelKey) + '</span>';
+  if (multiline) {
+    html += '<textarea id="' + id + '" class="forge-input forge-textarea" placeholder="' + _escAttr(t(placeholderKey)) + '" oninput="_syncForgeSkillField(\'' + _escAttr(field) + '\', this.value)">' + _esc(value) + '</textarea>';
+  } else {
+    html += '<input id="' + id + '" class="forge-input" placeholder="' + _escAttr(t(placeholderKey)) + '" value="' + _escAttr(value) + '" oninput="_syncForgeSkillField(\'' + _escAttr(field) + '\', this.value)">';
+  }
+  html += '</label>';
+  return html;
+}
+
+function _renderForgeSection(title, rows, renderItem, emptyText) {
   var html = '<div class="forge-card">';
   html += '<div class="forge-card-title">' + title + '</div>';
   if (!rows || !rows.length) {
-    html += '<div class="forge-history-stats" style="opacity:.72;">' + t('lab.section.empty') + '</div>';
+    html += '<div class="forge-history-stats" style="opacity:.72;">' + (emptyText || t('lab.section.empty')) + '</div>';
     html += '</div>';
     return html;
   }
@@ -161,79 +240,102 @@ function _renderForgeSection(title, rows, renderItem) {
   return html;
 }
 
-function submitForgeNeed() {
-  var inp = document.getElementById('forgeNeed');
-  var need = (inp && inp.value || '').trim();
-  if (!need) return;
-  inp.disabled = true;
+function _renderForgeDraftItem(item) {
+  var draft = _getForgeSkillDraft(item.id);
+  var text = '';
+  text += '<div class="forge-history-item">';
+  text += '<div class="forge-history-header">';
+  text += '<div class="forge-history-label">' + _esc(draft.skill_name || item.need || item.query || t('lab.unnamed.skill')) + '</div>';
+  text += '<div class="forge-status-badge ' + _badgeClass(item.status) + '">' + _esc(_statusText(item.status)) + '</div>';
+  text += '</div>';
+  text += '<div class="forge-inline-tags"><span class="forge-mini-tag">' + _esc(t('lab.badge.skillDraft')) + '</span></div>';
+  if (draft.goal) {
+    text += '<div class="forge-history-goal">' + t('lab.goal') + ': ' + _esc(draft.goal) + '</div>';
+  }
+  if (draft.use_case) {
+    text += '<div class="forge-history-goal">' + t('lab.meta.useCase') + ': ' + _esc(draft.use_case) + '</div>';
+  }
+  if (draft.boundary) {
+    text += '<div class="forge-history-goal">' + t('lab.meta.boundary') + ': ' + _esc(draft.boundary) + '</div>';
+  }
+  if (draft.resources) {
+    text += '<div class="forge-history-goal">' + t('lab.meta.resources') + ': ' + _esc(draft.resources) + '</div>';
+  }
+  text += '<div class="forge-history-stats">' + _esc(_fmtTime(item.updated_at || item.created_at)) + '</div>';
+  text += '<div class="forge-history-actions">';
+  text += '<button class="forge-action-btn primary" onclick="resumeForgeSkillDraft(\'' + _escAttr(item.id) + '\')">' + t('lab.action.continueDraft') + '</button>';
+  text += '</div>';
+  text += '</div>';
+  return text;
+}
+
+function saveForgeSkillDraft(buttonEl) {
+  var draft = _readForgeSkillComposerFromDom();
+  var need = _buildForgeQueueNeed(draft);
+  if (!need) {
+    _setForgeNotice(t('lab.notice.skillGoalRequired'));
+    return;
+  }
+
+  if (_forgeActiveDraftId) {
+    _rememberForgeSkillDraft(_forgeActiveDraftId, draft);
+    _resetForgeDraftComposer();
+    _setForgeNotice(t('lab.notice.skillUpdated'));
+    _fetchForgeData();
+    return;
+  }
+
+  if (buttonEl) {
+    buttonEl.disabled = true;
+    buttonEl.dataset.label = buttonEl.textContent;
+    buttonEl.textContent = t('lab.input.submit');
+  }
+
   fetch('/lab/experiment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ goal: need, rounds: 1 })
-  }).then(function(r) { return r.json(); }).then(function() {
-    inp.disabled = false;
-    inp.value = '';
-    _fetchForgeData();
-  }).catch(function() {
-    inp.disabled = false;
-  });
-}
-
-function startLabExperiment(expId) {
-  fetch('/lab/start/' + expId, { method: 'POST' }).then(function() {
-    _fetchForgeData();
-  });
-}
-
-function stopLabExperiment() {
-  fetch('/lab/stop', { method: 'POST' }).then(function() {
-    _fetchForgeData();
-  });
-}
-
-function applyLabResult(expId) {
-  fetch('/lab/apply/' + expId, { method: 'POST' }).then(function() {
-    _fetchForgeData();
-  });
-}
-
-function previewForgeReport(reportId, buttonEl) {
-  _setForgeNotice(t('lab.notice.previewing'));
-  if (buttonEl) {
-    buttonEl.disabled = true;
-    buttonEl.dataset.label = buttonEl.textContent;
-    buttonEl.textContent = t('lab.forging') + '...';
-  }
-  fetch('/self_repair/preview', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ report_id: reportId, auto_apply: false, run_validation: true })
   }).then(function(r) { return r.json(); }).then(function(data) {
-    var report = data && data.report ? data.report : {};
-    var preview = report.patch_preview || {};
-    if (data && data.ok) {
-      var status = String(preview.status || '').trim();
-      var detail = preview.error || preview.summary || preview.decision_reason || '';
-      if (status === 'preview_ready') {
-        _setForgeNotice(t('lab.notice.previewReady'));
-      } else if (status) {
-        _setForgeNotice(tf('lab.notice.previewResult', status, detail ? ' / ' + _trimPreview(detail) : ''));
-      } else {
-        _setForgeNotice(tf('lab.notice.previewResult', t('unknown'), ''));
-      }
-    } else {
-      _setForgeNotice(tf('lab.notice.previewFailed', ((data && data.error) || t('unknown'))));
+    var experiment = data && data.experiment ? data.experiment : null;
+    if (experiment && experiment.id) {
+      _rememberForgeSkillDraft(experiment.id, draft);
     }
+    _resetForgeDraftComposer();
+    _setForgeNotice(t('lab.notice.skillQueued'));
     _fetchForgeData();
   }).catch(function() {
-    _setForgeNotice(t('lab.notice.previewCatch'));
-    _fetchForgeData();
+    _setForgeNotice(t('network.error'));
   }).finally(function() {
     if (buttonEl) {
       buttonEl.disabled = false;
-      buttonEl.textContent = buttonEl.dataset.label || t('lab.action.preview');
+      buttonEl.textContent = buttonEl.dataset.label || t('lab.action.saveSkill');
     }
   });
+}
+
+function resumeForgeSkillDraft(expId) {
+  var id = String(expId || '').trim();
+  if (!id) return;
+  var draft = _getForgeSkillDraft(id);
+  if (!_hasForgeSkillDraft(id)) return;
+  _forgeActiveDraftId = id;
+  _forgeSkillDraftState = draft;
+  _setForgeNotice(t('lab.notice.resumeDraft'));
+  if (_forgeLastData) {
+    _renderForge(_forgeLastData);
+  }
+  setTimeout(function() {
+    var el = document.getElementById('forgeSkillName') || document.getElementById('forgeSkillGoal');
+    if (el && typeof el.focus === 'function') el.focus();
+  }, 0);
+}
+
+function resetForgeSkillDraftComposer() {
+  _resetForgeDraftComposer();
+  _setForgeNotice('');
+  if (_forgeLastData) {
+    _renderForge(_forgeLastData);
+  }
 }
 
 function _statusText(status) {
@@ -260,12 +362,6 @@ function _fmtTime(value) {
   var text = String(value || '').trim();
   if (!text) return '';
   return text.replace('T', ' ').slice(0, 16);
-}
-
-function _trimPreview(text) {
-  var value = String(text || '').replace(/\s+/g, ' ').trim();
-  if (value.length > 120) return value.slice(0, 120) + '...';
-  return value;
 }
 
 function _setForgeNotice(text) {

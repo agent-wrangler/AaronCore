@@ -191,10 +191,12 @@ function _writeRunPanelWidth(width){
 }
 
 function _getRunPanelWidthBounds(mainWidth){
+ var total=Math.max(Number(mainWidth)||0, 0);
  var min=300;
- var max=Math.min(620, Math.max(360, (Number(mainWidth)||0)-420));
+ var chatMin=360;
+ var max=Math.min(860, Math.max(420, total-chatMin));
  if(max<min) max=min;
- return { min:min, max:max };
+  return { min:min, max:max };
 }
 
 function _applyRunPanelWidth(width){

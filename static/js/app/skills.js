@@ -648,16 +648,18 @@ function _showCreateSkillModal(){
  content+='<div class="skill-modal-header"><div class="skill-modal-icon theme-builder">'+_skillIcons.creator+'</div><div class="skill-modal-head-main"><div class="skill-modal-title-row"><div class="skill-modal-title">'+escapeHtml(t('skills.creator.name'))+'</div></div><div class="skill-modal-subtitle">'+escapeHtml(t('skills.creator.summary'))+'</div></div></div>';
  content+='<div class="skill-modal-scroll"><div class="skill-modal-body">';
  content+='<div class="skill-modal-section"><div class="skill-modal-section-title">'+escapeHtml(t('skills.creator.user.title'))+'</div><div class="skill-modal-paragraph">'+escapeHtml(t('skills.creator.user.desc'))+'</div></div>';
- content+='<div class="skill-modal-section"><div class="skill-modal-section-title">'+escapeHtml(t('skills.creator.assistant.title'))+'</div><div class="skill-modal-paragraph">'+escapeHtml(t('skills.creator.assistant.desc'))+'</div></div>';
  content+='<div class="skill-modal-section"><div class="skill-modal-section-title">'+escapeHtml(t('skills.modal.boundary.title'))+'</div><div class="skill-modal-paragraph">'+escapeHtml(t('skills.modal.createBoundary'))+'</div></div>';
  content+='</div></div>';
- content+='<div class="skill-modal-actions"><div class="skill-modal-actions-left"><button class="skill-modal-btn ghost" onclick="_startCreateSkillFlow(\'user\')">'+escapeHtml(t('skills.action.userCreate'))+'</button></div><div class="skill-modal-actions-right"><button class="skill-modal-btn primary" onclick="_startCreateSkillFlow(\'assistant\')">'+escapeHtml(t('skills.action.assistantCreate'))+'</button></div></div>';
+ content+='<div class="skill-modal-actions"><div class="skill-modal-actions-right"><button class="skill-modal-btn primary" onclick="_startCreateSkillFlow(\'user\')">'+escapeHtml(t('skills.action.userCreate'))+'</button></div></div>';
  _renderSkillModal(content);
 }
 
 function _startCreateSkillFlow(mode){
  _closeSkillModal(true);
  if(mode==='user'){
+  if(typeof window._setForgeComposerMode==='function'){
+   window._setForgeComposerMode('skill', {});
+  }
   show(6);
   return;
  }

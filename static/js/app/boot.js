@@ -732,6 +732,11 @@ window._renderHistoryItems=function(items){
  function _updateScrollBtn(){
   if(_chatViewRestoring) return;
   if(!_scrollBtn) return;
+  if(window._currentTab!==1&&window._currentTab!==undefined){
+   _scrollBtn.classList.remove('visible');
+   _scrollBtn.style.display='none';
+   return;
+  }
   var awayFromBottom=_chatAwayFromBottom(chat);
   if(awayFromBottom>150){
    _scrollBtn.style.display='flex';
@@ -741,6 +746,16 @@ window._renderHistoryItems=function(items){
    setTimeout(function(){ if(!_scrollBtn.classList.contains('visible')) _scrollBtn.style.display='none'; },200);
   }
  }
+
+ window._setScrollToBottomButtonTabState=function(isChatTab){
+  if(!_scrollBtn) return;
+  if(!isChatTab){
+   _scrollBtn.classList.remove('visible');
+   _scrollBtn.style.display='none';
+   return;
+  }
+  _updateScrollBtn();
+ };
 
  window.scrollToBottom=function(){
   _setChatAutoStick(true);

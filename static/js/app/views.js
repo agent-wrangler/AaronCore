@@ -22,6 +22,9 @@ function show(n){
   if(typeof window._setRunPanelTabState==='function'){
    window._setRunPanelTabState(n===1);
   }
+  if(typeof window._setScrollToBottomButtonTabState==='function'){
+   window._setScrollToBottomButtonTabState(n===1);
+  }
   var isLight = document.body.classList.contains('light');
 
  if(n==1){

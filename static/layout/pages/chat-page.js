@@ -1,6 +1,9 @@
 ﻿// Chat page shell markup for the desktop client.
-// Extracted from the shared app shell so chat UI can evolve independently.
-document.write(String.raw`
+// Mounted into the shared shell so chat UI owns its DOM in one place.
+(function(){
+ var host=document.getElementById('pageMount');
+ if(!host) return;
+ host.innerHTML=String.raw`
 <div class="main">
  <div class="content">
   <style>@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}</style>
@@ -115,5 +118,5 @@ document.write(String.raw`
    </div>
   </div>
  </div>
-`);
-
+`;
+})();

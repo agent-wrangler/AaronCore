@@ -2173,11 +2173,63 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
   color: var(--text-label);
   margin-bottom: 12px;
 }
+.forge-card-head-copy {
+  min-width: 0;
+  flex: 1;
+}
 .forge-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+}
+.forge-composer-header {
+  align-items: flex-start;
+  gap: 14px;
+}
+.forge-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-card);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.02);
+  flex-shrink: 0;
+}
+.forge-mode-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-label);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.forge-mode-btn.active {
+  background: rgba(158, 144, 124, 0.16);
+  color: var(--text-primary);
+}
+.forge-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.forge-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.forge-field.full {
+  grid-column: 1 / -1;
+}
+.forge-field-label {
+  font-size: 12px;
+  color: var(--text-label);
+  font-weight: 600;
 }
 .forge-input-row {
   display: flex;
@@ -2196,6 +2248,11 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
 .forge-input:focus {
   border-color: #9e907c;
 }
+.forge-textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.55;
+}
 .forge-btn {
   padding: 10px 20px;
   border-radius: 10px;
@@ -2209,6 +2266,15 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
   transition: opacity 0.2s;
 }
 .forge-btn:hover { opacity: 0.85; }
+.forge-card-tip {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-label);
+  line-height: 1.6;
+}
+.forge-composer-actions {
+  margin-top: 14px;
+}
 .forge-active-card {
   border-color: #9e907c;
 }
@@ -2279,6 +2345,24 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
   display: flex;
   gap: 6px;
 }
+.forge-inline-tags {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.forge-mini-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(158, 144, 124, 0.22);
+  background: rgba(158, 144, 124, 0.1);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
 .forge-action-btn {
   padding: 4px 12px;
   border-radius: 6px;
@@ -2295,6 +2379,26 @@ body.light .mcp-installed-tag { background: rgba(74,222,128,0.08); color: #16a34
 .forge-action-btn.danger {
   border-color: #ef4444;
   color: #ef4444;
+}
+
+@media (max-width: 920px) {
+  .forge-card-header,
+  .forge-composer-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .forge-mode-switch {
+    align-self: flex-start;
+  }
+
+  .forge-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .forge-field.full {
+    grid-column: auto;
+  }
 }
 
 /* ── 任务进度条（输入框上方） ──────────────────── */
