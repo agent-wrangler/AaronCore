@@ -253,24 +253,29 @@
 
 /* 输入框内滚动??细、透明、跟随主?*/
 .input textarea::-webkit-scrollbar {
-  width: 3px;
+  width: 10px;
 }
 .input textarea::-webkit-scrollbar-track {
-  background: transparent;
+  background-color: transparent;
+  border-radius: 999px;
+  -webkit-border-radius: 999px;
   margin: 10px 0 6px;
 }
 .input textarea::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
-  border-radius: 3px;
+  background-color: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  -webkit-border-radius: 999px;
+  background-clip: padding-box;
+  -webkit-background-clip: padding-box;
+  min-height: 28px;
 }
 .input textarea::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background-color: var(--scrollbar-thumb-hover);
 }
-body.light .input textarea::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.2);
-}
-body.light .input textarea::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.35);
+
+.input textarea.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-active);
 }
 
 /* ===== 绠€绾︾幇浠ｅ彂閫佹寜閽?===== */

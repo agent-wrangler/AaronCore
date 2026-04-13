@@ -77,10 +77,25 @@ html.theme-booting *{
 
 /* 旧的 frameless 缩放触发层（当前 Electron 原生缩放为主，保留不显示） */
 .resize-edge,.resize-corner{display:none!important}
-::-webkit-scrollbar{width:6px}
-::-webkit-scrollbar-track{background:#1e1e20}
-::-webkit-scrollbar-thumb{background:#3a3a3a;border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:#4a4a4a}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background-color:transparent;border-radius:999px;-webkit-border-radius:999px}
+::-webkit-scrollbar-thumb{
+ background-color:var(--scrollbar-thumb, rgba(185,182,175,0.16));
+ border:3px solid transparent;
+ border-radius:999px;
+ -webkit-border-radius:999px;
+ background-clip:padding-box;
+ -webkit-background-clip:padding-box;
+ min-height:36px;
+}
+::-webkit-scrollbar-thumb:hover{background-color:var(--scrollbar-thumb-hover, rgba(185,182,175,0.32))}
+::-webkit-scrollbar-thumb:active{background-color:var(--scrollbar-thumb-active, rgba(185,182,175,0.5))}
+::-webkit-scrollbar-corner{background-color:transparent}
+.is-scrolling::-webkit-scrollbar-thumb{
+ background-color:var(--scrollbar-thumb-active, rgba(185,182,175,0.5));
+}
+.is-scrolling{
+}
 :root{
  --bg-app:#161618;
  --bg-top:#1e1e20;
@@ -155,6 +170,9 @@ html.theme-booting *{
  --process-label-color:#8690a2;
  --process-detail-color:#a3adbb;
  --glow-line:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);
+ --scrollbar-thumb:rgba(185,182,175,0.14);
+ --scrollbar-thumb-hover:rgba(185,182,175,0.28);
+ --scrollbar-thumb-active:rgba(185,182,175,0.48);
 }
 
 body.light{
@@ -213,6 +231,9 @@ body.light{
  --process-label-color:#8f867b;
  --process-detail-color:#6f675d;
  --glow-line:linear-gradient(90deg,transparent,rgba(0,0,0,0.04),transparent);
+ --scrollbar-thumb:rgba(111,103,93,0.16);
+ --scrollbar-thumb-hover:rgba(111,103,93,0.3);
+ --scrollbar-thumb-active:rgba(111,103,93,0.48);
 }
 /* 记忆标签 · 彩虹色（暗色默认） */
 .mem-tag{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:700;flex-shrink:0}
@@ -244,15 +265,15 @@ body.light .msg.assistant .bubble{background:transparent;color:#1c1c1e;border:no
 body.light .msg.user .bubble{background:#efebe5;color:#2f2b25;border:none;border-radius:16px;box-shadow:none}
 body.light .input{background:transparent;border-top:none}
 body.light .input textarea{background:transparent;color:#161618;border:none}
-body.light::-webkit-scrollbar-track{background:var(--bg-soft,#f7f4ee)}
-body.light::-webkit-scrollbar-thumb{background:rgba(111,103,93,0.32);border-radius:3px}
-body.light::-webkit-scrollbar-thumb:hover{background:rgba(111,103,93,0.46)}
-body.light .chat::-webkit-scrollbar-track{background:var(--bg-chat,#f6f4ef)}
-body.light .chat::-webkit-scrollbar-thumb{background:rgba(111,103,93,0.42);border-radius:3px}
-body.light .chat::-webkit-scrollbar-thumb:hover{background:rgba(111,103,93,0.56)}
-body.light .chat *::-webkit-scrollbar-track{background:var(--bg-chat,#f6f4ef)}
-body.light .chat *::-webkit-scrollbar-thumb{background:rgba(111,103,93,0.32);border-radius:3px}
-body.light .chat *::-webkit-scrollbar-thumb:hover{background:rgba(111,103,93,0.46)}
+body.light::-webkit-scrollbar-track{background-color:transparent}
+body.light::-webkit-scrollbar-thumb{background-color:var(--scrollbar-thumb)}
+body.light::-webkit-scrollbar-thumb:hover{background-color:var(--scrollbar-thumb-hover)}
+body.light .chat::-webkit-scrollbar-track{background-color:transparent}
+body.light .chat::-webkit-scrollbar-thumb{background-color:var(--scrollbar-thumb)}
+body.light .chat::-webkit-scrollbar-thumb:hover{background-color:var(--scrollbar-thumb-hover)}
+body.light .chat *::-webkit-scrollbar-track{background-color:transparent}
+body.light .chat *::-webkit-scrollbar-thumb{background-color:var(--scrollbar-thumb)}
+body.light .chat *::-webkit-scrollbar-thumb:hover{background-color:var(--scrollbar-thumb-hover)}
 body{font-family:var(--font-ui);font-synthesis:none;background:var(--bg-app);color:var(--text-main);height:100vh;overflow:hidden;display:flex}
 body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-optical-sizing:auto}
 /* ===== 优雅可拉伸侧边栏 ===== */

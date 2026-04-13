@@ -17,8 +17,6 @@
   scroll-behavior: smooth;
   overscroll-behavior: contain;
   scrollbar-gutter: stable both-edges;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(151,143,130,0.38) var(--bg-chat, #161618);
 }
 
 .chat::-webkit-scrollbar{
@@ -26,22 +24,30 @@
 }
 
 .chat::-webkit-scrollbar-track{
-  background: var(--bg-chat, #161618);
+  background-color: transparent;
+  border-radius: 999px;
+  -webkit-border-radius: 999px;
 }
 
 .chat::-webkit-scrollbar-thumb{
-  background: rgba(151,143,130,0.38);
-  border: 2px solid var(--bg-chat, #161618);
+  background-color: var(--scrollbar-thumb);
+  border: 2px solid transparent;
   border-radius: 999px;
+  -webkit-border-radius: 999px;
   background-clip: padding-box;
+  -webkit-background-clip: padding-box;
 }
 
 .chat::-webkit-scrollbar-thumb:hover{
-  background: rgba(151,143,130,0.54);
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.chat.is-scrolling::-webkit-scrollbar-thumb{
+  background-color: var(--scrollbar-thumb-active);
 }
 
 .chat::-webkit-scrollbar-corner{
-  background: var(--bg-chat, #161618);
+  background-color: transparent;
 }
 .chat::before {
   content: '';
@@ -190,25 +196,27 @@ body.light .chat-event-note-detail {
   color: rgba(92, 102, 116, 0.74);
 }
 
-body.light .chat{
-  scrollbar-color: rgba(111,103,93,0.42) var(--bg-chat, #f6f4ef);
-}
-
 body.light .chat::-webkit-scrollbar-track{
-  background: var(--bg-chat, #f6f4ef);
+  background-color: transparent;
 }
 
 body.light .chat::-webkit-scrollbar-thumb{
-  background: rgba(111,103,93,0.42);
-  border-color: var(--bg-chat, #f6f4ef);
+  background-color: var(--scrollbar-thumb);
+  border-color: transparent;
+  background-clip: padding-box;
+  -webkit-background-clip: padding-box;
+}
+
+body.light .chat.is-scrolling::-webkit-scrollbar-thumb{
+  background-color: var(--scrollbar-thumb-active);
 }
 
 body.light .chat::-webkit-scrollbar-thumb:hover{
-  background: rgba(111,103,93,0.56);
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 body.light .chat::-webkit-scrollbar-corner{
-  background: var(--bg-chat, #f6f4ef);
+  background-color: transparent;
 }
 
 /* ===== 欢迎页 ===== */

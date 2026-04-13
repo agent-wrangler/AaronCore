@@ -507,8 +507,6 @@ body.is-resizing-run-panel *{
   z-index:1;
   padding:12px 20px 20px;
   display:block;
-  scrollbar-width:thin;
-  scrollbar-color:rgba(200,193,180,0.34) #2a2925;
 }
 
 .run-panel-stream::-webkit-scrollbar{
@@ -516,23 +514,30 @@ body.is-resizing-run-panel *{
 }
 
 .run-panel-stream::-webkit-scrollbar-track{
-  background:#2a2925;
+  background-color:transparent;
+  border-radius:999px;
+  -webkit-border-radius:999px;
 }
 
 .run-panel-stream::-webkit-scrollbar-thumb{
-  background:rgba(200,193,180,0.34);
-  border:2px solid #2a2925;
+  background-color:var(--scrollbar-thumb);
+  border:2px solid transparent;
   border-radius:999px;
+  -webkit-border-radius:999px;
   background-clip:padding-box;
+  -webkit-background-clip:padding-box;
 }
 
 .run-panel-stream::-webkit-scrollbar-thumb:hover{
-  background:rgba(200,193,180,0.48);
-  border-color:#2a2925;
+  background-color:var(--scrollbar-thumb-hover);
+}
+
+.run-panel-stream.is-scrolling::-webkit-scrollbar-thumb{
+  background-color:var(--scrollbar-thumb-active);
 }
 
 .run-panel-stream::-webkit-scrollbar-corner{
-  background:#2a2925;
+  background-color:transparent;
 }
 
 .run-panel-empty{
@@ -965,26 +970,27 @@ body.light .run-panel-empty{
   color:#736b60;
 }
 
-body.light .run-panel-stream{
-  scrollbar-color:rgba(111,103,93,0.42) #f6f4ef;
-}
-
 body.light .run-panel-stream::-webkit-scrollbar-track{
-  background:#f6f4ef;
+  background-color:transparent;
 }
 
 body.light .run-panel-stream::-webkit-scrollbar-thumb{
-  background:rgba(111,103,93,0.42);
-  border-color:#f6f4ef;
+  background-color:var(--scrollbar-thumb);
+  border-color:transparent;
+  background-clip:padding-box;
+  -webkit-background-clip:padding-box;
+}
+
+body.light .run-panel-stream.is-scrolling::-webkit-scrollbar-thumb{
+  background-color:var(--scrollbar-thumb-active);
 }
 
 body.light .run-panel-stream::-webkit-scrollbar-thumb:hover{
-  background:rgba(111,103,93,0.56);
-  border-color:#f6f4ef;
+  background-color:var(--scrollbar-thumb-hover);
 }
 
 body.light .run-panel-stream::-webkit-scrollbar-corner{
-  background:#f6f4ef;
+  background-color:transparent;
 }
 
 body.light .run-stream-entry-label{

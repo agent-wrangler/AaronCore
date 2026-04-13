@@ -5,6 +5,37 @@ window.onload=function(){
  window._currentTab=1; // 默认聊天 tab
  initSidebarResize();
  hideWelcome();
+ (function(){
+  var scrollingTimers=new WeakMap();
+  function markScrolling(el){
+   if(!el || !el.classList) return;
+   el.classList.add('is-scrolling');
+   var oldTimer=scrollingTimers.get(el);
+   if(oldTimer) clearTimeout(oldTimer);
+   var nextTimer=setTimeout(function(){
+    el.classList.remove('is-scrolling');
+    scrollingTimers.delete(el);
+   },720);
+   scrollingTimers.set(el,nextTimer);
+  }
+  function resolveScrollableTarget(target){
+   var el=target && target.nodeType===1 ? target : null;
+   if(!el) return null;
+   if(el.matches && el.matches('.chat, .run-panel-stream, .input textarea, .task-plan-list, .settings-page-host')) return el;
+   if(el.closest){
+    return el.closest('.chat, .run-panel-stream, .input textarea, .task-plan-list, .settings-page-host');
+   }
+   return null;
+  }
+  document.addEventListener('scroll',function(e){
+   var target=e.target===document ? (document.scrollingElement||document.documentElement) : e.target;
+   markScrolling(resolveScrollableTarget(target) || target);
+  },true);
+  document.addEventListener('wheel',function(e){
+   var target=resolveScrollableTarget(e.target);
+   if(target) markScrolling(target);
+  },{capture:true,passive:true});
+ })();
  // 输入框右键菜单（pywebview 不提供原生右键）
  (function(){
   var menu=document.createElement('div');

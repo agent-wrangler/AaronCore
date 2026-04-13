@@ -554,26 +554,27 @@ body.dark .run-panel-summary-value{
   color:#a6a39b;
 }
 
-body.dark .run-panel-stream{
-  scrollbar-color:rgba(185,182,175,0.34) #262624;
-}
-
 body.dark .run-panel-stream::-webkit-scrollbar-track{
-  background:#262624;
+  background-color:transparent;
 }
 
 body.dark .run-panel-stream::-webkit-scrollbar-thumb{
-  background:rgba(185,182,175,0.34);
-  border:2px solid #262624;
+  background-color:var(--scrollbar-thumb);
+  border:2px solid transparent;
+  background-clip:padding-box;
+  -webkit-background-clip:padding-box;
+}
+
+body.dark .run-panel-stream.is-scrolling::-webkit-scrollbar-thumb{
+  background-color:var(--scrollbar-thumb-active);
 }
 
 body.dark .run-panel-stream::-webkit-scrollbar-thumb:hover{
-  background:rgba(185,182,175,0.48);
-  border-color:#262624;
+  background-color:var(--scrollbar-thumb-hover);
 }
 
 body.dark .run-panel-stream::-webkit-scrollbar-corner{
-  background:#262624;
+  background-color:transparent;
 }
 
 body.dark .run-panel-close{
