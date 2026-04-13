@@ -1,0 +1,16 @@
+{
+  "models": {
+    "deepseek-chat": {
+      "api_key": "YOUR_DEEPSEEK_API_KEY"
+    },
+    "minimax": {
+      "api_key": "YOUR_MINIMAX_API_KEY"
+    },
+    "MiniMax-M2.7-highspeed": {
+      "api_key": "YOUR_MINIMAX_API_KEY"
+    },
+    "deepseek-reasoner": {
+      "api_key": "YOUR_DEEPSEEK_API_KEY"
+    }
+  }
+}

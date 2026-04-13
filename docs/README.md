@@ -21,3 +21,7 @@
 ## 历史归档
 
 - `99-归档-archive/` — 所有过时的方案文档、旧版架构说明
+## 开源准备
+
+- `30-开源-open-source/AaronCore_开源整理草案.md` - AaronCore 公开仓的定位、边界与整理原则
+- `30-开源-open-source/AaronCore_state_data_public_boundary.md` - `state_data/` 的公开边界、模板策略与私有真值划分
