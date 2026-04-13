@@ -91,7 +91,9 @@
    <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none" onchange="handleImageFile(this)">
    <div class="inp-wrap">
     <div class="image-preview-bar" id="imagePreviewBar" style="display:none;"></div>
-  <textarea id="inp" placeholder="与 AaronCore 对话..." data-i18n-placeholder="input.placeholder" onkeydown="if(event.keyCode==13&&!event.shiftKey){event.preventDefault();send();}"></textarea>
+    <div class="inp-field-shell">
+  <textarea id="inp" placeholder="与 AaronCore 对话..." data-i18n-placeholder="input.placeholder" spellcheck="false" autocorrect="off" autocapitalize="off" data-gramm="false" data-ms-editor="false" onkeydown="if(event.keyCode==13&&!event.shiftKey){event.preventDefault();send();}"></textarea>
+    </div>
     <div class="inp-actions">
       <div class="model-selector-wrap composer-model-selector">
        <button class="model-selector-btn" id="modelSelectorBtn" type="button" onclick="toggleModelDropdown(event)" aria-haspopup="listbox" aria-expanded="false">

@@ -202,6 +202,10 @@
     background: rgba(54, 53, 49, 0.94);
     border-color: rgba(255, 255, 255, 0.14);
   }
+.inp-field-shell {
+  border-radius: 24px 24px 0 0;
+  overflow: hidden;
+}
 .input textarea {
   background: transparent;
   border: none;
@@ -217,10 +221,13 @@
   min-height: 49px;
   max-height: 40vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   line-height: 1.72;
   box-sizing: border-box;
   transition: none;
   box-shadow: none;
+  display: block;
   width: 100%;
 }
 
@@ -250,6 +257,7 @@
 }
 .input textarea::-webkit-scrollbar-track {
   background: transparent;
+  margin: 10px 0 6px;
 }
 .input textarea::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.25);

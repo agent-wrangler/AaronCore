@@ -652,6 +652,10 @@ body.dark .msg.assistant .assistant-reply-markdown pre {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+body.dark .msg.assistant .assistant-reply-markdown li::marker {
+  color: rgba(247, 241, 232, 0.78);
+}
+
 .bubble h1 {
   font-size: 19px;
   font-weight: 600;
