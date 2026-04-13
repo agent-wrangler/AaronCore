@@ -56,6 +56,10 @@ def _save_config():
     """持久化当前配置到文件"""
     import brain
     brain._raw_config["models"] = brain.MODELS_CONFIG
+    saver = getattr(brain, "save_raw_config", None)
+    if callable(saver):
+        saver(brain._raw_config)
+        return
     with open(brain.config_path, "w", encoding="utf-8") as f:
         json.dump(brain._raw_config, f, ensure_ascii=False, indent=2)
 

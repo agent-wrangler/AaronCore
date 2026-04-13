@@ -90,17 +90,12 @@ def _rate_limit_ok():
 
 def _load_llm_config():
     try:
-        p = str(_REPO_ROOT / 'brain' / 'llm_config.json')
-        with open(p, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        # 优先读 default 指向的模型配置
-        default = data.get('default', '')
-        if default and default in data.get('models', {}):
-            return data['models'][default]
-        # fallback: 顶层字段
-        if data.get('model') and data.get('api_key'):
-            return data
-        _log(f"llm_config \u65e0\u6709\u6548\u914d\u7f6e: default={default}")
+        from brain import get_current_llm_config
+
+        cfg = get_current_llm_config()
+        if isinstance(cfg, dict) and cfg.get("model"):
+            return cfg
+        _log("llm_config \u65e0\u6709\u6548\u914d\u7f6e")
         return None
     except Exception as e:
         _log(f"llm_config \u52a0\u8f7d\u5931\u8d25: {e}")

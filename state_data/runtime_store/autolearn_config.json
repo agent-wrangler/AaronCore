@@ -15,6 +15,6 @@
   "max_results": 5,
   "max_summary_length": 360,
   "search_engine": "tavily",
-  "tavily_api_key": "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",
+  "tavily_api_key": "",
   "brave_api_key": ""
 }

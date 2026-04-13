@@ -37,6 +37,10 @@ def _normalize_model_config(cfg: dict, *, fallback_model: str = "") -> dict:
 
 def _save_models_file(brain_module) -> None:
     brain_module._raw_config["models"] = brain_module.MODELS_CONFIG
+    saver = getattr(brain_module, "save_raw_config", None)
+    if callable(saver):
+        saver(brain_module._raw_config)
+        return
     with open(brain_module.config_path, "w", encoding="utf-8") as handle:
         json.dump(brain_module._raw_config, handle, ensure_ascii=False, indent=2)
 
@@ -332,6 +336,11 @@ async def save_model_config(request: dict):
         _save_models_file(brain)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+    if mid == getattr(brain, "_current_default", ""):
+        try:
+            brain.LLM_CONFIG = normalized
+        except Exception:
+            pass
     if len(brain.MODELS_CONFIG) == 1:
         brain.set_default_model(mid)
     return {"ok": True}

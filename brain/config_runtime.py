@@ -3,36 +3,64 @@
 from __future__ import annotations
 
 import json
-import os
+from copy import deepcopy
+from pathlib import Path
+
+from storage.paths import LLM_CONFIG_FILE, LLM_LOCAL_CONFIG_FILE
 
 
-DEFAULT_ASSISTANT_SYSTEM_PROMPT = "你是当前对话助手。"
-DEFAULT_CHAT_STYLE_PROMPT = "自然、直接、清楚地回应用户，优先遵守上层给出的事实和任务要求。"
+DEFAULT_ASSISTANT_SYSTEM_PROMPT = "You are the assistant for the current conversation."
+DEFAULT_CHAT_STYLE_PROMPT = (
+    "Respond naturally, clearly, and helpfully while staying grounded in the conversation."
+)
+
+
+_DEFAULT_RAW_CONFIG = {
+    "api_key": "",
+    "model": "MiniMax-M2.7",
+    "base_url": "https://api.minimaxi.com/anthropic",
+}
+_SECRET_MODEL_FIELDS = ("api_key",)
+
+
+def _read_json_dict(path: Path) -> dict:
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    merged = deepcopy(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
 
 
 def _load_raw_config() -> dict:
-    config_path = os.path.join(os.path.dirname(__file__), "llm_config.json")
-    if os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-
-    parent_config = os.path.join(os.path.dirname(os.path.dirname(__file__)), "brain", "llm_config.json")
-    if os.path.exists(parent_config):
-        with open(parent_config, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-
-    return {
-        "api_key": "",
-        "model": "MiniMax-M2.7",
-        "base_url": "https://api.minimaxi.com/anthropic",
-    }
+    public_config = _read_json_dict(LLM_CONFIG_FILE)
+    local_config = _read_json_dict(LLM_LOCAL_CONFIG_FILE)
+    base_config = public_config or deepcopy(_DEFAULT_RAW_CONFIG)
+    return _deep_merge(base_config, local_config)
 
 
 def _normalize_raw_config(raw_config: dict) -> dict:
-    if "models" in raw_config:
-        return raw_config
+    if isinstance(raw_config, dict) and "models" in raw_config and isinstance(raw_config.get("models"), dict) and raw_config["models"]:
+        normalized = deepcopy(raw_config)
+        default = str(normalized.get("default") or "").strip()
+        if not default or default not in normalized["models"]:
+            normalized["default"] = next(iter(normalized["models"]))
+        return normalized
 
-    model_name = raw_config.get("model", "deepseek-chat")
+    raw_config = raw_config if isinstance(raw_config, dict) else {}
+    model_name = str(raw_config.get("model", "deepseek-chat") or "deepseek-chat").strip() or "deepseek-chat"
     return {
         "models": {
             model_name: {
@@ -46,8 +74,64 @@ def _normalize_raw_config(raw_config: dict) -> dict:
     }
 
 
-config_path = os.path.join(os.path.dirname(__file__), "llm_config.json")
-raw_config = _normalize_raw_config(_load_raw_config())
-models_config = raw_config["models"]
-current_default = raw_config.get("default", next(iter(models_config)))
-llm_config = models_config.get(current_default) or next(iter(models_config.values()))
+def _split_raw_config(raw_config: dict) -> tuple[dict, dict]:
+    normalized = _normalize_raw_config(raw_config)
+    public_config = deepcopy(normalized)
+    local_config: dict = {}
+
+    models = public_config.get("models", {})
+    if isinstance(models, dict):
+        local_models = {}
+        for model_id, cfg in models.items():
+            public_entry = dict(cfg or {})
+            local_entry = {}
+            for field in _SECRET_MODEL_FIELDS:
+                value = str(public_entry.get(field) or "")
+                if value:
+                    local_entry[field] = value
+                if field in public_entry:
+                    public_entry[field] = ""
+            models[model_id] = public_entry
+            if local_entry:
+                local_models[model_id] = local_entry
+        if local_models:
+            local_config["models"] = local_models
+
+    return public_config, local_config
+
+
+def _write_json_dict(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _sync_runtime_state(merged_config: dict) -> None:
+    global raw_config, models_config, current_default, llm_config
+    raw_config = _normalize_raw_config(merged_config)
+    models_config = raw_config["models"]
+    current_default = raw_config.get("default", next(iter(models_config)))
+    llm_config = models_config.get(current_default) or next(iter(models_config.values()))
+
+
+def save_raw_config(raw_config_to_save: dict | None = None) -> dict:
+    merged_config = _normalize_raw_config(raw_config_to_save or raw_config)
+    public_config, local_config = _split_raw_config(merged_config)
+    _write_json_dict(LLM_CONFIG_FILE, public_config)
+    if local_config:
+        _write_json_dict(LLM_LOCAL_CONFIG_FILE, local_config)
+    elif LLM_LOCAL_CONFIG_FILE.exists():
+        try:
+            LLM_LOCAL_CONFIG_FILE.unlink()
+        except Exception:
+            pass
+    _sync_runtime_state(merged_config)
+    return deepcopy(raw_config)
+
+
+def get_current_llm_config() -> dict:
+    return deepcopy(llm_config)
+
+
+config_path = str(LLM_CONFIG_FILE)
+local_config_path = str(LLM_LOCAL_CONFIG_FILE)
+_sync_runtime_state(_load_raw_config())

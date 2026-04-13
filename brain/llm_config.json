@@ -5,7 +5,7 @@
       "vision": false,
       "transport": "openai_api",
       "base_url": "https://api.deepseek.com/v1",
-      "api_key": "sk-e5cbede8b15f454dad0e48273e8eb4e3"
+      "api_key": ""
     },
     "gpt-4o": {
       "base_url": "codex://local",
@@ -29,14 +29,14 @@
       "auth_mode": "codex_cli"
     },
     "minimax": {
-      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "api_key": "",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
       "model": "MiniMax-M2.7",
       "vision": false,
       "transport": "openai_api"
     },
     "MiniMax-M2.7-highspeed": {
-      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "api_key": "",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
       "model": "MiniMax-M2.7-highspeed",
       "vision": false,
@@ -53,7 +53,7 @@
       "model": "deepseek-reasoner",
       "vision": false,
       "transport": "openai_api",
-      "api_key": "sk-e5cbede8b15f454dad0e48273e8eb4e3",
+      "api_key": "",
       "base_url": "https://api.deepseek.com/v1"
     },
     "MiniMax-M2.5": {
@@ -61,7 +61,7 @@
       "vision": false,
       "transport": "openai_api",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
-      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "api_key": "",
       "derived": true,
       "source_model": "minimax",
       "provider_key": "minimax"
@@ -71,7 +71,7 @@
       "vision": false,
       "transport": "openai_api",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
-      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "api_key": "",
       "derived": true,
       "source_model": "minimax",
       "provider_key": "minimax"
@@ -81,7 +81,7 @@
       "vision": false,
       "transport": "openai_api",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
-      "api_key": "sk-api-zntyVGARB2y_80NvPT0OAwKcDqrRXugHDXkJwGZr0rxSNivSxcBP49oMStArFsH3-vzu6rXJJ_AvSqfb18nHRF0SeUOWem8oBLkNYWjsX3wVeDE0mHNSB4Y",
+      "api_key": "",
       "derived": true,
       "source_model": "minimax",
       "provider_key": "minimax"

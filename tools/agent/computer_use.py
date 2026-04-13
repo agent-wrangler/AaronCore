@@ -290,9 +290,11 @@ def desktop_list_windows() -> str:
 def _generate_first_msg(user_input: str, context: dict = None) -> str:
     """用 LLM 从用户指令+对话历史中提取话题，生成自然的第一句话发给对方 AI。"""
     try:
-        cfg_path = os.path.join(os.path.dirname(__file__), '..', '..', 'brain', 'llm_config.json')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg = json.load(f)
+        from brain import get_current_llm_config
+
+        cfg = get_current_llm_config()
+        if not cfg or not cfg.get("base_url") or not cfg.get("api_key"):
+            raise ValueError("llm_config_missing")
         import urllib.request
 
         # 把最近对话历史拼成摘要，帮 LLM 推断当前话题

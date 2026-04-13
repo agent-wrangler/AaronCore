@@ -57,13 +57,28 @@ def _post_with_proxy_fallback(url: str, **kwargs):
     return _provider_runtime.post_with_proxy_fallback(url, **kwargs)
 
 
-config_path = _config_runtime.config_path
-_raw_config = _config_runtime.raw_config
-MODELS_CONFIG = _config_runtime.models_config
-_current_default = _config_runtime.current_default
+def _refresh_config_state():
+    global config_path, _raw_config, MODELS_CONFIG, _current_default, LLM_CONFIG
+    config_path = _config_runtime.config_path
+    _raw_config = _config_runtime.raw_config
+    MODELS_CONFIG = _config_runtime.models_config
+    _current_default = _config_runtime.current_default
+    LLM_CONFIG = _config_runtime.llm_config
+
+
+def save_raw_config(raw_config: dict | None = None) -> dict:
+    _config_runtime.save_raw_config(_raw_config if raw_config is None else raw_config)
+    _refresh_config_state()
+    return _raw_config
+
+
+def get_current_llm_config() -> dict:
+    return _config_runtime.get_current_llm_config()
+
+
+_refresh_config_state()
 
 # 兼容旧代码：LLM_CONFIG 指向当前默认模型
-LLM_CONFIG = _config_runtime.llm_config
 DEFAULT_ASSISTANT_SYSTEM_PROMPT = _config_runtime.DEFAULT_ASSISTANT_SYSTEM_PROMPT
 DEFAULT_CHAT_STYLE_PROMPT = _config_runtime.DEFAULT_CHAT_STYLE_PROMPT
 
@@ -718,11 +733,16 @@ def set_default_model(model_id: str) -> bool:
         models_config=MODELS_CONFIG,
         raw_config=_raw_config,
         config_path=config_path,
+        save_raw_config_fn=save_raw_config,
     )
     if not ok:
         return False
     _current_default = new_default
     LLM_CONFIG = new_cfg
+    try:
+        _raw_config["default"] = new_default
+    except Exception:
+        pass
     _config_runtime.current_default = new_default
     _config_runtime.llm_config = new_cfg
     return True

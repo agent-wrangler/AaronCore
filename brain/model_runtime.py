@@ -16,13 +16,23 @@ def get_current_model_name(llm_config: dict, current_default: str) -> str:
     return llm_config.get("model", current_default)
 
 
-def set_default_model(model_id: str, *, models_config: dict, raw_config: dict, config_path: str) -> tuple[bool, str, dict]:
+def set_default_model(
+    model_id: str,
+    *,
+    models_config: dict,
+    raw_config: dict,
+    config_path: str = "",
+    save_raw_config_fn=None,
+) -> tuple[bool, str, dict]:
     if model_id not in models_config:
         return False, "", {}
     try:
         raw_config["default"] = model_id
-        with open(config_path, "w", encoding="utf-8") as handle:
-            json.dump(raw_config, handle, ensure_ascii=False, indent=2)
+        if callable(save_raw_config_fn):
+            save_raw_config_fn(raw_config)
+        elif config_path:
+            with open(config_path, "w", encoding="utf-8") as handle:
+                json.dump(raw_config, handle, ensure_ascii=False, indent=2)
     except Exception:
         pass
     return True, model_id, models_config[model_id]

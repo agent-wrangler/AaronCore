@@ -45,6 +45,24 @@ class L8LearnTests(unittest.TestCase):
         self.assertTrue(allowed)
         self.assertEqual(reason, "eligible")
 
+    def test_autolearn_config_moves_secret_keys_to_local_file(self):
+        config = dict(l8_learn.DEFAULT_CONFIG)
+        config["tavily_api_key"] = "tvly-live-123456"
+
+        saved = l8_learn.save_autolearn_config(config)
+        public_data = json.loads(self.config_file.read_text(encoding="utf-8"))
+        local_data = json.loads(
+            self.config_file.with_name("autolearn_config.local.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(saved["tavily_api_key"], "tvly-live-123456")
+        self.assertEqual(public_data["tavily_api_key"], "")
+        self.assertEqual(local_data["tavily_api_key"], "tvly-live-123456")
+        self.assertEqual(
+            l8_learn.load_autolearn_config()["tavily_api_key"],
+            "tvly-live-123456",
+        )
+
     def test_should_trigger_auto_learn_no_longer_keyword_blocks_greetings(self):
         allowed, reason = l8_learn.should_trigger_auto_learn("hello")
 

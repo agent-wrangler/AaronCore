@@ -38,15 +38,14 @@ _NEWS_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "app_data" / "conf
 
 def _load_llm_config():
     try:
-        with open(_LLM_CONFIG_PATH, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        if "models" in raw:
-            default = raw.get("default", "")
-            models = raw["models"]
-            return models.get(default) or next(iter(models.values()))
-        return raw
+        from brain import get_current_llm_config
+
+        cfg = get_current_llm_config()
+        if isinstance(cfg, dict):
+            return cfg
     except Exception:
-        return {"api_key": "", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"}
+        pass
+    return {"api_key": "", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"}
 
 
 def _load_news_config():

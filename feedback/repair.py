@@ -339,20 +339,14 @@ def _resolve_repo_path(path_str: str) -> Path | None:
 
 
 def _load_llm_config() -> dict:
-    config_path = ROOT / "brain" / "llm_config.json"
-    if config_path.exists():
-        try:
-            data = json.loads(config_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                # 新格式：models + default
-                if "models" in data:
-                    default = data.get("default", "")
-                    models = data["models"]
-                    return models.get(default) or next(iter(models.values()), {})
-                # 鏃ф牸寮忥細椤跺眰 api_key/model/base_url
-                return data
-        except Exception:
-            pass
+    try:
+        from brain import get_current_llm_config
+
+        config = get_current_llm_config()
+        if isinstance(config, dict):
+            return config
+    except Exception:
+        pass
     return {"api_key": "", "model": "", "base_url": ""}
 
 

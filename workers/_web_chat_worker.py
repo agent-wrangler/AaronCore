@@ -25,16 +25,14 @@ from playwright.sync_api import sync_playwright
 def _load_llm_config():
     """读取 brain/llm_config.json"""
     try:
-        cfg_path = Path(__file__).resolve().parents[1] / 'brain' / 'llm_config.json'
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            raw = json.load(f)
-        if "models" in raw:
-            default = raw.get("default", "")
-            models = raw["models"]
-            return models.get(default) or next(iter(models.values()))
-        return raw
+        from brain import get_current_llm_config
+
+        cfg = get_current_llm_config()
+        if isinstance(cfg, dict) and cfg.get("model"):
+            return cfg
     except Exception:
-        return None
+        pass
+    return None
 
 
 def _generate_follow_up(conversation_so_far, llm_cfg, original_goal=""):

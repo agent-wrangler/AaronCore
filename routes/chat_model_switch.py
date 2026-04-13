@@ -269,8 +269,12 @@ def detect_model_switch(text: str) -> dict | None:
             brain.MODELS_CONFIG[target] = new_cfg
             brain._raw_config["models"] = brain.MODELS_CONFIG
             try:
-                with open(brain.config_path, "w", encoding="utf-8") as handle:
-                    json.dump(brain._raw_config, handle, ensure_ascii=False, indent=2)
+                saver = getattr(brain, "save_raw_config", None)
+                if callable(saver):
+                    saver(brain._raw_config)
+                else:
+                    with open(brain.config_path, "w", encoding="utf-8") as handle:
+                        json.dump(brain._raw_config, handle, ensure_ascii=False, indent=2)
             except Exception:
                 pass
             ok = brain.set_default_model(target)
