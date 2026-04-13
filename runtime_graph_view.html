@@ -22,11 +22,18 @@
  </div>
  <script>
  (function(){
-  var savedTheme = localStorage.getItem('nova_theme') || 'light';
+  var savedMode = localStorage.getItem('nova_theme') || localStorage.getItem('novaTheme') || 'light';
+  savedMode = String(savedMode || '').toLowerCase();
+  if(savedMode!=='dark' && savedMode!=='system') savedMode='light';
+  var savedTheme = savedMode==='system'
+   ? (((window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'))
+   : savedMode;
   document.body.classList.remove('light','dark');
   document.body.classList.add(savedTheme === 'dark' ? 'dark' : 'light');
+  document.body.setAttribute('data-theme-mode', savedMode);
   document.documentElement.classList.remove('theme-light','theme-dark');
   document.documentElement.classList.add(savedTheme === 'dark' ? 'theme-dark' : 'theme-light');
+  document.documentElement.setAttribute('data-theme-mode', savedMode);
  })();
  </script>
  <script src="/static/js/runtime_graph.js?v=20260331-graph9"></script>

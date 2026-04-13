@@ -13,6 +13,7 @@ Menu.setApplicationMenu(null);
 
 let win;
 const WINDOW_CONTROLS_MODE = 'custom-html';
+const getSystemTheme = () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 function resolveExistingRoot(candidate) {
   if (!candidate) return '';
   try {
@@ -160,6 +161,13 @@ function emitWindowState() {
   });
 }
 
+function emitSystemTheme() {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('system-theme', {
+    theme: getSystemTheme(),
+  });
+}
+
 function focusExistingWindow() {
   if (!win) return;
   if (win.isMinimized()) {
@@ -293,13 +301,13 @@ function createWindow() {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   const ww = 1100, wh = 900;
 
-  nativeTheme.themeSource = 'light';
+  nativeTheme.themeSource = 'system';
   const getWindowPalette = (theme) => ({
     backgroundColor: theme === 'dark' ? '#161618' : '#ffffff',
     overlayColor: theme === 'dark' ? '#161618' : '#ffffff',
     symbolColor: theme === 'dark' ? '#ebebf0' : '#334155',
   });
-  const palette = getWindowPalette('light');
+  const palette = getWindowPalette(getSystemTheme());
 
   win = new BrowserWindow({
     width: ww,
@@ -331,7 +339,10 @@ function createWindow() {
   });
 
   win.loadURL(`http://localhost:${BACKEND_PORT}/`);
-  win.webContents.on('did-finish-load', emitWindowState);
+  win.webContents.on('did-finish-load', () => {
+    emitWindowState();
+    emitSystemTheme();
+  });
   win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     console.log('[renderer]', `level=${level}`, String(message || ''), `at ${sourceId || 'unknown'}:${line || 0}`);
   });
@@ -355,7 +366,6 @@ function createWindow() {
   // 主题切换时同步系统主题
   ipcMain.on('win-theme', (_, theme) => {
     if (!win) return;
-    nativeTheme.themeSource = theme === 'dark' ? 'dark' : 'light';
     const nextPalette = getWindowPalette(theme);
     if (typeof win.setBackgroundColor === 'function') {
       win.setBackgroundColor(nextPalette.backgroundColor);
@@ -372,6 +382,10 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
+nativeTheme.on('updated', () => {
+  emitSystemTheme();
+});
+
 // ── IPC：窗口控制 ──
 ipcMain.on('win-minimize', () => { if (win) win.minimize(); });
 ipcMain.on('win-maximize', () => {
@@ -384,6 +398,7 @@ ipcMain.on('win-drag-by', (_, dx, dy) => {
   const [x, y] = win.getPosition();
   win.setPosition(x + dx, y + dy);
 });
+ipcMain.handle('win-get-system-theme', () => getSystemTheme());
 
 // ── 启动 ──
 app.whenReady().then(async () => {

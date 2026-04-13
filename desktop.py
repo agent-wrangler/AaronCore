@@ -4,10 +4,15 @@ AaronCore Desktop - 无边框窗口（子类化 + WS_THICKFRAME 缩放 + JS 拖�
 import webview
 import time
 import os
+import json
 import ctypes
 import ctypes.wintypes
 import subprocess
 from pathlib import Path
+try:
+    import winreg
+except ImportError:  # pragma: no cover - non-Windows fallback
+    winreg = None
 
 user32 = ctypes.windll.user32
 dwmapi = ctypes.windll.dwmapi
@@ -70,6 +75,8 @@ _RESIZE_DIR = {
 # ── 窗口子类化 ──
 _hwnd = None
 _original_wndproc = None
+_theme_watch_started = False
+_last_system_theme = ""
 
 # 64 位 WNDPROC 签名
 WNDPROC = ctypes.WINFUNCTYPE(
@@ -169,6 +176,49 @@ def _set_titlebar_theme(dark=True):
 
 # ── 暴露给前端的 API ──
 
+def get_system_theme():
+    if winreg is None:
+        return "light"
+    personalize_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, personalize_path) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return "dark" if int(value) == 0 else "light"
+    except Exception:
+        return "light"
+
+def _emit_system_theme(theme: str):
+    try:
+        payload = json.dumps({"theme": str(theme or "light")}, ensure_ascii=True)
+        window.evaluate_js(
+            "window.dispatchEvent(new CustomEvent('aaroncore-system-theme', { detail: "
+            + payload
+            + " }));"
+        )
+    except Exception:
+        pass
+
+def _start_theme_watch():
+    global _theme_watch_started, _last_system_theme
+    if _theme_watch_started:
+        return
+    _theme_watch_started = True
+
+    def _watch():
+        global _last_system_theme
+        while True:
+            try:
+                theme = get_system_theme()
+                if theme != _last_system_theme:
+                    _last_system_theme = theme
+                    _emit_system_theme(theme)
+                time.sleep(1.2)
+            except Exception:
+                time.sleep(2.0)
+
+    import threading
+    threading.Thread(target=_watch, daemon=True).start()
+
 def set_theme(theme):
     _set_titlebar_theme(theme == 'dark')
 
@@ -245,6 +295,7 @@ def _on_shown():
     def _do():
         time.sleep(2)
         window.expose(set_theme)
+        window.expose(get_system_theme)
         window.expose(minimize)
         window.expose(toggle_maximize)
         window.expose(close_window)
@@ -255,7 +306,10 @@ def _on_shown():
             window.set_title("")
             if not _original_wndproc:
                 _subclass_window(hwnd)
-        _set_titlebar_theme(dark=False)
+        current_theme = get_system_theme()
+        _set_titlebar_theme(dark=(current_theme == "dark"))
+        _emit_system_theme(current_theme)
+        _start_theme_watch()
         print(f"[desktop] ready, hwnd={hwnd}", flush=True)
         try:
             from core.vision import init as vi, start as vs
