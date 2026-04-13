@@ -1,0 +1,18 @@
+[
+  {
+    "suite_id": "recorded_runtime_regressions",
+    "description": "Recorded runtime continuity regressions pulled from real conversations.",
+    "preset_ids": [
+      "recorded_runtime_guardrails"
+    ],
+    "strict_by_default": true
+  },
+  {
+    "suite_id": "full_runtime_regressions",
+    "description": "All runtime guardrails, including recorded regression traces.",
+    "preset_ids": [
+      "full_runtime_guardrails"
+    ],
+    "strict_by_default": true
+  }
+]

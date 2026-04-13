@@ -31,6 +31,10 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
     blocker = _short_text((working_state or {}).get("blocker"), 120)
     recent_progress = _short_text((working_state or {}).get("recent_progress"), 120)
     summary = _short_text((working_state or {}).get("summary"), 160)
+    verification_detail = _short_text((working_state or {}).get("verification_detail"), 160)
+    query_mode = _short_text((working_state or {}).get("query_mode"), 32)
+    runtime_status = _short_text((working_state or {}).get("runtime_status"), 32)
+    next_action = _short_text((working_state or {}).get("next_action"), 32)
 
     intent = ""
     user_state = ""
@@ -39,13 +43,41 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
     current_focus = current_step or goal
     resume_point = current_step or recent_progress or goal
     if working_state:
-        if blocker:
-            session_state = "open task context; last attempt blocked"
-        elif current_step:
-            session_state = "open task context; last step paused"
+        if query_mode == "locate":
+            session_state = "open task context; user is asking about the current target or location"
+            continuation_hint = "answer the current task location first; do not continue execution unless the user explicitly asks"
+        elif query_mode == "status":
+            session_state = "open task context; user is asking about current progress"
+            continuation_hint = "answer the current task status first; do not continue execution unless the user explicitly asks"
+        elif query_mode == "verify":
+            session_state = "open task context; user is asking whether the current result is verified"
+            continuation_hint = "answer the current task verification state first; do not continue execution unless the user explicitly asks"
+        elif query_mode == "interrupt":
+            session_state = "open task context; user is asking why the last run was interrupted"
+            continuation_hint = "explain the interruption state first; do not continue execution unless the user explicitly asks"
+        elif query_mode == "blocker":
+            session_state = "open task context; user is asking about the current blocker"
+            continuation_hint = "explain the blocker or the missing user action first; do not continue execution unless the user explicitly asks"
+        elif query_mode == "continue":
+            if runtime_status == "waiting_user" or next_action == "wait_for_user":
+                session_state = "open task context; user says the blocker step is complete"
+            elif runtime_status == "verify_failed" or next_action == "retry_or_close":
+                session_state = "open task context; user explicitly asked to retry the latest failed step"
+            elif runtime_status == "interrupted" or next_action == "resume_or_close":
+                session_state = "open task context; user explicitly asked to resume the interrupted task"
+            else:
+                session_state = "open task context; user explicitly asked to continue the current task"
+            continuation_hint = "resume execution from the current step and use the latest runtime state to choose the next action"
         else:
-            session_state = "open task context available"
-        continuation_hint = "continue only if the current user input clearly refers to this task"
+            if runtime_status == "interrupted" or next_action == "resume_or_close":
+                session_state = "open task context; last attempt interrupted"
+            elif blocker:
+                session_state = "open task context; last attempt blocked"
+            elif current_step:
+                session_state = "open task context; last step paused"
+            else:
+                session_state = "open task context available"
+            continuation_hint = "continue only if the current user input clearly refers to this task"
         user_state = (
             f"{session_state}; {continuation_hint}"
             if session_state and continuation_hint
@@ -66,5 +98,5 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
         "current_focus": current_focus,
         "resume_point": resume_point,
         "working_state": working_state,
-        "working_summary": summary or recent_progress or blocker,
+        "working_summary": summary or verification_detail or recent_progress or blocker,
     }

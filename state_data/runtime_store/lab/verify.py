@@ -1,80 +1,108 @@
-"""实验室验证脚本 — 根据目标评估技能输出"""
-import sys
+from __future__ import annotations
+
+import json
 import re
+import sys
+from pathlib import Path
 
-sys.path.insert(0, ".")
 
-target_file = sys.argv[1] if len(sys.argv) > 1 else ""
-goal = sys.argv[2] if len(sys.argv) > 2 else ""
+ROOT_DIR = Path(__file__).resolve().parents[3]
 
-score = 0
 
-# 根据目标文件类型执行
-if "story" in target_file:
+def _score_story_target(goal: str) -> float:
     from core.skills.story import execute
-    r = execute("讲个短故事")
-    if not r:
-        print(0)
-        sys.exit()
-    length = len(r)
-    # 基础分：能跑出来就有分
-    score += 20
-    # 有标题
-    if re.search(r"《.+》", r):
-        score += 15
-    # 有分段（至少3段）
-    paragraphs = [p.strip() for p in r.split("\n\n") if p.strip()]
-    score += min(len(paragraphs) * 5, 20)
-    # 字数评估（根据目标调整）
+
+    reply = execute("讲个短故事")
+    if not reply:
+        return 0.0
+
+    score = 20.0
+    if re.search(r"《.+》", reply):
+        score += 15.0
+
+    paragraphs = [item.strip() for item in reply.split("\n\n") if item.strip()]
+    score += min(len(paragraphs) * 5.0, 20.0)
+
+    length = len(reply)
     if "60秒" in goal or "短视频" in goal:
-        # 60秒约300-500字
         if 250 <= length <= 550:
-            score += 30
+            score += 30.0
         elif 200 <= length <= 700:
-            score += 15
+            score += 15.0
     else:
-        # 默认400-800字
         if 400 <= length <= 800:
-            score += 30
+            score += 30.0
         elif 200 <= length <= 1000:
-            score += 15
-    # 没有报错/废话
-    bad = ["没生成出来", "再说一次", "抱歉", "<think>"]
-    if not any(b in r[:100] for b in bad):
-        score += 15
+            score += 15.0
 
-elif "weather" in target_file:
+    bad_markers = ("没生成出来", "再说一次", "抱歉", "<think>")
+    if not any(marker in reply[:100] for marker in bad_markers):
+        score += 15.0
+    return score
+
+
+def _score_weather_target() -> float:
     from core.skills.weather import execute
-    r = execute("常州天气")
-    if not r:
-        print(0)
-        sys.exit()
-    score += 30
-    if re.search(r"\d+\s*[°℃]", r):
-        score += 40
-    if len(r) > 20:
-        score += 30
 
-elif "news" in target_file:
+    reply = execute("常州天气")
+    if not reply:
+        return 0.0
+
+    score = 30.0
+    if re.search(r"\d+\s*[度℃]", reply):
+        score += 40.0
+    if len(reply) > 20:
+        score += 30.0
+    return score
+
+
+def _score_news_target() -> float:
     from core.skills.news import execute
-    r = execute("今日新闻")
-    if not r:
-        print(0)
-        sys.exit()
-    score += 20
-    lines = [l.strip() for l in r.split("\n") if len(l.strip()) > 10]
-    score += min(len(lines) * 10, 50)
-    if len(r) > 100:
-        score += 30
 
-else:
-    # 配置文件类：检查 JSON 合法性
-    import json
+    reply = execute("今日新闻")
+    if not reply:
+        return 0.0
+
+    score = 20.0
+    lines = [line.strip() for line in reply.split("\n") if len(line.strip()) > 10]
+    score += min(len(lines) * 10.0, 50.0)
+    if len(reply) > 100:
+        score += 30.0
+    return score
+
+
+def _score_json_target(target_file: str) -> float:
     try:
-        with open(target_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        score = 50 + len(str(data)) // 10
+        data = json.loads(Path(target_file).read_text(encoding="utf-8"))
     except Exception:
-        score = 0
+        return 0.0
+    return float(50 + len(str(data)) // 10)
 
-print(score)
+
+def score_target(target_file: str = "", goal: str = "") -> float:
+    target = str(target_file or "").strip().replace("\\", "/").lower()
+    requested_goal = str(goal or "").strip()
+
+    if "story" in target:
+        return _score_story_target(requested_goal)
+    if "weather" in target:
+        return _score_weather_target()
+    if "news" in target:
+        return _score_news_target()
+    return _score_json_target(target_file)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(argv if argv is not None else sys.argv[1:])
+    target_file = args[0] if len(args) >= 1 else ""
+    goal = args[1] if len(args) >= 2 else ""
+    try:
+        score = score_target(target_file, goal)
+    except Exception:
+        score = 0.0
+    print(score)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

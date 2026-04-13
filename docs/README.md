@@ -16,6 +16,7 @@
 - 根目录 `RUNTIME.md` — AaronCore 当前真实运行态主链、tool_call/CoD、电脑操作底座和上下文装载说明；当前运行态优先看它
 - `10-架构-architecture/8层Brain架构详解.md` — L1-L8 各层详细说明，已按当前代码更新 L5-L8 语义
 - `10-架构-architecture/Context-on-Demand (CoD)（按需上下文系统）.md` — CoD 设计思路
+- `10-架构-architecture/AaronCore_运行质量门说明.md` — runtime replay eval、benchmark、quality gate 的日常使用入口
 
 ## 历史归档
 

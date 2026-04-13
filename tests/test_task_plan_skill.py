@@ -269,7 +269,8 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertEqual(session_context.get("intent"), "")
         self.assertIn("continue NovaNotes", session_context.get("topics") or [])
         self.assertIn("open task context", session_context.get("user_state") or "")
-        self.assertIn("continue only if the current user input clearly refers to this task", session_context.get("user_state") or "")
+        self.assertIn("user explicitly asked to continue the current task", session_context.get("user_state") or "")
+        self.assertIn("resume execution from the current step", session_context.get("user_state") or "")
         self.assertEqual(session_context.get("current_focus"), "Patch lower layers")
         self.assertEqual(session_context.get("resume_point"), "Patch lower layers")
         self.assertEqual((session_context.get("working_state") or {}).get("current_step"), "Patch lower layers")
@@ -458,6 +459,72 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIn("Recent progress: Inspect current flow", context)
         self.assertIn("Current blocker: Need the final HTML target path", context)
         self.assertIn("Current task directory/file target: C:/Users/36459/NovaNotes/templates/index.html", context)
+
+    def test_location_followup_keeps_task_context_without_auto_continue_bias(self):
+        _task, snapshot = task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "Working on the admin page patch",
+                "items": [
+                    {"id": "inspect", "title": "Inspect current flow", "status": "done"},
+                    {"id": "patch", "title": "Patch lower layers", "status": "running"},
+                ],
+                "current_item_id": "patch",
+                "phase": "patch",
+            },
+        )
+        task_store_module.remember_fs_target_for_task_plan(
+            snapshot,
+            {"path": "C:/Users/36459/NovaNotes/templates/index.html", "option": "inspect", "source": "tool_runtime"},
+        )
+
+        query = "that file path?"
+        working_state = task_store_module.get_active_task_working_state(query)
+        session_context = session_context_module.extract_session_context([], query)
+        context = reply_formatter_module._build_active_task_context({"user_input": query, "l5_success_paths": []})
+
+        self.assertEqual((working_state or {}).get("query_mode"), "locate")
+        self.assertEqual(((session_context.get("working_state") or {}).get("query_mode")), "locate")
+        self.assertIn("answer the current task location first", session_context.get("user_state") or "")
+        self.assertIn(
+            "Current user request: answer with the current task target or location first.",
+            context,
+        )
+        self.assertIn("Current task directory/file target", context)
+
+    def test_runtime_verification_fields_flow_into_working_state_and_context(self):
+        task_store_module.save_task_plan_snapshot(
+            "continue NovaNotes",
+            {
+                "goal": "continue NovaNotes",
+                "summary": "Verification is still pending",
+                "items": [
+                    {"id": "inspect", "title": "Inspect current flow", "status": "done"},
+                    {"id": "verify", "title": "Verify the patch", "status": "running"},
+                ],
+                "current_item_id": "verify",
+                "phase": "verify",
+                "runtime_status": "verify_failed",
+                "next_action": "retry_or_close",
+                "verification": {
+                    "verified": False,
+                    "detail": "Output file is still missing",
+                },
+            },
+        )
+
+        working_state = task_store_module.get_active_task_working_state("验证了吗")
+        session_context = session_context_module.extract_session_context([], "验证了吗")
+        context = reply_formatter_module._build_active_task_context({"user_input": "验证了吗", "l5_success_paths": []})
+
+        self.assertEqual(working_state.get("query_mode"), "verify")
+        self.assertEqual(working_state.get("runtime_status"), "verify_failed")
+        self.assertEqual(working_state.get("verification_status"), "failed")
+        self.assertEqual(working_state.get("verification_detail"), "Output file is still missing")
+        self.assertIn("answer the current task verification state first", session_context.get("user_state") or "")
+        self.assertIn("Latest verification status: failed", context)
+        self.assertIn("Latest verification detail: Output file is still missing", context)
 
     def test_task_plan_can_remember_and_retrieve_fs_target(self):
         _task, snapshot = task_store_module.save_task_plan_snapshot(

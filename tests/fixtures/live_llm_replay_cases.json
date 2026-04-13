@@ -1,0 +1,84 @@
+[
+  {
+    "case_id": "recorded_continue_after_login_blocker",
+    "description": "Recorded trace: bare continue after a login blocker should stay detached",
+    "query": "继续",
+    "seed_kind": "waiting_user",
+    "expect_active_context": false,
+    "expected_query_mode": "",
+    "expect_tool_call": false,
+    "dialogue_context": "最近对话片段：\n- user: 打开抖音主页\n- assistant: 需要你先完成抖音登录，我才能继续后面的采集",
+    "preset_ids": [
+      "recorded_runtime_guardrails",
+      "full_runtime_guardrails"
+    ]
+  },
+  {
+    "case_id": "recorded_retry_desktop_after_partial_check",
+    "description": "Recorded trace: retry desktop folder check should keep execution bias",
+    "query": "再试试看 能看到桌面的文件夹吗",
+    "seed_kind": "open_plan",
+    "goal": "看下桌面的文件夹有哪些",
+    "fs_target": "C:/Users/36459/Desktop",
+    "expect_active_context": true,
+    "expected_query_mode": "",
+    "expect_tool_call": true,
+    "expected_tool_any": [
+      "folder_explore"
+    ],
+    "dialogue_context": "最近对话片段：\n- user: 看下桌面的文件夹有哪些\n- assistant: 我先检查桌面目录\n- assistant: 上一轮检查没有完整返回",
+    "preset_ids": [
+      "recorded_runtime_guardrails",
+      "full_runtime_guardrails"
+    ]
+  },
+  {
+    "case_id": "recorded_interrupt_reason_first",
+    "description": "Recorded trace: interruption question should explain the interruption before resuming",
+    "query": "what interrupted it just now",
+    "seed_kind": "interrupted",
+    "goal": "Inspect desktop folders",
+    "fs_target": "C:/Users/36459/Desktop",
+    "expect_active_context": true,
+    "expected_query_mode": "interrupt",
+    "expect_tool_call": false,
+    "expected_reply_any": [
+      "中断",
+      "interrupted",
+      "interrupt"
+    ],
+    "dialogue_context": "Recent dialogue fragment:\n- user: inspect the desktop folders\n- assistant: I'll check the desktop folder now\n- assistant: the last environment check was interrupted before it finished",
+    "preset_ids": [
+      "recorded_runtime_guardrails",
+      "full_runtime_guardrails"
+    ]
+  },
+  {
+    "case_id": "recorded_waiting_user_completion_resume",
+    "description": "Recorded trace: explicit user completion after waiting_user should restore continue mode",
+    "query": "我登录好了",
+    "seed_kind": "waiting_user",
+    "expect_active_context": true,
+    "expected_query_mode": "continue",
+    "expect_tool_call": null,
+    "dialogue_context": "Recent dialogue fragment:\n- user: 打开抖音主页\n- assistant: 需要你先完成抖音登录，我才能继续后面的采集\n- user: 好的我去登录",
+    "preset_ids": [
+      "recorded_runtime_guardrails",
+      "full_runtime_guardrails"
+    ]
+  },
+  {
+    "case_id": "recorded_verify_failed_retry_resume",
+    "description": "Recorded trace: explicit retry request after verify_failed should restore continue mode",
+    "query": "再试一下修这个",
+    "seed_kind": "verify_failed",
+    "expect_active_context": true,
+    "expected_query_mode": "continue",
+    "expect_tool_call": null,
+    "dialogue_context": "Recent dialogue fragment:\n- user: 继续修 AaronCore continuity\n- assistant: 我先检查 continuity 链路\n- assistant: 上一轮验证还没通过，continuity 还会被一句闲聊误续接",
+    "preset_ids": [
+      "recorded_runtime_guardrails",
+      "full_runtime_guardrails"
+    ]
+  }
+]

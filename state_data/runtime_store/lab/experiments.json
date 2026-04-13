@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "id": "exp_20260322_175520",
     "target_key": "skills/builtin/story.py",
@@ -34,10 +34,59 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:58:07.387373",
+        "commit": "aa98a2f"
+      },
+      {
+        "round": 7,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:58:14.733997",
+        "commit": "aa98a2f"
+      },
+      {
+        "round": 8,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:58:23.367299",
+        "commit": "aa98a2f"
+      },
+      {
+        "round": 9,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:58:30.677873",
+        "commit": "aa98a2f"
+      },
+      {
+        "round": 10,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:58:37.082823",
+        "commit": "aa98a2f"
+      },
+      {
+        "round": 11,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:01.420938",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T17:55:32.035413"
+    "best_result": {
+      "round": 11,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:01.420938",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:01.420938",
+    "updated_at": "2026-04-14T03:59:01.420938"
   },
   {
     "id": "exp_20260322_175726",
@@ -74,10 +123,24 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:09.985545",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T17:57:38.979036"
+    "best_result": {
+      "round": 6,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:09.985545",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:09.985545",
+    "updated_at": "2026-04-14T03:59:09.985545"
   },
   {
     "id": "exp_20260322_175941",
@@ -114,10 +177,24 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:18.795921",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T17:59:53.926412"
+    "best_result": {
+      "round": 6,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:18.795921",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:18.795921",
+    "updated_at": "2026-04-14T03:59:18.795921"
   },
   {
     "id": "exp_20260322_180159",
@@ -154,10 +231,24 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:26.185539",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T18:02:18.682201"
+    "best_result": {
+      "round": 6,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:26.185539",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:26.185539",
+    "updated_at": "2026-04-14T03:59:26.185539"
   },
   {
     "id": "exp_20260322_180408",
@@ -194,10 +285,24 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:34.811692",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T18:04:19.910681"
+    "best_result": {
+      "round": 6,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:34.811692",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:34.811692",
+    "updated_at": "2026-04-14T03:59:34.811692"
   },
   {
     "id": "exp_20260322_180650",
@@ -234,10 +339,24 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:41.679524",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T18:07:01.795844"
+    "best_result": {
+      "round": 6,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:41.679524",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:41.679524",
+    "updated_at": "2026-04-14T03:59:41.679524"
   },
   {
     "id": "exp_20260322_181102",
@@ -274,9 +393,23 @@
         "round": 5,
         "score": 0,
         "status": "skip"
+      },
+      {
+        "round": 6,
+        "score": 100.0,
+        "status": "keep",
+        "time": "2026-04-14T03:59:50.166483",
+        "commit": "aa98a2f"
       }
     ],
-    "best_result": null,
-    "completed_at": "2026-03-22T18:16:08.675105"
+    "best_result": {
+      "round": 6,
+      "score": 100.0,
+      "status": "keep",
+      "time": "2026-04-14T03:59:50.166483",
+      "commit": "aa98a2f"
+    },
+    "completed_at": "2026-04-14T03:59:50.166483",
+    "updated_at": "2026-04-14T03:59:50.166483"
   }
 ]

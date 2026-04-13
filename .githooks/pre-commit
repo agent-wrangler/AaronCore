@@ -1,0 +1,14 @@
+#!/bin/sh
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
+echo "[AaronCore] running runtime quality gate..."
+python tools/runtime_quality_gate.py --strict
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "[AaronCore] runtime quality gate failed. Commit aborted."
+  exit "$status"
+fi
+
+exit 0
