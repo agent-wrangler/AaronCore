@@ -181,6 +181,45 @@ function _dismissAskUserCard(slot, card){
 
 window._clearAskUserSlot=_clearAskUserSlot;
 
+function _isAskUserDebugId(qid){
+ return String(qid||'').indexOf('__debug__:ask_user')===0;
+}
+
+function _buildAskUserDebugPayload(data){
+ var source=(data&&typeof data==='object') ? data : {};
+ var options=Array.isArray(source.options) ? source.options.filter(function(opt){
+  return String(opt||'').trim();
+ }) : [];
+ if(!options.length){
+  options=[
+   '数据处理类技能（如数据清洗、分析）',
+   '自动化工作流技能',
+   '专业领域辅助技能（如代码审查、文档生成）'
+  ];
+ }
+ return {
+  id:String(source.id||'__debug__:ask_user:preview'),
+  question:String(source.question||'主人想要设计什么类型的新技能呢？我可以先提供几个方向供选择：'),
+  options:options,
+  preview_only:source.preview_only!==false
+ };
+}
+
+window._debugAskUserCard=function(data){
+ var card=_renderAskUser(_buildAskUserDebugPayload(data||{}), null);
+ var target=card || document.getElementById('askUserSlot');
+ if(target && typeof target.scrollIntoView==='function'){
+  setTimeout(function(){
+   try{
+    target.scrollIntoView({block:'center', behavior:'smooth'});
+   }catch(e){
+    target.scrollIntoView();
+   }
+  }, 40);
+ }
+ return !!target;
+};
+
 // ── 任务进度条（输入框上方） ──
 function _addTaskProgress(label, value){
  var bar=document.getElementById('taskProgressBar');
@@ -232,6 +271,7 @@ function _renderAskUser(data, pendingState){
  var qid=data.id||'';
  var question=data.question||'';
  var options=data.options||[];
+ var previewOnly=!!(data&&data.preview_only);
  var slot=_getAskUserSlot();
  if(!question || !options.length){
   _clearAskUserSlot();
@@ -307,6 +347,13 @@ function _renderAskUser(data, pendingState){
   _setAskUserError(errorEl, '');
   for(var i=0;i<choiceBtns.length;i++) choiceBtns[i].classList.remove('selected');
   if(selectedBtn) selectedBtn.classList.add('selected');
+  if(previewOnly || _isAskUserDebugId(qid)){
+   _setAskUserDisabled(false);
+   if(keepCustomOpen){
+    _setCustomPanelOpen(true);
+   }
+   return;
+  }
   _setAskUserDisabled(true);
   fetch('/chat/answer',{
    method:'POST',
@@ -374,4 +421,5 @@ function _renderAskUser(data, pendingState){
  chat.appendChild(card);
   _stickChatToBottom();
  }
+ return card;
 }

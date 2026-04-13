@@ -73,20 +73,20 @@ function _buildThinkingProcessDetail(card, fallbackSummary, fallbackFull){
  _appendUniqueStepMeta(summaryParts, lead, '');
  _appendUniqueStepMeta(fullParts, lead, '');
  if(decisionNote && !_stepMetaContains(lead, decisionNote)){
-  _appendUniqueStepMeta(fullParts, decisionNote, '\u5224\u65ad\u57fa\u7ebf\uff1a');
+  _appendUniqueStepMeta(fullParts, decisionNote, _processMetaPrefix('decision'));
  }
  if(handoffNote && !_stepMetaContains(lead, handoffNote)){
-  _appendUniqueStepMeta(fullParts, handoffNote, '\u63a5\u624b\u65b9\u5f0f\uff1a');
+  _appendUniqueStepMeta(fullParts, handoffNote, _processMetaPrefix('handoff'));
  }
  if(goal){
-  _appendUniqueStepMeta(summaryParts, goal, '\u76ee\u6807\uff1a');
-  _appendUniqueStepMeta(fullParts, goal, '\u76ee\u6807\uff1a');
+  _appendUniqueStepMeta(summaryParts, goal, _processMetaPrefix('goal'));
+  _appendUniqueStepMeta(fullParts, goal, _processMetaPrefix('goal'));
  }
  if(expected){
-  _appendUniqueStepMeta(fullParts, expected, '\u9884\u671f\u4ea7\u51fa\uff1a');
+  _appendUniqueStepMeta(fullParts, expected, _processMetaPrefix('expected_output'));
  }
  if(nextNeed){
-  _appendUniqueStepMeta(fullParts, nextNeed, '\u4e0b\u4e00\u6b65\u53ef\u80fd\u5173\u5fc3\uff1a');
+  _appendUniqueStepMeta(fullParts, nextNeed, _processMetaPrefix('next_need'));
  }
  return {
   summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
@@ -104,10 +104,10 @@ function _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state){
  _appendUniqueStepMeta(summaryParts, lead, '');
  _appendUniqueStepMeta(fullParts, lead, '');
  if(parallelSize<=1 && String(state||'')==='running' && goal){
-  _appendUniqueStepMeta(fullParts, goal, '\u76ee\u6807\uff1a');
+  _appendUniqueStepMeta(fullParts, goal, _processMetaPrefix('goal'));
  }
  if(parallelSize<=1 && String(state||'')==='running' && expected){
-  _appendUniqueStepMeta(fullParts, expected, '\u9884\u671f\uff1a');
+  _appendUniqueStepMeta(fullParts, expected, _processMetaPrefix('expected'));
  }
  return {
   summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
@@ -142,13 +142,13 @@ function _normalizeStepCard(card){
  var parallelTools=(typeof _normalizeStepNameList==='function') ? _normalizeStepNameList(card&&card.parallel_tools) : [];
  var toolName=String((card&&card.tool_name)||'').trim();
  var phase='info';
- var displayLabel=rawLabel||t('chat.process');
+ var displayLabel=rawLabel||'process';
  var toolKey='';
  var toolFallback=_toolLabelFallback(rawLabel);
  var isParallelTool=!!(parallelGroupId && parallelSize>1);
  if(explicitPhase==='thinking' || (!explicitPhase && _looksLikeThinkingLabel(rawLabel))){
   phase='thinking';
-  displayLabel='Thinking';
+  displayLabel='thinking';
  }else if((explicitPhase==='info' || !explicitPhase) && _looksLikeMemoryLoadLabel(rawLabel)){
   displayLabel='memory_load';
  }else if(explicitPhase==='tool' || toolFallback){
@@ -179,6 +179,8 @@ function _normalizeStepCard(card){
  displayLabel=_formatProcessDisplayLabel(displayLabel);
  fullDetail=_cleanProcessDetail(fullDetail, rawLabel, displayLabel, state);
  summaryDetail=_cleanProcessDetail(summaryDetail, rawLabel, displayLabel, state);
+ fullDetail=_translateProcessDetailText(fullDetail);
+ summaryDetail=_translateProcessDetailText(summaryDetail);
  if(!fullDetail) fullDetail=summaryDetail;
  if(!summaryDetail) summaryDetail=fullDetail;
  summaryDetail=_collapseProcessDetail(summaryDetail||fullDetail, phase, state);

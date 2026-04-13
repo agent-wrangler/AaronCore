@@ -32,10 +32,142 @@ function _setProcessMarker(markerEl, label, status){
  markerEl.textContent=_processMarkerText(label, state);
 }
 
+function _isEnglishProcessUi(){
+ try{
+  if(typeof getLang==='function'){
+   return String(getLang()||'zh').toLowerCase()==='en';
+  }
+ }catch(e){}
+ try{
+  if(typeof _lang!=='undefined'){
+   return String(_lang||'zh').toLowerCase()==='en';
+  }
+ }catch(e){}
+ return false;
+}
+
+function _processUiText(zhText, enText){
+ return _isEnglishProcessUi() ? String(enText||zhText||'') : String(zhText||enText||'');
+}
+
+function _processMetaPrefix(kind){
+ var map={
+  decision:['判断基线：','Decision: '],
+  handoff:['接手方式：','Handoff: '],
+  goal:['目标：','Goal: '],
+  expected_output:['预期产出：','Expected Output: '],
+  next_need:['下一步可能关心：','Next Need: '],
+  expected:['预期：','Expected: ']
+ };
+ var pair=map[String(kind||'').trim()]||['',''];
+ return _processUiText(pair[0], pair[1]);
+}
+
 function _formatProcessDisplayLabel(label){
  var text=String(label||'').trim();
  if(!text) return text;
- return /^[a-z]/.test(text) ? (text.charAt(0).toUpperCase()+text.slice(1)) : text;
+ var aliases={
+  thinking:'Thinking',
+  process:'Process',
+  tool:'Tool',
+  waiting:'Waiting',
+  memory_load:'Memory Load',
+  load_memory:'Memory Load',
+  persona_switch:'Persona Switch',
+  model_switch:'Model Switch',
+  organize_results:'Organize Results',
+  compose_reply:'Compose Reply',
+  recall_memory:'Recall Memory',
+  web_search:'Web Search',
+  parallel_tools:'Parallel Tools',
+  'parallel tools':'Parallel Tools',
+  'PARALLEL CALL':'Parallel Call',
+  'PARALLEL RUN':'Parallel Run',
+  'PARALLEL DONE':'Parallel Done',
+  'PARALLEL RESULT':'Parallel Result',
+  '模型思考':'Thinking',
+  'Thinking':'Thinking',
+  '调用技能':'Tool Call',
+  '技能完成':'Tool Complete',
+  '技能失败':'Tool Failed',
+  '联网搜索':'Web Search',
+  '搜索完成':'Search Complete',
+  '搜索失败':'Search Failed',
+  '检索记忆':'Recall Memory',
+  '检索失败':'Recall Failed',
+  '记忆就绪':'Memory Ready',
+  '等待':'Waiting',
+  '等待接手':'Needs Handoff',
+  '参数待补':'Needs Args',
+  '技能中断':'Interrupted',
+  '备用路径失败':'Fallback Failed',
+  '重试失败':'Retry Failed'
+ };
+ if(aliases[text]) return aliases[text];
+ text=text.replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();
+ if(!text) return '';
+ return text.split(' ').map(function(word){
+  if(!word) return '';
+  if(/^[A-Z0-9]{2,}$/.test(word)) return word;
+  return word.charAt(0).toUpperCase()+word.slice(1).toLowerCase();
+ }).join(' ');
+}
+
+function _translateProcessDetailText(detail){
+ var text=String(detail||'').trim();
+ if(!text) return '';
+ if(!_isEnglishProcessUi()) return text;
+ text=text.replace(/我先理解你这句「(.+?)」，判断是直接回答还是先调用工具。?/g, 'I\'ll first understand "$1" and decide whether to answer directly or call a tool.');
+ text=text.replace(/我先接住上一步结果，判断是继续调用工具还是整理成最终回答。?/g, 'I\'ll take the previous result and decide whether to keep using tools or shape the final reply.');
+ text=text.replace(/这是实时信息，直接凭记忆不稳。?我先核实「(.+?)」的最新天气，再根据结果给你一个简洁结论。?/g, 'This is live information, so memory alone is not reliable. I\'ll verify the latest weather for "$1" first, then give a concise conclusion.');
+ text=text.replace(/我先把这一步需要核实的信息查清楚，再继续回答。当前先调用「(.+?)」确认「(.+?)」。?/g, 'I\'ll verify the information needed for this step before continuing. First I\'m calling "$1" to confirm "$2".');
+ text=text.replace(/我先调用「(.+?)」把关键事实拿到，再继续整理最终答复。?/g, 'I\'ll call "$1" first to gather the key facts, then I\'ll shape the final reply.');
+ text=text.replace(/这一轮更像是直接回应，不需要再调用工具。?我会先结合当前对话上下文直接给出答复。?/g, 'This looks like a direct response, so no extra tools are needed. I\'ll answer from the current conversation context.');
+ text=text.replace(/这一轮更像是直接回应，不需要再调用工具。?我会直接围绕你这句话给出答复。?/g, 'This looks like a direct response, so no extra tools are needed. I\'ll answer directly from your latest message.');
+ text=text.replace(/上一步\s*(.+?)\s*没走通，切到这条路径/g, 'Previous step $1 did not work, switching path');
+ text=text.replace(/这一批同时起跑\s*(\d+)\s*个工具[:：]?\s*/g, 'Launching $1 tools in parallel: ');
+ text=text.replace(/(\d+)\s*个工具同时在跑，已收回\s*(\d+\/\d+)/g, '$1 tools running in parallel, collected $2');
+ text=text.replace(/(\d+)\s*个工具已经收口/g, '$1 tools settled');
+ text=text.replace(/成功\s*(\d+)\s*个/g, '$1 succeeded');
+ text=text.replace(/失败\s*(\d+)\s*个/g, '$1 failed');
+ text=text.replace(/还在跑\s*(\d+)\s*个/g, '$1 still running');
+ text=text.replace(/都已完成/g, 'All completed');
+ text=text.replace(/这一批[:：]\s*/g, 'Batch: ');
+ text=text.replace(/根据上一轮结果继续重试/g, 'Retrying from the previous result');
+ text=text.replace(/沿着上一条结果继续推进/g, 'Continuing from the previous result');
+ text=text.replace(/切换路径后完成/g, 'Completed after switching path');
+ text=text.replace(/重试后完成/g, 'Completed after retry');
+ text=text.replace(/继续推进完成/g, 'Continued to completion');
+ text=text.replace(/需要用户接手/g, 'Needs user handoff');
+ text=text.replace(/参数还不完整/g, 'Arguments still incomplete');
+ text=text.replace(/这一轮中断了，没拿到完整结果/g, 'Interrupted before a complete result arrived');
+ text=text.replace(/执行时抛异常了/g, 'Execution raised an exception');
+ text=text.replace(/执行链中断了/g, 'Execution chain interrupted');
+ text=text.replace(/切换后的这条路径也没走通/g, 'Fallback path also failed');
+ text=text.replace(/这次重试还是没走通/g, 'Retry still failed');
+ text=text.replace(/正在等待工具执行结果/g, 'Waiting for tool result');
+ text=text.replace(/正在等待模型继续输出/g, 'Waiting for model output');
+ text=text.replace(/正在继续分析下一步动作/g, 'Analyzing the next action');
+ text=text.replace(/判断基线[:：]\s*/g, 'Decision: ');
+ text=text.replace(/接手方式[:：]\s*/g, 'Handoff: ');
+ text=text.replace(/目标[:：]\s*/g, 'Goal: ');
+ text=text.replace(/预期产出[:：]\s*/g, 'Expected Output: ');
+ text=text.replace(/下一步可能关心[:：]\s*/g, 'Next Need: ');
+ text=text.replace(/预期[:：]\s*/g, 'Expected: ');
+ text=text.replace(/判断是直接回答还是先调用工具/g, 'Decide whether to answer directly or call a tool first');
+ text=text.replace(/最新天气和一个可直接用的简洁结论/g, 'The latest weather plus a concise answer ready to use');
+ text=text.replace(/围绕「(.+?)」拿到可靠结果/g, 'Get a reliable result for "$1"');
+ text=text.replace(/拿到\s+(.+?)\s+的关键结果/g, 'Get the key result from $1');
+ text=text.replace(/拿到这一步需要的关键信息/g, 'Get the key information needed for this step');
+ text=text.replace(/今天状态、出门安排或要不要带伞/g, 'Today\'s conditions, whether to head out, and whether an umbrella is needed');
+ text=text.replace(/最新结论、怎么做，或要不要继续展开/g, 'The latest conclusion, what to do next, and whether to go deeper');
+ text=text.replace(/把上下文接回当前问题后的明确结论/g, 'A clear conclusion once the context is reattached to the current question');
+ text=text.replace(/今天最值得先关注的实时信息/g, 'The live information most worth checking first today');
+ text=text.replace(/一个能直接接住当前话题的结论/g, 'A conclusion that can directly carry the current topic');
+ text=text.replace(/先交给「(.+?)」把这一步需要的依据拿到/g, 'Hand this step to "$1" first so it can gather the needed evidence');
+ text=text.replace(/先拿到这一步需要的关键依据/g, 'Gather the key evidence needed for this step first');
+ text=text.replace(/\s+/g,' ').trim();
+ return text;
 }
 
 function _escapeRegExp(text){

@@ -6,9 +6,17 @@
   margin: 12px 0;
   padding: 16px;
   border-radius: 18px;
-  background: rgba(251, 248, 243, 0.96);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(180deg, #fbf8f3 0%, #f7f2eb 100%);
+  background-clip: padding-box;
   border: 1px solid rgba(114, 105, 94, 0.14);
   box-shadow: 0 10px 28px rgba(34, 29, 24, 0.04);
+}
+.ask-user-slot {
+  position: relative;
+  z-index: 2;
 }
 .ask-user-question {
   font-size: 14px;
@@ -128,9 +136,11 @@
   margin-top: 2px;
 }
 body.light .ask-user-card {
-  background: rgba(251, 248, 243, 0.98);
+  background: linear-gradient(180deg, #fbf8f3 0%, #f7f2eb 100%);
   border-color: rgba(114, 105, 94, 0.14);
-  box-shadow: 0 10px 28px rgba(34, 29, 24, 0.04);
+  box-shadow:
+    0 10px 28px rgba(34, 29, 24, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
 }
 
 /* ── 统计页面（驾驶舱） ───────────────────────────── */

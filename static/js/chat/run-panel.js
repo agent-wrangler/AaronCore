@@ -12,14 +12,14 @@ var _runPanelResizeBound=false;
 var _pendingModelSwitchNote=null;
 
 var _runPanelCopy={
- show:'\u663e\u793a\u8fd0\u884c\u9762\u677f',
- hide:'\u9690\u85cf\u8fd0\u884c\u9762\u677f',
+ show:'Show Run Panel',
+ hide:'Hide Run Panel',
  kicker:'[RUN #000 | READY]',
  idle:'STATUS:    [IDLE] READY (0/0)',
  taskIdle:'ELAPSED:   00:00',
- actionIdle:'\u6682\u65e0\u6d3b\u52a8',
- progress:'\u8fdb\u5ea6',
- action:'\u5f53\u524d\u52a8\u4f5c',
+ actionIdle:'No active step',
+ progress:'Progress',
+ action:'Current Action',
  empty:'AGENT STANDBY \u00b7 Awaiting current run...'
 };
 
@@ -156,7 +156,7 @@ function _setRunPanelEmptyState(kind){
 }
 
 function _formatRunPanelOutputs(fileCount, toolCount, errorCount){
- return String(fileCount||0)+' \u4e2a\u6587\u4ef6 \u00b7 '+String(toolCount||0)+' \u6b21\u5de5\u5177 \u00b7 '+String(errorCount||0)+' \u4e2a\u5f02\u5e38';
+ return String(fileCount||0)+' files \u00b7 '+String(toolCount||0)+' tools \u00b7 '+String(errorCount||0)+' errors';
 }
 
 function _readRunPanelPref(){

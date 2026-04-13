@@ -110,8 +110,8 @@ function _ensureRunPanelEntries(){
  for(var i=0;i<steps.length;i++){
   var step=steps[i];
   var missing=!step;
-  var labelText=_escapeRunPanelText(missing ? ('step_'+(i+1)) : (step.displayLabel||step.label||t('chat.process')));
-  var detailParts=missing ? {text:'\u6b65\u9aa4\u6570\u636e\u6682\u672a\u5c31\u7eea\uff0c\u7b49\u5f85\u540e\u7eed\u5237\u65b0\u3002', wait:''} : _getRunPanelStepDetailParts(step);
+  var labelText=_escapeRunPanelText(missing ? ('step_'+(i+1)) : (step.displayLabel||step.label||'Process'));
+  var detailParts=missing ? {text:'Step data is not ready yet. Waiting for the next refresh.', wait:''} : _getRunPanelStepDetailParts(step);
   var stateText=_escapeRunPanelText(missing ? '' : _getRunPanelStepElapsed(step));
   var detailText=_escapeRunPanelText(detailParts.text||labelText);
   var phaseName=missing ? 'info' : String(step.phase||'info');
@@ -212,8 +212,8 @@ function _stopRunElapsedClock(){
     120
    );
   if(!currentAction){
-    if(_streamRuntime.hasStarted() && !replyText) currentAction='\u6b63\u5728\u8f93\u51fa\u56de\u590d';
-    else if(steps.length) currentAction='\u7b49\u5f85\u4e0b\u4e00\u4e2a\u52a8\u4f5c';
+    if(_streamRuntime.hasStarted() && !replyText) currentAction='Streaming reply';
+    else if(steps.length) currentAction='Waiting for next action';
     else currentAction=_runPanelCopy.actionIdle;
    }
   _setRunPanelBusyState(statusKey==='thinking');
@@ -468,9 +468,26 @@ function _ensureTraceDetached(){
     phase:stepObj.phase||'info'
     });
     _syncTrackerChrome();
-   }
+  }
    _syncRunPanelHeader();
   }
+
+ function _thinkingStepText(stepLike){
+  return String((stepLike&&((stepLike.fullDetail||stepLike.summaryDetail||'')))||'').replace(/\s+/g,' ').trim();
+ }
+
+function _shouldSplitThinkingRevision(existing, meta){
+  if(!existing || !meta) return false;
+  if(existing.phase!=='thinking' || meta.phase!=='thinking') return false;
+  if(!existing.stepKey || !meta.stepKey || existing.stepKey!==meta.stepKey) return false;
+  if(existing.status==='error' || meta.status==='error') return false;
+  var currentRevision=Math.max(1, parseInt(existing.thinkingRevision, 10)||1);
+  if(currentRevision>=2) return false;
+  var previousText=_thinkingStepText(existing);
+  var nextText=_thinkingStepText(meta);
+  if(!previousText || !nextText || previousText===nextText) return false;
+  return true;
+ }
 
  function _applyStepMeta(stepObj, meta){
   if(!stepObj || !meta) return;
@@ -492,6 +509,7 @@ function _ensureTraceDetached(){
   stepObj.parallelSuccessCount=meta.parallelSuccessCount;
   stepObj.parallelFailureCount=meta.parallelFailureCount;
   stepObj.parallelTools=meta.parallelTools;
+  stepObj.thinkingRevision=(meta.phase==='thinking') ? (Math.max(1, parseInt(meta.thinkingRevision, 10)||1)) : 0;
   stepObj.displayLabel=meta.displayLabel;
   if(stepObj.labelEl) stepObj.labelEl.textContent=meta.displayLabel||t('chat.process');
   if(stepObj.kind==='process') _syncProcessPhase(stepObj);
@@ -542,6 +560,7 @@ function _ensureTraceDetached(){
   step.parallelSuccessCount=meta.parallelSuccessCount;
   step.parallelFailureCount=meta.parallelFailureCount;
   step.parallelTools=meta.parallelTools;
+  step.thinkingRevision=(meta.phase==='thinking') ? (Math.max(1, parseInt(meta.thinkingRevision, 10)||1)) : 0;
   chat.insertBefore(step.root, pendingState.root);
   return step;
 }
@@ -614,6 +633,13 @@ function _renderPendingPlan(plan){
   }
 
   if(mergeTarget){
+   if(_shouldSplitThinkingRevision(mergeTarget, meta)){
+    _setStepStatus(mergeTarget,'done');
+    meta.thinkingRevision=Math.max(2, (parseInt(mergeTarget.thinkingRevision,10)||1)+1);
+    var splitStep=_createActivityStep(meta);
+    steps.push(splitStep);
+    _appendRunPanelEntry(splitStep);
+   }else{
    _applyStepMeta(mergeTarget, meta);
    var preserveDoneThinking=(
     _streamRuntime.hasStarted()
@@ -625,6 +651,7 @@ function _renderPendingPlan(plan){
     && mergeTarget.stepKey===meta.stepKey
    );
    _setStepStatus(mergeTarget, preserveDoneThinking ? 'done' : meta.status);
+   }
   }else{
    if(last && last.status==='running' && !_canMergeStep(last, meta)){
     _setStepStatus(last,'done');
