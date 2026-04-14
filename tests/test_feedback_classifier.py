@@ -70,6 +70,14 @@ class FeedbackClassifierTests(unittest.TestCase):
                     },
                     ensure_ascii=False,
                 )
+            if "系统内置" in current_input or "什么时候加的" in current_input:
+                return json.dumps(
+                    {
+                        "is_feedback": False,
+                        "is_system_explanation_request": True,
+                    },
+                    ensure_ascii=False,
+                )
             if "今天天气怎么样" in current_input:
                 return json.dumps({"is_feedback": False}, ensure_ascii=False)
             return json.dumps(
@@ -125,6 +133,26 @@ class FeedbackClassifierTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertFalse(self.rules_file.exists())
+
+    def test_normalize_feedback_result_forces_system_explanation_requests_out_of_feedback(self):
+        normalized = feedback_classifier._normalize_feedback_result(
+            {
+                "is_feedback": True,
+                "is_system_explanation_request": True,
+                "category": "意图理解",
+                "type": "user_pref",
+                "scene": "general",
+                "problem": "generic_feedback",
+                "fix": "keep_observing_and_refine",
+                "level": "session",
+            },
+            "这个上下文是从哪里来的",
+            "你刚才怎么知道的",
+            "因为系统里有状态",
+        )
+
+        self.assertFalse(normalized["is_feedback"])
+        self.assertTrue(normalized["is_system_explanation_request"])
 
     def test_search_relevant_rules_relies_on_text_overlap(self):
         item = feedback_classifier.record_feedback_rule(

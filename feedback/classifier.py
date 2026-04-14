@@ -130,6 +130,7 @@ def _default_feedback_rule(
     problem = "generic_feedback"
     return {
         "is_feedback": bool(is_feedback),
+        "is_system_explanation_request": False,
         "category": _infer_category(scene, problem),
         "type": "user_pref",
         "scene": scene,
@@ -161,6 +162,10 @@ def _normalize_feedback_result(
     fix = str(result.get("fix") or "").strip()[:180] or _default_feedback_fix(
         scene, problem, user_feedback, last_answer
     )
+    is_system_explanation_request = _coerce_bool(
+        result.get("is_system_explanation_request"),
+        default=default["is_system_explanation_request"],
+    )
     has_specific = any(
         [
             scene != default["scene"],
@@ -171,7 +176,11 @@ def _normalize_feedback_result(
     )
 
     return {
-        "is_feedback": _coerce_bool(result.get("is_feedback"), default=has_specific),
+        "is_feedback": False if is_system_explanation_request else _coerce_bool(
+            result.get("is_feedback"),
+            default=has_specific,
+        ),
+        "is_system_explanation_request": is_system_explanation_request,
         "category": category,
         "type": rule_type,
         "scene": scene,
@@ -188,7 +197,7 @@ def _classify_feedback_with_llm(user_feedback: str, last_question: str = "", las
         "你是 AaronCore 的反馈分类器。根据上一轮用户问题、上一轮助手回复、以及用户这轮输入，"
         "判断用户这轮话是不是在纠正或投诉上一轮系统行为。\n"
         "只返回一个 JSON 对象，不要解释。\n"
-        'JSON 格式: {"is_feedback": true, "category": "...", "type": "...", "scene": "...", '
+        'JSON 格式: {"is_feedback": true, "is_system_explanation_request": false, "category": "...", "type": "...", "scene": "...", '
         '"problem": "...", "fix": "...", "level": "..."}\n'
         "允许的 category: 内容生成, 路由调度, 意图理解, 交互风格\n"
         "允许的 type: llm_rule, skill_route, execution_policy, user_pref\n"
@@ -201,6 +210,8 @@ def _classify_feedback_with_llm(user_feedback: str, last_question: str = "", las
         "- joke/general + output_not_matching_intent: 用户指出回答跑偏、答非所问、没有理解意图。\n"
         "- chat + fallback_too_generic: 用户指出回答太空泛、太模板、能力回答不直接。\n"
         "- generic_feedback: 确实是纠偏，但不属于上面几类。\n"
+        "- 如果这轮输入主要是在追问系统为什么知道、上下文或内部机制从哪里来、什么时候加的、在哪里配置的，"
+        "而不是在纠正上一轮行为，则返回 {\"is_feedback\": false, \"is_system_explanation_request\": true}。\n"
         "- 如果这轮输入其实是一个新问题、新请求或普通闲聊，不是在纠正上一轮，则返回 {\"is_feedback\": false}。\n"
         "- fix 用一句简短、可执行的英文 snake_case 或中文规则描述；拿不准可写 keep_observing_and_refine。\n"
         f"上一轮用户问题: {last_question[:120]}\n"
@@ -225,6 +236,7 @@ def inspect_feedback(user_feedback: str, last_question: str = "", last_answer: s
         "l7_classify_result",
         {
             "is_feedback": normalized.get("is_feedback"),
+            "is_system_explanation_request": normalized.get("is_system_explanation_request"),
             "scene": normalized.get("scene"),
             "problem": normalized.get("problem"),
             "source": "llm" if result else "fallback",
@@ -235,7 +247,11 @@ def inspect_feedback(user_feedback: str, last_question: str = "", last_answer: s
 
 def classify_feedback(user_feedback: str, last_question: str = "", last_answer: str = "") -> dict:
     result = inspect_feedback(user_feedback, last_question, last_answer)
-    return {key: value for key, value in result.items() if key != "is_feedback"}
+    return {
+        key: value
+        for key, value in result.items()
+        if key not in {"is_feedback", "is_system_explanation_request"}
+    }
 
 
 def _condense_fix(user_feedback: str, last_question: str, last_answer: str, raw_fix: str) -> str:
@@ -279,61 +295,7 @@ def _extract_routing_constraint(
     return None
 
 
-_SYSTEM_EXPLANATION_HINTS = (
-    "时间戳",
-    "系统内置",
-    "机制",
-    "原理",
-    "路径",
-    "怎么知道",
-    "直接就知道",
-    "为什么知道",
-    "哪来的",
-    "什么时候加",
-    "在哪",
-    "哪里",
-)
-_CORRECTION_HINTS = (
-    "不对",
-    "不是",
-    "错",
-    "跑偏",
-    "答非所问",
-    "误触发",
-    "乱触发",
-    "太空",
-    "空话",
-    "没理解",
-    "没听懂",
-    "总是",
-    "每次",
-    "重复",
-    "中断",
-    "刷屏",
-    "太短",
-    "不用",
-    "不要",
-    "太蠢",
-    "弱智",
-    "莫名其妙",
-    "不对劲",
-)
 _RECENT_RULE_SCAN_LIMIT = 80
-
-
-def _looks_like_system_explanation_request(user_feedback: str) -> bool:
-    raw = str(user_feedback or "").strip()
-    if len(raw) < 4:
-        return False
-    compact = _normalize_match_text(raw)
-    if not compact:
-        return False
-    has_question_form = any(token in raw for token in ("?", "？", "怎么", "为什么", "如何", "在哪", "哪里", "什么时候"))
-    if not has_question_form:
-        return False
-    if any(_normalize_match_text(token) in compact for token in _CORRECTION_HINTS):
-        return False
-    return any(_normalize_match_text(token) in compact for token in _SYSTEM_EXPLANATION_HINTS)
 
 
 def _find_followup_feedback_thread(rules: list[dict], last_question: str) -> dict | None:
@@ -394,19 +356,22 @@ def _merge_feedback_rule(existing: dict, candidate: dict, *, now_iso: str) -> di
 
 
 def record_feedback_rule(user_feedback: str, last_question: str = "", last_answer: str = "") -> dict | None:
-    if _looks_like_system_explanation_request(user_feedback):
+    inspected = inspect_feedback(user_feedback, last_question, last_answer)
+    if inspected.get("is_system_explanation_request", False):
         _debug_write(
             "l7_feedback_skip",
             {"feedback": str(user_feedback or "")[:80], "reason": "system_explanation_request"},
         )
         return None
-
-    inspected = inspect_feedback(user_feedback, last_question, last_answer)
     if not inspected.get("is_feedback", False):
         _debug_write("l7_feedback_skip", {"feedback": str(user_feedback or "")[:80], "reason": "not_feedback"})
         return None
 
-    rule = {key: value for key, value in inspected.items() if key != "is_feedback"}
+    rule = {
+        key: value
+        for key, value in inspected.items()
+        if key not in {"is_feedback", "is_system_explanation_request"}
+    }
     raw_fix = rule.get("fix", "")
     if raw_fix and raw_fix != "keep_observing_and_refine":
         condensed_fix = _condense_fix(user_feedback, last_question, last_answer, raw_fix)
