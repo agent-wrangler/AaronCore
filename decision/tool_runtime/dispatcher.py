@@ -1,5 +1,6 @@
 """Dispatch helpers for post-LLM tool execution."""
 
+from decision.tool_runtime.process_meta import build_tool_runtime_state
 from decision.tool_runtime.runtime_control import (
     ToolRuntimeInterrupted,
     build_interrupted_tool_result,
@@ -176,6 +177,34 @@ def normalize_tool_adapter_result(result: object, *, name: str) -> dict:
         normalized.pop("error", None)
     if normalized.get("success") is True and "response" not in normalized:
         normalized["response"] = ""
+    meta = dict(normalized.get("meta")) if isinstance(normalized.get("meta"), dict) else {}
+    top_level_verification = normalized.get("verification")
+    if isinstance(top_level_verification, dict) and top_level_verification:
+        merged_verification = dict(meta.get("verification")) if isinstance(meta.get("verification"), dict) else {}
+        merged_verification.update(top_level_verification)
+        meta["verification"] = merged_verification
+    runtime_state = build_tool_runtime_state(
+        meta=meta,
+        success=normalized.get("success"),
+        reason=str(normalized.get("reason") or ""),
+        synthetic=bool(normalized.get("synthetic", False)),
+        response=str(normalized.get("response") or ""),
+    )
+    if runtime_state:
+        meta["runtime_state"] = runtime_state
+        normalized["status"] = runtime_state.get("status") or normalized.get("status")
+        normalized["next_action"] = runtime_state.get("next_action") or normalized.get("next_action")
+        normalized["verified"] = runtime_state.get("verified")
+        blocker = str(runtime_state.get("blocker") or "").strip()
+        if blocker:
+            normalized["blocker"] = blocker
+        fs_target = runtime_state.get("fs_target")
+        if isinstance(fs_target, dict) and fs_target and not isinstance(normalized.get("fs_target"), dict):
+            normalized["fs_target"] = dict(fs_target)
+    if isinstance(meta.get("verification"), dict) and meta.get("verification") and not isinstance(normalized.get("verification"), dict):
+        normalized["verification"] = dict(meta.get("verification"))
+    if meta:
+        normalized["meta"] = meta
     return normalized
 
 

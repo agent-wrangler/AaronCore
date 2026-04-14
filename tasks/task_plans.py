@@ -32,7 +32,9 @@ def find_matching_task_plan_task(
     preferred_fs_target: str = "",
     *,
     all_task_plan_tasks,
+    extract_task_fs_target,
     extract_explicit_query_paths,
+    get_structured_fs_target_for_task_plan,
     task_matches_query_paths,
     normalize_query_path,
     has_task_fs_target,
@@ -47,7 +49,9 @@ def find_matching_task_plan_task(
         user_input,
         preferred_fs_target,
         all_task_plan_tasks=all_task_plan_tasks,
+        extract_task_fs_target=extract_task_fs_target,
         extract_explicit_query_paths=extract_explicit_query_paths,
+        get_structured_fs_target_for_task_plan=get_structured_fs_target_for_task_plan,
         task_matches_query_paths=task_matches_query_paths,
         normalize_query_path=normalize_query_path,
         has_task_fs_target=has_task_fs_target,
@@ -107,12 +111,14 @@ def get_active_task_working_state(
     *,
     find_matching_task_plan_task,
     task_to_working_state,
+    infer_task_query_mode,
 ) -> dict | None:
     return _views.get_active_task_working_state(
         user_input,
         preferred_fs_target,
         find_matching_task_plan_task=find_matching_task_plan_task,
         task_to_working_state=task_to_working_state,
+        infer_task_query_mode=infer_task_query_mode,
     )
 
 

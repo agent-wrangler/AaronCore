@@ -159,6 +159,40 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertEqual(meta["outcome_kind"], "success")
         self.assertEqual(meta["next_hint_kind"], "wait_for_user")
 
+    def test_build_done_process_meta_marks_verification_failures_from_runtime_state(self):
+        record = ToolCallRecord(
+            call_id="call_verify_1",
+            tool_name="write_file",
+            status="completed",
+            success=True,
+            response="write_file completed but verification failed",
+            action_summary="updated target file",
+            run_meta={
+                "action": {
+                    "action_kind": "write_file",
+                    "target_kind": "file",
+                    "target": "C:/repo/result.txt",
+                    "outcome": "edited",
+                    "verification_mode": "artifact_exists",
+                    "verification_detail": "Expected output file is still missing",
+                },
+                "verification": {
+                    "verified": False,
+                    "detail": "Expected output file is still missing",
+                    "verification_mode": "artifact_exists",
+                },
+            },
+        )
+
+        meta = build_done_process_meta(
+            record=record,
+            attempt_meta={"attempt_kind": "retry"},
+        )
+
+        self.assertEqual(meta["outcome_kind"], "verify_failed")
+        self.assertEqual(meta["next_hint_kind"], "retry_or_close")
+        self.assertEqual((meta.get("runtime_state") or {}).get("status"), "verify_failed")
+
     def test_flush_unfinished_marks_pending_and_executing_calls_as_synthetic_failures(self):
         ledger = ToolCallTurnLedger()
         first = ledger.register(
@@ -213,6 +247,8 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertEqual(event.get("reason"), "stream_signal_dropped")
         self.assertTrue(event.get("synthetic"))
         self.assertEqual(event.get("run_meta", {}).get("action", {}).get("action_kind"), "inspect_environment")
+        self.assertEqual(event.get("status"), "runtime_failed")
+        self.assertEqual(event.get("next_action"), "retry_or_close")
 
     def test_build_tool_turn_done_event_exposes_batch_metadata(self):
         first = ToolCallRecord(
@@ -234,6 +270,68 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertEqual(event.get("action_count"), 2)
         self.assertTrue(event.get("batch_mode"))
         self.assertEqual(len(event.get("tool_results") or []), 2)
+        self.assertEqual((event.get("tool_results") or [])[0].get("status"), "done")
+        self.assertEqual((event.get("tool_results") or [])[1].get("next_action"), "continue")
+
+    def test_build_tool_turn_done_event_includes_verification_payload(self):
+        record = ToolCallRecord(
+            call_id="call_verify_1",
+            tool_name="write_file",
+            status="completed",
+            success=True,
+            response="write_file completed but verification failed",
+            action_summary="updated target file",
+            run_meta={
+                "action": {
+                    "action_kind": "write_file",
+                    "target_kind": "file",
+                    "target": "C:/repo/result.txt",
+                    "outcome": "edited",
+                    "verification_mode": "artifact_exists",
+                    "verification_detail": "Expected output file is still missing",
+                },
+                "verification": {
+                    "verified": False,
+                    "detail": "Expected output file is still missing",
+                    "verification_mode": "artifact_exists",
+                },
+            },
+        )
+
+        event = build_tool_turn_done_event(record, {"prompt_tokens": 2}, records=[record])
+
+        self.assertEqual(event.get("status"), "verify_failed")
+        self.assertEqual(event.get("next_action"), "retry_or_close")
+        self.assertEqual((event.get("verification") or {}).get("detail"), "Expected output file is still missing")
+        result_row = (event.get("tool_results") or [])[0]
+        self.assertEqual(result_row.get("status"), "verify_failed")
+        self.assertEqual(result_row.get("next_action"), "retry_or_close")
+        self.assertEqual((result_row.get("verification") or {}).get("status"), "failed")
+
+    def test_normalize_tool_adapter_result_adds_runtime_state_for_user_takeover(self):
+        result = dispatcher_module.normalize_tool_adapter_result(
+            build_operation_result(
+                "Current page needs login first.",
+                expected_state="auth_cleared",
+                observed_state="auth_required",
+                drift_reason="auth_required",
+                repair_hint="user_login_required",
+                action_kind="open_url",
+                target_kind="url",
+                target="https://www.douyin.com",
+                outcome="blocked",
+                verification_mode="browser_search_submit",
+                verification_detail="Douyin login prompt",
+            ),
+            name="open_target",
+        )
+
+        self.assertEqual(result.get("status"), "waiting_user")
+        self.assertEqual(result.get("next_action"), "wait_for_user")
+        self.assertFalse(result.get("verified"))
+        self.assertEqual(result.get("blocker"), "Douyin login prompt")
+        self.assertEqual((result.get("meta", {}).get("runtime_state") or {}).get("status"), "waiting_user")
+        self.assertFalse(isinstance(result.get("fs_target"), dict))
 
     def test_normalize_legacy_operation_result_preserves_takeover_signals(self):
         result = dispatcher_module.normalize_tool_adapter_result(
@@ -278,6 +376,50 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertTrue(result.get("success"))
         self.assertTrue(result.get("meta", {}).get("verification", {}).get("verified"))
         self.assertEqual(result.get("meta", {}).get("action", {}).get("target_kind"), "url")
+
+    def test_normalize_tool_adapter_result_adds_fs_target_for_file_like_results(self):
+        result = dispatcher_module.normalize_tool_adapter_result(
+            build_operation_result(
+                "Listed the target directory.",
+                expected_state="directory_listed",
+                observed_state="directory_listed",
+                action_kind="list_directory",
+                target_kind="directory",
+                target="C:/repo/src",
+                outcome="resolved",
+                verification_mode="directory_listed",
+                verification_detail="dirs=3 files=12",
+            ),
+            name="folder_explore",
+        )
+
+        self.assertEqual(result.get("status"), "verified")
+        self.assertEqual(result.get("next_action"), "continue")
+        self.assertTrue(result.get("verified"))
+        self.assertEqual((result.get("fs_target") or {}).get("path"), "C:/repo/src")
+        self.assertEqual((result.get("fs_target") or {}).get("kind"), "directory")
+
+    def test_normalize_tool_adapter_result_marks_verify_failed_as_retry_or_close(self):
+        result = dispatcher_module.normalize_tool_adapter_result(
+            build_operation_result(
+                "Saved the file, but the expected artifact is still missing.",
+                expected_state="artifact_created",
+                observed_state="artifact_absent",
+                action_kind="write_file",
+                target_kind="file",
+                target="C:/repo/result.txt",
+                outcome="edited",
+                verification_mode="artifact_exists",
+                verification_detail="Expected output file is still missing",
+            ),
+            name="write_file",
+        )
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("status"), "verify_failed")
+        self.assertEqual(result.get("next_action"), "retry_or_close")
+        self.assertFalse(result.get("verified"))
+        self.assertEqual((result.get("verification") or {}).get("verification_mode"), "artifact_exists")
 
 
 if __name__ == "__main__":

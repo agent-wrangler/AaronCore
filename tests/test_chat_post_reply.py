@@ -74,6 +74,45 @@ class ChatPostReplyTests(unittest.TestCase):
         self.assertEqual(payload["plan"]["goal"], "finish")
         self.assertEqual(payload["steps"][0]["step_key"], "a")
 
+    def test_build_process_payload_preserves_runtime_tool_result_fields(self):
+        payload = build_process_payload(
+            [],
+            normalize_steps=lambda steps: steps,
+            tool_results=[
+                {
+                    "name": "write_file",
+                    "success": True,
+                    "call_id": "call_verify_1",
+                    "status": "verify_failed",
+                    "next_action": "retry_or_close",
+                    "verified": False,
+                    "blocker": "Expected output file is still missing",
+                    "runtime_state": {
+                        "status": "verify_failed",
+                        "next_action": "retry_or_close",
+                    },
+                    "verification": {
+                        "status": "failed",
+                        "detail": "Expected output file is still missing",
+                    },
+                    "fs_target": {
+                        "path": "C:/repo/result.txt",
+                        "kind": "file",
+                    },
+                }
+            ],
+        )
+
+        tool_row = (payload.get("tool_results") or [])[0]
+        self.assertEqual(tool_row["name"], "write_file")
+        self.assertEqual(tool_row["status"], "verify_failed")
+        self.assertEqual(tool_row["next_action"], "retry_or_close")
+        self.assertFalse(tool_row["verified"])
+        self.assertEqual(tool_row["blocker"], "Expected output file is still missing")
+        self.assertEqual((tool_row.get("runtime_state") or {}).get("status"), "verify_failed")
+        self.assertEqual((tool_row.get("verification") or {}).get("status"), "failed")
+        self.assertEqual((tool_row.get("fs_target") or {}).get("path"), "C:/repo/result.txt")
+
     def test_persist_reply_artifacts_runs_clean_and_memory(self):
         saved = {}
         remembered = []

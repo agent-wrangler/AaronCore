@@ -41,6 +41,35 @@ _MISSING_EXECUTION_CLOSEOUT_GUIDANCE = (
     "that the actual check/open/read/search did not complete successfully in this turn, and that the next correct move is to re-run the real action rather than rely on that answer. "
     "Do not mention internal classifiers, server fallback copy, or hidden runtime details."
 )
+_BACKGROUND_DIALOGUE_ONLY_GUIDANCE = (
+    "The dialogue context in this turn is background only. "
+    "The current user prompt does not include the explicit task continuity block, "
+    "so previous dialogue does not grant permission to resume a task or call tools. "
+    "Ask a brief clarification instead of executing tools."
+)
+
+
+def _rebuild_run_meta_from_tool_result(item: dict) -> dict:
+    if not isinstance(item, dict):
+        return {}
+    run_meta = item.get("run_meta")
+    if isinstance(run_meta, dict) and run_meta:
+        return dict(run_meta)
+
+    rebuilt = {}
+    runtime_state = item.get("runtime_state")
+    if isinstance(runtime_state, dict) and runtime_state:
+        rebuilt["runtime_state"] = dict(runtime_state)
+    verification = item.get("verification")
+    if isinstance(verification, dict) and verification:
+        rebuilt["verification"] = dict(verification)
+    fs_target = item.get("fs_target")
+    if isinstance(fs_target, dict) and fs_target:
+        existing_runtime = rebuilt.get("runtime_state")
+        runtime_payload = dict(existing_runtime) if isinstance(existing_runtime, dict) else {}
+        runtime_payload.setdefault("fs_target", dict(fs_target))
+        rebuilt["runtime_state"] = runtime_payload
+    return rebuilt
 
 
 def _result_to_terminal_record(result: dict) -> ToolCallRecord | None:
@@ -57,7 +86,7 @@ def _result_to_terminal_record(result: dict) -> ToolCallRecord | None:
         success=success,
         response=str(result.get("tool_response") or "").strip(),
         action_summary=str(result.get("action_summary") or "").strip(),
-        run_meta=result.get("run_meta") if isinstance(result.get("run_meta"), dict) else {},
+        run_meta=_rebuild_run_meta_from_tool_result(result),
         synthetic=bool(result.get("synthetic")),
         reason=str(result.get("reason") or "").strip(),
     )
@@ -77,6 +106,7 @@ def _result_to_terminal_records(result: dict) -> list[ToolCallRecord]:
                 tool_name=tool_name,
                 status="synthetic_failed" if item.get("synthetic") else "completed",
                 success=item.get("success"),
+                run_meta=_rebuild_run_meta_from_tool_result(item),
                 synthetic=bool(item.get("synthetic")),
                 reason=str(item.get("reason") or "").strip(),
             )
@@ -217,6 +247,8 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
         l1_messages = formatter._build_l1_messages(bundle, limit=None)
         if l1_messages:
             messages.extend(l1_messages)
+        if dialogue_context and "任务连续性提示" not in user_prompt:
+            messages.append({"role": "system", "content": _BACKGROUND_DIALOGUE_ONLY_GUIDANCE})
         messages.append({"role": "user", "content": user_prompt})
 
         formatter._debug_write(

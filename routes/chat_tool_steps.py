@@ -70,10 +70,30 @@ def _parallel_text(process_meta: dict | None) -> str:
     return f"parallel batch {parallel_size} actions"
 
 
+def _tool_done_presentation_kind(success: bool, process_meta: dict | None) -> str:
+    meta = process_meta if isinstance(process_meta, dict) else {}
+    outcome_kind = _clean_text(meta.get("outcome_kind"))
+    next_hint_kind = _clean_text(meta.get("next_hint_kind"))
+    if next_hint_kind == "wait_for_user":
+        return "wait_for_user"
+    if outcome_kind in {
+        "arg_failure",
+        "blocked",
+        "failed",
+        "interrupted",
+        "runtime_failure",
+        "verify_failed",
+    }:
+        return outcome_kind
+    if not success:
+        return "failed"
+    return ""
+
+
 def build_tool_execution_trace_label(default_label: str, *, process_meta: dict | None = None) -> str:
     if _parallel_group_enabled(process_meta):
         return "PARALLEL CALL"
-    return _clean_text(default_label) or "调用技能"
+    return _clean_text(default_label) or "调用工具"
 
 
 def build_tool_execution_trace_detail(
@@ -106,7 +126,7 @@ def build_tool_execution_trace_detail(
     _append_unique(parts, _parallel_text(meta))
     if preview:
         _append_unique(parts, f"目标: {preview}")
-    return " · ".join(parts) or f"正在{_clean_text(skill_display) or '执行技能'}..."
+    return " · ".join(parts) or f"正在{_clean_text(skill_display) or '执行工具'}..."
 
 
 def build_tool_done_label(default_label: str, *, success: bool, process_meta: dict | None = None) -> str:
@@ -120,10 +140,17 @@ def build_tool_done_label(default_label: str, *, success: bool, process_meta: di
         if failure_count > 0 or not success:
             return "PARALLEL RESULT"
         return "PARALLEL DONE"
-    if success:
-        return default_label
-    outcome_kind = _clean_text(meta.get("outcome_kind"))
+
+    outcome_kind = _tool_done_presentation_kind(success, meta)
     attempt_kind = _clean_text(meta.get("attempt_kind"))
+    if outcome_kind == "wait_for_user":
+        return "等待接手"
+    if outcome_kind == "verify_failed":
+        return "核验失败"
+    if outcome_kind == "interrupted":
+        return "已中断"
+    if success and not outcome_kind:
+        return default_label
     if outcome_kind == "blocked":
         return "等待接手"
     if outcome_kind == "arg_failure":
@@ -181,9 +208,26 @@ def build_tool_done_trace_detail(
     _append_unique(parts, base_name)
 
     attempt_kind = _clean_text(meta.get("attempt_kind"))
-    outcome_kind = _clean_text(meta.get("outcome_kind"))
+    outcome_kind = _tool_done_presentation_kind(success, meta)
     reason = _clean_text(meta.get("reason"))
+    next_hint_kind = _clean_text(meta.get("next_hint_kind"))
     summary = _clean_text(action_summary) or _summarize_text(response)
+
+    if outcome_kind == "wait_for_user":
+        _append_unique(parts, "需要用户接手")
+        if next_hint_kind == "wait_for_user":
+            _append_unique(parts, "先等你完成当前步骤再继续")
+        _append_unique(parts, _parallel_text(meta))
+        _append_unique(parts, summary)
+        return " · ".join(parts)
+
+    if outcome_kind == "verify_failed":
+        _append_unique(parts, "已执行但核验没有通过")
+        _append_unique(parts, _parallel_text(meta))
+        if preview and not summary:
+            _append_unique(parts, f"目标: {preview}")
+        _append_unique(parts, summary)
+        return " · ".join(parts)
 
     if success:
         if attempt_kind == "fallback":
@@ -198,6 +242,8 @@ def build_tool_done_trace_detail(
 
     if outcome_kind == "blocked":
         _append_unique(parts, "需要用户接手")
+    elif outcome_kind == "interrupted":
+        _append_unique(parts, "这一步被中断了")
     elif outcome_kind == "arg_failure":
         _append_unique(parts, "参数还不完整")
     elif outcome_kind == "runtime_failure":

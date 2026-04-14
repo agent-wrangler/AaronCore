@@ -13,7 +13,7 @@ class ChatToolStepTests(unittest.TestCase):
         detail = build_tool_execution_trace_detail(
             tool_name="search_text",
             preview="router.py 里的 route 关键字",
-            skill_display="调用技能",
+            skill_display="调用工具",
             process_meta={
                 "attempt_kind": "fallback",
                 "previous_tool": "run_command",
@@ -81,6 +81,45 @@ class ChatToolStepTests(unittest.TestCase):
         self.assertIn("参数还不完整", retry_detail)
         self.assertIn("切换路径后完成", fallback_success)
 
+    def test_verify_failed_does_not_render_as_success(self):
+        label = build_tool_done_label(
+            "技能完成",
+            success=True,
+            process_meta={"outcome_kind": "verify_failed"},
+        )
+        detail = build_tool_done_trace_detail(
+            tool_name="write_file",
+            preview="result.txt",
+            success=True,
+            action_summary="Expected output file is still missing",
+            response="",
+            process_meta={"outcome_kind": "verify_failed"},
+        )
+
+        self.assertEqual(label, "核验失败")
+        self.assertIn("已执行但核验没有通过", detail)
+        self.assertNotIn("继续推进完成", detail)
+
+    def test_wait_for_user_success_does_not_render_as_done(self):
+        label = build_tool_done_label(
+            "技能完成",
+            success=True,
+            process_meta={"outcome_kind": "success", "next_hint_kind": "wait_for_user"},
+        )
+        detail = build_tool_done_trace_detail(
+            tool_name="open_target",
+            preview="https://www.douyin.com",
+            success=True,
+            action_summary="已打开登录页",
+            response="",
+            process_meta={"outcome_kind": "success", "next_hint_kind": "wait_for_user"},
+        )
+
+        self.assertEqual(label, "等待接手")
+        self.assertIn("需要用户接手", detail)
+        self.assertIn("先等你完成当前步骤再继续", detail)
+        self.assertNotIn("继续推进完成", detail)
+
     def test_parallel_group_helpers_surface_single_batch_progress(self):
         group_meta = {
             "parallel_group_id": "parallel:1:1:call_parallel_fast",
@@ -92,7 +131,7 @@ class ChatToolStepTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            build_tool_execution_trace_label("调用技能", process_meta=group_meta),
+            build_tool_execution_trace_label("调用工具", process_meta=group_meta),
             "PARALLEL CALL",
         )
         self.assertIn(
@@ -100,7 +139,7 @@ class ChatToolStepTests(unittest.TestCase):
             build_tool_execution_trace_detail(
                 tool_name="folder_explore",
                 preview="",
-                skill_display="调用技能",
+                skill_display="调用工具",
                 process_meta=group_meta,
             ),
         )

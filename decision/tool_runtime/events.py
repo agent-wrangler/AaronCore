@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .ledger import ToolCallRecord
+from .process_meta import build_runtime_payload, extract_record_runtime_state
 
 
 def synthesize_tool_failure_response(
@@ -37,21 +38,21 @@ def build_tool_call_executing_event(record: ToolCallRecord, *, process_meta: dic
 
 
 def build_tool_call_done_event(record: ToolCallRecord, *, process_meta: dict | None = None) -> dict:
-    return {
-        "_tool_call": {
-            "id": record.call_id,
-            "name": record.tool_name,
-            "done": True,
-            "success": bool(record.success),
-            "response": str(record.response or "")[:200],
-            "preview": record.preview,
-            "action_summary": record.action_summary,
-            "run_meta": record.run_meta if isinstance(record.run_meta, dict) else {},
-            "synthetic": bool(record.synthetic),
-            "reason": record.reason,
-            "process_meta": dict(process_meta or {}),
-        }
+    payload = {
+        "id": record.call_id,
+        "name": record.tool_name,
+        "done": True,
+        "success": bool(record.success),
+        "response": str(record.response or "")[:200],
+        "preview": record.preview,
+        "action_summary": record.action_summary,
+        "run_meta": record.run_meta if isinstance(record.run_meta, dict) else {},
+        "synthetic": bool(record.synthetic),
+        "reason": record.reason,
+        "process_meta": dict(process_meta or {}),
     }
+    payload.update(build_runtime_payload(record))
+    return {"_tool_call": payload}
 
 
 def build_tool_turn_done_event(
@@ -62,6 +63,7 @@ def build_tool_turn_done_event(
     turn_meta: dict | None = None,
 ) -> dict:
     batch_records = [item for item in (records or ([record] if record else [])) if isinstance(item, ToolCallRecord)]
+    runtime_state = extract_record_runtime_state(record) if record else {}
     event = {
         "_done": True,
         "usage": usage or {},
@@ -83,10 +85,13 @@ def build_tool_turn_done_event(
                 "success": item.success,
                 "synthetic": bool(item.synthetic),
                 "reason": item.reason,
+                **build_runtime_payload(item),
             }
             for item in batch_records
         ],
     }
+    if runtime_state:
+        event.update(build_runtime_payload(record))
     if isinstance(turn_meta, dict):
         event.update(turn_meta)
     return event

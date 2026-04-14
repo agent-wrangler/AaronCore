@@ -39,6 +39,7 @@ from routes.chat_reply_closeout import (
     prepare_reply_for_user as _prepare_reply_for_user,
 )
 from routes.chat_run_helpers import (
+    apply_runtime_state_to_task_plan as _apply_runtime_state_to_task_plan,
     block_task_plan_after_failure as _block_task_plan_after_failure,
     build_run_event as _build_run_event,
     extract_task_plan_from_meta as _extract_task_plan_from_meta,
@@ -746,6 +747,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
                                     if _plan_update:
                                         _task_plan = _plan_update
+                                        bundle["task_plan"] = _task_plan
                                         yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                                     _tool_action_summary = str(tc_info.get("action_summary") or "").strip()
                                     _tool_response_text = str(tc_info.get("response") or "").strip()
@@ -853,6 +855,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                     _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
                                     if _plan_update:
                                         _task_plan = _plan_update
+                                        bundle["task_plan"] = _task_plan
                                         yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                                 if "success" in _item:
                                     _tool_success = bool(_item.get("success"))
@@ -963,6 +966,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         _plan_update = _extract_task_plan_from_meta(_tool_run_meta)
                         if _plan_update:
                             _task_plan = _plan_update
+                            bundle["task_plan"] = _task_plan
                             yield {"event": "plan", "data": json.dumps(_plan_update, ensure_ascii=False)}
                         _tool_success = tc_result.get("success") if _tool_used else None
                         _tool_response_text = str(tc_result.get("tool_response") or "").strip()
@@ -1045,7 +1049,30 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     stream_had_output=bool(_stream_chunks),
                     debug_write=S.debug_write,
                 )
-                if _task_plan and (_tool_success is False or _direct_tool_gap):
+                _runtime_status = str(
+                    ((_tool_run_meta.get("runtime_state") if isinstance(_tool_run_meta, dict) else {}) or {}).get("status") or ""
+                ).strip()
+                if not _task_plan and isinstance(bundle.get("task_plan"), dict):
+                    _task_plan = bundle.get("task_plan")
+                if _task_plan:
+                    _runtime_plan = _apply_runtime_state_to_task_plan(
+                        _task_plan,
+                        meta=_tool_run_meta,
+                        goal_hint=msg,
+                        tool_used=_tool_used or "",
+                        action_summary=_tool_action_summary,
+                        tool_response=_tool_response_text or response,
+                    )
+                    if _runtime_plan and _runtime_plan != _task_plan:
+                        _task_plan = _runtime_plan
+                        bundle["task_plan"] = _task_plan
+                        yield {"event": "plan", "data": json.dumps(_runtime_plan, ensure_ascii=False)}
+                if _task_plan and (_tool_success is False or _direct_tool_gap) and _runtime_status not in {
+                    "blocked",
+                    "interrupted",
+                    "verify_failed",
+                    "waiting_user",
+                }:
                     _blocked_plan = _block_task_plan_after_failure(
                         _task_plan,
                         goal_hint=msg,

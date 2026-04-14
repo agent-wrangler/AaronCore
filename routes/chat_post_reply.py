@@ -102,6 +102,26 @@ def build_process_payload(
         call_id = str(item.get("call_id") or "").strip()
         if call_id:
             row["call_id"] = call_id
+        status = str(item.get("status") or "").strip()
+        if status:
+            row["status"] = status
+        next_action = str(item.get("next_action") or "").strip()
+        if next_action:
+            row["next_action"] = next_action
+        if item.get("verified") in {True, False}:
+            row["verified"] = bool(item.get("verified"))
+        blocker = str(item.get("blocker") or "").strip()
+        if blocker:
+            row["blocker"] = blocker
+        runtime_state = item.get("runtime_state")
+        if isinstance(runtime_state, dict) and runtime_state:
+            row["runtime_state"] = dict(runtime_state)
+        verification = item.get("verification")
+        if isinstance(verification, dict) and verification:
+            row["verification"] = dict(verification)
+        fs_target = item.get("fs_target")
+        if isinstance(fs_target, dict) and fs_target:
+            row["fs_target"] = dict(fs_target)
         normalized_tool_results.append(row)
 
     normalized_steps = normalize_steps(steps) if callable(normalize_steps) else list(steps or [])

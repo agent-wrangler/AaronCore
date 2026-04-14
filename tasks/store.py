@@ -407,18 +407,75 @@ def _query_clearly_refers_to_active_task(
     last_ref: str = "",
     goal: str = "",
     current_step: str = "",
+    current_step_status: str = "",
+    recent_progress: str = "",
+    blocker: str = "",
+    fs_target: str = "",
+    phase: str = "",
     task_status: str = "",
+    latest_event_summary: str = "",
+    runtime_status: str = "",
+    next_action: str = "",
+    verification_status: str = "",
+    verification_detail: str = "",
 ) -> bool:
     return _continuity.query_clearly_refers_to_active_task(
         query,
         last_ref=last_ref,
         goal=goal,
         current_step=current_step,
+        current_step_status=current_step_status,
+        recent_progress=recent_progress,
+        blocker=blocker,
+        fs_target=fs_target,
+        phase=phase,
         task_status=task_status,
+        latest_event_summary=latest_event_summary,
+        runtime_status=runtime_status,
+        next_action=next_action,
+        verification_status=verification_status,
+        verification_detail=verification_detail,
     )
 
 def _goal_overlap(a: str, b: str) -> float:
     return _continuity.goal_overlap(a, b)
+
+
+def _infer_task_query_mode(
+    query: str,
+    *,
+    goal: str = "",
+    current_step: str = "",
+    current_step_status: str = "",
+    recent_progress: str = "",
+    blocker: str = "",
+    fs_target: str = "",
+    phase: str = "",
+    task_status: str = "",
+    last_ref: str = "",
+    latest_event_summary: str = "",
+    runtime_status: str = "",
+    next_action: str = "",
+    verification_status: str = "",
+    verification_detail: str = "",
+) -> str:
+    return _continuity.infer_task_query_mode(
+        query,
+        goal=goal,
+        current_step=current_step,
+        current_step_status=current_step_status,
+        recent_progress=recent_progress,
+        blocker=blocker,
+        fs_target=fs_target,
+        phase=phase,
+        task_status=task_status,
+        last_ref=last_ref,
+        latest_event_summary=latest_event_summary,
+        runtime_status=runtime_status,
+        next_action=next_action,
+        verification_status=verification_status,
+        verification_detail=verification_detail,
+    )
 
 def _get_or_create_task_plan_project():
     return _task_plans.get_or_create_task_plan_project(
@@ -442,7 +499,9 @@ def _find_matching_task_plan_task(user_input: str = "", preferred_fs_target: str
         user_input,
         preferred_fs_target,
         all_task_plan_tasks=_all_task_plan_tasks,
+        extract_task_fs_target=_extract_task_fs_target,
         extract_explicit_query_paths=_extract_explicit_query_paths,
+        get_structured_fs_target_for_task_plan=get_structured_fs_target_for_task_plan,
         task_matches_query_paths=_task_matches_query_paths,
         normalize_query_path=_normalize_query_path,
         has_task_fs_target=_has_task_fs_target,
@@ -489,6 +548,7 @@ def get_active_task_working_state(user_input: str = "", preferred_fs_target: str
         preferred_fs_target,
         find_matching_task_plan_task=_find_matching_task_plan_task,
         task_to_working_state=task_to_working_state,
+        infer_task_query_mode=_infer_task_query_mode,
     )
 
 

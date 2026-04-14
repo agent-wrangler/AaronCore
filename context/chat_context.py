@@ -251,6 +251,7 @@ def build_active_task_context(
 
     phase = str((working_state.get("phase") if working_state else "") or task_plan.get("phase") or "").strip()
     summary = str((working_state.get("summary") if working_state else "") or task_plan.get("summary") or "").strip()
+    query_mode = str((working_state.get("query_mode") if working_state else "") or "").strip()
     current_item_id = str(
         (working_state.get("current_item_id") if working_state else "")
         or task_plan.get("current_item_id")
@@ -260,6 +261,9 @@ def build_active_task_context(
     recent_progress = str((working_state.get("recent_progress") if working_state else "") or "").strip()
     blocker = str((working_state.get("blocker") if working_state else "") or "").strip()
     next_step = str((working_state.get("next_step") if working_state else "") or "").strip()
+    runtime_status = str((working_state.get("runtime_status") if working_state else "") or "").strip()
+    verification_status = str((working_state.get("verification_status") if working_state else "") or "").strip()
+    verification_detail = str((working_state.get("verification_detail") if working_state else "") or "").strip()
 
     if task_plan and items:
         current_item = next(
@@ -303,6 +307,39 @@ def build_active_task_context(
 
     if phase:
         lines.append(f"Current phase: {phase}")
+    turn_execution_policy = ""
+    if query_mode == "locate":
+        lines.append("Current user request: answer with the current task target or location first. Do not continue execution automatically.")
+        turn_execution_policy = "explain_only"
+    elif query_mode == "status":
+        lines.append("Current user request: answer with the current task status or progress first. Do not continue execution automatically.")
+        turn_execution_policy = "explain_only"
+    elif query_mode == "verify":
+        lines.append("Current user request: answer whether the latest task result is verified first. Do not continue execution automatically.")
+        turn_execution_policy = "explain_only"
+    elif query_mode == "interrupt":
+        lines.append("Current user request: explain why the last attempt was interrupted first. Do not continue execution automatically.")
+        turn_execution_policy = "explain_only"
+    elif query_mode == "blocker":
+        lines.append("Current user request: explain the blocker or missing user action first. Do not continue execution automatically.")
+        turn_execution_policy = "explain_only"
+    elif query_mode == "continue":
+        turn_execution_policy = "continue_execution_allowed"
+    elif query_mode:
+        lines.append("Current user request: answer about the active task first. Do not continue execution automatically.")
+        turn_execution_policy = "explain_only"
+    if turn_execution_policy:
+        lines.append(f"Turn execution policy: {turn_execution_policy}")
+    if turn_execution_policy == "explain_only":
+        lines.append(
+            "This request is already answerable from the current task runtime state. "
+            "Answer from that state first, and do not call inspection, search, capture, or execution tools "
+            "unless the user explicitly asks for a new check."
+        )
+        lines.append(
+            "This turn is explanation-only. End after answering the current question. "
+            "Do not continue the task or call tools in this same turn."
+        )
     if summary:
         lines.append(f"Working summary: {summary}")
     if current_step:
@@ -313,6 +350,12 @@ def build_active_task_context(
         lines.append(f"Recent progress: {recent_progress}")
     if blocker:
         lines.append(f"Current blocker: {blocker}")
+    if runtime_status == "interrupted":
+        lines.append("Latest runtime status: interrupted")
+    if verification_status:
+        lines.append(f"Latest verification status: {verification_status}")
+    if verification_detail and verification_detail not in {summary, blocker}:
+        lines.append(f"Latest verification detail: {verification_detail}")
     if next_step and next_step != current_step:
         lines.append(f"Default next step: {next_step}")
 

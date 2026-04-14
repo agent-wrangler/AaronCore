@@ -1,12 +1,34 @@
 """Task-plan projections and working-state views."""
 
 
+_BLOCKED_RUNTIME_STATUSES = {"blocked", "waiting_user"}
+
+
+def _snapshot_verification(snapshot: dict) -> dict:
+    return snapshot.get("verification") if isinstance(snapshot.get("verification"), dict) else {}
+
+
+def _verification_status(snapshot: dict) -> str:
+    verification = _snapshot_verification(snapshot)
+    status = str(verification.get("status") or "").strip().lower()
+    if status:
+        return status
+    verified = verification.get("verified")
+    if verified is True:
+        return "verified"
+    if verified is False:
+        return "failed"
+    return ""
+
+
 def find_matching_task_plan_task(
     user_input: str = "",
     preferred_fs_target: str = "",
     *,
     all_task_plan_tasks,
+    extract_task_fs_target,
     extract_explicit_query_paths,
+    get_structured_fs_target_for_task_plan,
     task_matches_query_paths,
     normalize_query_path,
     has_task_fs_target,
@@ -62,6 +84,8 @@ def find_matching_task_plan_task(
     ).strip()
     current_item_id = str((snapshot.get("current_item_id") if isinstance(snapshot, dict) else "") or "").strip()
     current_step = ""
+    current_step_status = ""
+    current_step_detail = ""
     items = snapshot.get("items") if isinstance(snapshot.get("items"), list) else []
     if current_item_id and items:
         for item in items:
@@ -69,15 +93,63 @@ def find_matching_task_plan_task(
                 continue
             if str(item.get("id") or "").strip() == current_item_id:
                 current_step = str(item.get("title") or "").strip()
+                current_step_status = str(item.get("status") or "").strip()
+                current_step_detail = str(item.get("detail") or "").strip()
                 if current_step:
                     break
+    last_done = _last_done_plan_item(items, current_item_id=current_item_id)
+    recent_progress = str(last_done.get("title") or "").strip()
+    latest_event = {}
+    events = latest.get("events") if isinstance(latest.get("events"), list) else []
+    for event in reversed(events):
+        if isinstance(event, dict):
+            latest_event = event
+            break
+    latest_event_summary = str(latest_event.get("summary") or "").strip()
+    phase = str((snapshot.get("phase") if isinstance(snapshot, dict) else "") or latest.get("stage") or "").strip()
+    runtime_status = str((snapshot.get("runtime_status") if isinstance(snapshot, dict) else "") or "").strip()
+    next_action = str((snapshot.get("next_action") if isinstance(snapshot, dict) else "") or "").strip()
+    verification_status = _verification_status(snapshot if isinstance(snapshot, dict) else {})
+    verification_detail = str(
+        (_snapshot_verification(snapshot).get("detail") if isinstance(snapshot, dict) else "") or ""
+    ).strip()
+    blocker = ""
+    task_fs_target = ""
+    task_target = extract_task_fs_target(latest) if callable(extract_task_fs_target) else None
+    if isinstance(task_target, dict):
+        task_fs_target = str(task_target.get("path") or "").strip()
+    if not task_fs_target and callable(get_structured_fs_target_for_task_plan):
+        inferred_target = get_structured_fs_target_for_task_plan(snapshot)
+        if isinstance(inferred_target, dict):
+            task_fs_target = str(inferred_target.get("path") or "").strip()
+    if phase == "blocked" or runtime_status in _BLOCKED_RUNTIME_STATUSES or str(latest.get("status") or "").strip() == "blocked" or current_step_status in {
+        "blocked",
+        "error",
+        "failed",
+        "waiting_user",
+    }:
+        blocker = current_step_detail or str(
+            (snapshot.get("blocker") if isinstance(snapshot, dict) else "") or ""
+        ).strip() or verification_detail or latest_event_summary or str(
+            (snapshot.get("summary") if isinstance(snapshot, dict) else "") or ""
+        ).strip()
 
     if query_clearly_refers_to_active_task(
         raw,
         last_ref=last_ref,
         goal=goal,
         current_step=current_step,
+        current_step_status=current_step_status,
+        recent_progress=recent_progress,
+        blocker=blocker,
+        fs_target=task_fs_target or prefer_by_fs_target,
+        phase=phase,
         task_status=str(latest.get("status") or ""),
+        latest_event_summary=latest_event_summary,
+        runtime_status=runtime_status,
+        next_action=next_action,
+        verification_status=verification_status,
+        verification_detail=verification_detail,
     ):
         return latest
     return None
@@ -162,6 +234,11 @@ def task_to_working_state(
     goal = str(snapshot.get("goal") or (task.get("input") or {}).get("query") or task.get("title") or "").strip()
     phase = str(snapshot.get("phase") or task.get("stage") or "").strip()
     summary = str(snapshot.get("summary") or (task.get("result") or {}).get("summary") or "").strip()
+    runtime_status = str(snapshot.get("runtime_status") or "").strip().lower()
+    next_action = str(snapshot.get("next_action") or "").strip().lower()
+    verification = _snapshot_verification(snapshot)
+    verification_status = _verification_status(snapshot)
+    verification_detail = str(verification.get("detail") or "").strip()
     current_item_id = str(snapshot.get("current_item_id") or "").strip()
     current_item = _find_plan_item(items, current_item_id)
     current_step = str(current_item.get("title") or "").strip()
@@ -182,7 +259,7 @@ def task_to_working_state(
     fs_path = str((fs_target or {}).get("path") or "").strip()
 
     blocker = ""
-    if phase == "blocked" or str(task.get("status") or "").strip() == "blocked" or current_step_status in {
+    if phase == "blocked" or runtime_status in _BLOCKED_RUNTIME_STATUSES or str(task.get("status") or "").strip() == "blocked" or current_step_status in {
         "blocked",
         "error",
         "failed",
@@ -190,6 +267,8 @@ def task_to_working_state(
     }:
         blocker = (
             str(current_item.get("detail") or "").strip()
+            or str(snapshot.get("blocker") or "").strip()
+            or verification_detail
             or latest_event_summary
             or summary
             or current_step
@@ -229,6 +308,10 @@ def task_to_working_state(
         "recent_progress": recent_progress,
         "blocker": blocker,
         "next_step": next_step,
+        "runtime_status": runtime_status,
+        "next_action": next_action,
+        "verification_status": verification_status,
+        "verification_detail": verification_detail,
         "fs_target": fs_path,
         "updated_at": str(task.get("updated_at") or snapshot.get("updated_at") or "").strip(),
         "latest_event": {
@@ -245,6 +328,30 @@ def get_active_task_working_state(
     *,
     find_matching_task_plan_task,
     task_to_working_state,
+    infer_task_query_mode,
 ) -> dict | None:
     task = find_matching_task_plan_task(user_input, preferred_fs_target=preferred_fs_target)
-    return task_to_working_state(task)
+    state = task_to_working_state(task)
+    if not isinstance(state, dict) or not state:
+        return state
+    query_mode = infer_task_query_mode(
+        user_input,
+        goal=str(state.get("goal") or "").strip(),
+        current_step=str(state.get("current_step") or "").strip(),
+        current_step_status=str(state.get("current_step_status") or "").strip(),
+        recent_progress=str(state.get("recent_progress") or "").strip(),
+        blocker=str(state.get("blocker") or "").strip(),
+        fs_target=str(state.get("fs_target") or "").strip(),
+        phase=str(state.get("phase") or "").strip(),
+        task_status=str(state.get("task_status") or "").strip(),
+        latest_event_summary=str(
+            ((state.get("latest_event") if isinstance(state.get("latest_event"), dict) else {}) or {}).get("summary") or ""
+        ).strip(),
+        runtime_status=str(state.get("runtime_status") or "").strip(),
+        next_action=str(state.get("next_action") or "").strip(),
+        verification_status=str(state.get("verification_status") or "").strip(),
+        verification_detail=str(state.get("verification_detail") or "").strip(),
+    )
+    updated = dict(state)
+    updated["query_mode"] = query_mode
+    return updated

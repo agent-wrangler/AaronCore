@@ -7,6 +7,7 @@ from decision.tool_runtime.batch import (
 )
 from decision.tool_runtime.events import synthesize_tool_failure_response
 from decision.tool_runtime.ledger import ToolCallTurnLedger
+from decision.tool_runtime.process_meta import build_runtime_payload, extract_record_runtime_state
 from decision.tool_runtime.runtime_control import (
     ToolRuntimeInterrupted,
     raise_if_cancelled,
@@ -34,6 +35,12 @@ _MISSING_EXECUTION_CLOSEOUT_GUIDANCE = (
     "that the actual check/open/read/search did not complete successfully in this turn, and that the next correct move is to re-run the real action rather than rely on that answer. "
     "Do not mention internal classifiers, server fallback copy, or hidden runtime details."
 )
+_BACKGROUND_DIALOGUE_ONLY_GUIDANCE = (
+    "The dialogue context in this turn is background only. "
+    "The current user prompt does not include the explicit task continuity block, "
+    "so previous dialogue does not grant permission to resume a task or call tools. "
+    "Ask a brief clarification instead of executing tools."
+)
 
 
 def _build_non_stream_result(
@@ -45,6 +52,7 @@ def _build_non_stream_result(
     turn_meta: dict | None = None,
 ) -> dict:
     terminal_records = ledger.terminal_records()
+    runtime_state = extract_record_runtime_state(terminal_record) if terminal_record else {}
     result = {
         "reply": reply,
         "tool_used": terminal_record.tool_name if terminal_record else None,
@@ -66,10 +74,13 @@ def _build_non_stream_result(
                 "success": record.success,
                 "synthetic": bool(record.synthetic),
                 "reason": record.reason,
+                **build_runtime_payload(record),
             }
             for record in terminal_records
         ],
     }
+    if runtime_state:
+        result.update(build_runtime_payload(terminal_record))
     if isinstance(turn_meta, dict):
         result.update(turn_meta)
     return result
@@ -182,6 +193,8 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
         ]
         if dialogue_context:
             messages.append({"role": "system", "content": f"对话增量提示：\n{dialogue_context}"})
+        if dialogue_context and "任务连续性提示" not in user_prompt:
+            messages.append({"role": "system", "content": _BACKGROUND_DIALOGUE_ONLY_GUIDANCE})
         messages.append({"role": "user", "content": user_prompt})
 
         formatter._debug_write("tool_call_request", {"tools_count": len(tools), "msg_len": len(user_prompt)})

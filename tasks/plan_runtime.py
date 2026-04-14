@@ -114,6 +114,34 @@ def _normalize_plan_items(items, *, goal: str, plan_item_status: set[str]) -> li
     return rows
 
 
+def _normalize_verification_payload(data: dict | None) -> dict:
+    payload = data if isinstance(data, dict) else {}
+    verified = payload.get("verified")
+    status = str(payload.get("status") or "").strip().lower()
+    detail = str(payload.get("detail") or payload.get("verification_detail") or "").strip()
+    observed_state = str(payload.get("observed_state") or "").strip()
+    verification_mode = str(payload.get("verification_mode") or "").strip()
+
+    if not status:
+        if verified is True:
+            status = "verified"
+        elif verified is False:
+            status = "failed"
+
+    normalized = {}
+    if verified in {True, False}:
+        normalized["verified"] = bool(verified)
+    if status:
+        normalized["status"] = status
+    if detail:
+        normalized["detail"] = detail
+    if observed_state:
+        normalized["observed_state"] = observed_state
+    if verification_mode:
+        normalized["verification_mode"] = verification_mode
+    return normalized
+
+
 def normalize_task_plan_snapshot(
     plan: dict | None,
     *,
@@ -170,7 +198,7 @@ def normalize_task_plan_snapshot(
         else:
             summary = "正在推进任务" if re.search(r"[\u4e00-\u9fff]", plan_goal) else "Working through the task."
 
-    return {
+    normalized = {
         "goal": plan_goal,
         "mode": "multi_step",
         "phase": phase,
@@ -179,6 +207,19 @@ def normalize_task_plan_snapshot(
         "current_item_id": current_item_id,
         "updated_at": str(data.get("updated_at") or now_iso()),
     }
+    runtime_status = str(data.get("runtime_status") or "").strip().lower()
+    next_action = str(data.get("next_action") or "").strip().lower()
+    blocker = str(data.get("blocker") or "").strip()
+    verification = _normalize_verification_payload(data.get("verification"))
+    if runtime_status:
+        normalized["runtime_status"] = runtime_status
+    if next_action:
+        normalized["next_action"] = next_action
+    if blocker:
+        normalized["blocker"] = blocker
+    if verification:
+        normalized["verification"] = verification
+    return normalized
 
 
 def task_status_from_plan(plan: dict) -> str:
