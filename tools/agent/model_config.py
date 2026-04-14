@@ -1,6 +1,5 @@
 """模型配置技能：通过对话添加、切换、删除、查看 LLM 模型"""
 import re
-import json
 import requests
 
 # 已知厂商：用户只需给 key，自动填 base_url 和 model
@@ -57,11 +56,9 @@ def _save_config():
     import brain
     brain._raw_config["models"] = brain.MODELS_CONFIG
     saver = getattr(brain, "save_raw_config", None)
-    if callable(saver):
-        saver(brain._raw_config)
-        return
-    with open(brain.config_path, "w", encoding="utf-8") as f:
-        json.dump(brain._raw_config, f, ensure_ascii=False, indent=2)
+    if not callable(saver):
+        raise RuntimeError("save_raw_config is required for redacted model config persistence.")
+    saver(brain._raw_config)
 
 
 def _list_models():

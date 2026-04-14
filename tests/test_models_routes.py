@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import sys
 import tempfile
 import types
@@ -6,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from routes.models import (
+    get_models_catalog,
     list_models,
     save_model_config,
     switch_model,
@@ -26,12 +28,16 @@ class ModelRoutesTests(unittest.TestCase):
             fake_brain._current_default = mid
             return True
 
+        def _save_raw_config(raw):
+            fake_brain._raw_config = copy.deepcopy(raw)
+
         fake_brain = types.SimpleNamespace(
             MODELS_CONFIG=models_config,
             _current_default=current,
             _raw_config={"models": dict(models_config), "default": current},
             config_path=temp_path,
             llm_call=_llm_call,
+            save_raw_config=_save_raw_config,
             set_default_model=_set_default,
             validate_codex_cli_login=lambda timeout=8: (True, "ok"),
         )
@@ -98,6 +104,22 @@ class ModelRoutesTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["detail"], "Connection OK")
 
+    def test_models_catalog_exposes_official_provider_base_urls(self):
+        original = self._install_fake_brain({})
+        try:
+            result = asyncio.run(get_models_catalog())
+        finally:
+            self._restore_brain(original)
+        self.assertEqual(result["catalog"]["openai"]["base_url"], "https://api.openai.com/v1")
+        self.assertEqual(result["catalog"]["claude"]["base_url"], "https://api.anthropic.com/v1")
+        self.assertEqual(
+            result["catalog"]["qwen"]["base_url"],
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+        claude_models = [entry["id"] for entry in result["catalog"]["claude"]["models"]]
+        self.assertIn("claude-opus-4-6", claude_models)
+        self.assertIn("claude-sonnet-4-6", claude_models)
+
     def test_save_model_config_rejects_non_api_transport(self):
         original = self._install_fake_brain({})
         try:
@@ -142,6 +164,14 @@ class ModelRoutesTests(unittest.TestCase):
         self.assertEqual(
             fake_brain.MODELS_CONFIG["deepseek-reasoner"]["base_url"],
             "https://api.deepseek.com/v1",
+        )
+        self.assertEqual(
+            fake_brain.MODELS_CONFIG["deepseek-reasoner"]["provider_key"],
+            "deepseek",
+        )
+        self.assertEqual(
+            fake_brain.MODELS_CONFIG["deepseek-reasoner"]["api_mode"],
+            "chat_completions",
         )
 
     def test_switch_model_does_not_probe_remote_api_before_switching(self):
@@ -190,6 +220,73 @@ class ModelRoutesTests(unittest.TestCase):
             self._restore_brain(original)
         self.assertTrue(result["ok"])
         self.assertEqual(result["detail"], "Connection OK")
+
+    def test_list_models_prefers_gateway_base_url_over_model_name_for_provider_grouping(self):
+        original = self._install_fake_brain(
+            {
+                "gateway-claude": {
+                    "model": "claude-sonnet-4-6",
+                    "transport": "openai_api",
+                    "base_url": "https://api.minimaxi.com/anthropic/v1",
+                    "api_key": "sk-live-123",
+                    "provider_key": "claude",
+                    "provider": "anthropic",
+                }
+            }
+        )
+        try:
+            result = asyncio.run(list_models())
+        finally:
+            self._restore_brain(original)
+        self.assertEqual(result["models"]["gateway-claude"]["provider_key"], "minimax")
+
+    def test_save_model_config_preserves_display_name_but_keeps_actual_model_name(self):
+        original = self._install_fake_brain({})
+        try:
+            result = asyncio.run(
+                save_model_config(
+                    {
+                        "id": "deepseek-main",
+                        "config": {
+                            "model": "deepseek-chat",
+                            "display_name": "主脑对话",
+                            "transport": "openai_api",
+                            "base_url": "https://api.deepseek.com/v1",
+                            "api_key": "sk-live-123",
+                        },
+                    }
+                )
+            )
+            fake_brain = sys.modules["brain"]
+        finally:
+            self._restore_brain(original)
+        self.assertTrue(result["ok"])
+        self.assertEqual(fake_brain.MODELS_CONFIG["deepseek-main"]["model"], "deepseek-chat")
+        self.assertEqual(fake_brain.MODELS_CONFIG["deepseek-main"]["display_name"], "主脑对话")
+
+    def test_save_model_config_requires_redacted_save_runtime(self):
+        original = self._install_fake_brain({})
+        try:
+            fake_brain = sys.modules["brain"]
+            delattr(fake_brain, "save_raw_config")
+            result = asyncio.run(
+                save_model_config(
+                    {
+                        "id": "deepseek-main",
+                        "config": {
+                            "model": "deepseek-chat",
+                            "transport": "openai_api",
+                            "base_url": "https://api.deepseek.com/v1",
+                            "api_key": "sk-live-123",
+                        },
+                    }
+                )
+            )
+        finally:
+            self._restore_brain(original)
+        self.assertFalse(result["ok"])
+        self.assertIn("save_raw_config", result["error"])
+        self.assertNotIn("deepseek-main", fake_brain.MODELS_CONFIG)
 
 
 if __name__ == "__main__":

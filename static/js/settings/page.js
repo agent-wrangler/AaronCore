@@ -457,7 +457,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
   html+='Loading...';
  }else if(Object.keys(savedVisibleModels).length===0){
   html+='<div style="padding:18px 16px;border:1px dashed '+theme.border+';border-radius:12px;background:'+theme.softRowBg+';color:'+theme.sub+';font-size:12px;line-height:1.8;">';
-  html+='No provider connection is active yet. Add one API model first; after that, models from the same provider can appear here.';
+  html+='No provider connection is active yet. Pick a provider, choose a model, and fill in its API key first.';
   html+='</div>';
  }else{
   var shownIds={};

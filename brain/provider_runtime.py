@@ -3,6 +3,8 @@ from urllib.parse import urlparse
 
 import requests
 
+from core import model_provider_config as _provider_config
+
 from . import codex_cli_runtime as _codex_cli_runtime
 
 _DOMESTIC_HOSTS = {"minimaxi.com", "dashscope.aliyuncs.com", "open.bigmodel.cn", "api.volcengine.com"}
@@ -62,20 +64,30 @@ def post_with_proxy_fallback(url: str, **kwargs):
 
 
 def is_minimax_provider(cfg: dict) -> bool:
-    model = str(cfg.get("model", "")).lower()
-    base_url = str(cfg.get("base_url", "")).lower()
+    provider_key = _provider_config.infer_provider_key(str((cfg or {}).get("model") or ""), cfg)
+    if provider_key == "minimax":
+        return True
+    model = str((cfg or {}).get("model", "")).lower()
+    base_url = str((cfg or {}).get("base_url", "")).lower()
     return "minimax" in model or "minimaxi.com" in base_url
 
 
 def is_anthropic_provider(cfg: dict) -> bool:
     if is_minimax_provider(cfg):
         return False
-    base_url = str(cfg.get("base_url", "")).lower()
+    runtime_provider = _provider_config.runtime_provider_kind(cfg)
+    if runtime_provider == "anthropic":
+        return True
+    base_url = str((cfg or {}).get("base_url", "")).lower()
     return "/anthropic" in base_url
 
 
 def is_codex_cli_provider(cfg: dict) -> bool:
     return _codex_cli_runtime.is_codex_cli_provider(cfg)
+
+
+def normalize_model_config(cfg: dict | None, *, fallback_model: str = "") -> dict:
+    return _provider_config.normalize_model_config(cfg, fallback_model=fallback_model)
 
 
 def validate_codex_cli_login(*, timeout: int = 10) -> tuple[bool, str]:
@@ -159,6 +171,14 @@ def build_openai_extra_body(cfg: dict) -> dict | None:
 
 def build_anthropic_url(base_url: str) -> str:
     url = base_url.rstrip("/")
+    if "api.anthropic.com" in url:
+        if url.endswith("/v1/messages"):
+            return url
+        if url.endswith("/v1"):
+            return url + "/messages"
+        if url.endswith("/messages"):
+            return url
+        return url + "/v1/messages"
     if url.endswith("/anthropic/v1/messages"):
         return url
     if url.endswith("/anthropic"):

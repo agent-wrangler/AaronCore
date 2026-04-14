@@ -1,8 +1,8 @@
 """LLM model management routes."""
 
-import json
-
 from fastapi import APIRouter
+
+from core import model_provider_config as _provider_config
 
 router = APIRouter()
 
@@ -14,35 +14,15 @@ def _provider_catalog() -> dict:
 
 
 def _normalize_model_config(cfg: dict, *, fallback_model: str = "") -> dict:
-    normalized = dict(cfg or {})
-    transport = str(normalized.get("transport") or "").strip().lower()
-    if not transport:
-        base_url = str(normalized.get("base_url") or "").strip().lower()
-        transport = "codex_cli" if base_url.startswith("codex://") else "openai_api"
-    normalized["transport"] = transport
-
-    model_name = str(normalized.get("model") or fallback_model or "").strip()
-    if model_name:
-        normalized["model"] = model_name
-    normalized["vision"] = bool(normalized.get("vision", False))
-
-    if transport == "codex_cli":
-        normalized["auth_mode"] = "codex_cli"
-        normalized.pop("api_key", None)
-        normalized["base_url"] = "codex://local"
-    else:
-        normalized.pop("auth_mode", None)
-    return normalized
+    return _provider_config.normalize_model_config(cfg, fallback_model=fallback_model)
 
 
 def _save_models_file(brain_module) -> None:
     brain_module._raw_config["models"] = brain_module.MODELS_CONFIG
     saver = getattr(brain_module, "save_raw_config", None)
-    if callable(saver):
-        saver(brain_module._raw_config)
-        return
-    with open(brain_module.config_path, "w", encoding="utf-8") as handle:
-        json.dump(brain_module._raw_config, handle, ensure_ascii=False, indent=2)
+    if not callable(saver):
+        raise RuntimeError("save_raw_config is required for redacted model config persistence.")
+    saver(brain_module._raw_config)
 
 
 def _find_duplicate_model_id(models_config: dict, *, model_name: str, exclude_id: str = "") -> str:
@@ -96,9 +76,17 @@ def _is_visible_api_model(cfg: dict) -> bool:
 
 
 def _classify_provider(model_id: str, cfg: dict, catalog: dict) -> str | None:
+    normalized = _normalize_model_config(cfg, fallback_model=model_id)
+    provider_key = str(normalized.get("provider_key") or "").strip().lower()
+    if provider_key and provider_key in catalog:
+        return provider_key
+
+    base_url_provider = _provider_config.provider_key_from_base_url(normalized.get("base_url") or "")
+    if base_url_provider and base_url_provider in catalog:
+        return base_url_provider
+
     model_id_l = str(model_id or "").strip().lower()
-    model_name_l = str((cfg or {}).get("model") or "").strip().lower()
-    base_url_l = str((cfg or {}).get("base_url") or "").strip().lower()
+    model_name_l = str(normalized.get("model") or "").strip().lower()
 
     for provider_key, provider_info in catalog.items():
         catalog_ids = {str(mid).strip().lower() for mid, _desc in provider_info.get("models", [])}
@@ -111,15 +99,11 @@ def _classify_provider(model_id: str, cfg: dict, catalog: dict) -> str | None:
             if alias_l and (alias_l in model_id_l or alias_l in model_name_l):
                 return provider_key
 
-    for provider_key, provider_info in catalog.items():
-        url_hint = str(provider_info.get("url_hint") or "").strip().lower()
-        if url_hint and url_hint in base_url_l:
-            return provider_key
     return None
 
 
 def _build_derived_model_config(model_id: str, donor_id: str, donor_cfg: dict, provider_key: str) -> dict:
-    return {
+    derived = {
         "model": model_id,
         "vision": bool(donor_cfg.get("vision", False)),
         "transport": "openai_api",
@@ -129,6 +113,13 @@ def _build_derived_model_config(model_id: str, donor_id: str, donor_cfg: dict, p
         "source_model": donor_id,
         "provider_key": provider_key,
     }
+    if donor_cfg.get("provider"):
+        derived["provider"] = donor_cfg.get("provider")
+    if donor_cfg.get("auth_mode"):
+        derived["auth_mode"] = donor_cfg.get("auth_mode")
+    if donor_cfg.get("api_mode"):
+        derived["api_mode"] = donor_cfg.get("api_mode")
+    return _normalize_model_config(derived, fallback_model=model_id)
 
 
 def _find_provider_donor(models_config: dict, target_model: str) -> tuple[str | None, str | None, dict | None]:
@@ -190,9 +181,13 @@ def _build_visible_model_summary(brain_module) -> dict:
 
         models[model_id] = {
             "model": cfg.get("model", model_id),
+            "display_name": cfg.get("display_name", ""),
             "vision": cfg.get("vision", False),
             "base_url": cfg.get("base_url", ""),
             "transport": cfg.get("transport", "openai_api"),
+            "provider_key": cfg.get("provider_key", ""),
+            "provider": cfg.get("provider", ""),
+            "api_mode": cfg.get("api_mode", ""),
         }
         existing_catalog_keys.add(str(model_id).strip().lower())
         existing_catalog_keys.add(str(cfg.get("model", model_id)).strip().lower())
@@ -208,11 +203,14 @@ def _build_visible_model_summary(brain_module) -> dict:
                 continue
             models[catalog_model_id] = {
                 "model": catalog_model_id,
+                "display_name": "",
                 "vision": donor_cfg.get("vision", False),
                 "base_url": donor_cfg.get("base_url", ""),
                 "transport": "openai_api",
                 "derived": True,
                 "provider_key": provider_key,
+                "provider": donor_cfg.get("provider", ""),
+                "api_mode": donor_cfg.get("api_mode", ""),
                 "source_model": donor_id,
             }
 
@@ -231,6 +229,8 @@ async def switch_model(name: str):
     import brain
 
     created_derived = False
+    previous_cfg = brain.MODELS_CONFIG.get(name)
+    had_existing = name in brain.MODELS_CONFIG
     if name in brain.MODELS_CONFIG:
         cfg = _normalize_model_config(brain.MODELS_CONFIG[name], fallback_model=name)
     else:
@@ -248,8 +248,13 @@ async def switch_model(name: str):
     brain.MODELS_CONFIG[name] = cfg
     try:
         _save_models_file(brain)
-    except Exception:
-        pass
+    except Exception as exc:
+        if had_existing:
+            brain.MODELS_CONFIG[name] = previous_cfg
+        else:
+            brain.MODELS_CONFIG.pop(name, None)
+        brain._raw_config["models"] = brain.MODELS_CONFIG
+        return {"ok": False, "error": str(exc)}
 
     ok = brain.set_default_model(name)
     if ok:
@@ -300,6 +305,7 @@ async def get_models_catalog():
         catalog[provider_key] = {
             "aliases": provider_info["aliases"],
             "url_hint": provider_info["url_hint"],
+            "base_url": provider_info.get("base_url", ""),
             "models": [{"id": mid, "desc": desc} for mid, desc in provider_info["models"]],
         }
     models = {mid: _normalize_model_config(cfg, fallback_model=mid) for mid, cfg in MODELS_CONFIG.items()}
@@ -331,10 +337,17 @@ async def save_model_config(request: dict):
             "error": f"model '{normalized.get('model', mid)}' already exists as '{duplicate_id}'. Edit that model instead of creating a duplicate.",
         }
 
+    previous_cfg = brain.MODELS_CONFIG.get(mid)
+    had_existing = mid in brain.MODELS_CONFIG
     brain.MODELS_CONFIG[mid] = normalized
     try:
         _save_models_file(brain)
     except Exception as exc:
+        if had_existing:
+            brain.MODELS_CONFIG[mid] = previous_cfg
+        else:
+            brain.MODELS_CONFIG.pop(mid, None)
+        brain._raw_config["models"] = brain.MODELS_CONFIG
         return {"ok": False, "error": str(exc)}
     if mid == getattr(brain, "_current_default", ""):
         try:
@@ -357,9 +370,12 @@ async def delete_model_config(request: dict):
         return {"ok": False, "error": "cannot delete the currently active model"}
     if mid not in brain.MODELS_CONFIG:
         return {"ok": False, "error": "model not found"}
+    deleted_cfg = brain.MODELS_CONFIG[mid]
     del brain.MODELS_CONFIG[mid]
     try:
         _save_models_file(brain)
     except Exception as exc:
+        brain.MODELS_CONFIG[mid] = deleted_cfg
+        brain._raw_config["models"] = brain.MODELS_CONFIG
         return {"ok": False, "error": str(exc)}
     return {"ok": True}

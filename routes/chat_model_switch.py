@@ -1,10 +1,12 @@
 import json
 import re
 
+from core import model_provider_config as _provider_config
+
 
 MODEL_SWITCH_RE = re.compile(
-    r'(?:换成?|切换?到?|改[成用]|用)\s*'
-    r'([a-zA-Z0-9][\w\-\.]*(?:[\-\.]\w+)*)',
+    r"(?:(?:^|\b)(?:switch(?:\s+to)?|use)\s+|\u5207\u6362(?:\u5230|\u6210)?\s*|\u6362\u6210\s*|\u6539\u6210\s*|\u7528\s*|^)"
+    r"([A-Za-z0-9][\w\-.]*(?:[\-.]\w+)*)",
     re.IGNORECASE,
 )
 
@@ -13,93 +15,125 @@ PROVIDER_CATALOG = {
     "deepseek": {
         "aliases": ["deepseek", "ds"],
         "url_hint": "deepseek",
+        "base_url": "https://api.deepseek.com/v1",
         "models": [
-            ("deepseek-chat", "V3 日常对话，快且便宜"),
-            ("deepseek-reasoner", "R1 深度推理，慢但智商高"),
+            ("deepseek-chat", "General chat, fast and cheap"),
+            ("deepseek-reasoner", "Deeper reasoning"),
         ],
     },
     "openai": {
         "aliases": ["openai", "gpt", "chatgpt"],
         "url_hint": "openai",
+        "base_url": "https://api.openai.com/v1",
         "models": [
-            ("gpt-5.4", "最新主力，复杂推理 / 编码"),
-            ("gpt-5.4-mini", "高性价比主力，速度更快"),
-            ("gpt-5.4-nano", "最便宜，适合轻任务"),
-            ("gpt-4o", "多模态旗舰，支持图片"),
-            ("gpt-4o-mini", "轻量快速，性价比高"),
-            ("gpt-4.1", "最新主力模型"),
-            ("gpt-4.1-mini", "轻量版 4.1"),
-            ("gpt-4.1-nano", "极速版，最便宜"),
+            ("gpt-5.4", "Latest flagship for coding and reasoning"),
+            ("gpt-5.4-mini", "Faster lower-cost flagship"),
+            ("gpt-5.4-nano", "Cheapest lightweight option"),
+            ("gpt-4o", "Multimodal flagship"),
+            ("gpt-4o-mini", "Fast lightweight multimodal"),
+            ("gpt-4.1", "Stable general-purpose model"),
+            ("gpt-4.1-mini", "Smaller 4.1 variant"),
+            ("gpt-4.1-nano", "Tiny low-cost 4.1"),
         ],
     },
     "claude": {
         "aliases": ["claude", "anthropic"],
         "url_hint": "anthropic",
+        "base_url": "https://api.anthropic.com/v1",
         "models": [
-            ("claude-sonnet-4-20250514", "Sonnet 4 均衡型"),
-            ("claude-3-5-haiku-20241022", "Haiku 3.5 极速"),
+            ("claude-opus-4-6", "Strongest Claude model"),
+            ("claude-sonnet-4-6", "Balanced main Claude model"),
+            ("claude-haiku-4-5-20251001", "Fast lower-cost Claude model"),
         ],
     },
     "qwen": {
-        "aliases": ["qwen", "通义千问", "千问"],
+        "aliases": ["qwen", "\u901a\u4e49\u5343\u95ee", "\u5343\u95ee"],
         "url_hint": "dashscope",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "models": [
-            ("qwen-plus", "主力模型，性价比高"),
-            ("qwen-turbo", "极速版，最便宜"),
-            ("qwen-max", "旗舰版，最强"),
+            ("qwen-plus", "Balanced main model"),
+            ("qwen-turbo", "Fast lower-cost model"),
+            ("qwen-max", "Stronger flagship"),
         ],
     },
     "minimax": {
-        "aliases": ["minimax", "mm", "hailuo", "海螺"],
+        "aliases": ["minimax", "mm", "hailuo", "\u6d77\u87ba"],
         "url_hint": "minimax",
+        "base_url": "https://api.minimaxi.com/v1",
         "models": [
-            ("MiniMax-M2.7", "M2.7 最新主力"),
-            ("MiniMax-M2.7-highspeed", "M2.7 极速版"),
-            ("MiniMax-M2.5", "M2.5 均衡型"),
-            ("MiniMax-M2.5-highspeed", "M2.5 极速版"),
-            ("MiniMax-M2.1", "M2.1 经典版"),
-            ("MiniMax-M2.1-highspeed", "M2.1 极速版"),
-            ("MiniMax-M2", "M2 基础版"),
+            ("MiniMax-M2.7", "Latest main model"),
+            ("MiniMax-M2.7-highspeed", "Fast M2.7"),
+            ("MiniMax-M2.5", "Balanced M2.5"),
+            ("MiniMax-M2.5-highspeed", "Fast M2.5"),
+            ("MiniMax-M2.1", "Classic M2.1"),
+            ("MiniMax-M2.1-highspeed", "Fast M2.1"),
+            ("MiniMax-M2", "Base M2"),
         ],
     },
     "doubao": {
-        "aliases": ["doubao", "豆包"],
+        "aliases": ["doubao", "\u8c46\u5305"],
         "url_hint": "volcengine",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
         "models": [
-            ("doubao-1.5-pro-32k", "1.5 Pro 主力"),
-            ("doubao-1.5-lite-32k", "1.5 Lite 轻量"),
+            ("doubao-1.5-pro-32k", "Main Doubao model"),
+            ("doubao-1.5-lite-32k", "Lighter Doubao model"),
         ],
     },
     "glm": {
-        "aliases": ["glm", "zhipu", "智谱", "chatglm"],
+        "aliases": ["glm", "zhipu", "\u667a\u8c31", "chatglm"],
         "url_hint": "zhipuai",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "models": [
-            ("glm-4-plus", "GLM-4 Plus 旗舰"),
-            ("glm-4-flash", "GLM-4 Flash 免费"),
+            ("glm-4-plus", "GLM flagship"),
+            ("glm-4-flash", "GLM flash"),
         ],
     },
 }
 
 
+def _user_model_name(model_id: str, cfg: dict | None) -> str:
+    config = cfg if isinstance(cfg, dict) else {}
+    return str(config.get("display_name") or config.get("model") or model_id).strip() or str(model_id)
+
+
+def _persist_models_config(brain_module) -> None:
+    brain_module._raw_config["models"] = brain_module.MODELS_CONFIG
+    saver = getattr(brain_module, "save_raw_config", None)
+    if not callable(saver):
+        raise RuntimeError("save_raw_config is required for redacted model config persistence.")
+    saver(brain_module._raw_config)
+
+
 def match_provider(target: str, models_config: dict) -> tuple[str | None, dict | None]:
     target_l = target.lower()
     target_prefix = target_l.split("-")[0].lower()
+
     for provider_key, provider_info in PROVIDER_CATALOG.items():
-        if target_l in provider_info["aliases"] or target_prefix in provider_info["aliases"]:
+        aliases = [provider_key] + [str(alias).lower() for alias in provider_info["aliases"]]
+        if target_l in aliases or target_prefix in aliases:
             for model_id, cfg in models_config.items():
-                base_url = str(cfg.get("base_url", "")).lower()
-                model_id_l = model_id.lower()
-                if provider_info["url_hint"] in base_url or provider_key in model_id_l:
+                explicit_provider_key = _provider_config.infer_provider_key(model_id, cfg)
+                if explicit_provider_key == provider_key:
+                    return provider_key, cfg
+                base_url_provider = _provider_config.provider_key_from_base_url((cfg or {}).get("base_url") or "")
+                model_id_l = str(model_id or "").lower()
+                if base_url_provider == provider_key or provider_key in model_id_l:
                     return provider_key, cfg
             return provider_key, None
 
     for model_id, cfg in models_config.items():
-        model_id_l = model_id.split("-")[0].lower()
-        model_l = str(cfg.get("model", "")).split("-")[0].lower()
-        base_url = str(cfg.get("base_url", "")).lower()
+        explicit_provider_key = _provider_config.infer_provider_key(model_id, cfg)
+        model_id_l = str(model_id or "").split("-")[0].lower()
+        model_l = str((cfg or {}).get("model") or "").split("-")[0].lower()
+        base_url = str((cfg or {}).get("base_url") or "").lower()
+        base_url_provider = _provider_config.provider_key_from_base_url(base_url)
         if target_prefix == model_id_l or target_prefix == model_l or target_l in base_url:
-            for provider_key, provider_info in PROVIDER_CATALOG.items():
-                if provider_info["url_hint"] in base_url or provider_key in model_id_l:
+            if explicit_provider_key:
+                return explicit_provider_key, cfg
+            if base_url_provider:
+                return base_url_provider, cfg
+            for provider_key in PROVIDER_CATALOG:
+                if provider_key in model_id_l:
                     return provider_key, cfg
             return None, cfg
     return None, None
@@ -109,7 +143,11 @@ def is_vague_provider_name(target: str) -> bool:
     if "-" in target or "." in target:
         return False
     target_l = target.lower()
-    return any(target_l in provider_info["aliases"] for provider_info in PROVIDER_CATALOG.values())
+    for provider_key, provider_info in PROVIDER_CATALOG.items():
+        aliases = [provider_key] + [str(alias).lower() for alias in provider_info["aliases"]]
+        if target_l in aliases:
+            return True
+    return False
 
 
 def build_model_list_reply(
@@ -122,45 +160,45 @@ def build_model_list_reply(
     lines = []
     existing = []
     for model_id, cfg in models_config.items():
-        model_id_l = model_id.lower()
-        model_name = str(cfg.get("model", model_id))
+        model_id_l = str(model_id or "").lower()
+        model_name = _user_model_name(model_id, cfg)
+        explicit_provider_key = _provider_config.infer_provider_key(model_id, cfg)
         if provider_key:
-            provider_info = PROVIDER_CATALOG.get(provider_key, {})
-            url_hint = provider_info.get("url_hint", provider_key)
-            base_url = str(cfg.get("base_url", "")).lower()
-            if provider_key in model_id_l or url_hint in base_url:
-                tag = " ← 当前" if model_id == current_default else ""
+            base_url = str((cfg or {}).get("base_url") or "").lower()
+            base_url_provider = _provider_config.provider_key_from_base_url(base_url)
+            if explicit_provider_key == provider_key or provider_key in model_id_l or base_url_provider == provider_key:
+                tag = " [current]" if model_id == current_default else ""
                 existing.append(f"  {model_name}{tag}")
         elif target.lower() in model_id_l:
-            tag = " ← 当前" if model_id == current_default else ""
+            tag = " [current]" if model_id == current_default else ""
             existing.append(f"  {model_name}{tag}")
 
     if existing:
-        lines.append("已配置的：")
+        lines.append("Configured:")
         lines.extend(existing)
 
     if provider_key and provider_key in PROVIDER_CATALOG:
         catalog_models = PROVIDER_CATALOG[provider_key]["models"]
-        existing_names = {str(cfg.get("model", model_id)).lower() for model_id, cfg in models_config.items()}
+        existing_names = {str((cfg or {}).get("model") or model_id).lower() for model_id, cfg in models_config.items()}
         suggestions = []
         for model_id, desc in catalog_models:
             if model_id.lower() not in existing_names:
-                suggestions.append(f"  {model_id}（{desc}）")
+                suggestions.append(f"  {model_id} ({desc})")
         if suggestions:
             if existing:
                 lines.append("")
-            lines.append("还可以用：" if donor_cfg else "常见模型：")
+            lines.append("Also available:" if donor_cfg else "Common options:")
             lines.extend(suggestions)
 
     if not lines:
         return ""
 
-    header = f"{target.upper()} 有这些模型：\n"
-    footer = "\n\n直接说“换成 xxx”就行，"
+    header = f"{target.upper()} models:\n"
+    footer = "\n\nSay \"switch xxx\" or \"\u5207\u6362\u5230 xxx\" directly."
     if donor_cfg:
-        footer += "同厂商的我会自动复用 API 配置。"
+        footer += " Same-provider models will reuse the existing API config."
     else:
-        footer += "不过这个厂商还没配置 API，需要先在设置里添加一个。"
+        footer += " This provider is not configured yet, so add one in Settings first."
     return header + "\n".join(lines) + footer
 
 
@@ -168,24 +206,45 @@ def is_placeholder_key(api_key: str) -> bool:
     if not api_key:
         return True
     key = str(api_key).strip()
+    key_l = key.lower()
     if len(key) < 10:
         return True
-    if "xxx" in key.lower() or "sk-xxx" in key.lower():
+    if "xxx" in key_l or "sk-xxx" in key_l:
+        return True
+    if "your-api-key" in key_l or "your_api_key" in key_l or "please fill" in key_l:
         return True
     if any("\u4e00" <= char <= "\u9fff" for char in key):
         return True
-    if key.startswith(("你的", "填写", "请填")):
+    if key.startswith(("\u4f60\u7684", "\u586b\u5199", "\u8bf7\u586b")):
         return True
     return False
 
 
 def check_model_ready(model_id: str, cfg: dict) -> str | None:
-    api_key = str(cfg.get("api_key", "")).strip()
-    base_url = str(cfg.get("base_url", "")).strip()
+    transport = _provider_config.normalize_transport(
+        (cfg or {}).get("transport"),
+        base_url=str((cfg or {}).get("base_url", "") or ""),
+    )
+    auth_mode = _provider_config.normalize_auth_mode((cfg or {}).get("auth_mode"), transport=transport)
+    if transport == "codex_cli" or auth_mode == "codex_cli":
+        try:
+            import brain
+
+            validate_login = getattr(brain, "validate_codex_cli_login", None)
+            if callable(validate_login):
+                ok, detail = validate_login(timeout=8)
+                if not ok:
+                    return detail or f"{model_id} is unavailable. Please confirm local Codex is logged in."
+        except Exception:
+            pass
+        return None
+
+    api_key = str((cfg or {}).get("api_key") or "").strip()
+    base_url = str((cfg or {}).get("base_url") or "").strip()
     if not base_url:
-        return f"{model_id} 还没配置 base_url，去设置页填一下再切。"
+        return f"{model_id} is missing Base URL. Fill it in on the Settings page first."
     if is_placeholder_key(api_key):
-        return f"{model_id} 的 API key 还没填，去设置页填一下再切。"
+        return f"{model_id} is missing API Key. Fill it in on the Settings page first."
     return None
 
 
@@ -200,7 +259,7 @@ def detect_model_switch(text: str) -> dict | None:
     target = match.group(1).strip()
     target_l = target.lower()
     after = text[match.end():].strip()
-    if after and after[0] in "做写画搜查找帮来聊说讲看":
+    if after and after[0] in "\u505a\u5199\u753b\u641c\u67e5\u627e\u5e2e\u6765\u804a\u8bf4\u8bb2\u770b":
         return None
 
     import brain
@@ -210,40 +269,46 @@ def detect_model_switch(text: str) -> dict | None:
         model_id = next(key for key in models if key.lower() == target_l)
         if model_id == brain._current_default:
             return {
-                "reply": f"已经在用 {models[model_id].get('model', model_id)} 了呀～",
-                "trace": f"当前已是 {model_id}",
+                "reply": f"Already using {_user_model_name(model_id, models[model_id])}.",
+                "trace": f"current already {model_id}",
             }
         err = check_model_ready(model_id, models[model_id])
         if err:
-            return {"reply": err, "trace": f"{model_id} 配置不完整"}
+            return {"reply": err, "trace": f"{model_id} config incomplete"}
         ok = brain.set_default_model(model_id)
         if ok:
             name = brain.get_current_model_name()
             return {
-                "reply": f"好的，已经切到 {name} 了，接下来用这个模型跟你聊。",
-                "trace": f"已切换到 {name}",
+                "reply": f"Switched to {name}.",
+                "trace": f"switched to {name}",
                 "model_changed": True,
             }
-        return {"reply": "切换失败了，你再试一次。", "trace": "切换失败"}
+        return {"reply": "Switch failed. Try again.", "trace": "switch failed"}
 
     if not is_vague_provider_name(target_l):
         for model_id, cfg in models.items():
-            model_name = str(cfg.get("model", model_id)).lower()
-            if target_l in model_id.lower() or target_l in model_name or target_l == model_name:
+            model_name = str((cfg or {}).get("model") or model_id).lower()
+            display_name = str((cfg or {}).get("display_name") or "").lower()
+            if (
+                target_l in model_id.lower()
+                or target_l in model_name
+                or target_l == model_name
+                or (display_name and (target_l in display_name or target_l == display_name))
+            ):
                 if model_id == brain._current_default:
                     return {
-                        "reply": f"已经在用 {cfg.get('model', model_id)} 了呀～",
-                        "trace": f"当前已是 {model_id}",
+                        "reply": f"Already using {_user_model_name(model_id, cfg)}.",
+                        "trace": f"current already {model_id}",
                     }
                 err = check_model_ready(model_id, cfg)
                 if err:
-                    return {"reply": err, "trace": f"{model_id} 配置不完整"}
+                    return {"reply": err, "trace": f"{model_id} config incomplete"}
                 ok = brain.set_default_model(model_id)
                 if ok:
                     name = brain.get_current_model_name()
                     return {
-                        "reply": f"好的，已经切到 {name} 了，接下来用这个模型跟你聊。",
-                        "trace": f"已切换到 {name}",
+                        "reply": f"Switched to {name}.",
+                        "trace": f"switched to {name}",
                         "model_changed": True,
                     }
 
@@ -252,36 +317,40 @@ def detect_model_switch(text: str) -> dict | None:
         if is_vague_provider_name(target_l):
             reply = build_model_list_reply(target, provider_key, donor_cfg, models, brain._current_default)
             if reply:
-                return {"reply": reply, "trace": f"列出 {target} 可用模型"}
+                return {"reply": reply, "trace": f"list models for {target}"}
         elif donor_cfg and "-" in target:
             err = check_model_ready("donor", donor_cfg)
             if err:
                 return {
-                    "reply": "同厂商的 API 配置不完整，去设置页填好 key 再切。",
-                    "trace": "同厂商配置不完整",
+                    "reply": "The donor API config is incomplete. Finish it in Settings first.",
+                    "trace": "donor config incomplete",
                 }
             new_cfg = {
                 "api_key": donor_cfg["api_key"],
                 "base_url": donor_cfg["base_url"],
                 "model": target,
                 "vision": donor_cfg.get("vision", False),
+                "provider_key": donor_cfg.get("provider_key", provider_key or ""),
+                "provider": donor_cfg.get("provider", ""),
+                "transport": donor_cfg.get("transport", "openai_api"),
+                "auth_mode": donor_cfg.get("auth_mode", "api_key"),
+                "api_mode": donor_cfg.get("api_mode", "chat_completions"),
             }
             brain.MODELS_CONFIG[target] = new_cfg
-            brain._raw_config["models"] = brain.MODELS_CONFIG
             try:
-                saver = getattr(brain, "save_raw_config", None)
-                if callable(saver):
-                    saver(brain._raw_config)
-                else:
-                    with open(brain.config_path, "w", encoding="utf-8") as handle:
-                        json.dump(brain._raw_config, handle, ensure_ascii=False, indent=2)
-            except Exception:
-                pass
+                _persist_models_config(brain)
+            except Exception as exc:
+                brain.MODELS_CONFIG.pop(target, None)
+                brain._raw_config["models"] = brain.MODELS_CONFIG
+                return {
+                    "reply": "Unable to save the derived model securely. Please try again from Settings.",
+                    "trace": f"persist failed: {exc}",
+                }
             ok = brain.set_default_model(target)
             if ok:
                 return {
-                    "reply": f"好的，已自动添加并切换到 {target}，复用了同厂商的 API 配置。",
-                    "trace": f"自动创建 + 切换到 {target}",
+                    "reply": f"Created and switched to {target} using the same provider config.",
+                    "trace": f"created and switched to {target}",
                     "model_changed": True,
                 }
 

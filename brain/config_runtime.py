@@ -6,6 +6,7 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+from . import provider_runtime as _provider_runtime
 from storage.paths import LLM_CONFIG_FILE, LLM_LOCAL_CONFIG_FILE
 
 
@@ -54,6 +55,10 @@ def _load_raw_config() -> dict:
 def _normalize_raw_config(raw_config: dict) -> dict:
     if isinstance(raw_config, dict) and "models" in raw_config and isinstance(raw_config.get("models"), dict) and raw_config["models"]:
         normalized = deepcopy(raw_config)
+        normalized["models"] = {
+            str(model_id): _provider_runtime.normalize_model_config(cfg, fallback_model=str(model_id))
+            for model_id, cfg in normalized["models"].items()
+        }
         default = str(normalized.get("default") or "").strip()
         if not default or default not in normalized["models"]:
             normalized["default"] = next(iter(normalized["models"]))
@@ -61,14 +66,23 @@ def _normalize_raw_config(raw_config: dict) -> dict:
 
     raw_config = raw_config if isinstance(raw_config, dict) else {}
     model_name = str(raw_config.get("model", "deepseek-chat") or "deepseek-chat").strip() or "deepseek-chat"
+    model_cfg = _provider_runtime.normalize_model_config(
+        {
+            "api_key": raw_config.get("api_key", ""),
+            "base_url": raw_config.get("base_url", ""),
+            "model": model_name,
+            "vision": False,
+            "transport": raw_config.get("transport", ""),
+            "provider": raw_config.get("provider", ""),
+            "provider_key": raw_config.get("provider_key", ""),
+            "auth_mode": raw_config.get("auth_mode", ""),
+            "api_mode": raw_config.get("api_mode", ""),
+        },
+        fallback_model=model_name,
+    )
     return {
         "models": {
-            model_name: {
-                "api_key": raw_config.get("api_key", ""),
-                "base_url": raw_config.get("base_url", ""),
-                "model": model_name,
-                "vision": False,
-            }
+            model_name: model_cfg
         },
         "default": model_name,
     }

@@ -1,11 +1,9 @@
-import json
-
-
 def get_models(models_config: dict, current_default: str) -> dict:
     models = {}
     for model_id, cfg in models_config.items():
         models[model_id] = {
             "model": cfg.get("model", model_id),
+            "display_name": cfg.get("display_name", ""),
             "vision": cfg.get("vision", False),
             "base_url": cfg.get("base_url", ""),
         }
@@ -13,7 +11,7 @@ def get_models(models_config: dict, current_default: str) -> dict:
 
 
 def get_current_model_name(llm_config: dict, current_default: str) -> str:
-    return llm_config.get("model", current_default)
+    return llm_config.get("display_name") or llm_config.get("model", current_default)
 
 
 def set_default_model(
@@ -26,15 +24,13 @@ def set_default_model(
 ) -> tuple[bool, str, dict]:
     if model_id not in models_config:
         return False, "", {}
+    if not callable(save_raw_config_fn):
+        return False, "", {}
     try:
         raw_config["default"] = model_id
-        if callable(save_raw_config_fn):
-            save_raw_config_fn(raw_config)
-        elif config_path:
-            with open(config_path, "w", encoding="utf-8") as handle:
-                json.dump(raw_config, handle, ensure_ascii=False, indent=2)
+        save_raw_config_fn(raw_config)
     except Exception:
-        pass
+        return False, "", {}
     return True, model_id, models_config[model_id]
 
 
