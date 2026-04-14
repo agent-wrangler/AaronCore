@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from core.network_protocol import get_with_network_strategy, post_with_network_strategy
+from core.runtime_state.json_store import load_json as _load_json, write_json as _write_json
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -216,10 +217,6 @@ def _infer_primary_scene(
 
     # 4. 默认：自主学习（纯知识类问答）
     return "自主学习"
-
-
-    from core.runtime_state.json_store import load_json as _load_json, write_json as _write_json
-
 
 def _normalize_query(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip().lower())

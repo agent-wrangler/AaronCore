@@ -1006,7 +1006,7 @@ def _normalize_time_sensitive_search_query(query: str) -> str:
 # ── self_fix：对话中即时自我修复 ──
 
 # 安全白名单：允许读写的目录
-_SELF_FIX_ALLOWED = ["static/", "configs/", "core/skills/", "memory_db/"]
+_SELF_FIX_ALLOWED = ["static/", "configs/", "tools/agent/", "skills/builtin/", "skill_runtime/", "workers/", "memory_db/"]
 
 def _execute_self_fix(arguments: dict) -> dict:
     """读文件 → LLM 生成最小修复 → 写回"""

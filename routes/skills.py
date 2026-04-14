@@ -8,16 +8,12 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
 from core import shared as S
+from core.markdown_render import render_markdown_html
 
 try:
     import yaml
 except Exception:  # pragma: no cover
     yaml = None
-
-try:
-    from markdown_it import MarkdownIt
-except Exception:  # pragma: no cover
-    MarkdownIt = None
 
 router = APIRouter()
 
@@ -71,19 +67,6 @@ def _first_markdown_paragraph(markdown_text: str) -> str:
     text = _strip_leading_h1(markdown_text)
     parts = re.split(r"\r?\n\s*\r?\n", text, maxsplit=1)
     return (parts[0] if parts else text).strip()
-
-
-def _render_markdown_html(markdown_text: str) -> str:
-    text = str(markdown_text or "").strip()
-    if not text:
-        return ""
-    if _MARKDOWN_RENDERER is not None:
-        try:
-            return _MARKDOWN_RENDERER.render(text)
-        except Exception:
-            pass
-    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return f"<p>{escaped}</p>"
 
 
 def _normalize_skill_path(value) -> str:
@@ -210,7 +193,7 @@ def _build_installed_skill_index() -> dict[str, dict]:
             "skill_md_path": str(skill_md),
             "default_prompt": default_prompt,
             "body_markdown": body,
-            "body_html": _render_markdown_html(body),
+            "body_html": render_markdown_html(body),
             "icon_small_path": str(small_icon_path) if small_icon_path else "",
             "icon_large_path": str(large_icon_path) if large_icon_path else "",
             "has_example_prompt": bool(default_prompt),
@@ -220,19 +203,14 @@ def _build_installed_skill_index() -> dict[str, dict]:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CODEX_HOME = Path.home() / ".codex"
 _CODEX_CONFIG_PATH = _CODEX_HOME / "config.toml"
-_SKILLS_DIR = _REPO_ROOT / "core" / "skills"
+_WORKFLOW_SKILLS_DIR = _REPO_ROOT / "skills" / "builtin"
+_TOOL_SKILLS_DIR = _REPO_ROOT / "tools" / "agent"
+_COMPAT_SKILLS_DIR = _REPO_ROOT / "core" / "skills"
 _NATIVE_SKILL_DOCS_DIR = _REPO_ROOT / "skills"
 _SKILL_SCAN_ROOTS = (
     _CODEX_HOME / "skills",
     _REPO_ROOT / ".agents" / "skills",
 )
-_MARKDOWN_RENDERER = (
-    MarkdownIt("commonmark", {"html": False, "linkify": True, "typographer": False})
-    if MarkdownIt
-    else None
-)
-
-
 def _serialize_skill_items(skills_data: dict) -> list[dict]:
     skills = []
     for name, info in (skills_data or {}).items():
@@ -302,13 +280,19 @@ def _resolve_native_skill_source_path(skill_id: str) -> Path:
         return doc_path
     skill_name = str(skill_id or "").strip()
     for candidate in (
-        _SKILLS_DIR / f"{skill_name}.py",
-        _SKILLS_DIR / f"{skill_name}.json",
-        _SKILLS_DIR / skill_name,
+        _WORKFLOW_SKILLS_DIR / f"{skill_name}.py",
+        _WORKFLOW_SKILLS_DIR / f"{skill_name}.json",
+        _TOOL_SKILLS_DIR / f"{skill_name}.py",
+        _TOOL_SKILLS_DIR / f"{skill_name}.json",
+        _COMPAT_SKILLS_DIR / f"{skill_name}.py",
+        _COMPAT_SKILLS_DIR / f"{skill_name}.json",
+        _WORKFLOW_SKILLS_DIR / skill_name,
+        _TOOL_SKILLS_DIR / skill_name,
+        _COMPAT_SKILLS_DIR / skill_name,
     ):
         if candidate.exists():
             return candidate
-    return _SKILLS_DIR
+    return _WORKFLOW_SKILLS_DIR
 
 
 def _build_native_skill_fallback_markdown(skill_id: str, entry: dict | None = None) -> str:
@@ -389,7 +373,7 @@ def _load_native_skill_doc(skill_id: str, entry: dict | None = None) -> dict:
         "path": str(source_path),
         "default_prompt": default_prompt,
         "body_markdown": body_markdown,
-        "body_html": _render_markdown_html(body_markdown),
+            "body_html": render_markdown_html(body_markdown),
         "has_example_prompt": bool(default_prompt),
         "doc_scope": _native_skill_doc_scope(doc_path),
     }

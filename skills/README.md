@@ -8,12 +8,18 @@ NovaCore skill docs use a two-tier layout:
 The UI reads card title/short description/example prompt from frontmatter
 and renders the markdown body as the detail document.
 
-Runtime execution code still lives in `core/skills/`:
+Runtime execution is now split by responsibility:
 
+- `tools/agent/<skill-id>.py`
+  Agent-callable native tools such as file, shell, desktop, and target actions.
+- `tools/agent/<skill-id>.json`
+  Runtime metadata for those native tools.
+- `skills/builtin/<skill-id>.py`
+  Built-in workflow/domain skill implementation for user-visible capabilities.
+- `skills/builtin/<skill-id>.json`
+  Runtime metadata for those built-in workflow/domain skills.
 - `core/skills/<skill-id>.py`
-  Execution logic
-- `core/skills/<skill-id>.json`
-  Runtime metadata and catalog fields
+  Compatibility shim that forwards old imports into `tools/agent/` or `skills/builtin/`.
 
-This keeps skill documents easy to browse at the top level without moving
-the existing runtime execution chain.
+This keeps user-visible skill docs easy to browse at the top level while
+letting tool execution code leave `core/`.

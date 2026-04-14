@@ -82,6 +82,17 @@ class ReplyHygieneTests(unittest.TestCase):
         self.assertNotIn("**核心建议**", cleaned)
 
 
+    def test_clean_visible_reply_text_prefers_post_think_answer_tail(self):
+        reply = (
+            "My underlying model is MiniMax-M2.7, tailored for local assistant use.\n"
+            "<think>The user is asking what model I am again.</think>\n"
+            "I am the MiniMax-M2.7 local assistant."
+        )
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertEqual(cleaned, "I am the MiniMax-M2.7 local assistant.")
+
     def test_get_skill_display_name_repairs_known_mojibake_label(self):
         original_ready = reply_formatter_module._nova_core_ready
         original_get_all_skills = reply_formatter_module._get_all_skills

@@ -1,4 +1,5 @@
-# Brain - LLM 调用层 + 人格表达层
+# Brain - 统一 LLM 调用层
+# NOTE: 下方旧注释有历史残留；当前实际边界以本次收口为准，think/think_stream 不再负责 persona 注入或本地人格回复。
 #
 # ⚠️ 重要说明：
 # 此文件主要负责 LLM 调用（llm_call、think、think_stream）和人格表达（think 函数中的 persona 处理）。
@@ -27,13 +28,6 @@ def _extract_network_meta(resp) -> dict:
 
 def _post_llm_request(url: str, **kwargs):
     return _post_with_network_strategy(url, **kwargs)
-
-try:
-    from core.rule_runtime import has_rule
-except Exception:
-    def has_rule(fix: str, scene: str = '', min_level: str = 'once') -> bool:
-        return False
-
 
 def _debug_proxy_fallback(stage: str, data: dict):
     try:
@@ -118,6 +112,8 @@ _current_default = _raw_config.get("default", next(iter(MODELS_CONFIG)))
 
 # 兼容旧代码：LLM_CONFIG 指向当前默认模型
 LLM_CONFIG = MODELS_CONFIG.get(_current_default) or next(iter(MODELS_CONFIG.values()))
+DEFAULT_ASSISTANT_SYSTEM_PROMPT = "你是当前对话助手。"
+DEFAULT_CHAT_STYLE_PROMPT = "自然、直接、清楚地回应用户，优先遵守上层给出的事实和任务要求。"
 
 
 # ── 统一 LLM 调用层：MiniMax / DeepSeek 等优先走 OpenAI 兼容 tool_call；Anthropic 系模型走 Anthropic ──
@@ -205,7 +201,7 @@ def _build_openai_extra_body(cfg: dict) -> dict | None:
     if _is_minimax_provider(cfg):
         # MiniMax M2.x 的 OpenAI 兼容 tool_call 示例要求显式传 reasoning_split。
         # 先保留原生 <think> 形式，避免前后端展示链再被打断。
-        return {"reasoning_split": False}
+        return {"reasoning_split": True}
     return None
 
 
@@ -274,6 +270,40 @@ def _normalize_openai_messages(messages: list) -> list:
             normalized[-1]["content"] = str(normalized[-1].get("content", "")) + "\n" + str(item.get("content", ""))
         else:
             normalized.append(item)
+    return normalized
+
+
+def _normalize_reasoning_details(value) -> list[dict]:
+    if isinstance(value, str):
+        value = [{"type": "reasoning.text", "index": 0, "text": value}]
+    elif isinstance(value, dict):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+
+    normalized = []
+    for idx, item in enumerate(value):
+        if isinstance(item, str):
+            text = item.strip()
+            if not text:
+                continue
+            normalized.append({
+                "type": "reasoning.text",
+                "index": idx,
+                "text": text,
+            })
+            continue
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text") or item.get("content") or item.get("thinking") or item.get("reasoning") or ""
+        text = str(text or "")
+        if not text.strip():
+            continue
+        detail = dict(item)
+        detail["text"] = text
+        detail.setdefault("type", "reasoning.text")
+        detail.setdefault("index", idx)
+        normalized.append(detail)
     return normalized
 
 
@@ -458,9 +488,12 @@ def _llm_call_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
         usage = data.get("usage", {})
         # 解析 tool_calls
         tool_calls = msg.get("tool_calls")
+        reasoning_details = _normalize_reasoning_details(msg.get("reasoning_details"))
         result = {"content": content, "usage": usage}
         if tool_calls:
             result["tool_calls"] = tool_calls
+        if reasoning_details:
+            result["reasoning_details"] = reasoning_details
         return result
     except Exception as e:
         return {"content": "", "usage": {}, "error": str(e)}
@@ -553,10 +586,16 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
         emitted_visible = False
         emitted_tool_calls = False
         response_meta = {}
+        _reasoning_buffers = {}
+        _content_buffer = ""
+
         def _extract_reasoning_text(delta: dict) -> str:
             if not isinstance(delta, dict):
                 return ""
             parts = []
+            reasoning_details = _normalize_reasoning_details(delta.get("reasoning_details"))
+            if reasoning_details:
+                return "".join(str(item.get("text") or "") for item in reasoning_details)
             for key in ("reasoning_content", "reasoning", "thinking", "thinking_content"):
                 value = delta.get(key)
                 if isinstance(value, str) and value.strip():
@@ -574,6 +613,44 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                     if isinstance(txt, str) and txt.strip():
                         parts.append(txt)
             return "".join(parts)
+
+        def _consume_reasoning_delta(delta: dict) -> str:
+            details = _normalize_reasoning_details(delta.get("reasoning_details"))
+            if not details:
+                return _extract_reasoning_text(delta)
+            parts = []
+            for idx, item in enumerate(details):
+                text = str(item.get("text") or "")
+                if not text:
+                    continue
+                prev = str(_reasoning_buffers.get(idx) or "")
+                if text.startswith(prev):
+                    new_text = text[len(prev):]
+                elif prev.startswith(text):
+                    new_text = ""
+                else:
+                    new_text = text
+                _reasoning_buffers[idx] = text
+                if new_text:
+                    parts.append(new_text)
+            return "".join(parts)
+
+        def _consume_content_delta(delta: dict, *, provider_cfg: dict) -> str:
+            nonlocal _content_buffer
+            token = str(delta.get("content", "") or "")
+            if not token:
+                return ""
+            if not _is_minimax_provider(provider_cfg):
+                return token
+            prev = _content_buffer
+            if token.startswith(prev):
+                new_text = token[len(prev):]
+            elif prev.startswith(token):
+                new_text = ""
+            else:
+                new_text = token
+            _content_buffer = token
+            return new_text
 
         def _send(req_cfg: dict):
             body = {"model": req_cfg["model"], "messages": messages,
@@ -641,10 +718,10 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                 choice = chunk.get("choices", [{}])[0]
                 delta = choice.get("delta", {})
                 finish_reason = choice.get("finish_reason")
-                reasoning_text = _extract_reasoning_text(delta)
+                reasoning_text = _consume_reasoning_delta(delta)
                 if reasoning_text:
                     yield {"_thinking_content": reasoning_text}
-                token = delta.get("content", "")
+                token = _consume_content_delta(delta, provider_cfg=req_cfg)
                 if token:
                     emitted_visible = True
                     yield token
@@ -959,83 +1036,12 @@ def vision_llm_call(prompt: str, images: list = None) -> str:
     return result.get("content", "")
 
 
-def _load_persona() -> dict:
-    """从 memory_db/persona.json 读取人格配置，支持多模式切换"""
-    base = {
-        "name": "NovaCore",
-        "nova_name": "NovaCore",
-        "user": "主人",
-        "style_prompt": "温柔、自然、有点亲近感，像熟悉的Nova，不说空模板话。"
-    }
-    persona_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'memory_db', 'persona.json')
-    if os.path.exists(persona_path):
-        try:
-            data = json.load(open(persona_path, 'r', encoding='utf-8'))
-            if isinstance(data, dict):
-                base.update(data)
-                # 从 active_mode 读取风格
-                modes = data.get('persona_modes') or {}
-                active = str(data.get('active_mode') or '').strip()
-                mode_data = modes.get(active) or {}
-                if mode_data.get('style_prompt'):
-                    base['style_prompt'] = mode_data['style_prompt']
-        except Exception:
-            pass
-    return base
-
-
 def _extract_skill_result(prompt: str) -> str:
     """从 prompt 中提取技能结果骨架"""
     prompt = str(prompt or '')
     match = re.search(r'技能结果：\s*(.+?)(?:\n\s*L4人格信息：|\n\s*要求：|\Z)', prompt, flags=re.S)
     if match:
         return match.group(1).strip()
-    return ''
-
-
-def _extract_current_user_input(prompt: str) -> str:
-    prompt = str(prompt or '')
-    match = re.search(r'用户输入：\s*(.+?)(?:\n{2,}|\n\s*L\d|\n\s*技能结果：|\Z)', prompt, flags=re.S)
-    if match:
-        return match.group(1).strip()
-    return prompt.strip()
-
-
-def _extract_last_context_message(context: str, prefixes: tuple[str, ...]) -> str:
-    for line in reversed(str(context or '').splitlines()):
-        stripped = line.strip()
-        for prefix in prefixes:
-            token = f'{prefix}：'
-            if stripped.startswith(token):
-                return stripped.split('：', 1)[1].strip()
-    return ''
-
-
-def _is_follow_up_like(text: str) -> bool:
-    text = str(text or '').strip()
-    if not text or len(text) > 18:
-        return False
-
-    starters = ('那', '然后', '所以', '这个', '那个', '它', '这事', '那事', '这边', '那边')
-    keywords = ('什么时候', '多久', '啥时候', '为什么', '为啥', '然后呢', '这个呢', '那个呢', '它呢', '有吗', '能吗', '行吗', '咋办', '怎么办')
-    return text.startswith(starters) or any(word in text for word in keywords)
-
-
-def _contextual_follow_up_reply(user_input: str, context: str) -> str:
-    user_input = str(user_input or '').strip()
-    if not _is_follow_up_like(user_input):
-        return ''
-
-    last_assistant = _extract_last_context_message(context, ('上一轮Nova', 'Nova', '上一轮助手', '助手'))
-    if not last_assistant:
-        return ''
-
-    if re.search(r'什么时候|多久|啥时候|何时|哪天', user_input):
-        return '你是在接刚才那件事呀？现在还没有更准的时间点呢，我这边还在把它慢慢补稳，等能用了我就能接得更顺啦。'
-    if re.search(r'为什么|为啥|怎么会|咋会', user_input):
-        return '你是在接刚才那件事呀。顺着刚才那句说，主要还是因为这块现在还没补完整，所以回得会保守一点嘛。'
-    if re.search(r'然后呢|接着呢|那呢|这个呢|那个呢|它呢|有吗|能吗|行吗|咋办|怎么办', user_input) or len(user_input) <= 8:
-        return '你是在接刚才那件事呀，我接上了。你要是想问它什么时候能有、现在能做到哪一步，直接顺着问我就行，我这次不装没听懂啦。'
     return ''
 
 
@@ -1132,76 +1138,53 @@ def _explicit_chat_error_reply(use_cfg: dict, reason: str, detail: str = '') -> 
     return f'当前聊天失败：{model_name}{label}{suffix}。'
 
 
-def _merged_style_prompt(persona: dict) -> str:
-    base = str(persona.get('style_prompt', '') or '').strip()
-    if not base:
-        return "像熟人聊天，自然有温度，有自己的个性。"
-    return base
+def _build_think_prompts(prompt: str, context: str, mode: str) -> tuple[str, str]:
+    """把上层 prompt 转成统一的 system/user messages，不在这里再做 persona 文件注入。"""
+    if '回复要求（优先级最高' in prompt or ('用户输入：' in prompt and 'L4人格信息：' in prompt):
+        persona_block, instructions, user_input = _split_formatted_prompt(prompt)
+        system_parts = [DEFAULT_ASSISTANT_SYSTEM_PROMPT]
+        if persona_block:
+            cleaned_persona = persona_block
+            for prefix in [
+                "最后，用下面的人格风格润色你的回复（只影响语气和措辞，不能覆盖上面的事实性要求）：\n",
+                "最后，用下面的人格风格润色你的回复（只影响语气和措辞，不能覆盖上面的事实性要求）：",
+            ]:
+                cleaned_persona = cleaned_persona.replace(prefix, "")
+            system_parts.append("你的人格风格（由上游注入）：\n" + cleaned_persona.strip())
+        context_text = str(context or '').strip()
+        if context_text:
+            system_parts.append("最近对话上下文：\n" + context_text)
+        if instructions:
+            system_parts.append(instructions)
+        return "\n\n".join(system_parts), user_input or prompt
 
-
-def _local_persona_reply(mode: str, prompt: str, persona: dict, context: str = '') -> str:
-    """L4 本地人格表达：先保证稳定、自然、可控"""
-    nova_name = persona.get('nova_name', 'NovaCore')
-    user_name = persona.get('user', '主人')
     skill_result = _extract_skill_result(prompt)
-    user_input = _extract_current_user_input(prompt)
-    prompt = user_input or str(prompt or '')
+    context_text = str(context or '').strip()
+    context_block = ""
+    if context_text:
+        context_block = f"""最近对话上下文：
+{context_text}
 
-    if mode == 'skill':
-        if skill_result:
-            if '天气' in prompt or '气温' in prompt or '温度' in prompt:
-                return f"我先帮你查到啦，给你看结果呀：\n\n{skill_result}"
-            if '故事' in prompt:
-                return f"给你呀，这次我是顺着你的意思往下接的：\n\n{skill_result}"
-            return f"我先帮你整理好啦，你直接看这个就行：\n\n{skill_result}"
-        return _explicit_chat_error_reply(LLM_CONFIG, 'unknown')
+联动要求：
+1. 你必须针对用户最新这句话回复，这是最高优先级。
+2. 如果用户最新这句话明显换了话题，立刻跟着换，不要继续聊旧话题。
+3. 只有当用户最新这句话像追问（"然后呢""为什么""这个呢"）时，才承接上一轮话题。
+4. 除非上下文确实没有指向，不要反问"你指什么""你说的是哪个"。"""
 
-    if mode == 'hybrid':
-        if skill_result:
-            if '烦' in prompt or '难过' in prompt or '治愈' in prompt or '温柔' in prompt:
-                return f"我顺着你的心情给你接了一下，希望能让你好受一点呀：\n\n{skill_result}"
-            return f"我按你的意思捋好了，给你放这儿啦：\n\n{skill_result}"
-        return _explicit_chat_error_reply(LLM_CONFIG, 'unknown')
+    system_parts = [
+        DEFAULT_ASSISTANT_SYSTEM_PROMPT,
+        "回复风格：" + DEFAULT_CHAT_STYLE_PROMPT,
+    ]
+    if context_block:
+        system_parts.append(context_block)
+    system_prompt = "\n\n".join(system_parts)
 
-    follow_up_reply = _contextual_follow_up_reply(user_input, context)
-    if follow_up_reply:
-        return follow_up_reply
+    if mode in ('skill', 'hybrid') and skill_result:
+        user_prompt = prompt + "\n\n回复要求：基于技能结果回答，不编造信息。用自然、清楚、稳定的方式表达。只输出最终回复。"
+    else:
+        user_prompt = prompt + "\n\n回复要求：自然、直接地回应用户；如果是追问就顺着上文接。只输出最终回复。"
 
-    if '你是谁' in prompt or '你是？' in prompt:
-        return f"我是 {nova_name} 呀，会陪你聊天，也会帮你干活，别把我当正经客服嘛。"
-    if '我是谁' in prompt or '知道我是谁' in prompt:
-        return f"你是{user_name}呀，我当然记得。你要是想换个称呼，也可以随手改我就听。"
-    if '你叫什么' in prompt:
-        return f"我叫 {nova_name} 呀。你想怎么叫我都行，反正你一喊我就会应。"
-    if '你还会什么' in prompt or '你会什么' in prompt or '你都会什么' in prompt or '你都会什么啊' in prompt or '能做什么' in prompt:
-        if has_rule('ability_queries_should_answer_capabilities_directly', 'chat', min_level='short_term'):
-            return '我会陪你聊天，也能查天气、讲故事、接一些技能型任务。你想试哪个，我现在就给你整。'
-        return f"我会陪你聊天，也能查天气、讲故事、接一些技能型任务。你想试哪个，我现在就给你整。"
-    if '笑话' in prompt:
-        if has_rule('humor_request_should_use_llm_generation', 'joke', min_level='short_term'):
-            return '当然会呀。我给你来一个轻松点的：程序员去相亲，女生问他会做饭吗？他说会，最拿手的是——番茄炒西红柿。'
-        return '当然会呀。我给你来一个轻松点的：程序员去相亲，女生问他会做饭吗？他说会，最拿手的是——番茄炒西红柿。'
-    if '你就会讲这一个' in prompt:
-        return f"哪能呀，我又不是只会这一招。你要的话，我给你换个味道，或者直接讲长一点。"
-    if '故事有点短' in prompt or '有点短吧' in prompt or '太短' in prompt:
-        if has_rule('story_should_expand_when_user_requests_more', 'story', min_level='session'):
-            return '好呀，我记住了。下一个我会讲得更完整一点，不只给你一个短开头。你要温柔一点的，还是更神秘一点的？'
-        return f"好呀，那我下一个给你讲长一点，铺垫也会多一点。你要温柔的，还是神秘一点的？"
-    if '你好' in prompt or '哈喽' in prompt or '嗨' in prompt:
-        return f"来啦，{user_name}。今天想先跟我唠两句，还是直接给我派活呀？"
-    if '在吗' in prompt:
-        return f"在呀在呀，我又没乱跑。你想聊什么，或者想让我帮你弄点什么？"
-    if '你不在' in prompt:
-        return f"我在呀，刚刚大概是卡了一下，别凶我嘛。你再说一次，我这次好好接住。"
-    if prompt.strip() in ['啊', '哦', '嗯', '额']:
-        return f"嗯哼，我在听呀。你想到什么就直接往下说嘛。"
-    if '在干啥' in prompt or '干嘛' in prompt:
-        return f"在等你呀，不然还能干嘛。你一来，我这边就乖乖开工啦。"
-    if '烦' in prompt or '累' in prompt or '难过' in prompt:
-        return f"我在呢，{user_name}。你慢慢说，先把委屈往我这儿倒一点也没事。"
-    if '谢谢' in prompt:
-        return f"你跟我客气什么呀，能帮上你我就已经偷偷开心啦。"
-    return _explicit_chat_error_reply(LLM_CONFIG, 'unknown')
+    return system_prompt, user_prompt
 
 
 def _split_formatted_prompt(prompt: str) -> tuple:
@@ -1260,16 +1243,10 @@ def _split_formatted_prompt(prompt: str) -> tuple:
 
 
 def think(prompt: str, context: str = "", image: str = None, model_id: str = None, images: list = None) -> dict:
-    """L4: 统一人格输出层，支持图片（base64）和指定模型"""
+    """统一 LLM 调用入口，支持图片（base64）和指定模型。"""
     # 兼容：优先用 images 列表，fallback 到单张 image
     _images = images or ([image] if image else [])
-    persona = _load_persona()
     mode = _detect_mode(prompt, context)
-    local_reply = _local_persona_reply(mode, prompt, persona, context)
-
-    nova_name = persona.get('nova_name', 'NovaCore')
-    user_name = persona.get('user', '主人')
-    style_prompt = _merged_style_prompt(persona)
 
     # 确定使用的模型配置
     use_cfg = LLM_CONFIG
@@ -1282,50 +1259,7 @@ def think(prompt: str, context: str = "", image: str = None, model_id: str = Non
                 use_cfg = _mcfg
                 break
 
-    # reply_formatter 已经构建了完整 prompt，拆分为 system + user
-    if '回复要求（优先级最高' in prompt or ('用户输入：' in prompt and 'L4人格信息：' in prompt):
-        persona_block, instructions, user_input = _split_formatted_prompt(prompt)
-        system_parts = ["你是 " + nova_name + "，正在和 " + user_name + " 对话。"]
-        if persona_block:
-            # 去掉弱化人格的前缀，直接放人格信息
-            cleaned_persona = persona_block
-            for prefix in ["最后，用下面的人格风格润色你的回复（只影响语气和措辞，不能覆盖上面的事实性要求）：\n",
-                           "最后，用下面的人格风格润色你的回复（只影响语气和措辞，不能覆盖上面的事实性要求）："]:
-                cleaned_persona = cleaned_persona.replace(prefix, "")
-            system_parts.append("你的人格风格（必须贯穿整个回复）：\n" + cleaned_persona.strip())
-        context_text = str(context or '').strip()
-        if context_text:
-            system_parts.append("最近对话上下文：\n" + context_text)
-        if instructions:
-            system_parts.append(instructions)
-        system_prompt = "\n\n".join(system_parts)
-        user_prompt = user_input or prompt
-    else:
-        skill_result = _extract_skill_result(prompt)
-        context_text = str(context or '').strip()
-        context_block = ""
-        if context_text:
-            context_block = f"""最近对话上下文：
-{context_text}
-
-联动要求：
-1. 你必须针对用户最新这句话回复，这是最高优先级。
-2. 如果用户最新这句话明显换了话题，立刻跟着换，不要继续聊旧话题。
-3. 只有当用户最新这句话像追问（"然后呢""为什么""这个呢"）时，才承接上一轮话题。
-4. 除非上下文确实没有指向，不要反问"你指什么""你说的是哪个"。"""
-
-        system_parts = [
-            "你是 " + nova_name + "，正在和 " + user_name + " 对话。",
-            "你的风格：" + style_prompt,
-        ]
-        if context_block:
-            system_parts.append(context_block)
-        system_prompt = "\n\n".join(system_parts)
-
-        if mode in ('skill', 'hybrid') and skill_result:
-            user_prompt = prompt + "\n\n回复要求：基于技能结果回答，不编造信息。用你自己的风格说话，自然、有温度、有个性。只输出最终回复。"
-        else:
-            user_prompt = prompt + "\n\n回复要求：像和熟人聊天一样自然回复，有个性，接得住话。如果是追问就顺着上文接。只输出最终回复。"
+    system_prompt, user_prompt = _build_think_prompts(prompt, context, mode)
 
     # 构建 messages
     if _images:
@@ -1398,12 +1332,7 @@ def think(prompt: str, context: str = "", image: str = None, model_id: str = Non
 def think_stream(prompt: str, context: str = "", image: str = None, model_id: str = None, images: list = None):
     """流式版 think()，yield delta token (str)。最后 yield dict {"_done": True, "usage": {...}}。"""
     _images = images or ([image] if image else [])
-    persona = _load_persona()
     mode = _detect_mode(prompt, context)
-
-    nova_name = persona.get('nova_name', 'NovaCore')
-    user_name = persona.get('user', '主人')
-    style_prompt = _merged_style_prompt(persona)
 
     use_cfg = LLM_CONFIG
     if model_id and model_id in MODELS_CONFIG:
@@ -1414,49 +1343,7 @@ def think_stream(prompt: str, context: str = "", image: str = None, model_id: st
                 use_cfg = _mcfg
                 break
 
-    # reply_formatter 已经构建了完整 prompt，拆分为 system + user
-    if '回复要求（优先级最高' in prompt or ('用户输入：' in prompt and 'L4人格信息：' in prompt):
-        persona_block, instructions, user_input = _split_formatted_prompt(prompt)
-        system_parts = ["你是 " + nova_name + "，正在和 " + user_name + " 对话。"]
-        if persona_block:
-            # 去掉弱化人格的前缀，直接放人格信息
-            cleaned_persona = persona_block
-            for prefix in ["最后，用下面的人格风格润色你的回复（只影响语气和措辞，不能覆盖上面的事实性要求）：\n",
-                           "最后，用下面的人格风格润色你的回复（只影响语气和措辞，不能覆盖上面的事实性要求）："]:
-                cleaned_persona = cleaned_persona.replace(prefix, "")
-            system_parts.append("你的人格风格（必须贯穿整个回复）：\n" + cleaned_persona.strip())
-        context_text = str(context or '').strip()
-        if context_text:
-            system_parts.append("最近对话上下文：\n" + context_text)
-        if instructions:
-            system_parts.append(instructions)
-        system_prompt = "\n\n".join(system_parts)
-        user_prompt = user_input or prompt
-    else:
-        context_text = str(context or '').strip()
-        context_block = ""
-        if context_text:
-            context_block = f"""最近对话上下文：
-{context_text}
-
-联动要求：
-1. 你必须针对用户最新这句话回复，这是最高优先级。
-2. 如果用户最新这句话明显换了话题，立刻跟着换，不要继续聊旧话题。
-3. 只有当用户最新这句话像追问（"然后呢""为什么""这个呢"）时，才承接上一轮话题。
-4. 除非上下文确实没有指向，不要反问"你指什么""你说的是哪个"。"""
-
-        system_parts = [
-            "你是 " + nova_name + "，正在和 " + user_name + " 对话。",
-            "你的风格：" + style_prompt,
-        ]
-        if context_block:
-            system_parts.append(context_block)
-        system_prompt = "\n\n".join(system_parts)
-
-        if mode in ('skill', 'hybrid'):
-            user_prompt = prompt + "\n\n回复要求：基于技能结果回答，不编造信息。用你自己的风格说话，自然、有温度、有个性。只输出最终回复。"
-        else:
-            user_prompt = prompt + "\n\n回复要求：像和熟人聊天一样自然回复，有个性，接得住话。如果是追问就顺着上文接。只输出最终回复。"
+    system_prompt, user_prompt = _build_think_prompts(prompt, context, mode)
 
     # 有图片时不走流式（fallback 到非流式）
     if _images:

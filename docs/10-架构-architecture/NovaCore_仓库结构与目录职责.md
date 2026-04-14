@@ -11,7 +11,7 @@
 
 - 根目录只保留稳定入口、核心源码目录和少量构建脚本。
 - 临时文件、日志、截图、scratch 脚本不要长期平铺在根目录。
-- `skills/` 是唯一的 skill 文档根目录。
+- `skills/` 是 skill 一级类目：既是 skill 文档根，也承载内建用户可见技能实现。
 
 ## 主要目录
 
@@ -31,9 +31,13 @@
 ### 技能与能力
 
 - `/skills`
-  skill 文档目录。这里放系统 skill 和用户 skill 的 `SKILL.md` 包。
+  skill 一级类目。这里放系统/用户 skill 文档，以及内建用户可见技能实现。
+- `/skills/builtin`
+  内建 workflow/domain 技能的真实运行时代码与元数据。
+- `/capability_registry`
+  运行时技能注册与装载边界；负责发现 `tools/agent` 和 `skills/builtin`。
 - `/core/skills`
-  运行时 capability 包，不是 skill 文档目录。
+  兼容包；保留旧导入路径，不再承载新的真实技能实现。
 
 ### 状态与数据
 
@@ -80,7 +84,7 @@
 ## 当前最容易混的几个点
 
 - `skills/` 和 `core/skills/` 不是一回事。
-  前者是 skill 文档，后者是运行时能力实现。
+  前者是一级类目；真实 builtin 技能实现在 `skills/builtin/`，`core/skills/` 只是兼容层。
 - `memory_db/` 和 `memory/` 不是一回事。
   前者是主状态目录，后者是旧接口层。
 - `.exe` 不一定直接吃打包资源。

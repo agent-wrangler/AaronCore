@@ -308,6 +308,18 @@ function createWindow() {
 
   win.loadURL(`http://localhost:${BACKEND_PORT}/`);
   win.webContents.on('did-finish-load', emitWindowState);
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    console.log('[renderer]', `level=${level}`, String(message || ''), `at ${sourceId || 'unknown'}:${line || 0}`);
+  });
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('[renderer] did-fail-load', errorCode, errorDescription, validatedURL);
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[renderer] render-process-gone', JSON.stringify(details || {}));
+  });
+  win.webContents.on('unresponsive', () => {
+    console.warn('[renderer] window unresponsive');
+  });
 
   // 标题栏双击最大化/还原（无边框窗口需要手动处理）
   win.on('page-title-updated', (e) => e.preventDefault());

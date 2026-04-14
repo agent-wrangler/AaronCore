@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter
 from core import shared as S
+from core.markdown_render import render_markdown_html
 from core.runtime_memory.l2_memory import classify_retention_bucket
 from core.l8_learn import classify_l8_entry_kind, should_show_l8_timeline_entry
 from core.runtime_state.state_loader import get_model_price, MODEL_PRICES
@@ -37,6 +38,7 @@ RUNTIME_GRAPH_CLUSTER_META = {
     "routes": {"label": "路由层", "rank": 50, "color": "#ea580c"},
     "core": {"label": "核心执行", "rank": 60, "color": "#dc2626"},
     "tools": {"label": "辅助工具", "rank": 70, "color": "#0891b2"},
+    "skills": {"label": "技能实现", "rank": 75, "color": "#b45309"},
     "tests": {"label": "测试验证", "rank": 80, "color": "#475569"},
     "misc": {"label": "其他模块", "rank": 90, "color": "#64748b"},
     "external": {"label": "当前任务目标", "rank": 100, "color": "#ca8a04"},
@@ -85,13 +87,25 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "core/self_repair.py": "自修复模块",
     "core/session_context.py": "会话上下文",
     "core/shared.py": "共享状态",
-    "core/skills_loader.py": "技能加载器",
+    "capability_registry/__init__.py": "技能注册表",
+    "capability_registry/loader.py": "技能加载器",
     "core/state_loader.py": "状态加载器",
     "core/target_protocol.py": "目标协议",
     "core/task_store.py": "任务存储",
     "core/test_search.py": "测试搜索",
     "core/tool_adapter.py": "工具适配器",
     "core/vision.py": "视觉模块",
+    "tools/agent/open_target.py": "打开目标工具",
+    "tools/agent/app_target.py": "应用目标工具",
+    "tools/agent/ui_interaction.py": "界面交互工具",
+    "skills/builtin/article.py": "文章技能",
+    "skills/builtin/content_task.py": "内容任务技能",
+    "skills/builtin/development_flow.py": "开发流技能",
+    "skills/builtin/news.py": "新闻技能",
+    "skills/builtin/stock.py": "股票技能",
+    "skills/builtin/story.py": "故事技能",
+    "skills/builtin/task_plan.py": "任务规划技能",
+    "skills/builtin/weather.py": "天气技能",
     "static/js/app.js": "主页面控制脚本",
     "static/js/awareness.js": "感知面板脚本",
     "static/js/chat.js": "聊天脚本",
@@ -238,12 +252,16 @@ def _runtime_graph_cluster_for(rel_path: Path) -> str:
         return "static_css"
     if rel_posix.startswith("routes/"):
         return "routes"
+    if rel_posix.startswith("capability_registry/"):
+        return "core"
     if rel_posix.startswith("core/"):
         return "core"
     if rel_posix.startswith("tests/"):
         return "tests"
     if rel_posix.startswith("tools/"):
         return "tools"
+    if rel_posix.startswith("skills/builtin/"):
+        return "skills"
     if rel_path.parent == Path("."):
         return "root"
     return "misc"
@@ -255,6 +273,8 @@ def _runtime_graph_kind_for(rel_path: Path, cluster: str) -> str:
         return "route"
     if cluster == "core":
         return "core"
+    if cluster == "skills":
+        return "skill"
     if cluster == "tests":
         return "test"
     if suffix == ".html":
@@ -320,6 +340,8 @@ def _runtime_graph_file_subtitle(rel_path: Path, cluster: str) -> str:
         return f"{base}测试"
     if cluster == "tools":
         return f"{base}辅助工具"
+    if cluster == "skills":
+        return f"{base}技能实现"
     if cluster == "root":
         return f"{base}根目录文件"
     return f"{base}模块"
@@ -1250,6 +1272,9 @@ async def get_history(limit: int = 40, offset: int = 0):
                 row["time"] = datetime.fromisoformat(row["time"]).strftime("%m-%d %H:%M")
             except Exception:
                 pass
+        role = str(row.get("role") or "").strip().lower()
+        if role and role != "user":
+            row["content_html"] = render_markdown_html(row.get("content", ""))
         formatted.append(row)
     return {"history": formatted, "text_history": S.get_text_history(20), "total": total, "has_more": (total - offset - limit) > 0}
 
@@ -1268,7 +1293,7 @@ async def get_stats():
     except Exception:
         mem["real_l3_count"] = mem.get("l3_count", 0)
     try:
-        from core.skills_loader import get_all_skills
+        from capability_registry import get_all_skills
         mem["real_l5_count"] = len(get_all_skills())
     except Exception:
         try:

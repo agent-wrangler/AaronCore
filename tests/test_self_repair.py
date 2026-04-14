@@ -65,7 +65,7 @@ class SelfRepairTests(unittest.TestCase):
 
         self.assertIn("core/router.py", paths)
         self.assertIn("agent_final.py", paths)
-        self.assertIn("core/skills/run_code.json", paths)
+        self.assertIn("tools/agent/run_code.json", paths)
         self.assertEqual(report["status"], "awaiting_confirmation")
         self.assertTrue(report["validation"]["ran"])
         self.assertTrue(report["validation"]["all_passed"])
@@ -87,7 +87,7 @@ class SelfRepairTests(unittest.TestCase):
         paths = [item["path"] for item in report["candidate_files"]]
         test_paths = [item["path"] for item in report["suggested_tests"]]
 
-        self.assertIn("core/skills/story.py", paths)
+        self.assertIn("skills/builtin/story.py", paths)
         self.assertIn("agent_final.py", paths)
         self.assertIn("tests/test_story_skill.py", test_paths)
         self.assertIn("tests/test_story_routing.py", test_paths)
@@ -238,14 +238,14 @@ class SelfRepairTests(unittest.TestCase):
         self.assertTrue(saved["patch_preview"]["confirmation_required"])
 
     def test_preview_self_repair_report_auto_applies_low_risk_patch(self):
-        target = self._write_repo_file("core/skills/story.py", "def render_story():\n    return 'short'\n")
+        target = self._write_repo_file("skills/builtin/story.py", "def render_story():\n    return 'short'\n")
         report = {
             "id": "repair_auto_apply_ok",
             "created_at": "2026-03-14T06:00:00",
             "updated_at": "2026-03-14T06:00:00",
             "apply_mode": "confirm",
             "status": "awaiting_confirmation",
-            "candidate_files": [{"path": "core/skills/story.py", "reason": "修故事回复"}],
+            "candidate_files": [{"path": "skills/builtin/story.py", "reason": "修故事回复"}],
             "suggested_tests": [{"path": "tests/test_story_skill.py", "reason": "回归"}],
             "validation": {"ran": True, "all_passed": True, "test_runs": [], "duration_ms": 8},
         }
@@ -257,10 +257,10 @@ class SelfRepairTests(unittest.TestCase):
             return_value={
                 "ok": True,
                 "summary": "把故事回复调整得更完整",
-                "allowed_paths": ["core/skills/story.py"],
+                "allowed_paths": ["skills/builtin/story.py"],
                 "edits": [
                     {
-                        "path": "core/skills/story.py",
+                        "path": "skills/builtin/story.py",
                         "old": "return 'short'",
                         "new": "return 'full'",
                         "reason": "修正故事回复",

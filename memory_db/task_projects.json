@@ -229,8 +229,8 @@
     "description": "",
     "owner": "nova",
     "created_at": "2026-03-24T05:30:28.343351",
-    "updated_at": "2026-03-31T19:30:52.354611",
-    "current_task_id": "task_20260331_072",
+    "updated_at": "2026-04-02T19:00:42.313151",
+    "current_task_id": "task_20260402_148",
     "goal": {
       "summary": "持续推进开发/修复任务"
     },
@@ -449,8 +449,8 @@
     "description": "",
     "owner": "nova",
     "created_at": "2026-03-30T12:05:18.383604",
-    "updated_at": "2026-04-01T20:22:02.331094",
-    "current_task_id": "task_20260401_131",
+    "updated_at": "2026-04-02T19:02:54.270817",
+    "current_task_id": "task_20260402_142",
     "goal": {
       "summary": "持续推进多步任务计划"
     },

@@ -481,6 +481,34 @@ document.addEventListener('click',function(event){
  handleSettingsAction(button.getAttribute('data-settings-action'),{key:button.getAttribute('data-settings-key')||''});
 });
 
+document.addEventListener('click',function(event){
+ var button=event.target&&event.target.closest?event.target.closest('[data-model-action]'):null;
+ if(!button) return;
+ var action=String(button.getAttribute('data-model-action')||'').trim();
+ var modelId=String(button.getAttribute('data-model-id')||'').trim();
+ var providerKey=String(button.getAttribute('data-provider-key')||'').trim();
+ console.log('[models][settings] action', action, modelId||providerKey||'');
+ if(action==='open-dialog'){
+  openModelDialog();
+  return;
+ }
+ if(action==='toggle-provider'&&providerKey){
+  _toggleProviderGroup(providerKey);
+  return;
+ }
+ if(action==='switch'&&modelId){
+  switchModel(modelId);
+  return;
+ }
+ if(action==='edit-dialog'&&modelId){
+  openModelDialog(modelId);
+  return;
+ }
+ if(action==='quick-add'&&providerKey&&modelId){
+  _quickAddModel(providerKey, modelId);
+ }
+});
+
 document.addEventListener('change',function(event){
  var node=event.target;
  if(!node||!node.matches||!node.matches('[data-settings-change="self-repair-mode"]')) return;
@@ -537,32 +565,12 @@ function renderSettingsPage(isLight){
 }
 
 function refreshSettingsData(isLight, noticeText){
- return Promise.all([
-  fetch('/stats').then(function(r){return r.json();}),
-  fetch('/autolearn/config').then(function(r){return r.json();}),
-  fetch('/self_repair/status').then(function(r){return r.json();}),
-  fetch('/self_repair/reports?limit=6').then(function(r){return r.json();}).catch(function(){return {reports:[]};}),
-  fetch('/l7/stats').then(function(r){return r.json();}).catch(function(){return {};})
- ]).then(function(values){
-  var statsResp=values[0]||{};
-  var configResp=values[1]||{};
-  var statusResp=values[2]||{};
-  var reportsResp=values[3]||{};
-  var l7Resp=values[4]||{};
-  settingsPanelState.stats=statsResp.stats||statsResp||{};
-  settingsPanelState.config=mergeAutolearnConfig((configResp&&configResp.config)||settingsPanelState.config||{});
-  settingsPanelState.selfRepairStatus=(statusResp&&statusResp.status)||settingsPanelState.selfRepairStatus||{};
-  settingsPanelState.selfRepairReports=Array.isArray(reportsResp&&reportsResp.reports)?reportsResp.reports:[];
-  settingsPanelState.l7Stats=l7Resp;
-  if(settingsPanelState.activeRepairId){
-   var stillExists=settingsPanelState.selfRepairReports.some(function(item){return String((item||{}).id||'')===String(settingsPanelState.activeRepairId||'');});
-   if(!stillExists) settingsPanelState.activeRepairId=(settingsPanelState.selfRepairReports[0]&&settingsPanelState.selfRepairReports[0].id)||'';
-  }else{
-   settingsPanelState.activeRepairId=(settingsPanelState.selfRepairReports[0]&&settingsPanelState.selfRepairReports[0].id)||'';
-  }
-  if(noticeText!==undefined){settingsPanelState.notice=noticeText;settingsPanelState.error='';}
-  renderSettingsPage(isLight);
- });
+ if(noticeText!==undefined){
+  settingsPanelState.notice=noticeText;
+  settingsPanelState.error='';
+ }
+ renderSettingsPage(isLight);
+ return Promise.resolve();
 }
 
 function loadSettingsPage(isLight){
@@ -988,8 +996,6 @@ function renderSettingsPage(isLight){
  var box=document.getElementById('settingsBox');
  if(!box) return;
  var theme=getSettingsTheme(isLight);
- var config=mergeAutolearnConfig(settingsPanelState.config||{});
- var l7s=settingsPanelState.l7Stats||{};
  var notice=settingsPanelState.error||settingsPanelState.notice||'';
  var noticeColor=settingsPanelState.error?'#ef4444':theme.accentText;
  var html='';
@@ -1006,20 +1012,6 @@ function renderSettingsPage(isLight){
  html+='<button onclick="setLang(\'en\')" style="padding:6px 14px;border-radius:8px;border:1px solid '+theme.border+';background:'+(!_isZh?theme.actionPrimary:theme.cardBg)+';color:'+(!_isZh?theme.actionPrimaryText:theme.text)+';font-size:13px;font-weight:600;cursor:pointer;">'+t('settings.lang.en')+'</button>';
  html+='</div></div>';
 
- html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">';
- html+='<div style="background:'+theme.cardBg+';padding:16px;border-radius:14px;border:1px solid '+theme.border+';"><div style="font-size:12px;color:'+theme.sub+';margin-bottom:8px;">'+t('settings.correction')+'</div><div style="font-size:22px;font-weight:800;color:'+theme.text+';">'+(l7s.l7_rule_count||0)+'<span style="font-size:12px;font-weight:400;color:'+theme.sub+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
- html+='<div style="background:'+theme.cardBg+';padding:16px;border-radius:14px;border:1px solid '+theme.border+';"><div style="font-size:12px;color:'+theme.sub+';margin-bottom:8px;">'+t('settings.behavior')+'</div><div style="font-size:22px;font-weight:800;color:'+(l7s.l7_constraint_count?theme.okText:theme.text)+';">'+(l7s.l7_constraint_count||0)+'<span style="font-size:12px;font-weight:400;color:'+theme.sub+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
- html+='<div style="background:'+theme.cardBg+';padding:16px;border-radius:14px;border:1px solid '+theme.border+';"><div style="font-size:12px;color:'+theme.sub+';margin-bottom:8px;">'+t('settings.knowledge')+'</div><div style="font-size:22px;font-weight:800;color:'+theme.text+';">'+(l7s.l8_knowledge_count||0)+'<span style="font-size:12px;font-weight:400;color:'+theme.sub+';margin-left:4px;">'+t('settings.items')+'</span></div></div>';
- html+='</div>';
-
- var _evo=config.enabled;
- if(!document.getElementById('nova-spin-style')){var _ss=document.createElement('style');_ss.id='nova-spin-style';_ss.textContent='@keyframes nova-spin{to{transform:rotate(360deg)}}';document.head.appendChild(_ss);}
- var _dotHtml=_evo?'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2.5px solid '+theme.spinner+';border-top-color:transparent;animation:nova-spin 1s linear infinite;vertical-align:middle;margin-right:10px;"></span>':'<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+theme.toggleOff+';vertical-align:middle;margin-right:10px;"></span>';
- html+='<div style="margin-top:14px;background:'+theme.cardBg+';border:1px solid '+theme.border+';padding:18px 20px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;">';
- html+='<div><div style="display:flex;align-items:center;"><span style="font-size:16px;font-weight:700;color:'+theme.text+';">'+_dotHtml+(_evo?t('settings.evolving'):t('settings.paused'))+'</span></div><div style="font-size:12px;color:'+theme.sub+';margin-top:6px;">'+(_evo?t('settings.evolve.desc.on'):t('settings.evolve.desc.off'))+'</div></div>';
- html+='<div data-settings-action="toggle" data-settings-key="enabled" style="flex-shrink:0;width:44px;height:24px;border-radius:12px;background:'+(_evo?theme.toggleOn:theme.toggleOff)+';cursor:pointer;position:relative;transition:background 0.2s;"><span style="position:absolute;top:2px;'+(_evo?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.2s;"></span></div>';
- html+='</div>';
-
  html+=renderModelManageSection(isLight,theme.text,theme.sub,theme.cardBg,theme.border);
  box.innerHTML=html;
 }
@@ -1030,7 +1022,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
  html+='<div style="margin-top:14px;background:'+theme.cardBg+';border:1px solid '+theme.border+';padding:18px 20px;border-radius:14px;">';
  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;">';
  html+='<span style="font-size:15px;font-weight:700;color:'+theme.text+';">'+t('settings.models')+'</span>';
- html+='<button type="button" onclick="openModelDialog()" style="padding:6px 14px;border:1px solid '+theme.border+';border-radius:8px;background:rgba(255,255,255,0.03);color:'+theme.text+';font-size:12px;cursor:pointer;">'+t('settings.models.add')+'</button>';
+ html+='<button type="button" data-model-action="open-dialog" style="padding:6px 14px;border:1px solid '+theme.border+';border-radius:8px;background:rgba(255,255,255,0.03);color:'+theme.text+';font-size:12px;cursor:pointer;">'+t('settings.models.add')+'</button>';
  html+='</div>';
  html+='<div id="modelListBox" style="display:flex;flex-direction:column;gap:8px;">';
  if(!_settingsModels||!_settingsCatalog){
@@ -1068,7 +1060,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    var headerBg=isExpanded?theme.headerBg:'transparent';
    var chevron=isExpanded?'\u25BC':'\u25B6';
    html+='<div style="border:1px solid '+theme.border+';border-radius:12px;overflow:hidden;'+(isExpanded?'box-shadow:0 2px 8px rgba(0,0,0,0.12);':'')+'margin-bottom:2px;">';
-   html+='<div onclick="_toggleProviderGroup(\''+pk+'\')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:'+headerBg+';transition:background 0.15s;">';
+   html+='<div data-model-action="toggle-provider" data-provider-key="'+escapeHtml(pk)+'" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:'+headerBg+';transition:background 0.15s;">';
    html+='<span style="font-size:11px;color:'+theme.sub+';width:14px;text-align:center;">'+chevron+'</span>';
    html+='<span style="font-size:14px;font-weight:600;color:'+theme.text+';flex:1;">'+escapeHtml(providerLabel)+'</span>';
    if(activeModelName){
@@ -1095,9 +1087,9 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      if(isCurrent){
       html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
      }else{
-      html+='<button onclick="switchModel(\''+escapeHtml(cmid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+theme.actionText+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+theme.actionText+'\'">'+t('settings.models.activate')+'</button>';
+      html+='<button type="button" data-model-action="switch" data-model-id="'+escapeHtml(cmid)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.activate')+'</button>';
      }
-     html+='<button onclick="openModelDialog(\''+escapeHtml(cmid)+'\')" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
+     html+='<button type="button" data-model-action="edit-dialog" data-model-id="'+escapeHtml(cmid)+'" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      html+='</div>';
     }
     var configuredIds={};
@@ -1113,7 +1105,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:'+theme.softDashedBg+';border:1px dashed '+theme.softDashedBorder+';border-radius:10px;">';
      html+='<span style="font-size:13px;color:'+theme.sub+';flex:1;">'+escapeHtml(catModel.id)+'<span style="font-size:11px;margin-left:6px;opacity:0.7;">'+escapeHtml(catModel.desc)+'</span></span>';
      if(hasConfigured){
-      html+='<button onclick="_quickAddModel(\''+escapeHtml(pk)+'\',\''+escapeHtml(catModel.id)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.background=\''+theme.actionText+'\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'none\';this.style.color=\''+theme.actionText+'\'">'+t('settings.models.quickadd')+'</button>';
+      html+='<button type="button" data-model-action="quick-add" data-provider-key="'+escapeHtml(pk)+'" data-model-id="'+escapeHtml(catModel.id)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;transition:all 0.15s;">'+t('settings.models.quickadd')+'</button>';
      }
      html+='</div>';
     }
@@ -1125,7 +1117,7 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
    var uncExpanded=_settingsExpandedProviders['_other']!==undefined?_settingsExpandedProviders['_other']:(!currentProvider);
    var uncChevron=uncExpanded?'\u25BC':'\u25B6';
    html+='<div style="border:1px solid '+theme.border+';border-radius:12px;overflow:hidden;margin-bottom:2px;">';
-   html+='<div onclick="_toggleProviderGroup(\'_other\')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;">';
+   html+='<div data-model-action="toggle-provider" data-provider-key="_other" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;">';
    html+='<span style="font-size:11px;color:'+theme.sub+';width:14px;text-align:center;">'+uncChevron+'</span>';
    html+='<span style="font-size:14px;font-weight:600;color:'+theme.text+';flex:1;">Other</span>';
    html+='</div>';
@@ -1144,9 +1136,9 @@ function renderModelManageSection(isLight,textColor,subColor,cardBg,borderColor)
      if(uCurrent){
       html+='<span style="padding:3px 10px;border-radius:5px;background:'+theme.successBg+';color:'+theme.successText+';font-size:11px;font-weight:600;">'+t('settings.models.active')+'</span>';
      }else{
-      html+='<button onclick="switchModel(\''+escapeHtml(umid)+'\')" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;">'+t('settings.models.activate')+'</button>';
+      html+='<button type="button" data-model-action="switch" data-model-id="'+escapeHtml(umid)+'" style="padding:3px 10px;border-radius:5px;border:1px solid '+theme.actionBorder+';background:none;color:'+theme.actionText+';font-size:11px;cursor:pointer;font-weight:500;">'+t('settings.models.activate')+'</button>';
      }
-     html+='<button onclick="openModelDialog(\''+escapeHtml(umid)+'\')" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
+     html+='<button type="button" data-model-action="edit-dialog" data-model-id="'+escapeHtml(umid)+'" style="padding:3px 8px;border:1px solid '+theme.border+';border-radius:5px;background:none;color:'+theme.sub+';font-size:11px;cursor:pointer;">'+t('settings.models.edit')+'</button>';
      html+='</div>';
     }
     html+='</div>';
@@ -1211,16 +1203,22 @@ function openModelDialog(editId){
 
 function switchModel(mid){
  if(mid===_settingsCurrentModel) return;
+ console.log('[models][settings] switch start', mid, 'current=', _settingsCurrentModel||'');
  // 即时视觉反馈：禁用所有启用按钮
- var btns=document.querySelectorAll('[onclick*="switchModel"]');
+ var btns=document.querySelectorAll('[data-model-action="switch"],[onclick*="switchModel"]');
  btns.forEach(function(el){el.style.pointerEvents='none';el.style.opacity='0.5';});
  var clicked=null;
- btns.forEach(function(el){if(el.getAttribute('onclick').indexOf(mid)!==-1){clicked=el;}});
+ btns.forEach(function(el){
+  var targetMid=String(el.getAttribute('data-model-id')||'').trim();
+  var onclick=String(el.getAttribute('onclick')||'');
+  if(targetMid===mid||onclick.indexOf(mid)!==-1){clicked=el;}
+ });
  if(clicked){clicked.style.opacity='1';clicked.textContent=t('settings.models.switching');}
  fetch('/model/'+encodeURIComponent(mid),{method:'POST'})
   .then(function(r){return r.json();})
   .then(function(d){
-   if(d.ok||d.model){
+    if(d.ok||d.model){
+     console.log('[models][settings] switch ok', mid);
     _settingsCurrentModel=mid;
     window._novaCurrentModel=mid;
     var el=document.getElementById('modelName');
@@ -1229,11 +1227,13 @@ function switchModel(mid){
     if(typeof updateImageBtnState==='function') updateImageBtnState();
     // 延迟刷新，让用户先看到切换成功
     setTimeout(function(){loadSettingsModels();},300);
-   }else{
+    }else{
+     console.warn('[models][settings] switch fail', mid, d&&d.error);
     alert(d.error||'\u5207\u6362\u5931\u8d25');
     loadSettingsModels();
    }
-  }).catch(function(){
+   }).catch(function(){
+    console.warn('[models][settings] switch error', mid);
    alert('\u5207\u6362\u5931\u8d25');
    loadSettingsModels();
   });

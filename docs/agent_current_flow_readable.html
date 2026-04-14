@@ -604,7 +604,7 @@
         <ul>
           <li><code>core/tool_adapter.py</code>：工具定义和执行桥接</li>
           <li><code>core/executor.py</code>：技能执行分发</li>
-          <li><code>core/skills/</code>：对上暴露给 LLM 的技能接口层</li>
+          <li><code>capability_registry/</code>：技能发现/注册边界；<code>tools/agent/</code> 和 <code>skills/builtin/</code> 是真实实现，<code>core/skills/</code> 只保留兼容壳</li>
         </ul>
       </div>
       <div class="map-card">
@@ -612,7 +612,7 @@
         <ul>
           <li><code>core/target_protocol.py</code>：目标解析、窗口发现、应用识别</li>
           <li><code>core/fs_protocol.py</code>：状态校验、漂移检测、自动修复</li>
-          <li><code>open_target / app_target / ui_interaction</code>：协议技能入口</li>
+          <li><code>tools/agent/open_target.py / app_target.py / ui_interaction.py</code>：协议技能入口</li>
         </ul>
       </div>
       <div class="map-card">
@@ -821,7 +821,7 @@
           <li>启动应用、结束应用、检测新窗口</li>
           <li>聚焦已有窗口而不是重复拉起</li>
           <li>窗口未出现时的重试与失败判定</li>
-          <li>核心文件：<code>core/skills/app_target.py</code></li>
+          <li>核心文件：<code>tools/agent/app_target.py</code></li>
         </ul>
       </div>
       <div class="layer-card">
@@ -832,7 +832,7 @@
           <li>窗口焦点、移动、缩放、最小化、最大化</li>
           <li>窗口标题匹配和目标窗口定位</li>
           <li>依赖目标解析层提供窗口候选</li>
-          <li>核心文件：<code>core/skills/ui_interaction.py</code></li>
+          <li>核心文件：<code>tools/agent/ui_interaction.py</code></li>
         </ul>
       </div>
       <div class="layer-card">
@@ -843,7 +843,7 @@
           <li>点击、输入、点击并提交</li>
           <li>浏览器 CDP 交互、桌面控件 Accessibility 交互</li>
           <li>必要时回退到通用 UI 操作</li>
-          <li>核心文件：<code>core/skills/ui_interaction.py</code></li>
+          <li>核心文件：<code>tools/agent/ui_interaction.py</code></li>
         </ul>
       </div>
       <div class="layer-card">

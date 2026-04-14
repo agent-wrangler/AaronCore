@@ -143,6 +143,13 @@ function hideWelcome(){
  if(w) w.style.display='none';
 }
 
+function _setModelLabel(label){
+ ['modelName','topModelName'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.textContent=label;
+ });
+}
+
 window.onload=function(){
  window._currentTab=1; // 默认聊天 tab
  initSidebarResize();
@@ -241,10 +248,21 @@ _syncThemeIcon();
   return true;
  }
 
- var _chatBottomLockRaf=0;
- var _chatBottomLockUntil=0;
- var _chatBottomLockStopTimer=0;
- var _chatBottomResizeObserver=null;
+var _chatBottomLockRaf=0;
+var _chatBottomLockUntil=0;
+var _chatBottomLockStopTimer=0;
+var _chatBottomResizeObserver=null;
+var _chatAutoStickToBottom=true;
+
+ function _chatAwayFromBottom(chat){
+  var host=chat||document.getElementById('chat');
+  if(!host) return 0;
+  return Math.max(host.scrollHeight-host.scrollTop-host.clientHeight, 0);
+ }
+
+ function _isChatNearBottom(threshold){
+  return _chatAwayFromBottom() <= Math.max(0, Number(threshold)||150);
+ }
 
  function _pinChatToBottom(){
   var chat=document.getElementById('chat');
@@ -265,6 +283,28 @@ _syncThemeIcon();
    settle();
    chat.style.scrollBehavior='';
   }, 48);
+ }
+
+ function _setChatAutoStick(enabled){
+  _chatAutoStickToBottom = enabled!==false;
+ }
+
+ function _maybePinChatToBottom(options){
+  var chat=document.getElementById('chat');
+  if(!chat) return false;
+  options=options||{};
+  var force=!!options.force;
+  var lockMs=Math.max(0, Number(options.lock_ms)||0);
+  var threshold=Math.max(0, Number(options.threshold)||150);
+  if(!force && !_chatAutoStickToBottom && _chatAwayFromBottom(chat)>threshold && Date.now()>=_chatBottomLockUntil){
+   return false;
+  }
+  _chatAutoStickToBottom=true;
+  _pinChatToBottom();
+  if(force || lockMs>0){
+   _lockChatToBottom(lockMs||900);
+  }
+  return true;
  }
 
  function _beginChatViewRestore(durationMs){
@@ -333,13 +373,18 @@ _syncThemeIcon();
  }
 
  function _schedulePinChatToBottom(){
-  _pinChatToBottom();
-  _lockChatToBottom(900);
+  _maybePinChatToBottom({force:true, lock_ms:900});
  }
 
  function _restoreTimelineSnapshot(){
   var chat=document.getElementById('chat');
   if(!chat) return false;
+  if(typeof hasCompatibleChatHistorySnapshot==='function' && !hasCompatibleChatHistorySnapshot()){
+   if(typeof clearChatHistorySnapshot==='function'){
+    clearChatHistorySnapshot();
+   }
+   return false;
+  }
   var snapshot='';
   try{
    snapshot=localStorage.getItem('nova_chat_history')||'';
@@ -374,6 +419,9 @@ _syncThemeIcon();
    if(items.length){
     chat.innerHTML=window._renderHistoryItems(items);
     chatHistory=chat.innerHTML;
+    if(typeof persistChatHistorySnapshot==='function'){
+     persistChatHistorySnapshot();
+    }
     if(typeof window._rebindStepToggles==='function'){
      window._rebindStepToggles(chat);
     }
@@ -393,10 +441,13 @@ _syncThemeIcon();
  window._snapshotChatScroll=_snapshotChatScroll;
  window._restoreChatScroll=_restoreChatScroll;
  window._beginChatViewRestore=_beginChatViewRestore;
- window._stopChatBottomLock=_stopChatBottomLock;
- window._schedulePinChatToBottom=_schedulePinChatToBottom;
- window._looksLikeChatSnapshot=_looksLikeChatSnapshot;
- window._reloadChatFromServer=_reloadChatFromServer;
+window._stopChatBottomLock=_stopChatBottomLock;
+window._schedulePinChatToBottom=_schedulePinChatToBottom;
+window._maybePinChatToBottom=_maybePinChatToBottom;
+window._setChatAutoStick=_setChatAutoStick;
+window._isChatNearBottom=_isChatNearBottom;
+window._looksLikeChatSnapshot=_looksLikeChatSnapshot;
+window._reloadChatFromServer=_reloadChatFromServer;
 
  var _restoredTimelineSnapshot=_restoreTimelineSnapshot();
 
@@ -404,25 +455,254 @@ _syncThemeIcon();
  function _processMarkerText(label, status){
    var text=String(label||'');
    if(status==='error') return '!';
-   if(/思考|thinking/i.test(text)) return '∴';
+   if(/思考|thinking/i.test(text)) return '·';
    if(/计划|plan/i.test(text)) return '⌁';
-   return status==='running' ? '›' : '·';
-  }
+    return '·';
+   }
 
- function _renderProcessMessage(step){
-   var label=escapeHtml(String((step&&step.label)||''));
-   var rawStatus=String((step&&step.status)||'done');
-   var state=(rawStatus==='error'?'error':(rawStatus==='running'?'running':'done'));
-   var detailRaw=String((step&&((step.full_detail&&String(step.full_detail).trim())||step.detail))||'');
-   var detail=escapeHtml(detailRaw);
-   var marker=escapeHtml(_processMarkerText(step&&step.label, state));
-   var html='<div class="msg assistant process-msg'+(state==='running'?' is-running':'')+(state==='error'?' is-error':'')+'">';
-   html+='<div class="avatar" style="background:linear-gradient(135deg,#667eea,#764ba2)">N</div>';
-   html+='<div class="msg-content process-content">';
-   html+='<div class="process-line '+state+'">';
-   html+='<span class="process-marker">'+marker+'</span>';
-   html+='<span class="process-label">'+(label||escapeHtml(t('chat.process')))+'</span>';
-   html+='<span class="process-detail">'+detail+'</span>';
+  function _looksLikeMemoryLoadLabel(label){
+    return /^(?:记忆加载(?:完成)?|memory_load|load_memory)$/i.test(String(label||'').trim());
+   }
+
+  function _formatProcessDisplayLabel(label){
+    var text=String(label||'').trim();
+    if(!text) return text;
+    return /^[a-z]/.test(text) ? (text.charAt(0).toUpperCase()+text.slice(1)) : text;
+   }
+
+  function _escapeRegExp(text){
+    return String(text||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+   }
+
+  function _stripProcessDetailPrefix(detail, label){
+    var text=String(detail||'').trim();
+    var head=String(label||'').trim();
+    if(!text || !head) return text;
+    var pattern=new RegExp('^'+_escapeRegExp(head)+'(?:\\s*[·•:：-]\\s*)?', 'i');
+    return text.replace(pattern, '').trim();
+   }
+
+  function _cleanProcessDetail(detail, rawLabel, displayLabel, status){
+    var text=String(detail||'').replace(/\s+/g,' ').trim();
+    if(!text) return '';
+    text=_stripProcessDetailPrefix(text, displayLabel);
+    text=_stripProcessDetailPrefix(text, rawLabel);
+    text=text.replace(/(?:\s*[·•]\s*)?(?:执行中|输出中|处理中)\s*(\d+s)\s*$/i, ' $1').trim();
+    text=text.replace(/\s*[·•:：-]+\s*$/g,'').trim();
+    if(!text) return '';
+    var lower=text.toLowerCase();
+    var rawLower=String(rawLabel||'').trim().toLowerCase();
+    var displayLower=String(displayLabel||'').trim().toLowerCase();
+    if((rawLower && lower===rawLower) || (displayLower && lower===displayLower)) return '';
+    return text;
+   }
+
+  function _splitProcessWaitSuffix(detail){
+    var text=String(detail||'').trim();
+    if(!text) return {text:'', wait:''};
+    var match=text.match(/^(.*?)(?:\s*[\u00b7\u2022]\s*)?(\d+s)\s*$/i);
+    if(!match) return {text:text, wait:''};
+    return {
+      text:String(match[1]||'').replace(/\s*[\u00b7\u2022:：-]+\s*$/g,'').trim(),
+      wait:String(match[2]||'').trim()
+    };
+   }
+
+  function _stepMetaText(value){
+    return String(value||'').replace(/\s+/g,' ').trim();
+   }
+
+  function _stepMetaContains(base, sample){
+    var left=_stepMetaText(base).toLowerCase();
+    var right=_stepMetaText(sample).toLowerCase();
+    if(!left || !right) return false;
+    return left.indexOf(right)!==-1 || right.indexOf(left)!==-1;
+   }
+
+  function _appendUniqueStepMeta(parts, text, prefix){
+    var value=_stepMetaText(text);
+    if(!value) return;
+    if(prefix && value.indexOf(prefix)!==0) value=prefix+value;
+    for(var i=0;i<parts.length;i++){
+      if(_stepMetaContains(parts[i], value)) return;
+    }
+    parts.push(value);
+   }
+
+  function _joinStepMeta(parts){
+    return parts.join(' ').trim();
+   }
+
+  function _buildThinkingProcessDetail(step, fallbackSummary, fallbackFull){
+    var summaryParts=[];
+    var fullParts=[];
+    var lead=_stepMetaText((step&&step.decision_note)||'') || _stepMetaText((step&&step.handoff_note)||'') || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull);
+    var goal=_stepMetaText(step&&step.goal);
+    var expected=_stepMetaText(step&&step.expected_output);
+    var nextNeed=_stepMetaText(step&&step.next_user_need);
+    _appendUniqueStepMeta(summaryParts, lead, '');
+    _appendUniqueStepMeta(fullParts, lead, '');
+    if(goal){
+      _appendUniqueStepMeta(summaryParts, goal, '先确认：');
+      _appendUniqueStepMeta(fullParts, goal, '先确认：');
+    }
+    if(expected){
+      _appendUniqueStepMeta(fullParts, expected, '预期产出：');
+    }
+    if(nextNeed){
+      _appendUniqueStepMeta(fullParts, nextNeed, '下一步可能会关心：');
+    }
+    return {
+      summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
+      full:_joinStepMeta(fullParts) || _stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
+    };
+   }
+
+  function _buildToolProcessDetail(step, fallbackSummary, fallbackFull, state){
+    var summaryParts=[];
+    var fullParts=[];
+    var lead=_stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull) || _stepMetaText(step&&step.goal) || _stepMetaText(step&&step.handoff_note) || _stepMetaText(step&&step.expected_output);
+    var goal=_stepMetaText(step&&step.goal);
+    var expected=_stepMetaText(step&&step.expected_output);
+    _appendUniqueStepMeta(summaryParts, lead, '');
+    _appendUniqueStepMeta(fullParts, lead, '');
+    if(String(state||'')==='running' && goal){
+      _appendUniqueStepMeta(fullParts, goal, '目标：');
+    }
+    if(String(state||'')==='running' && expected){
+      _appendUniqueStepMeta(fullParts, expected, '预期：');
+    }
+    return {
+      summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
+      full:_joinStepMeta(fullParts) || _stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
+    };
+   }
+
+  function _buildStructuredProcessDetail(step, phase, state, fallbackSummary, fallbackFull){
+    if(phase==='thinking') return _buildThinkingProcessDetail(step, fallbackSummary, fallbackFull);
+    if(phase==='tool') return _buildToolProcessDetail(step, fallbackSummary, fallbackFull, state);
+    return {
+      summary:_stepMetaText(fallbackSummary),
+      full:_stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
+    };
+   }
+
+  function _renderProcessDetailMarkup(detail){
+    return escapeHtml(String(detail||'').trim());
+   }
+
+  function _processLabelAlias(rawLabel){
+    var text=String(rawLabel||'').trim();
+    if(!text) return null;
+    var aliases={
+      '记忆加载':'memory_load',
+      '记忆加载完成':'memory_load',
+      '人格切换':'persona_switch',
+      '切换模型':'model_switch',
+      '整理结果':'organize_results',
+      '组织回复':'compose_reply',
+      '回忆对话':'recall_memory',
+      '等待':'waiting'
+    };
+    return aliases[text]||null;
+   }
+
+  function _toolLabelFallback(rawLabel){
+    var text=String(rawLabel||'').trim();
+    if(!text) return '';
+    if(text==='联网搜索' || text==='搜索完成' || text==='搜索失败') return 'web_search';
+    if(text==='检索记忆' || text==='检索失败' || text==='记忆就绪') return 'recall_memory';
+    if(text==='调用技能' || text==='技能完成' || text==='技能失败') return 'tool';
+    return '';
+   }
+
+  function _extractToolKey(detail){
+    var text=String(detail||'').trim();
+    if(!text) return '';
+    var parts=text.split(/\s*[\u00b7\u2022]\s*/);
+    var head=String(parts[0]||'').trim();
+    if(!head && parts.length>1) head=String(parts[1]||'').trim();
+    return head.toLowerCase();
+   }
+
+  function _extractToolDetail(detail){
+    var text=String(detail||'').trim();
+    if(!text) return '';
+    var parts=text.split(/\s*[\u00b7\u2022]\s*/);
+    if(parts.length<=1) return text;
+    return String(parts.slice(1).join(' · ')).trim();
+   }
+
+  function _simplifyToolDetail(detail, toolKey, status){
+    var text=String(detail||'').trim();
+    var key=String(toolKey||'').trim();
+    var state=String(status||'').trim();
+    if(!text) return '';
+    if(key){
+      text=text.replace(new RegExp('^正在执行\\s+'+_escapeRegExp(key)+'(?:\\.\\.\\.)?$', 'i'), '').trim();
+      text=text.replace(new RegExp('^'+_escapeRegExp(key)+'\\s*$', 'i'), '').trim();
+    }
+    if(state==='running'){
+      text=text.replace(/^正在执行(?:中)?(?:\\.\\.\\.)?$/i, '').trim();
+    }
+    return text;
+   }
+
+  function _displayProcessLabel(step){
+    var rawLabel=String((step&&step.label)||'').trim();
+    if(/思考|thinking/i.test(rawLabel)) return 'Thinking';
+    if(_looksLikeMemoryLoadLabel(rawLabel)) return 'Memory_load';
+    var toolFallback=_toolLabelFallback(rawLabel);
+    if(toolFallback){
+      var explicitTool=String((step&&step.tool_name)||'').trim();
+      if(explicitTool) return _formatProcessDisplayLabel(explicitTool);
+      var detail=String((step&&((step.full_detail&&String(step.full_detail).trim())||step.detail))||'').trim();
+      return _formatProcessDisplayLabel(_extractToolKey(detail)||toolFallback||'tool');
+    }
+    var alias=_processLabelAlias(rawLabel);
+    if(alias) return _formatProcessDisplayLabel(alias);
+    return _formatProcessDisplayLabel(rawLabel);
+   }
+
+  function _renderProcessMarker(step, state){
+    if(state==='running'){
+      return '<span class="process-marker is-running" aria-hidden="true"><span></span><span></span><span></span></span>';
+    }
+    return '<span class="process-marker">'+escapeHtml(_processMarkerText(step&&step.label, state))+'</span>';
+   }
+
+  function _renderProcessMessage(step){
+    var displayLabel=_displayProcessLabel(step);
+    var label=escapeHtml(displayLabel);
+    var rawStatus=String((step&&step.status)||'done');
+    var state=(rawStatus==='error'?'error':(rawStatus==='running'?'running':'done'));
+    var rawLabel=String((step&&step.label)||'').trim();
+    var detailRaw=String((step&&((step.full_detail&&String(step.full_detail).trim())||step.detail))||'');
+    var toolFallback=_toolLabelFallback(rawLabel);
+    var phase=String((step&&step.phase)||'').trim();
+    if(!phase){
+      if(/思考|thinking/i.test(rawLabel)) phase='thinking';
+      else if(toolFallback) phase='tool';
+      else if(/等待|waiting/i.test(rawLabel)) phase='waiting';
+      else phase='info';
+    }
+    if(toolFallback){
+      var toolKey=String((step&&step.tool_name)||'').trim() || _extractToolKey(detailRaw)||toolFallback;
+      detailRaw=_extractToolDetail(detailRaw)||detailRaw;
+      detailRaw=_simplifyToolDetail(detailRaw, toolKey, state);
+    }
+    var structuredDetail=_buildStructuredProcessDetail(step, phase, state, detailRaw, detailRaw);
+    detailRaw=String((structuredDetail&&structuredDetail.full)||detailRaw||'');
+    detailRaw=_cleanProcessDetail(detailRaw, rawLabel, displayLabel, state);
+    var detailMarkup=_renderProcessDetailMarkup(detailRaw);
+    var marker=_renderProcessMarker(step, state);
+    var html='<div class="msg assistant process-msg'+(state==='running'?' is-running':'')+(state==='error'?' is-error':'')+'">';
+    html+='<div class="avatar" style="background:linear-gradient(135deg,#667eea,#764ba2)">N</div>';
+    html+='<div class="msg-content process-content">';
+    html+='<div class="process-line '+state+'">';
+    html+=marker;
+    html+='<span class="process-label">'+(label||escapeHtml(t('chat.process')))+'</span>';
+   html+='<span class="process-detail">'+detailMarkup+'</span>';
    html+='</div>';
    html+='</div>';
    html+='</div>';
@@ -492,7 +772,8 @@ _syncThemeIcon();
    html+='<div class="msg-meta">';
    html+='<span class="msg-name">'+name+'</span><span class="msg-time">'+time+'</span>';
    html+='</div>';
-   html+='<div class="bubble">'+formatBubbleText(text)+'</div>';
+   var bubbleHtml=role==='user' ? formatBubbleText(text) : renderAssistantBubbleHtml(text, item.content_html);
+   html+='<div class="bubble">'+bubbleHtml+'</div>';
    html+='</div>';
    if(role!=='user'&&(plan&&plan.items&&plan.items.length)){
     html+='</div>';
@@ -519,6 +800,9 @@ _syncThemeIcon();
    chat.style.scrollBehavior='auto';
    chat.insertAdjacentHTML('afterbegin',html);
    chatHistory=chat.innerHTML;
+   if(typeof persistChatHistorySnapshot==='function'){
+    persistChatHistorySnapshot();
+   }
    chat.scrollTop=chat.scrollHeight-prevHeight;
    requestAnimationFrame(function(){ chat.style.scrollBehavior=''; });
    window._historyLoading=false;
@@ -533,7 +817,7 @@ _syncThemeIcon();
  function _updateScrollBtn(){
   if(_chatViewRestoring) return;
   if(!_scrollBtn) return;
-  var awayFromBottom=chat.scrollHeight-chat.scrollTop-chat.clientHeight;
+  var awayFromBottom=_chatAwayFromBottom(chat);
   if(awayFromBottom>150){
    _scrollBtn.style.display='flex';
    requestAnimationFrame(function(){ _scrollBtn.classList.add('visible'); });
@@ -544,13 +828,15 @@ _syncThemeIcon();
  }
 
  window.scrollToBottom=function(){
-  chat.scrollTo({top:chat.scrollHeight,behavior:'smooth'});
+  _setChatAutoStick(true);
+  _schedulePinChatToBottom();
  };
 
  chat.addEventListener('scroll',function(){
   if(window._currentTab!==1&&window._currentTab!==undefined) return;
   if(_chatViewRestoring) return;
   _snapshotChatScroll();
+  _chatAutoStickToBottom=_isChatNearBottom(150);
   _updateScrollBtn();
   if(chat.scrollTop<80&&window._historyHasMore&&!window._historyLoading){
    window._loadMoreHistory();
@@ -575,6 +861,9 @@ fetch('/history?limit=15&offset=0').then(function(r){return r.json()}).then(func
   if(!_restoredTimelineSnapshot || !renderedTurns){
    chat.innerHTML=window._renderHistoryItems(items);
    chatHistory=chat.innerHTML;
+   if(typeof persistChatHistorySnapshot==='function'){
+    persistChatHistorySnapshot();
+   }
    _schedulePinChatToBottom();
   }
   console.log('[Nova] 从后端恢复聊天历史，消息数:', items.length, '更多:', window._historyHasMore);
@@ -666,6 +955,11 @@ function show(n){
   }
   setInputVisible(true);
   if(!chatHistory || chatHistory.trim()===''){
+   if(typeof hasCompatibleChatHistorySnapshot==='function' && !hasCompatibleChatHistorySnapshot()){
+    if(typeof clearChatHistorySnapshot==='function'){
+     clearChatHistorySnapshot();
+    }
+   }
    try{
     chatHistory=localStorage.getItem('nova_chat_history')||'';
    }catch(e){
@@ -1524,7 +1818,7 @@ function toggleModelDropdown(e){
     var displayName=m.model||mid;
     var active=mid===current?' active':'';
     var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
-    html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+displayName+vision+'</div>';
+    html+='<div class="model-dropdown-item'+active+'" data-model-id="'+escapeHtml(mid)+'">'+displayName+vision+'</div>';
    });
   }
   if(uncategorized.length>0){
@@ -1535,7 +1829,7 @@ function toggleModelDropdown(e){
     var displayName=m.model||mid;
     var active=mid===current?' active':'';
     var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
-    html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+displayName+vision+'</div>';
+    html+='<div class="model-dropdown-item'+active+'" data-model-id="'+escapeHtml(mid)+'">'+displayName+vision+'</div>';
    });
   }
  }else{
@@ -1545,10 +1839,21 @@ function toggleModelDropdown(e){
    var displayName=m.model||mid;
    var active=mid===current?' active':'';
    var vision=m.vision?' <span class="model-vision-tag">'+t('model.vision')+'</span>':'';
-   html+='<div class="model-dropdown-item'+active+'" onclick="switchModel(\''+mid+'\')">'+displayName+vision+'</div>';
+   html+='<div class="model-dropdown-item'+active+'" data-model-id="'+escapeHtml(mid)+'">'+displayName+vision+'</div>';
   });
  }
  dd.innerHTML=html;
+ dd.onclick=function(evt){
+  evt.stopPropagation();
+  var target=evt.target;
+  if(!target||!target.closest) return;
+  var item=target.closest('.model-dropdown-item[data-model-id]');
+  if(!item) return;
+  var modelId=String(item.getAttribute('data-model-id')||'').trim();
+  if(!modelId) return;
+  console.log('[models][sidebar] click', modelId);
+  _sidebarSwitchModel(modelId);
+ };
  dd.style.display='block';
  // 点击其他地方关闭
  setTimeout(function(){
@@ -1559,34 +1864,74 @@ function _closeModelDropdown(){
  var dd=document.getElementById('modelDropdown');
  if(dd) dd.style.display='none';
 }
-function switchModel(mid){
+function _resetModelSwitchButtons(){
+ var items=document.querySelectorAll('[onclick*="switchModel"],[onclick*="_sidebarSwitchModel"],[data-model-action="switch"]');
+ items.forEach(function(it){
+  it.style.pointerEvents='';
+  it.style.opacity='';
+  it.style.outline='';
+  it.style.outlineOffset='';
+ });
+ return items;
+}
+function _restoreModelSwitchState(previousModel, previousLabel, previousSettingsModel){
+ window._novaCurrentModel=previousModel||'';
+ _setModelLabel(previousLabel||t('unknown'));
+ if(typeof _settingsCurrentModel!=='undefined'){
+  _settingsCurrentModel=previousSettingsModel||'';
+ }
+ _resetModelSwitchButtons();
+ if(typeof updateImageBtnState==='function') updateImageBtnState();
+}
+function _alertModelSwitchFailure(detail){
+ var text=String(detail||'').trim()||'切换失败，请检查模型配置或网络连接';
+ try{
+  alert(text);
+ }catch(_err){}
+}
+function _sidebarSwitchModel(mid){
  // 即时关闭 dropdown
  var dd=document.getElementById('modelDropdown');
  if(dd) dd.style.display='none';
- if(mid===window._novaCurrentModel) return;
+ var previousModel=window._novaCurrentModel||'';
+  if(mid===previousModel) return;
+  console.log('[models][sidebar] switch start', mid, 'current=', previousModel||'');
+ var previousSettingsModel=(typeof _settingsCurrentModel!=='undefined')?_settingsCurrentModel:'';
+ var previousCfg=(window._novaModels||{})[previousModel];
+ var previousLabel=(previousCfg&&previousCfg.model)?previousCfg.model:(previousModel||t('unknown'));
  // 即时更新侧边栏显示
  window._novaCurrentModel=mid;
  var _m=(window._novaModels||{})[mid];
  _setModelLabel((_m&&_m.model)?_m.model:mid);
  // 如果在设置页，即时高亮
- var items=document.querySelectorAll('[onclick*="switchModel"]');
+ var items=_resetModelSwitchButtons();
  items.forEach(function(it){it.style.pointerEvents='none';it.style.opacity='0.5';});
  var clicked=null;
- items.forEach(function(it){if(it.getAttribute('onclick')&&it.getAttribute('onclick').indexOf(mid)!==-1){clicked=it;}});
+ items.forEach(function(it){
+  var targetMid=String(it.getAttribute('data-model-id')||'').trim();
+  var onclick=String(it.getAttribute('onclick')||'');
+  if(targetMid===mid||onclick.indexOf(mid)!==-1){clicked=it;}
+ });
  if(clicked){clicked.style.opacity='1';clicked.style.outline='2px solid #60a5fa';clicked.style.outlineOffset='-2px';}
  fetch('/model/'+encodeURIComponent(mid),{method:'POST'}).then(r=>r.json()).then(function(d){
   if(d.ok){
+   console.log('[models][sidebar] switch ok', mid);
+   _resetModelSwitchButtons();
    if(typeof updateImageBtnState==='function') updateImageBtnState();
    if(typeof _settingsCurrentModel!=='undefined'){
     _settingsCurrentModel=mid;
     setTimeout(function(){if(typeof loadSettingsModels==='function') loadSettingsModels();},300);
    }
   }else{
+   console.warn('[models][sidebar] switch fail', mid, d&&d.error);
    // 回滚
-   items.forEach(function(it){it.style.pointerEvents='';it.style.opacity='';it.style.outline='';});
+   _restoreModelSwitchState(previousModel, previousLabel, previousSettingsModel);
+   _alertModelSwitchFailure(d&&d.error);
   }
  }).catch(function(){
-  items.forEach(function(it){it.style.pointerEvents='';it.style.opacity='';it.style.outline='';});
+  console.warn('[models][sidebar] switch error', mid);
+  _restoreModelSwitchState(previousModel, previousLabel, previousSettingsModel);
+  _alertModelSwitchFailure('');
  });
 }
 function updateImageBtnState(){

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 import re as _re
 from core import shared as S
+from core.markdown_render import render_markdown_html
 from core.runtime_state.state_loader import (
     DEFAULT_L1_RECENT_TOKEN_BUDGET as _L1_RECENT_TOKEN_BUDGET,
 )
@@ -176,6 +177,23 @@ def _block_task_plan_after_failure(
 
 
 def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
+    meta_fields = (
+        "full_detail",
+        "step_key",
+        "phase",
+        "reason_kind",
+        "goal",
+        "decision_note",
+        "handoff_note",
+        "expected_output",
+        "next_user_need",
+        "tool_name",
+    )
+
+    def _is_thinking_label(value: str) -> bool:
+        text = str(value or "").strip().lower()
+        return text in {"thinking", "\u6a21\u578b\u601d\u8003"}
+
     rows = []
     for item in steps or []:
         if not isinstance(item, dict):
@@ -185,7 +203,7 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
         status = str(item.get("status") or "").strip().lower()
         if status not in {"done", "error", "running"}:
             continue
-        if status == "running" and label != "模型思考":
+        if status == "running" and not _is_thinking_label(label):
             continue
         if not label and not detail:
             continue
@@ -194,6 +212,21 @@ def _normalize_persisted_process_steps(steps: list | None) -> list[dict]:
             "detail": detail,
             "status": "error" if status == "error" else "done",
         }
+        for field in meta_fields:
+            value = item.get(field)
+            if field == "full_detail":
+                value = str(value or detail or "").strip()
+            else:
+                value = str(value or "").strip()
+            if value:
+                row[field] = value
+        if rows and _is_thinking_label(label) and _is_thinking_label(rows[-1].get("label")):
+            rows[-1]["detail"] = detail or rows[-1].get("detail", "")
+            rows[-1]["status"] = row["status"]
+            for field in meta_fields:
+                if row.get(field):
+                    rows[-1][field] = row[field]
+            continue
         if rows and rows[-1] == row:
             continue
         rows.append(row)
@@ -232,6 +265,83 @@ def _ensure_tool_call_failure_reply(
     if fallback_text:
         return S.format_skill_fallback(fallback_text)
     return text
+
+
+def _drop_incomplete_tool_handoff_prefix(chunks: list[str]) -> str:
+    if not chunks:
+        return ""
+    try:
+        from core.reply_formatter import _clean_visible_reply_text, _looks_like_incomplete_tool_handoff
+
+        joined = "".join(str(chunk or "") for chunk in chunks).strip()
+        cleaned = _clean_visible_reply_text(joined)
+        if cleaned and _looks_like_incomplete_tool_handoff(cleaned):
+            chunks.clear()
+            return cleaned
+    except Exception:
+        return ""
+    return ""
+
+
+_THINK_OPEN_TAG = "<think>"
+_THINK_CLOSE_TAG = "</think>"
+
+
+def _consume_think_filtered_stream_text(
+    carry: str,
+    chunk: str,
+    *,
+    in_think: bool = False,
+    end_of_stream: bool = False,
+) -> tuple[list[str], str, bool, bool]:
+    carry = f"{carry}{str(chunk or '')}"
+    visible_parts: list[str] = []
+    saw_think = False
+    open_keep = max(0, len(_THINK_OPEN_TAG) - 1)
+    close_keep = max(0, len(_THINK_CLOSE_TAG) - 1)
+
+    while carry:
+        lowered = carry.lower()
+        if in_think:
+            close_idx = lowered.find(_THINK_CLOSE_TAG)
+            if close_idx < 0:
+                if end_of_stream:
+                    return visible_parts, "", True, saw_think
+                if close_keep and len(carry) > close_keep:
+                    carry = carry[-close_keep:]
+                break
+            carry = carry[close_idx + len(_THINK_CLOSE_TAG):]
+            in_think = False
+            continue
+
+        open_idx = lowered.find(_THINK_OPEN_TAG)
+        if open_idx >= 0:
+            prefix = carry[:open_idx]
+            if prefix:
+                visible_parts.append(prefix)
+            carry = carry[open_idx + len(_THINK_OPEN_TAG):]
+            in_think = True
+            saw_think = True
+            continue
+
+        if end_of_stream:
+            visible_parts.append(carry)
+            return visible_parts, "", in_think, saw_think
+
+        if len(carry) <= open_keep:
+            break
+        visible_parts.append(carry[:-open_keep])
+        carry = carry[-open_keep:]
+        break
+
+    return visible_parts, carry, in_think, saw_think
+
+
+def _reset_stream_visible_state(stream_chunks: list[str], carry: str) -> tuple[str, str, bool]:
+    dropped_text = f"{''.join(stream_chunks)}{str(carry or '')}".strip()
+    if stream_chunks:
+        stream_chunks.clear()
+    return dropped_text, "", False
 
 
 def _get_tool_call_enabled() -> bool:
@@ -573,6 +683,18 @@ def _strip_markdown(text: str) -> str:
     """保留 Markdown 格式（已改为允许自由使用 Markdown）"""
     return text
 
+
+def _build_reply_payload(reply: str, **extra) -> dict:
+    payload = {
+        "reply": str(reply or ""),
+        "reply_html": render_markdown_html(reply),
+    }
+    for key, value in (extra or {}).items():
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
 router = APIRouter()
 
 
@@ -619,43 +741,243 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         _collected_steps = []
         _last_progress_label = ""
         _last_progress_detail = ""
+        _last_progress_step_key = ""
+        _last_progress_status = ""
         _last_progress_at = asyncio.get_running_loop().time()
         _last_wait_event_at = 0.0
+        _step_key_counts: dict[str, int] = {}
+        _active_tool_step_key = ""
+        _active_tool_name = ""
 
-        async def _trace(label, detail, status="running"):
-            nonlocal _last_progress_label, _last_progress_detail, _last_progress_at, _last_wait_event_at
-            _collected_steps.append({"label": label, "detail": detail, "status": status})
-            _last_progress_label = str(label or "").strip()
-            _last_progress_detail = str(detail or "").strip()
+        def _clean_step_text(value: object) -> str:
+            return str(value or "").strip()
+
+        def _slugify_step_part(value: str, fallback: str = "step") -> str:
+            text = _re.sub(r"[^a-z0-9]+", "_", _clean_step_text(value).lower()).strip("_")
+            return text or fallback
+
+        def _next_step_key(prefix: str, hint: str) -> str:
+            base = f"{_slugify_step_part(prefix, 'step')}:{_slugify_step_part(hint, 'step')}"
+            count = _step_key_counts.get(base, 0) + 1
+            _step_key_counts[base] = count
+            return base if count == 1 else f"{base}:{count}"
+
+        def _looks_like_tool_label(label: str) -> bool:
+            text = _clean_step_text(label)
+            return text in {"调用技能", "技能完成", "技能失败", "联网搜索", "搜索完成", "搜索失败", "检索记忆", "检索失败", "记忆就绪"}
+
+        def _infer_step_phase(label: str, *, explicit_phase: str = "", tool_name: str = "") -> str:
+            phase = _clean_step_text(explicit_phase).lower()
+            if phase:
+                return phase
+            text = _clean_step_text(label)
+            if text in {"模型思考", "thinking"}:
+                return "thinking"
+            if text in {"等待", "waiting"}:
+                return "waiting"
+            if tool_name or _looks_like_tool_label(text):
+                return "tool"
+            return "info"
+
+        def _build_expected_output(*, phase: str, tool_name: str = "", preview: str = "", display_name: str = "") -> str:
+            phase = _clean_step_text(phase).lower()
+            preview = _clean_step_text(preview)
+            display_name = _clean_step_text(display_name or tool_name)
+            if phase == "thinking":
+                return "判断是直接回答还是先调用工具"
+            if phase != "tool":
+                return ""
+            if tool_name == "weather":
+                return "最新天气和一个可直接用的简洁结论"
+            if preview:
+                return f"围绕「{preview}」拿到可靠结果"
+            if display_name:
+                return f"拿到 {display_name} 的关键结果"
+            return "拿到这一步需要的关键信息"
+
+        def _build_next_user_need(*, tool_name: str = "", preview: str = "", expected_output: str = "") -> str:
+            preview = _clean_step_text(preview)
+            expected_output = _clean_step_text(expected_output)
+            if tool_name == "weather" or "天气" in preview:
+                return "今天状态、出门安排或要不要带伞"
+            if tool_name == "web_search":
+                return "最新结论、怎么做，或要不要继续展开"
+            if tool_name in {"recall_memory", "query_knowledge"}:
+                return "把上下文接回当前问题后的明确结论"
+            if any(token in msg for token in ("今天", "新的一天", "早安", "早上")):
+                return "今天最值得先关注的实时信息"
+            if expected_output:
+                return expected_output
+            return "一个能直接接住当前话题的结论"
+
+        def _build_step_payload(
+            *,
+            label: str,
+            detail: str,
+            status: str = "running",
+            step_key: str = "",
+            phase: str = "",
+            full_detail: str = "",
+            reason_kind: str = "",
+            goal: str = "",
+            decision_note: str = "",
+            handoff_note: str = "",
+            expected_output: str = "",
+            next_user_need: str = "",
+            tool_name: str = "",
+        ) -> dict:
+            clean_label = _clean_step_text(label)
+            clean_detail = _clean_step_text(detail)
+            clean_status = _clean_step_text(status).lower() or "running"
+            clean_phase = _infer_step_phase(clean_label, explicit_phase=phase, tool_name=tool_name)
+            clean_tool_name = _clean_step_text(tool_name)
+            clean_step_key = _clean_step_text(step_key)
+            clean_full_detail = _clean_step_text(full_detail) or clean_detail
+            clean_decision_note = _clean_step_text(decision_note)
+            clean_handoff_note = _clean_step_text(handoff_note)
+            clean_goal = _clean_step_text(goal)
+            clean_expected_output = _clean_step_text(expected_output)
+            clean_next_user_need = _clean_step_text(next_user_need)
+            clean_reason_kind = _clean_step_text(reason_kind)
+            if not clean_step_key:
+                if clean_phase == "thinking":
+                    clean_step_key = "thinking:decision"
+                elif clean_phase == "waiting":
+                    clean_step_key = _last_progress_step_key or "thinking:decision"
+                elif clean_phase == "tool":
+                    if clean_status == "running" or not _active_tool_step_key:
+                        clean_step_key = _next_step_key("tool", clean_tool_name or clean_label or "tool")
+                    else:
+                        clean_step_key = _active_tool_step_key
+                else:
+                    clean_step_key = _next_step_key(clean_phase or "info", clean_label or "step")
+            payload = {
+                "label": clean_label,
+                "detail": clean_detail,
+                "status": "error" if clean_status == "error" else ("running" if clean_status == "running" else "done"),
+                "step_key": clean_step_key,
+                "phase": clean_phase,
+                "full_detail": clean_full_detail,
+            }
+            optional_fields = {
+                "reason_kind": clean_reason_kind,
+                "goal": clean_goal,
+                "decision_note": clean_decision_note,
+                "handoff_note": clean_handoff_note,
+                "expected_output": clean_expected_output,
+                "next_user_need": clean_next_user_need,
+                "tool_name": clean_tool_name,
+            }
+            for field, value in optional_fields.items():
+                if value:
+                    payload[field] = value
+            return payload
+
+        async def _trace(
+            label,
+            detail,
+            status="running",
+            *,
+            step_key: str = "",
+            phase: str = "",
+            full_detail: str = "",
+            reason_kind: str = "",
+            goal: str = "",
+            decision_note: str = "",
+            handoff_note: str = "",
+            expected_output: str = "",
+            next_user_need: str = "",
+            tool_name: str = "",
+        ):
+            nonlocal _last_progress_label, _last_progress_detail, _last_progress_step_key, _last_progress_status, _last_progress_at, _last_wait_event_at, _active_tool_step_key, _active_tool_name
+            payload = _build_step_payload(
+                label=label,
+                detail=detail,
+                status=status,
+                step_key=step_key,
+                phase=phase,
+                full_detail=full_detail,
+                reason_kind=reason_kind,
+                goal=goal,
+                decision_note=decision_note,
+                handoff_note=handoff_note,
+                expected_output=expected_output,
+                next_user_need=next_user_need,
+                tool_name=tool_name,
+            )
+            _collected_steps.append(dict(payload))
+            _last_progress_status = payload.get("status", "")
+            if _last_progress_status == "running":
+                _last_progress_label = payload.get("label", "")
+                _last_progress_detail = payload.get("detail", "")
+                _last_progress_step_key = payload.get("step_key", "")
+            else:
+                _last_progress_label = ""
+                _last_progress_detail = ""
+                _last_progress_step_key = ""
             _last_progress_at = asyncio.get_running_loop().time()
             _last_wait_event_at = 0.0
-            return {"event": "trace", "data": json.dumps({"label": label, "detail": detail, "status": status}, ensure_ascii=False)}
+            if payload.get("phase") == "tool":
+                _active_tool_name = payload.get("tool_name") or _active_tool_name
+                _active_tool_step_key = payload.get("step_key") or _active_tool_step_key
+                if payload.get("status") != "running":
+                    _active_tool_name = ""
+                    _active_tool_step_key = ""
+            return {"event": "trace", "data": json.dumps(payload, ensure_ascii=False)}
 
-        async def _agent_step(phase, detail="", label="", waited_seconds=0):
+        async def _agent_step(
+            phase,
+            detail="",
+            label="",
+            waited_seconds=0,
+            *,
+            step_key: str = "",
+            reason_kind: str = "",
+            goal: str = "",
+            decision_note: str = "",
+            handoff_note: str = "",
+            expected_output: str = "",
+            next_user_need: str = "",
+            tool_name: str = "",
+        ):
             nonlocal _last_wait_event_at
             _last_wait_event_at = asyncio.get_running_loop().time()
-            payload = {
-                "phase": str(phase or "").strip(),
-                "label": str(label or "").strip(),
-                "detail": str(detail or "").strip(),
-            }
+            payload = _build_step_payload(
+                label=label,
+                detail=detail,
+                status="running",
+                step_key=step_key or (_last_progress_step_key if (_clean_step_text(phase).lower() == "waiting" and _last_progress_status == "running") else ""),
+                phase=phase,
+                full_detail=detail,
+                reason_kind=reason_kind,
+                goal=goal,
+                decision_note=decision_note,
+                handoff_note=handoff_note,
+                expected_output=expected_output,
+                next_user_need=next_user_need,
+                tool_name=tool_name,
+            )
+            payload["phase"] = _clean_step_text(phase).lower() or payload.get("phase", "")
             if waited_seconds:
                 payload["waited_seconds"] = int(waited_seconds)
             return {"event": "agent_step", "data": json.dumps(payload, ensure_ascii=False)}
 
         def _build_waiting_step(waited_seconds: float, *, tool_active: bool = False, streamed: bool = False) -> tuple[str, str]:
             waited = max(1, int(waited_seconds))
-            label = _last_progress_label or ("调用技能" if tool_active else "模型思考")
-            base_detail = str(_last_progress_detail or "").strip()
             if tool_active:
-                wait_note = f"还在等待工具执行结果，已等待 {waited}s"
-            elif streamed:
-                wait_note = f"还在等待模型继续输出，已等待 {waited}s"
+                label = _last_progress_label or "\u8c03\u7528\u6280\u80fd"
+                base_detail = str(_last_progress_detail or "").strip() or "\u6b63\u5728\u7b49\u5f85\u5de5\u5177\u6267\u884c\u7ed3\u679c"
             else:
-                wait_note = f"还在等待模型继续处理，已等待 {waited}s"
-            if base_detail:
-                return label, f"{base_detail} · {wait_note}"
-            return label, wait_note
+                label = "\u6a21\u578b\u601d\u8003"
+                base_detail = str(_last_progress_detail or "").strip()
+                if not base_detail:
+                    base_detail = (
+                        "\u6b63\u5728\u7b49\u5f85\u6a21\u578b\u7ee7\u7eed\u8f93\u51fa"
+                        if streamed
+                        else "\u6b63\u5728\u7ee7\u7eed\u5206\u6790\u4e0b\u4e00\u6b65\u52a8\u4f5c"
+                    )
+            wait_note = f"{waited}s"
+            return label, f"{base_detail} {wait_note}"
 
         def _summarize_tool_response_text(text: str) -> str:
             text = str(text or "").strip()
@@ -675,11 +997,11 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             if tool_name == "weather" and preview:
                 if "天气" not in preview:
                     preview = f"{preview}今天天气"
-                return f"这类问题直接查实时天气更稳，我先确认「{preview}」的天气结果。"
+                return f"这是实时信息，直接凭记忆不稳。我先核实「{preview}」的最新天气，再根据结果给你一个简洁结论。"
             if preview:
-                return f"我判断这一步更适合先调用「{display_name}」，目标：{preview}。"
+                return f"我先把这一步需要核实的信息查清楚，再继续回答。当前先调用「{display_name}」确认「{preview}」。"
             if display_name:
-                return f"我判断这一步更适合先调用「{display_name}」来推进。"
+                return f"我先调用「{display_name}」把关键事实拿到，再继续整理最终答复。"
             return ""
 
         pending_awareness = S.awareness_pull()
@@ -807,7 +1129,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             if mode_switch_reply:
                 response = mode_switch_reply
                 yield await _trace("\u4eba\u683c\u5207\u6362", "\u5df2\u5207\u6362\u4eba\u683c\u6a21\u5f0f", "done")
-                yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                yield {"event": "reply", "data": json.dumps(_build_reply_payload(response), ensure_ascii=False)}
                 _comp.activity = "idle"
                 S.add_to_history("assistant", response)
                 history.append({"role": "assistant", "content": response, "time": datetime.now().isoformat()})
@@ -819,7 +1141,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             if _model_switch:
                 yield await _trace("\u5207\u6362\u6a21\u578b", _model_switch.get("trace", "\u6b63\u5728\u5207\u6362\u6a21\u578b\u2026"), "done")
                 response = _model_switch["reply"]
-                yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                yield {"event": "reply", "data": json.dumps(_build_reply_payload(response), ensure_ascii=False)}
                 if _model_switch.get("model_changed"):
                     from brain import get_current_model_name, _current_default
                     yield {"event": "model_changed", "data": json.dumps({"model": _current_default, "model_name": get_current_model_name()}, ensure_ascii=False)}
@@ -845,7 +1167,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     "tool_call \u4e3b\u94fe\u4e0d\u53ef\u7528\uff0c\u5df2\u663e\u5f0f\u62a5\u9519\uff0c\u4e0d\u518d\u56de\u9000\u5230\u65e7 skill \u94fe\u3002",
                     "error",
                 )
-                yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                yield {"event": "reply", "data": json.dumps(_build_reply_payload(response), ensure_ascii=False)}
                 _comp.activity = "idle"
                 S.add_to_history("nova", response)
                 history.append({"role": "nova", "content": response, "time": datetime.now().isoformat()})
@@ -917,19 +1239,180 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 _tool_action_summary = ""
                 _tool_response_text = ""
                 _trace_thinking_sent = False
-                _think_buf = ""
-                _think_done = False
+                _thinking_trace_text = ""
+                _thinking_trace_emitted = ""
+                _last_thinking_emit_at = 0.0
+                _think_carry = ""
+                _inside_think_block = False
                 _tool_trace_started = False
+                _dropped_stream_prefix = ""
                 _msg_short = msg[:20] + ("\u2026" if len(msg) > 20 else "")
                 _default_think_detail = f"\u6211\u5148\u7406\u89e3\u4f60\u8fd9\u53e5\u300c{_msg_short}\u300d\uff0c\u5224\u65ad\u662f\u76f4\u63a5\u56de\u7b54\u8fd8\u662f\u5148\u8c03\u7528\u5de5\u5177\u3002"
+                _thinking_step_key = "thinking:decision"
+                _thinking_reason_kind = "decision"
+                _thinking_goal = ""
+                _thinking_decision_note = _default_think_detail
+                _thinking_handoff_note = ""
+                _thinking_expected_output = _build_expected_output(phase="thinking")
+                _thinking_next_user_need = _build_next_user_need(expected_output=_thinking_expected_output)
                 # 立即发出思考卡片，不等 LLM 首 token
-                yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail, "running")
+                yield await _trace(
+                    "\u6a21\u578b\u601d\u8003",
+                    _default_think_detail,
+                    "running",
+                    step_key=_thinking_step_key,
+                    phase="thinking",
+                    reason_kind=_thinking_reason_kind,
+                    decision_note=_thinking_decision_note,
+                    expected_output=_thinking_expected_output,
+                    next_user_need=_thinking_next_user_need,
+                    full_detail=_default_think_detail,
+                )
                 _trace_thinking_sent = True
                 async def _emit_default_thinking_trace():
                     nonlocal _trace_thinking_sent
                     if not _trace_thinking_sent:
-                        yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail, "running")
+                        yield await _trace(
+                            "\u6a21\u578b\u601d\u8003",
+                            _default_think_detail,
+                            "running",
+                            step_key=_thinking_step_key,
+                            phase="thinking",
+                            reason_kind=_thinking_reason_kind,
+                            decision_note=_thinking_decision_note,
+                            expected_output=_thinking_expected_output,
+                            next_user_need=_thinking_next_user_need,
+                            full_detail=_default_think_detail,
+                        )
                         _trace_thinking_sent = True
+
+                def _append_thinking_text(existing: str, incoming: str) -> str:
+                    current = str(existing or "")
+                    piece = str(incoming or "")
+                    if not piece:
+                        return current
+                    if not current:
+                        return piece
+                    if current.endswith(piece):
+                        return current
+                    return current + piece
+
+                def _normalize_thinking_trace_text(text: str) -> str:
+                    cleaned = str(text or "").replace("\r", " ").replace("\n", " ")
+                    cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+                    return cleaned
+
+                def _update_thinking_meta(
+                    *,
+                    reason_kind: str = "",
+                    goal: str = "",
+                    decision_note: str = "",
+                    handoff_note: str = "",
+                    expected_output: str = "",
+                    next_user_need: str = "",
+                ) -> None:
+                    nonlocal _thinking_reason_kind, _thinking_goal, _thinking_decision_note, _thinking_handoff_note, _thinking_expected_output, _thinking_next_user_need
+                    if _clean_step_text(reason_kind):
+                        _thinking_reason_kind = _clean_step_text(reason_kind)
+                    if _clean_step_text(goal):
+                        _thinking_goal = _clean_step_text(goal)
+                    if _clean_step_text(decision_note):
+                        _thinking_decision_note = _clean_step_text(decision_note)
+                    if _clean_step_text(handoff_note):
+                        _thinking_handoff_note = _clean_step_text(handoff_note)
+                    if _clean_step_text(expected_output):
+                        _thinking_expected_output = _clean_step_text(expected_output)
+                    if _clean_step_text(next_user_need):
+                        _thinking_next_user_need = _clean_step_text(next_user_need)
+
+                def _looks_like_toolish_thinking_text(
+                    text: str,
+                    *,
+                    tool_name: str = "",
+                    preview: str = "",
+                    action_summary: str = "",
+                ) -> bool:
+                    visible = _normalize_thinking_trace_text(text)
+                    if not visible:
+                        return False
+                    lower = visible.lower()
+                    tool_lower = str(tool_name or "").strip().lower()
+                    preview_text = str(preview or "").strip()
+                    action_text = str(action_summary or "").strip()
+                    if visible.startswith("{") or visible.startswith("["):
+                        return True
+                    if any(token in visible for token in ("📍", "°C", "http://", "https://")):
+                        return True
+                    if tool_lower and (
+                        lower.startswith(tool_lower)
+                        or f"{tool_lower} ·" in lower
+                        or f"{tool_lower}:" in lower
+                    ):
+                        return True
+                    if action_text and action_text in visible:
+                        return True
+                    if preview_text and preview_text in visible and len(visible) <= max(len(preview_text) + 40, 180):
+                        return True
+                    if _re.match(r"^[a-z0-9_]+\s*[·•:/：-]\s*", lower) and len(visible) <= 180:
+                        return True
+                    if visible.count(" / ") >= 1 and len(visible) <= 160:
+                        return True
+                    return False
+
+                def _prefer_reason_note_for_tool(
+                    current_text: str,
+                    *,
+                    tool_name: str = "",
+                    preview: str = "",
+                    reason_note: str = "",
+                    action_summary: str = "",
+                ) -> str:
+                    reason = _normalize_thinking_trace_text(reason_note)
+                    current = _normalize_thinking_trace_text(current_text)
+                    if not reason:
+                        return current
+                    if not current or current == _default_think_detail:
+                        return reason
+                    if _looks_like_toolish_thinking_text(
+                        current,
+                        tool_name=tool_name,
+                        preview=preview,
+                        action_summary=action_summary,
+                    ):
+                        return reason
+                    if len(current) < 42:
+                        return reason
+                    return current
+
+                async def _emit_thinking_trace(force: bool = False):
+                    nonlocal _thinking_trace_emitted, _last_thinking_emit_at, _trace_thinking_sent
+                    if _tool_trace_started:
+                        return
+                    detail = _normalize_thinking_trace_text(_thinking_trace_text) or _thinking_decision_note or _default_think_detail
+                    if not detail or detail == _thinking_trace_emitted:
+                        return
+                    now = asyncio.get_running_loop().time()
+                    if not force:
+                        changed = detail[len(_thinking_trace_emitted):] if detail.startswith(_thinking_trace_emitted) else detail
+                        if len(changed) < 24 and not _re.search(r"[。！？!?；;：:]\s*$", changed) and (now - _last_thinking_emit_at) < 0.35:
+                            return
+                    _thinking_trace_emitted = detail
+                    _last_thinking_emit_at = now
+                    yield await _trace(
+                        "\u6a21\u578b\u601d\u8003",
+                        detail,
+                        "running",
+                        step_key=_thinking_step_key,
+                        phase="thinking",
+                        reason_kind=_thinking_reason_kind,
+                        goal=_thinking_goal,
+                        decision_note=_thinking_decision_note,
+                        handoff_note=_thinking_handoff_note,
+                        expected_output=_thinking_expected_output,
+                        next_user_need=_thinking_next_user_need,
+                        full_detail=detail,
+                    )
+                    _trace_thinking_sent = True
 
                 try:
                     import queue, threading
@@ -962,9 +1445,11 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         "event": "ask_user",
                                         "data": json.dumps(_pending_question, ensure_ascii=False),
                                     }
+                            async for _evt in _emit_thinking_trace():
+                                yield _evt
                             _now = asyncio.get_running_loop().time()
                             _idle_for = _now - _last_progress_at
-                            if _idle_for >= 4 and (_now - _last_wait_event_at) >= 2.5:
+                            if _idle_for >= 1.2 and (_now - _last_wait_event_at) >= 1.0:
                                 _wait_label, _wait_detail = _build_waiting_step(
                                     _idle_for,
                                     tool_active=bool(_tool_trace_started and not _tool_used),
@@ -980,15 +1465,73 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                         if isinstance(_item, tuple) and len(_item) == 2 and _item[0] == "__error__":
                             raise _item[1]
                         if isinstance(_item, dict):
+                            if _item.get("_stream_reset"):
+                                _reset_info = _item.get("_stream_reset") or {}
+                                _dropped_text, _think_carry, _inside_think_block = _reset_stream_visible_state(
+                                    _stream_chunks,
+                                    _think_carry,
+                                )
+                                yield {
+                                    "event": "stream_reset",
+                                    "data": json.dumps(
+                                        {"reason": str(_reset_info.get("reason") or "stream_reset")},
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                                _reset_text = str(_reset_info.get("text") or "").strip()
+                                _dropped_stream_prefix = _dropped_text or _reset_text or _dropped_stream_prefix
+                                if _dropped_stream_prefix:
+                                    S.debug_write("tool_call_stream_prefix_dropped", {
+                                        "reason": str(_reset_info.get("reason") or "stream_reset"),
+                                        "text_len": len(_dropped_stream_prefix),
+                                        "text_preview": _dropped_stream_prefix[:120],
+                                    })
+                                continue
                             if _item.get("_tool_call"):
                                 tc_info = _item["_tool_call"]
                                 tc_name = tc_info.get("name", "")
                                 tc_preview = str(tc_info.get("preview") or "").strip()
+                                _MEMORY_TOOL_NAMES = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
+                                _tool_skill_display = _MEMORY_TOOL_NAMES.get(tc_name) or S.get_skill_display_name(tc_name)
+                                if tc_name == "web_search":
+                                    _tool_skill_display = "\u8054\u7f51\u641c\u7d22"
+                                _tool_expected_output = _build_expected_output(
+                                    phase="tool",
+                                    tool_name=tc_name,
+                                    preview=tc_preview,
+                                    display_name=_tool_skill_display,
+                                )
+                                _tool_next_user_need = _build_next_user_need(
+                                    tool_name=tc_name,
+                                    preview=tc_preview,
+                                    expected_output=_tool_expected_output,
+                                )
+                                _tool_handoff_note = (
+                                    f"\u5148\u4ea4\u7ed9\u300c{_tool_skill_display}\u300d\u628a\u8fd9\u4e00\u6b65\u9700\u8981\u7684\u4f9d\u636e\u62ff\u5230"
+                                    if _tool_skill_display
+                                    else "\u5148\u62ff\u5230\u8fd9\u4e00\u6b65\u9700\u8981\u7684\u5173\u952e\u4f9d\u636e"
+                                )
                                 if tc_info.get("executing"):
+                                    async for _evt in _emit_thinking_trace(force=True):
+                                        yield _evt
                                     _tool_trace_started = True
+                                    if not _dropped_stream_prefix:
+                                        _dropped_stream_prefix = _drop_incomplete_tool_handoff_prefix(_stream_chunks)
+                                        if _dropped_stream_prefix:
+                                            yield {
+                                                "event": "stream_reset",
+                                                "data": json.dumps(
+                                                    {"reason": "tool_handoff_prefix_dropped"},
+                                                    ensure_ascii=False,
+                                                ),
+                                            }
+                                            S.debug_write("tool_call_stream_prefix_dropped", {
+                                                "tool_name": tc_name,
+                                                "text_len": len(_dropped_stream_prefix),
+                                                "text_preview": _dropped_stream_prefix[:120],
+                                            })
                                     _comp.activity = "skill"
-                                    _MEMORY_TOOL_NAMES = {"recall_memory": "\u56de\u5fc6\u8bb0\u5fc6", "query_knowledge": "\u67e5\u8be2\u77e5\u8bc6"}
-                                    skill_display = _MEMORY_TOOL_NAMES.get(tc_name) or S.get_skill_display_name(tc_name)
+                                    skill_display = _tool_skill_display
                                     _is_mem_tool = tc_name in _MEMORY_TOOL_NAMES
                                     if tc_name == "web_search":
                                         _trace_label = "\u8054\u7f51\u641c\u7d22"
@@ -999,18 +1542,45 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                         _trace_label = "\u8c03\u7528\u6280\u80fd"
                                     _reason_note = _build_tool_reason_note(tc_name, tc_preview, skill_display)
                                     if _reason_note:
-                                        yield await _trace("\u6a21\u578b\u601d\u8003", _reason_note, "running")
-                                        _trace_thinking_sent = True
+                                        _update_thinking_meta(
+                                            reason_kind="tool_decision",
+                                            goal=tc_preview or skill_display,
+                                            decision_note=_reason_note,
+                                            handoff_note=_tool_handoff_note,
+                                            expected_output=_tool_expected_output,
+                                            next_user_need=_tool_next_user_need,
+                                        )
+                                        _thinking_trace_text = _prefer_reason_note_for_tool(
+                                            _thinking_trace_text or _thinking_trace_emitted or _default_think_detail,
+                                            tool_name=tc_name,
+                                            preview=tc_preview,
+                                            reason_note=_reason_note,
+                                            action_summary=_tool_action_summary,
+                                        )
+                                        async for _evt in _emit_thinking_trace(force=True):
+                                            yield _evt
                                     elif not _trace_thinking_sent:
-                                        yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail, "running")
-                                        _trace_thinking_sent = True
+                                        async for _evt in _emit_default_thinking_trace():
+                                            yield _evt
                                     _trace_parts = [tc_name] if tc_name else []
                                     if tc_preview:
                                         _trace_parts.append(f"\u76ee\u6807\uff1a{tc_preview}")
                                     elif tc_name:
                                         _trace_parts.append(f"\u6b63\u5728\u6267\u884c {tc_name}\u2026")
                                     _trace_detail = " \u00b7 ".join([p for p in _trace_parts if p]) or f"\u6b63\u5728{skill_display}\u2026"
-                                    yield await _trace(_trace_label, _trace_detail, "running")
+                                    yield await _trace(
+                                        _trace_label,
+                                        _trace_detail,
+                                        "running",
+                                        phase="tool",
+                                        tool_name=tc_name,
+                                        goal=tc_preview,
+                                        handoff_note=_tool_handoff_note,
+                                        expected_output=_tool_expected_output,
+                                        next_user_need=_tool_next_user_need,
+                                        reason_kind="tool_execution",
+                                        full_detail=_trace_detail,
+                                    )
                                 elif tc_info.get("done"):
                                     _tool_used = tc_name
                                     _tool_success = bool(tc_info.get("success"))
@@ -1039,7 +1609,19 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             _done_detail = f"{_dn}\u5b8c\u6210"
                                         if tc_name:
                                             _done_detail = " \u00b7 ".join([p for p in [tc_name, _done_detail] if p])
-                                        yield await _trace(_done_label, _done_detail, "done")
+                                        yield await _trace(
+                                            _done_label,
+                                            _done_detail,
+                                            "done",
+                                            step_key=_active_tool_step_key,
+                                            phase="tool",
+                                            tool_name=tc_name,
+                                            goal=tc_preview,
+                                            expected_output=_tool_expected_output,
+                                            next_user_need=_tool_next_user_need,
+                                            reason_kind="tool_result",
+                                            full_detail=_done_detail,
+                                        )
                                     else:
                                         if tc_name == "web_search":
                                             _fail_label = "\u641c\u7d22\u5931\u8d25"
@@ -1054,8 +1636,22 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                             _fail_detail = f"\u76ee\u6807\uff1a{tc_preview}"
                                         if tc_name:
                                             _fail_detail = " \u00b7 ".join([p for p in [tc_name, _fail_detail] if p])
-                                        yield await _trace(_fail_label, _fail_detail, "error")
+                                        yield await _trace(
+                                            _fail_label,
+                                            _fail_detail,
+                                            "error",
+                                            step_key=_active_tool_step_key,
+                                            phase="tool",
+                                            tool_name=tc_name,
+                                            goal=tc_preview,
+                                            expected_output=_tool_expected_output,
+                                            next_user_need=_tool_next_user_need,
+                                            reason_kind="tool_result",
+                                            full_detail=_fail_detail,
+                                        )
                             elif _item.get("_done"):
+                                async for _evt in _emit_thinking_trace(force=True):
+                                    yield _evt
                                 _tool_used = _item.get("tool_used")
                                 if "run_meta" in _item and isinstance(_item.get("run_meta"), dict):
                                     _tool_run_meta = _item.get("run_meta") or {}
@@ -1069,39 +1665,64 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                                 break
                             elif _item.get("_thinking"):
                                 if not _tool_trace_started and not _trace_thinking_sent:
-                                    yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail, "running")
-                                    _trace_thinking_sent = True
+                                    async for _evt in _emit_default_thinking_trace():
+                                        yield _evt
+                            elif "_thinking_content" in _item:
+                                if not _tool_trace_started:
+                                    _thinking_trace_text = _append_thinking_text(
+                                        _thinking_trace_text,
+                                        str(_item.get("_thinking_content") or ""),
+                                    )
+                                    async for _evt in _emit_thinking_trace():
+                                        yield _evt
                             continue
                         # 文本 token — 过滤 <think> 标签
-                        if not _tool_trace_started and not _trace_thinking_sent and not _think_buf:
+                        _visible_parts, _think_carry, _inside_think_block, _saw_think = _consume_think_filtered_stream_text(
+                            _think_carry,
+                            _item,
+                            in_think=_inside_think_block,
+                        )
+                        if _saw_think and not _trace_thinking_sent and not _tool_trace_started:
                             async for _evt in _emit_default_thinking_trace():
                                 yield _evt
-                        if not _think_done:
-                            _think_buf += _item
-                            if '<think>' in _think_buf.lower():
-                                if not _trace_thinking_sent and not _tool_trace_started:
-                                    yield await _trace("\u6a21\u578b\u601d\u8003", _default_think_detail, "running")
-                                    _trace_thinking_sent = True
-                                _close_match = _re.search(r'</think>', _think_buf, flags=_re.I)
-                                if _close_match:
-                                    _think_done = True
-                                    _after = _think_buf[_close_match.end():]
-                                    if _after.strip():
-                                        _stream_chunks.append(_after)
-                                        yield {"event": "stream", "data": json.dumps({"token": _after}, ensure_ascii=False)}
-                            elif len(_think_buf) > 7:
+                        for _visible in _visible_parts:
+                            if not _visible:
+                                continue
+                            _stream_chunks.append(_visible)
+                            yield {"event": "stream", "data": json.dumps({"token": _visible}, ensure_ascii=False)}
                                 # 超过 7 字符没出现 <think>，直接输出
-                                _think_done = True
+                            if False:
                                 if _think_buf.strip():
                                     _stream_chunks.append(_think_buf)
                                     yield {"event": "stream", "data": json.dumps({"token": _think_buf}, ensure_ascii=False)}
                             # else: 继续缓冲，等更多 token 到达再判断
-                        else:
+                        if False:
                             _stream_chunks.append(_item)
                             yield {"event": "stream", "data": json.dumps({"token": _item}, ensure_ascii=False)}
 
+                    _tail_parts, _think_carry, _inside_think_block, _tail_saw_think = _consume_think_filtered_stream_text(
+                        _think_carry,
+                        "",
+                        in_think=_inside_think_block,
+                        end_of_stream=True,
+                    )
+                    if _tail_saw_think and not _trace_thinking_sent and not _tool_trace_started:
+                        async for _evt in _emit_default_thinking_trace():
+                            yield _evt
+                    for _tail in _tail_parts:
+                        if not _tail:
+                            continue
+                        _stream_chunks.append(_tail)
+                        yield {"event": "stream", "data": json.dumps({"token": _tail}, ensure_ascii=False)}
+                    async for _evt in _emit_thinking_trace(force=True):
+                        yield _evt
                     response = "".join(_stream_chunks)
-                    S.debug_write("tool_call_stream_done", {"chunks": len(_stream_chunks), "len": len(response), "tool_used": _tool_used})
+                    S.debug_write("tool_call_stream_done", {
+                        "chunks": len(_stream_chunks),
+                        "len": len(response),
+                        "tool_used": _tool_used,
+                        "dropped_prefix_len": len(_dropped_stream_prefix),
+                    })
                 except Exception as _tce:
                     S.debug_write("tool_call_error", {"error": str(_tce)})
                     if not _stream_chunks:
@@ -1157,9 +1778,14 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                 # 跳到最终回复处理（不走下面的正常路径）
                 # 清理 think 标签 + markdown
                 try:
-                    response = _re.sub(r'<think>.*?</think>', '', response, flags=_re.S | _re.I).strip()
+                    from core.reply_formatter import _clean_visible_reply_text
+
+                    response = _clean_visible_reply_text(response)
                 except Exception:
-                    pass
+                    try:
+                        response = _re.sub(r'<think>.*?</think>', '', response, flags=_re.S | _re.I).strip()
+                    except Exception:
+                        pass
                 response = _strip_markdown(response)
                 response = _ensure_tool_call_failure_reply(
                     response,
@@ -1189,7 +1815,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
                     pass
                 S.debug_write("pre_reply_yield", {"response_len": len(response), "response_preview": response[:100]})
                 await asyncio.sleep(0.05)
-                yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+                yield {"event": "reply", "data": json.dumps(_build_reply_payload(response), ensure_ascii=False)}
 
                 _comp.activity = "idle"
                 _comp.reply_id = datetime.now().isoformat()
@@ -1286,9 +1912,14 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
         # 最终回复（清理 think 标签 + 剥掉 markdown 格式符号）
         try:
-            response = _re.sub(r'<think>.*?</think>', '', response, flags=_re.S | _re.I).strip()
+            from core.reply_formatter import _clean_visible_reply_text
+
+            response = _clean_visible_reply_text(response)
         except Exception:
-            pass
+            try:
+                response = _re.sub(r'<think>.*?</think>', '', response, flags=_re.S | _re.I).strip()
+            except Exception:
+                pass
         response = _strip_markdown(response)
         try:
             from core.reply_formatter import l1_hygiene_clean
@@ -1299,7 +1930,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             pass
         S.debug_write("pre_reply_yield", {"response_len": len(response), "response_preview": response[:100]})
         await asyncio.sleep(0.05)
-        yield {"event": "reply", "data": json.dumps({"reply": response}, ensure_ascii=False)}
+        yield {"event": "reply", "data": json.dumps(_build_reply_payload(response), ensure_ascii=False)}
         S.debug_write("post_reply_yield", {"ok": True})
 
         _comp.activity = "idle"
@@ -1396,7 +2027,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         S.debug_write("event_stream_fatal", {"error": str(_fatal), "type": type(_fatal).__name__})
         import traceback
         S.debug_write("event_stream_traceback", {"tb": traceback.format_exc()})
-        yield {"event": "reply", "data": json.dumps({"reply": f"\u5185\u90e8\u9519\u8bef\uff1a{_fatal}"}, ensure_ascii=False)}
+        yield {"event": "reply", "data": json.dumps(_build_reply_payload(f"\u5185\u90e8\u9519\u8bef\uff1a{_fatal}"), ensure_ascii=False)}
       except BaseException as _base:
         S.debug_write("event_stream_cancelled", {"error": str(_base), "type": type(_base).__name__})
         raise

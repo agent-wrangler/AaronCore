@@ -146,6 +146,76 @@ class SkillFallbackTests(unittest.TestCase):
         self.assertEqual(run_event.get("verification_detail"), "Explorer window matched target path")
 
 
+class StreamThinkFilterTests(unittest.TestCase):
+    def test_consume_think_filtered_stream_text_suppresses_mid_reply_think_blocks(self):
+        chunks = [
+            "Draft answer. <th",
+            "ink>The user is asking again.",
+            "</thi",
+            "nk>Final answer.",
+        ]
+
+        visible_parts = []
+        carry = ""
+        in_think = False
+
+        for chunk in chunks:
+            emitted, carry, in_think, _saw_think = chat_module._consume_think_filtered_stream_text(
+                carry,
+                chunk,
+                in_think=in_think,
+            )
+            visible_parts.extend(emitted)
+
+        emitted, carry, in_think, _saw_think = chat_module._consume_think_filtered_stream_text(
+            carry,
+            "",
+            in_think=in_think,
+            end_of_stream=True,
+        )
+        visible_parts.extend(emitted)
+
+        self.assertEqual("".join(visible_parts), "Draft answer. Final answer.")
+        self.assertEqual(carry, "")
+        self.assertFalse(in_think)
+
+    def test_reset_stream_visible_state_discards_buffered_tail_before_retry(self):
+        stream_chunks = []
+        carry = ""
+        in_think = False
+
+        emitted, carry, in_think, _saw_think = chat_module._consume_think_filtered_stream_text(
+            carry,
+            "I will update the file directly now.",
+            in_think=in_think,
+        )
+        stream_chunks.extend(emitted)
+
+        dropped_text, carry, in_think = chat_module._reset_stream_visible_state(stream_chunks, carry)
+
+        self.assertEqual(dropped_text, "I will update the file directly now.")
+        self.assertEqual(stream_chunks, [])
+        self.assertEqual(carry, "")
+        self.assertFalse(in_think)
+
+        visible_parts = []
+        emitted, carry, in_think, _saw_think = chat_module._consume_think_filtered_stream_text(
+            carry,
+            "File updated.",
+            in_think=in_think,
+        )
+        visible_parts.extend(emitted)
+        emitted, carry, in_think, _saw_think = chat_module._consume_think_filtered_stream_text(
+            carry,
+            "",
+            in_think=in_think,
+            end_of_stream=True,
+        )
+        visible_parts.extend(emitted)
+
+        self.assertEqual("".join(visible_parts), "File updated.")
+
+
 class DialogueContextTests(unittest.TestCase):
     def test_build_dialogue_context_returns_structured_hints(self):
         history = [
@@ -248,6 +318,7 @@ class RunEventMappingTests(unittest.TestCase):
                 "| 方案 | 技术栈 | 优点 |\n|------|--------|------|\n| A | HTML + LocalStorage | 零部署 |"
             )
         )
+        self.assertFalse(reply_formatter_module._looks_like_tool_preamble("好的，有需要随时叫我哦～"))
         self.assertTrue(
             reply_formatter_module._looks_like_trailing_tool_handoff(
                 "主人，你说到点子上了！这确实是个很关键的问题。\n\n"
@@ -255,15 +326,6 @@ class RunEventMappingTests(unittest.TestCase):
                 "- 日常聊天还能接住\n"
                 "- 一到任务就容易断片\n\n"
                 "好消息是我现在有完整的记忆系统了。\n\n"
-                "让我先回忆一下我们最近的开发任务："
-            )
-        )
-        self.assertTrue(
-            reply_formatter_module._looks_like_incomplete_tool_handoff(
-                "主人，你说到点子上了！这确实是个很关键的问题。\n\n"
-                "我理解你的感受：\n"
-                "- 日常聊天还能接住\n"
-                "- 一到任务就容易断片\n\n"
                 "让我先回忆一下我们最近的开发任务："
             )
         )
@@ -447,6 +509,72 @@ class RunEventMappingTests(unittest.TestCase):
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
         self.assertEqual(done.get("tool_used"), "development_flow")
+        self.assertEqual(done.get("success"), True)
+
+    def test_unified_reply_with_tools_stream_keeps_visible_intro_before_ask_user(self):
+        executed = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
+            if not has_tool_result:
+                yield "Let's play a tiny game. Pick one:"
+                yield {
+                    "_tool_calls": [
+                        {
+                            "id": "call_ask_1",
+                            "type": "function",
+                            "function": {
+                                "name": "ask_user",
+                                "arguments": json.dumps(
+                                    {"question": "Which game?", "options": ["Trivia", "Would you rather"]},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ]
+                }
+                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 3}}
+                return
+
+            yield "Nice, let's start with trivia."
+            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 6}}
+
+        def fake_tool_executor(name, args, _context):
+            executed.append((name, args))
+            return {
+                "success": True,
+                "response": "User selected: Trivia",
+            }
+
+        bundle = {
+            "user_input": "I have nothing in mind",
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
+        ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
+            reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
+
+        self.assertEqual(executed[0][0], "ask_user")
+        self.assertEqual(executed[0][1].get("question"), "Which game?")
+        self.assertEqual(executed[0][1].get("options"), ["Trivia", "Would you rather"])
+        self.assertTrue(any(isinstance(chunk, str) and "Pick one" in chunk for chunk in chunks))
+        self.assertTrue(
+            any(
+                isinstance(chunk, dict)
+                and chunk.get("_tool_call", {}).get("executing")
+                and chunk.get("_tool_call", {}).get("name") == "ask_user"
+                for chunk in chunks
+            )
+        )
+        done = chunks[-1]
+        self.assertEqual(done.get("_done"), True)
+        self.assertEqual(done.get("tool_used"), "ask_user")
         self.assertEqual(done.get("success"), True)
 
     def test_unified_reply_with_tools_stream_stops_repeating_incomplete_write_file(self):
@@ -2120,49 +2248,12 @@ class TaskPlanFsTargetBridgeTests(unittest.TestCase):
 
 
 class InitialToolHandoffRetryRegressionTests(unittest.TestCase):
-    def test_stream_retries_initial_text_only_handoff_before_marking_done(self):
+    def test_stream_does_not_retry_text_only_handoff_without_structured_tool_signal(self):
         executed = []
         call_count = {"value": 0}
-        saw_retry_guidance = {"value": False}
 
         def fake_stream(_cfg, messages, **_kwargs):
             call_count["value"] += 1
-            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
-            has_retry_guidance = any(
-                isinstance(m, dict)
-                and m.get("role") == "user"
-                and "No tool has executed yet" in str(m.get("content") or "")
-                for m in messages
-            )
-            if has_retry_guidance:
-                saw_retry_guidance["value"] = True
-
-            if has_tool_result:
-                yield "File updated."
-                yield {"_usage": {"prompt_tokens": 3, "completion_tokens": 2}}
-                return
-
-            if has_retry_guidance:
-                yield {
-                    "_tool_calls": [
-                        {
-                            "id": "call_edit_retry_1",
-                            "type": "function",
-                            "function": {
-                                "name": "write_file",
-                                "arguments": json.dumps(
-                                    {
-                                        "file_path": "C:/Users/36459/NovaNotes/templates/index.html",
-                                        "change_request": "Update the admin page copy",
-                                    }
-                                ),
-                            },
-                        }
-                    ]
-                }
-                yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 2}}
-                return
-
             yield "I will update the file directly now."
             yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 4}}
 
@@ -2193,61 +2284,19 @@ class InitialToolHandoffRetryRegressionTests(unittest.TestCase):
         ):
             chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], fake_tool_executor))
 
-        self.assertEqual(call_count["value"], 3)
-        self.assertTrue(saw_retry_guidance["value"])
-        self.assertEqual(len(executed), 1)
-        self.assertEqual(executed[0][0], "write_file")
-        self.assertEqual(executed[0][1].get("file_path"), "C:/Users/36459/NovaNotes/templates/index.html")
-        self.assertTrue(any(isinstance(chunk, dict) and chunk.get("_tool_call", {}).get("executing") for chunk in chunks))
+        self.assertEqual(call_count["value"], 1)
+        self.assertEqual(len(executed), 0)
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
-        self.assertEqual(done.get("tool_used"), "write_file")
-        self.assertEqual(done.get("success"), True)
+        self.assertIsNone(done.get("tool_used"))
+        self.assertIn("I will update the file directly now.", "".join(str(chunk) for chunk in chunks if isinstance(chunk, str)))
 
-    def test_non_stream_retries_initial_text_only_handoff_before_marking_done(self):
+    def test_non_stream_does_not_retry_text_only_handoff_without_structured_tool_signal(self):
         executed = []
         call_count = {"value": 0}
-        saw_retry_guidance = {"value": False}
 
         def fake_llm_call(_cfg, messages, tools=None, **_kwargs):
             call_count["value"] += 1
-            has_tool_result = any(isinstance(m, dict) and m.get("role") == "tool" for m in messages)
-            has_retry_guidance = any(
-                isinstance(m, dict)
-                and m.get("role") == "user"
-                and "No tool has executed yet" in str(m.get("content") or "")
-                for m in messages
-            )
-            if has_retry_guidance:
-                saw_retry_guidance["value"] = True
-
-            if has_tool_result:
-                return {
-                    "content": "File updated.",
-                    "usage": {"prompt_tokens": 3, "completion_tokens": 2},
-                }
-
-            if has_retry_guidance:
-                return {
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": "call_edit_retry_1",
-                            "type": "function",
-                            "function": {
-                                "name": "write_file",
-                                "arguments": json.dumps(
-                                    {
-                                        "file_path": "C:/Users/36459/NovaNotes/templates/index.html",
-                                        "change_request": "Update the admin page copy",
-                                    }
-                                ),
-                            },
-                        }
-                    ],
-                    "usage": {"prompt_tokens": 6, "completion_tokens": 2},
-                }
-
             return {
                 "content": "I will update the file directly now.",
                 "usage": {"prompt_tokens": 5, "completion_tokens": 4},
@@ -2278,12 +2327,10 @@ class InitialToolHandoffRetryRegressionTests(unittest.TestCase):
         ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
             result = reply_formatter_module.unified_reply_with_tools(bundle, [], fake_tool_executor)
 
-        self.assertEqual(call_count["value"], 3)
-        self.assertTrue(saw_retry_guidance["value"])
-        self.assertEqual(len(executed), 1)
-        self.assertEqual(executed[0][0], "write_file")
-        self.assertEqual(result.get("tool_used"), "write_file")
-        self.assertNotIn("I will update the file directly now.", result.get("reply", ""))
+        self.assertEqual(call_count["value"], 1)
+        self.assertEqual(len(executed), 0)
+        self.assertIsNone(result.get("tool_used"))
+        self.assertIn("I will update the file directly now.", result.get("reply", ""))
         self.assertTrue(str(result.get("reply") or "").strip())
 
 

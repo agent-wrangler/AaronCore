@@ -1,5 +1,7 @@
 var chatHistory='';
 var CHAT_HISTORY_MAX=200;
+var CHAT_HISTORY_RENDER_VERSION='chat-render-v20260412b';
+var CHAT_HISTORY_RENDER_VERSION_KEY='nova_chat_history_render_version';
 var voiceEnabled=false;
 function T(){var d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
 
@@ -19,6 +21,36 @@ function trimChatHistory(){
  }
 }
 
+function hasCompatibleChatHistorySnapshot(){
+ try{
+  return localStorage.getItem(CHAT_HISTORY_RENDER_VERSION_KEY)===CHAT_HISTORY_RENDER_VERSION;
+ }catch(e){
+  return false;
+ }
+}
+
+function clearChatHistorySnapshot(){
+ chatHistory='';
+ try{
+  localStorage.removeItem('nova_chat_history');
+  localStorage.removeItem(CHAT_HISTORY_RENDER_VERSION_KEY);
+ }catch(e){}
+}
+
+function persistChatHistorySnapshot(){
+ trimChatHistory();
+ try{
+  localStorage.setItem('nova_chat_history',chatHistory);
+  localStorage.setItem(CHAT_HISTORY_RENDER_VERSION_KEY,CHAT_HISTORY_RENDER_VERSION);
+ }catch(e){}
+}
+
+function renderAssistantBubbleHtml(text, renderedHtml){
+ var html=String(renderedHtml||'').trim();
+ if(html) return html;
+ return formatBubbleText(text);
+}
+
 function updateSendButton(){
  var inp=document.getElementById('inp');
  var btn=document.getElementById('sendBtn');
@@ -35,11 +67,12 @@ function updateSendButton(){
 }
 
 function formatBubbleText(text){
- var raw=String(text||'');
+ var raw=String(text||'').replace(/\r/g,'');
  var lines=raw.split('\n');
  var html=[];
  var inCode=false, codeLines=[];
  var inList=false, listType='';
+ var paragraphLines=[];
 
  function flushCode(){
   if(!inCode) return;
@@ -55,11 +88,25 @@ function formatBubbleText(text){
   listType='';
  }
 
+ function flushParagraph(){
+  if(!paragraphLines.length) return;
+  // Keep consecutive plain-text lines inside one visual paragraph so model-authored
+  // line breaks do not get amplified into multiple loose blocks.
+  html.push('<div class="bubble-p">'+paragraphLines.map(fmtInline).join('<br>')+'</div>');
+  paragraphLines=[];
+ }
+
  function fmtInline(s){
   s=escapeHtml(s);
   s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   s=s.replace(/`([^`]+)`/g,'<code class="bubble-inline-code">$1</code>');
   return s;
+ }
+
+ function listTypeForLine(trimmed){
+  if(/^[-*]\s+(.+)$/.test(trimmed)) return 'ul';
+  if(/^\d+[.)]\s+(.+)$/.test(trimmed)) return 'ol';
+  return '';
  }
 
  for(var i=0;i<lines.length;i++){
@@ -68,20 +115,35 @@ function formatBubbleText(text){
 
   if(trimmed.startsWith('```')){
    if(inCode){ flushCode(); }
-   else{ flushList(); inCode=true; codeLines=[]; }
+   else{ flushParagraph(); flushList(); inCode=true; codeLines=[]; }
    continue;
   }
   if(inCode){ codeLines.push(line); continue; }
 
-  if(!trimmed){ flushList(); html.push('<div class="bubble-spacer"></div>'); continue; }
+  // Empty lines end the current paragraph, but a single blank line between list items
+  // should keep the same visual list instead of splitting into many one-item lists.
+  if(!trimmed){
+   var nextListType='';
+   for(var ni=i+1;ni<lines.length;ni++){
+    var nextTrimmed=lines[ni].trim();
+    if(!nextTrimmed) continue;
+    nextListType=listTypeForLine(nextTrimmed);
+    break;
+   }
+   flushParagraph();
+   if(inList && nextListType===listType) continue;
+   flushList();
+   continue;
+  }
 
   var hm=trimmed.match(/^(#{1,3})\s+(.+)$/);
-  if(hm){ flushList(); html.push('<div class="bubble-h'+hm[1].length+'">'+fmtInline(hm[2])+'</div>'); continue; }
+  if(hm){ flushParagraph(); flushList(); html.push('<div class="bubble-h'+hm[1].length+'">'+fmtInline(hm[2])+'</div>'); continue; }
 
-  if(trimmed.startsWith('> ')){ flushList(); html.push('<blockquote class="bubble-quote">'+fmtInline(trimmed.slice(2))+'</blockquote>'); continue; }
+  if(trimmed.startsWith('> ')){ flushParagraph(); flushList(); html.push('<blockquote class="bubble-quote">'+fmtInline(trimmed.slice(2))+'</blockquote>'); continue; }
 
   var ulm=trimmed.match(/^[-*]\s+(.+)$/);
   if(ulm){
+   flushParagraph();
    if(!inList||listType!=='ul'){ flushList(); html.push('<ul class="bubble-ul">'); inList=true; listType='ul'; }
    html.push('<li>'+fmtInline(ulm[1])+'</li>');
    continue;
@@ -89,16 +151,18 @@ function formatBubbleText(text){
 
   var olm=trimmed.match(/^\d+[.)]\s+(.+)$/);
   if(olm){
+   flushParagraph();
    if(!inList||listType!=='ol'){ flushList(); html.push('<ol class="bubble-ol">'); inList=true; listType='ol'; }
    html.push('<li>'+fmtInline(olm[1])+'</li>');
    continue;
   }
 
   flushList();
-  html.push('<div class="bubble-p">'+fmtInline(trimmed)+'</div>');
+  paragraphLines.push(trimmed);
  }
 
  flushCode();
+ flushParagraph();
  flushList();
  return html.join('');
 }
@@ -127,4 +191,3 @@ function setInputVisible(visible){
 }
 
 // memoryGrowthProfile / formatGrowthNumber → 已移至 memory.js
-

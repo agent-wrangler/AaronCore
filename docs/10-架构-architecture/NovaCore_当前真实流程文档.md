@@ -505,19 +505,19 @@ executor 统一执行
 
 ### 2. 文件系统协议层
 - 文件/目录/制品相关原语
-- 相关文件：`core/fs_protocol.py`、`open_target.py`、`save_export.py`、`folder_explore.py`
+- 相关文件：`core/fs_protocol.py`、`tools/agent/open_target.py`、`tools/agent/save_export.py`、`tools/agent/folder_explore.py`
 
 ### 3. 应用生命周期协议层
 - 应用启动/关闭/聚焦/校验
-- 相关文件：`core/skills/app_target.py`
+- 相关文件：`tools/agent/app_target.py`
 
 ### 4. 窗口管理协议层
 - 最大化/最小化/还原/移动/缩放/焦点
-- 相关文件：`core/skills/ui_interaction.py`
+- 相关文件：`tools/agent/ui_interaction.py`
 
 ### 5. UI 交互协议层
 - 点击/输入/快捷键/拖拽/悬停
-- 相关文件：`core/skills/ui_interaction.py`
+- 相关文件：`tools/agent/ui_interaction.py`
 
 ### 6. 执行编排层
 - 执行、校验、drift、repair
@@ -733,9 +733,9 @@ executor 统一执行
 11. `core/fs_protocol.py`
 12. `core/target_protocol.py`
 13. `core/executor.py`
-14. `core/skills/open_target.py`
-15. `core/skills/app_target.py`
-16. `core/skills/ui_interaction.py`
+14. `tools/agent/open_target.py`
+15. `tools/agent/app_target.py`
+16. `tools/agent/ui_interaction.py`
 
 ---
 
@@ -799,8 +799,8 @@ executor 统一执行
 
 - `core/fs_protocol.py`
 - `core/executor.py`
-- `core/skills/open_target.py`
-- `core/skills/app_target.py`
+- `tools/agent/open_target.py`
+- `tools/agent/app_target.py`
 
 现在协议层开始统一返回这类结构：
 

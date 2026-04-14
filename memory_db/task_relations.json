@@ -960,5 +960,145 @@
       "index": 4,
       "plan_item_id": "4"
     }
+  },
+  {
+    "id": "rel_20260402_090",
+    "from_id": "task_20260402_136",
+    "to_id": "task_20260402_137",
+    "type": "parent_of",
+    "created_at": "2026-04-02T12:00:53.841434",
+    "meta": {
+      "index": 1,
+      "plan_item_id": "1"
+    }
+  },
+  {
+    "id": "rel_20260402_091",
+    "from_id": "task_20260402_136",
+    "to_id": "task_20260402_138",
+    "type": "parent_of",
+    "created_at": "2026-04-02T12:00:53.873107",
+    "meta": {
+      "index": 2,
+      "plan_item_id": "2"
+    }
+  },
+  {
+    "id": "rel_20260402_092",
+    "from_id": "task_20260402_136",
+    "to_id": "task_20260402_139",
+    "type": "parent_of",
+    "created_at": "2026-04-02T12:00:53.936042",
+    "meta": {
+      "index": 3,
+      "plan_item_id": "3"
+    }
+  },
+  {
+    "id": "rel_20260402_093",
+    "from_id": "task_20260402_136",
+    "to_id": "task_20260402_140",
+    "type": "parent_of",
+    "created_at": "2026-04-02T12:00:53.980212",
+    "meta": {
+      "index": 4,
+      "plan_item_id": "4"
+    }
+  },
+  {
+    "id": "rel_20260402_094",
+    "from_id": "task_20260402_136",
+    "to_id": "task_20260402_141",
+    "type": "parent_of",
+    "created_at": "2026-04-02T12:00:54.015260",
+    "meta": {
+      "index": 5,
+      "plan_item_id": "5"
+    }
+  },
+  {
+    "id": "rel_20260402_095",
+    "from_id": "task_20260402_142",
+    "to_id": "task_20260402_143",
+    "type": "parent_of",
+    "created_at": "2026-04-02T18:58:40.446192",
+    "meta": {
+      "index": 1,
+      "plan_item_id": "1"
+    }
+  },
+  {
+    "id": "rel_20260402_096",
+    "from_id": "task_20260402_142",
+    "to_id": "task_20260402_144",
+    "type": "parent_of",
+    "created_at": "2026-04-02T18:58:40.479527",
+    "meta": {
+      "index": 2,
+      "plan_item_id": "2"
+    }
+  },
+  {
+    "id": "rel_20260402_097",
+    "from_id": "task_20260402_142",
+    "to_id": "task_20260402_145",
+    "type": "parent_of",
+    "created_at": "2026-04-02T18:58:40.530219",
+    "meta": {
+      "index": 3,
+      "plan_item_id": "3"
+    }
+  },
+  {
+    "id": "rel_20260402_098",
+    "from_id": "task_20260402_142",
+    "to_id": "task_20260402_146",
+    "type": "parent_of",
+    "created_at": "2026-04-02T18:58:40.579093",
+    "meta": {
+      "index": 4,
+      "plan_item_id": "4"
+    }
+  },
+  {
+    "id": "rel_20260402_099",
+    "from_id": "task_20260402_142",
+    "to_id": "task_20260402_147",
+    "type": "parent_of",
+    "created_at": "2026-04-02T18:58:40.630445",
+    "meta": {
+      "index": 5,
+      "plan_item_id": "5"
+    }
+  },
+  {
+    "id": "rel_20260402_100",
+    "from_id": "task_20260402_148",
+    "to_id": "task_20260402_149",
+    "type": "parent_of",
+    "created_at": "2026-04-02T19:00:42.221422",
+    "meta": {
+      "index": 1
+    }
+  },
+  {
+    "id": "rel_20260402_101",
+    "from_id": "task_20260402_148",
+    "to_id": "task_20260402_150",
+    "type": "parent_of",
+    "created_at": "2026-04-02T19:00:42.261953",
+    "meta": {
+      "index": 2
+    }
+  },
+  {
+    "id": "rel_20260402_102",
+    "from_id": "task_20260402_148",
+    "to_id": "task_20260402_151",
+    "type": "parent_of",
+    "created_at": "2026-04-02T19:00:42.313151",
+    "meta": {
+      "index": 3
+    }
   }
 ]

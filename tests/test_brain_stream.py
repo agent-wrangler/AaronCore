@@ -27,6 +27,40 @@ class _FakeJsonResponse:
 
 
 class BrainStreamTests(unittest.TestCase):
+    def test_think_does_not_load_persona_file_for_plain_chat(self):
+        captured = {}
+
+        def _fake_llm_call(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25):
+            captured["messages"] = messages
+            return {"content": "模型回复"}
+
+        with patch.object(brain_module.json, "load", side_effect=AssertionError("think should not load persona.json")):
+            with patch.object(brain_module, "llm_call", side_effect=_fake_llm_call):
+                result = brain_module.think("你叫什么")
+
+        self.assertEqual(result["reply"], "模型回复")
+        self.assertEqual(captured["messages"][0]["role"], "system")
+        self.assertIn("你是当前对话助手", captured["messages"][0]["content"])
+        self.assertIn("你叫什么", captured["messages"][1]["content"])
+
+    def test_think_stream_does_not_load_persona_file_for_plain_chat(self):
+        captured = {}
+
+        def _fake_llm_call_stream(cfg, messages, temperature=0.7, max_tokens=2000, timeout=25):
+            captured["messages"] = messages
+            yield "模"
+            yield "型"
+
+        with patch.object(brain_module.json, "load", side_effect=AssertionError("think_stream should not load persona.json")):
+            with patch.object(brain_module, "llm_call_stream", side_effect=_fake_llm_call_stream):
+                chunks = list(brain_module.think_stream("在吗"))
+
+        self.assertEqual(chunks[:2], ["模", "型"])
+        self.assertEqual(chunks[-1], {"_done": True, "usage": {}})
+        self.assertEqual(captured["messages"][0]["role"], "system")
+        self.assertIn("你是当前对话助手", captured["messages"][0]["content"])
+        self.assertIn("在吗", captured["messages"][1]["content"])
+
     def test_openai_stream_retries_when_stream_returns_no_content(self):
         cfg = {"model": "test-model", "base_url": "https://example.com/v1", "api_key": "test"}
         messages = [{"role": "user", "content": "我的意思是记录下来的文档存在本地吧"}]

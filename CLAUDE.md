@@ -69,7 +69,7 @@ Main chain: `start_nova.bat → shell/main.js (Electron) → http://localhost:80
 - 技能通过 `core/tool_adapter.py` 转成 OpenAI function calling 格式
 - `build_tools_list()` 从 `get_all_skills()` 自动构建 tools 定义
 - LLM 自己决定调不调工具、调哪个 — **不需要规则路由预判**
-- 技能 description（`core/skills/*.json`）是 LLM 判断的唯一依据，必须写清楚能力边界
+- 技能 description（`tools/agent/*.json` 和 `skills/builtin/*.json`）是 LLM 判断的唯一依据，必须写清楚能力边界
 
 ### CoD（Context-on-Demand）按需上下文
 
@@ -152,7 +152,12 @@ Chat streaming uses SSE events: `trace`(步骤状态), `stream`(文字 token), `
 
 ### Skills
 
-Skills live in `core/skills/`. Each skill module has an `execute(user_input: str) -> str` function and optional `.json` metadata. `core/skills/__init__.py` auto-discovers them.
+Runtime skills are now split by responsibility:
+
+- `tools/agent/` — native protocol tools such as file, shell, desktop, and target actions
+- `skills/builtin/` — built-in workflow/domain skills
+- `core/skills/` — compatibility package for old imports only
+- `capability_registry/__init__.py` — runtime registry that auto-discovers `tools/agent/` and `skills/builtin/`
 
 ### Memory layers (L1-L8)
 
@@ -440,9 +445,10 @@ for round in 1..N:
 - 路径自动纠错：`frontend/css/` → `static/css/`、反斜杠→正斜杠、模糊匹配文件名
 
 #### 白名单扩展
-- 原始：`["static/", "configs/", "core/skills/"]`
-- 新增：`"memory_db/"` — Nova 能读写自己的全部记忆文件（L1-L8）
-- `core/` 核心引擎代码仍不开放（改坏无法启动）
+- 早期：`["static/", "configs/", "core/skills/"]`
+- 当前：`["static/", "configs/", "tools/agent/", "skills/builtin/", "skill_runtime/", "workers/", "memory_db/"]`
+- `memory_db/` 允许 Nova 读写自己的主状态与记忆数据
+- `core/` 核心引擎代码仍不直接开放给 self_fix
 
 #### "禁止加粗" 规则清理
 - 发现 Markdown 渲染不是 CSS/JS 问题，而是 system prompt 禁止 LLM 输出 Markdown 语法
@@ -521,7 +527,7 @@ for round in 1..N:
 
 #### self_fix 工具（对话中即时自我修复）
 - 新增 CoD 工具 `self_fix(file_path, problem)` — Nova 聊天中直接修文件
-- 白名单限制：只能改 `static/`、`configs/`、`core/skills/`
+- 白名单限制：只能改 `static/`、`configs/`、`tools/agent/`、`skills/builtin/`、`skill_runtime/`、`workers/`、`memory_db/`
 - 自动备份 `.bak`、截断保护、流式 LLM 调用
 - 工具定义写入 `configs/tools.json`（否则被覆盖 LLM 看不到）
 - 修复 `core/self_repair.py` 的 `_load_llm_config()` 不认新格式 config 的 bug

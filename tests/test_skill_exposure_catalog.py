@@ -7,6 +7,29 @@ import core.skills as skills_module
 import core.tool_adapter as tool_adapter_module
 
 
+_RUNTIME_METADATA_DIRS = (Path("tools/agent"), Path("skills/builtin"))
+
+
+def _metadata_path(skill_name: str) -> Path:
+    for base in _RUNTIME_METADATA_DIRS:
+        candidate = base / f"{skill_name}.json"
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(skill_name)
+
+
+def _iter_metadata_paths():
+    seen = set()
+    for base in _RUNTIME_METADATA_DIRS:
+        if not base.exists():
+            continue
+        for path in sorted(base.glob("*.json")):
+            if path.name.startswith(".") or path.name in seen:
+                continue
+            seen.add(path.name)
+            yield path
+
+
 def _fake_skill(exposure_scope: str, *, enabled: bool = True):
     return {
         "name": f"skill_{exposure_scope}",
@@ -38,9 +61,7 @@ class SkillExposureCatalogTests(unittest.TestCase):
             "risk_level",
             "trust_level",
         }
-        for path in sorted(Path("core/skills").glob("*.json")):
-            if path.name.startswith("."):
-                continue
+        for path in _iter_metadata_paths():
             data = json.loads(path.read_text(encoding="utf-8"))
             missing = sorted(key for key in required if not data.get(key))
             self.assertEqual(missing, [], f"{path.name} missing metadata: {missing}")
@@ -65,7 +86,7 @@ class SkillExposureCatalogTests(unittest.TestCase):
             "model_config": "hidden",
         }
         for skill_name, expected_scope in expected_hidden.items():
-            data = json.loads(Path("core/skills", f"{skill_name}.json").read_text(encoding="utf-8"))
+            data = json.loads(_metadata_path(skill_name).read_text(encoding="utf-8"))
             self.assertEqual(data.get("user_view_scope"), expected_scope, skill_name)
 
     def test_user_visible_skill_metadata_matches_real_capabilities(self):
@@ -78,7 +99,7 @@ class SkillExposureCatalogTests(unittest.TestCase):
             "weather": ("天气查询", "信息查询"),
         }
         for skill_name, (expected_name, expected_category) in expected.items():
-            data = json.loads(Path("core/skills", f"{skill_name}.json").read_text(encoding="utf-8"))
+            data = json.loads(_metadata_path(skill_name).read_text(encoding="utf-8"))
             self.assertEqual(data.get("name"), expected_name, skill_name)
             self.assertEqual(data.get("category"), expected_category, skill_name)
 

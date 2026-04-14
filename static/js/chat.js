@@ -11,9 +11,151 @@ var _taskProgressDoneSvg = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://w
 function _processMarkerText(label, status){
  var text=String(label||'');
  if(status==='error') return '!';
- if(/思考|thinking/i.test(text)) return '';
+ if(/思考|thinking/i.test(text)) return '·';
  if(/计划|plan/i.test(text)) return '⌁';
- return status==='running' ? '›' : '·';
+ return '·';
+}
+
+function _setProcessMarker(markerEl, label, status){
+ if(!markerEl) return;
+ var state=String(status||'done');
+ markerEl.classList.toggle('is-running', state==='running');
+ if(state==='running'){
+  markerEl.setAttribute('aria-hidden','true');
+  markerEl.innerHTML='<span></span><span></span><span></span>';
+  return;
+ }
+ markerEl.removeAttribute('aria-hidden');
+ markerEl.textContent=_processMarkerText(label, state);
+}
+
+function _formatProcessDisplayLabel(label){
+ var text=String(label||'').trim();
+ if(!text) return text;
+ return /^[a-z]/.test(text) ? (text.charAt(0).toUpperCase()+text.slice(1)) : text;
+}
+
+function _escapeRegExp(text){
+ return String(text||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function _stripProcessDetailPrefix(detail, label){
+ var text=String(detail||'').trim();
+ var head=String(label||'').trim();
+ if(!text || !head) return text;
+ var pattern=new RegExp('^'+_escapeRegExp(head)+'(?:\\s*[·•:：-]\\s*)?', 'i');
+ return text.replace(pattern, '').trim();
+}
+
+function _cleanProcessDetail(detail, rawLabel, displayLabel, status){
+ var text=String(detail||'').replace(/\s+/g,' ').trim();
+ if(!text) return '';
+ text=_stripProcessDetailPrefix(text, displayLabel);
+ text=_stripProcessDetailPrefix(text, rawLabel);
+ text=text.replace(/(?:\s*[·•]\s*)?(?:执行中|输出中|处理中)\s*(\d+s)\s*$/i, ' $1').trim();
+ text=text.replace(/\s*[·•:：-]+\s*$/g,'').trim();
+ if(!text) return '';
+ var lower=text.toLowerCase();
+ var rawLower=String(rawLabel||'').trim().toLowerCase();
+ var displayLower=String(displayLabel||'').trim().toLowerCase();
+ if((rawLower && lower===rawLower) || (displayLower && lower===displayLower)) return '';
+ return text;
+}
+
+function _splitProcessWaitSuffix(detail){
+ var text=String(detail||'').trim();
+ if(!text) return {text:'', wait:''};
+ var match=text.match(/^(.*?)(?:\s*[\u00b7\u2022]\s*)?(\d+s)\s*$/i);
+ if(!match) return {text:text, wait:''};
+ return {
+  text:String(match[1]||'').replace(/\s*[\u00b7\u2022:：-]+\s*$/g,'').trim(),
+  wait:String(match[2]||'').trim()
+ };
+}
+
+function _mergeProcessDetailWithPrevious(detail, previous){
+ var current=_splitProcessWaitSuffix(detail);
+ if(current.text || !current.wait) return String(detail||'').trim();
+ var prior=_splitProcessWaitSuffix(previous);
+ if(!prior.text) return String(detail||'').trim();
+ return prior.text+' '+current.wait;
+}
+
+function _preserveProcessWaitSuffix(detail, previous){
+ var current=_splitProcessWaitSuffix(detail);
+ if(current.wait) return String(detail||'').trim();
+ var prior=_splitProcessWaitSuffix(previous);
+ if(!current.text || !prior.wait || !prior.text) return String(detail||'').trim();
+ var currentText=String(current.text||'').replace(/\s+/g,' ').trim();
+ var priorText=String(prior.text||'').replace(/\s+/g,' ').trim();
+ if(!currentText || !priorText) return String(detail||'').trim();
+ if(currentText===priorText || currentText.indexOf(priorText)===0 || priorText.indexOf(currentText)===0){
+  return currentText+' '+prior.wait;
+ }
+ return String(detail||'').trim();
+}
+
+function _detailHasWaitSuffix(detail){
+ return !!_splitProcessWaitSuffix(detail).wait;
+}
+
+function _appendElapsedSuffix(detail, seconds){
+ var text=String(detail||'').trim();
+ var waited=Math.max(1, Number(seconds)||0);
+ if(!waited) return text;
+ if(_detailHasWaitSuffix(text)) return text;
+ return text ? (text+' '+waited+'s') : (waited+'s');
+}
+
+function _renderProcessDetailMarkup(detail){
+ return escapeHtml(String(detail||'').trim());
+}
+
+function _setProcessDetailContent(detailEl, detail){
+ if(!detailEl) return;
+ var text=String(detail||'').trim();
+ detailEl.dataset.rawDetail=text;
+ detailEl.textContent=text;
+}
+
+function _processLabelAlias(rawLabel){
+ var text=String(rawLabel||'').trim();
+ if(!text) return null;
+ var aliases={
+  '记忆加载':'memory_load',
+  '记忆加载完成':'memory_load',
+  '人格切换':'persona_switch',
+  '切换模型':'model_switch',
+  '整理结果':'organize_results',
+  '组织回复':'compose_reply',
+  '回忆对话':'recall_memory',
+  '等待':'waiting'
+ };
+ return aliases[text]||null;
+}
+
+function _toolLabelFallback(rawLabel){
+ var text=String(rawLabel||'').trim();
+ if(!text) return '';
+ if(text==='联网搜索' || text==='搜索完成' || text==='搜索失败') return 'web_search';
+ if(text==='检索记忆' || text==='检索失败' || text==='记忆就绪') return 'recall_memory';
+ if(text==='调用技能' || text==='技能完成' || text==='技能失败') return 'tool';
+ return '';
+}
+
+function _simplifyToolDetail(detail, toolKey, status){
+ var text=String(detail||'').trim();
+ var key=String(toolKey||'').trim();
+ var state=String(status||'').trim();
+ if(!text) return '';
+ if(key){
+  text=text.replace(new RegExp('^正在执行\\s+'+_escapeRegExp(key)+'(?:\\.\\.\\.)?$', 'i'), '').trim();
+  text=text.replace(new RegExp('^'+_escapeRegExp(key)+'\\s*$', 'i'), '').trim();
+ }
+ if(state==='running'){
+  text=text.replace(/^正在执行(?:中)?(?:\.\.\.)?$/i, '').trim();
+ }
+ return text;
 }
 
 (function(){
@@ -131,7 +273,7 @@ function _stopGeneration(){
  }
 }
 
-function addMessage(sender,text,type,imageUrl){
+function addMessage(sender,text,type,imageUrl,renderedHtml){
  var chat=document.getElementById('chat');
  var msgDiv=document.createElement('div');
  msgDiv.className='msg '+(type==='user'?'user':'assistant');
@@ -170,7 +312,7 @@ function addMessage(sender,text,type,imageUrl){
   if(type==='user'){
    textNode.textContent=text;
   }else{
-   textNode.innerHTML=formatBubbleText(text);
+   textNode.innerHTML=renderAssistantBubbleHtml(text, renderedHtml);
   }
   bubble.appendChild(textNode);
  }
@@ -205,15 +347,15 @@ function addMessage(sender,text,type,imageUrl){
   msgDiv.appendChild(msgContent);
   
   chat.appendChild(msgDiv);
- chat.scrollTop=chat.scrollHeight;
+ if(type==='user' && typeof window._setChatAutoStick==='function'){
+  window._setChatAutoStick(true);
+ }
+ _stickChatToBottom(type==='user' ? {force:true, lock_ms:240} : {});
  
  // 保存到历史
  if(type==='user'||type==='assistant'){
   chatHistory+=msgDiv.outerHTML;
-  trimChatHistory();
-  try{
-   localStorage.setItem('nova_chat_history',chatHistory);
-  }catch(e){}
+  persistChatHistorySnapshot();
  }
 }
 
@@ -221,10 +363,17 @@ function _snapshotChatHistory(){
  var chat=document.getElementById('chat');
  if(!chat) return;
  chatHistory=chat.innerHTML;
- trimChatHistory();
- try{
-  localStorage.setItem('nova_chat_history',chatHistory);
- }catch(e){}
+ persistChatHistorySnapshot();
+}
+
+function _stickChatToBottom(options){
+ if(typeof window._maybePinChatToBottom==='function'){
+  return window._maybePinChatToBottom(options||{});
+ }
+ var chat=document.getElementById('chat');
+ if(!chat) return false;
+ chat.scrollTop=chat.scrollHeight;
+ return true;
 }
 
 function _createNovaAvatar(){
@@ -263,7 +412,7 @@ function buildPendingAssistantMessage(){
  status.setAttribute('aria-expanded','false');
  status.innerHTML=''
   +'<span class="step-tracker-status-main">'
-  +'<span class="step-tracker-spinner running" aria-hidden="true"></span>'
+  +'<span class="step-tracker-spinner thinking running" aria-hidden="true"></span>'
   +'<span class="step-tracker-title">Thinking</span>'
   +'</span>'
   +'<span class="step-tracker-summary"></span>'
@@ -273,7 +422,7 @@ function buildPendingAssistantMessage(){
  var contentArea=document.createElement('div');
  contentArea.className='msg-content';
  contentArea.style.display='none';
-
+ 
  wrap.appendChild(status);
  wrap.appendChild(planStrip);
  wrap.appendChild(tracker);
@@ -332,7 +481,7 @@ function _detachTraceMessageForPendingState(pendingState){
  pendingState.traceDetached=true;
 }
 
-function finalizePendingAssistantMessage(pendingState, replyText){
+function finalizePendingAssistantMessage(pendingState, replyText, renderedHtml){
  if(!pendingState || !pendingState.root) return;
  if(pendingState.placeholderTimer){
   clearTimeout(pendingState.placeholderTimer);
@@ -382,7 +531,7 @@ function finalizePendingAssistantMessage(pendingState, replyText){
  contentArea.innerHTML='';
  var bubble=document.createElement('div');
  bubble.className='bubble';
- bubble.innerHTML=formatBubbleText(replyText);
+ bubble.innerHTML=renderAssistantBubbleHtml(replyText, renderedHtml);
  var meta=document.createElement('div');
  meta.className='msg-meta';
  var nameSpan=document.createElement('span');
@@ -438,7 +587,7 @@ function _syncProcessDetailDisplay(stepObj){
   stepObj.line.classList.toggle('expandable', expandable);
   stepObj.line.classList.toggle('expanded', expandable && !!stepObj.expanded);
  }
- stepObj.detailEl.textContent=(expandable && !stepObj.expanded) ? summary : full;
+ _setProcessDetailContent(stepObj.detailEl, (expandable && !stepObj.expanded) ? summary : full);
 }
 
 function showRepairBar(repair){
@@ -495,10 +644,10 @@ function createProcessMessage(card){
   line.className='process-line '+(status==='error'?'error':(status==='running'?'running':'done'));
   var marker=document.createElement('span');
   marker.className='process-marker';
-  marker.textContent=_processMarkerText(card&&card.label, status);
+  _setProcessMarker(marker, card&&card.label, status);
  var label=document.createElement('span');
  label.className='process-label';
- label.textContent=String((card&&card.label)||'')||t('chat.process');
+  label.textContent=_formatProcessDisplayLabel(String((card&&card.label)||''))||t('chat.process');
  var detail=document.createElement('span');
  detail.className='process-detail';
  detail.textContent=String((card&&card.detail)||'');
@@ -521,6 +670,15 @@ function createProcessMessage(card){
   summaryDetail:String((card&&card.detail)||'').trim(),
   fullDetail:String((card&&((card.full_detail&&String(card.full_detail).trim())||card.detail))||'').trim(),
   phase:phase,
+  stepKey:String((card&&card.step_key)||'').trim(),
+  reasonKind:String((card&&card.reason_kind)||'').trim(),
+  goal:String((card&&card.goal)||'').trim(),
+  decisionNote:String((card&&card.decision_note)||'').trim(),
+  handoffNote:String((card&&card.handoff_note)||'').trim(),
+  expectedOutput:String((card&&card.expected_output)||'').trim(),
+  nextUserNeed:String((card&&card.next_user_need)||'').trim(),
+  toolName:String((card&&card.tool_name)||'').trim(),
+  startedAt:Date.now(),
   expanded:false,
   expandable:false
  };
@@ -577,6 +735,7 @@ async function send(){
  var chat=document.getElementById('chat');
 
  var replyText='';
+ var replyHtml='';
  var replyImage='';
  var _thinkingContent='';
  var _showRawThinkingPanel=false;
@@ -585,6 +744,7 @@ async function send(){
   var _streamBubble=null; // 流式输出的气泡
   var _streamText=''; // 流式累积的文本
   var _streamStarted=false;
+  var _suppressTypingCursor=false;
 
  function _clearPendingPlaceholderTimer(){
   if(pendingState.placeholderTimer){
@@ -609,7 +769,7 @@ async function send(){
  pendingState.placeholderTimer=setTimeout(function(){
   if(pendingState.replyVisible || pendingState.steps.length>0 || replyText) return;
   chat.appendChild(pendingState.root);
-  chat.scrollTop=chat.scrollHeight;
+  _stickChatToBottom();
  },260);
 
  var _streamParts=[];
@@ -627,8 +787,12 @@ function _ensureTraceDetached(){
   _placePendingRootAtEnd();
 }
 
- function _looksLikeThinkingLabel(label){
+  function _looksLikeThinkingLabel(label){
   return /thinking|\u6a21\u578b\u601d\u8003/i.test(String(label||''));
+ }
+
+ function _looksLikeMemoryLoadLabel(label){
+  return /^(?:\u8bb0\u5fc6\u52a0\u8f7d(?:\u5b8c\u6210)?|memory_load|load_memory)$/i.test(String(label||'').trim());
  }
 
  function _extractToolKey(detail){
@@ -656,6 +820,85 @@ function _ensureTraceDetached(){
   return text.length>limit ? (text.slice(0, limit-1)+'…') : text;
  }
 
+ function _stepMetaText(value){
+  return String(value||'').replace(/\s+/g,' ').trim();
+ }
+
+ function _stepMetaContains(base, sample){
+  var left=_stepMetaText(base).toLowerCase();
+  var right=_stepMetaText(sample).toLowerCase();
+  if(!left || !right) return false;
+  return left.indexOf(right)!==-1 || right.indexOf(left)!==-1;
+ }
+
+ function _appendUniqueStepMeta(parts, text, prefix){
+  var value=_stepMetaText(text);
+  if(!value) return;
+  if(prefix && value.indexOf(prefix)!==0) value=prefix+value;
+  for(var i=0;i<parts.length;i++){
+   if(_stepMetaContains(parts[i], value)) return;
+  }
+  parts.push(value);
+ }
+
+ function _joinStepMeta(parts){
+  return parts.join(' ').trim();
+ }
+
+ function _buildThinkingProcessDetail(card, fallbackSummary, fallbackFull){
+  var summaryParts=[];
+  var fullParts=[];
+  var lead=_stepMetaText((card&&card.decision_note)||'') || _stepMetaText((card&&card.handoff_note)||'') || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull);
+  var goal=_stepMetaText(card&&card.goal);
+  var expected=_stepMetaText(card&&card.expected_output);
+  var nextNeed=_stepMetaText(card&&card.next_user_need);
+  _appendUniqueStepMeta(summaryParts, lead, '');
+  _appendUniqueStepMeta(fullParts, lead, '');
+  if(goal){
+   _appendUniqueStepMeta(summaryParts, goal, '先确认：');
+   _appendUniqueStepMeta(fullParts, goal, '先确认：');
+  }
+  if(expected){
+   _appendUniqueStepMeta(fullParts, expected, '预期产出：');
+  }
+  if(nextNeed){
+   _appendUniqueStepMeta(fullParts, nextNeed, '下一步可能会关心：');
+  }
+  return {
+   summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
+   full:_joinStepMeta(fullParts) || _stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
+  };
+ }
+
+ function _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state){
+  var summaryParts=[];
+  var fullParts=[];
+  var lead=_stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull) || _stepMetaText(card&&card.goal) || _stepMetaText(card&&card.handoff_note) || _stepMetaText(card&&card.expected_output);
+  var goal=_stepMetaText(card&&card.goal);
+  var expected=_stepMetaText(card&&card.expected_output);
+  _appendUniqueStepMeta(summaryParts, lead, '');
+  _appendUniqueStepMeta(fullParts, lead, '');
+  if(String(state||'')==='running' && goal){
+   _appendUniqueStepMeta(fullParts, goal, '目标：');
+  }
+  if(String(state||'')==='running' && expected){
+   _appendUniqueStepMeta(fullParts, expected, '预期：');
+  }
+  return {
+   summary:_joinStepMeta(summaryParts) || _stepMetaText(fallbackSummary) || _stepMetaText(fallbackFull),
+   full:_joinStepMeta(fullParts) || _stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
+  };
+ }
+
+ function _buildStructuredProcessDetail(card, phase, state, fallbackSummary, fallbackFull){
+  if(phase==='thinking') return _buildThinkingProcessDetail(card, fallbackSummary, fallbackFull);
+  if(phase==='tool') return _buildToolProcessDetail(card, fallbackSummary, fallbackFull, state);
+  return {
+   summary:_stepMetaText(fallbackSummary),
+   full:_stepMetaText(fallbackFull) || _stepMetaText(fallbackSummary)
+  };
+ }
+
  function _normalizeStepCard(card){
   var rawLabel=String((card&&card.label)||'').trim();
   var rawStatus=String((card&&card.status)||'running');
@@ -667,33 +910,41 @@ function _ensureTraceDetached(){
   var phase='info';
   var displayLabel=rawLabel||t('chat.process');
   var toolKey='';
+  var toolFallback=_toolLabelFallback(rawLabel);
   if(_looksLikeThinkingLabel(rawLabel)){
    phase='thinking';
    displayLabel='Thinking';
-  }else if(rawLabel==='\u8c03\u7528\u6280\u80fd'){
-   phase='tool';
-   toolKey=_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail);
-   displayLabel=toolKey||'\u5de5\u5177';
-   fullDetail=_extractToolDetail(rawFullDetail)||rawFullDetail||rawSummaryDetail;
-   summaryDetail=fullDetail||'\u6267\u884c\u4e2d';
-  }else if(rawLabel==='\u6280\u80fd\u5b8c\u6210'){
-   phase='tool';
-   toolKey=_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail);
-   displayLabel=toolKey||'\u5de5\u5177';
-   fullDetail=_extractToolDetail(rawFullDetail)||rawFullDetail||rawSummaryDetail;
-   summaryDetail=fullDetail ? ('\u5df2\u5b8c\u6210 \u00b7 '+fullDetail) : '\u5df2\u5b8c\u6210';
-   fullDetail=summaryDetail;
-  }else if(rawLabel==='\u6280\u80fd\u5931\u8d25'){
-   phase='tool';
-   toolKey=_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail);
-   displayLabel=toolKey||'\u5de5\u5177';
-   fullDetail=_extractToolDetail(rawFullDetail)||rawFullDetail||rawSummaryDetail;
-   summaryDetail=fullDetail ? ('\u5931\u8d25 \u00b7 '+fullDetail) : '\u5931\u8d25';
-   fullDetail=summaryDetail;
+  }else if(_looksLikeMemoryLoadLabel(rawLabel)){
+   displayLabel='memory_load';
+  }else if(toolFallback){
+    phase='tool';
+    toolKey=_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)||toolFallback;
+    displayLabel=toolKey||toolFallback||'tool';
+    fullDetail=_extractToolDetail(rawFullDetail)||rawFullDetail||rawSummaryDetail;
+    summaryDetail=_extractToolDetail(rawSummaryDetail)||fullDetail||rawSummaryDetail;
+    fullDetail=_simplifyToolDetail(fullDetail, toolKey, state);
+    summaryDetail=_simplifyToolDetail(summaryDetail, toolKey, state);
   }else if(/\u7b49\u5f85|waiting/i.test(rawLabel)){
-   phase='waiting';
-   displayLabel='\u7b49\u5f85';
+    phase='waiting';
+    displayLabel='waiting';
+  }else{
+    var alias=_processLabelAlias(rawLabel);
+    if(alias) displayLabel=alias;
   }
+  var stepKey=String((card&&card.step_key)||'').trim();
+  var reasonKind=String((card&&card.reason_kind)||'').trim();
+  var goal=String((card&&card.goal)||'').trim();
+  var decisionNote=String((card&&card.decision_note)||'').trim();
+  var handoffNote=String((card&&card.handoff_note)||'').trim();
+  var expectedOutput=String((card&&card.expected_output)||'').trim();
+  var nextUserNeed=String((card&&card.next_user_need)||'').trim();
+  var toolName=String((card&&card.tool_name)||'').trim();
+  var structuredDetail=_buildStructuredProcessDetail(card, phase, state, summaryDetail, fullDetail);
+  summaryDetail=structuredDetail.summary;
+  fullDetail=structuredDetail.full;
+  displayLabel=_formatProcessDisplayLabel(displayLabel);
+  fullDetail=_cleanProcessDetail(fullDetail, rawLabel, displayLabel, state);
+  summaryDetail=_cleanProcessDetail(summaryDetail, rawLabel, displayLabel, state);
   if(!fullDetail) fullDetail=summaryDetail;
   if(!summaryDetail) summaryDetail=fullDetail;
   summaryDetail=_collapseProcessDetail(summaryDetail||fullDetail, phase, state);
@@ -704,7 +955,15 @@ function _ensureTraceDetached(){
    displayLabel:displayLabel,
    summaryDetail:summaryDetail,
    fullDetail:fullDetail,
-   toolKey:phase==='tool' ? (toolKey||_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)) : ''
+   toolKey:phase==='tool' ? (toolName||toolKey||_extractToolKey(rawSummaryDetail)||_extractToolKey(rawFullDetail)) : '',
+   stepKey:stepKey,
+   reasonKind:reasonKind,
+   goal:goal,
+   decisionNote:decisionNote,
+   handoffNote:handoffNote,
+   expectedOutput:expectedOutput,
+   nextUserNeed:nextUserNeed,
+   toolName:toolName
   };
  }
 
@@ -764,11 +1023,24 @@ function _ensureTraceDetached(){
 
  function _setStepStatus(stepObj, newStatus){
   if(!stepObj) return;
+  var previousStatus=String(stepObj.status||'');
+  if(stepObj.kind==='process'){
+   if(previousStatus!=='running' && newStatus==='running'){
+    stepObj.startedAt=Date.now();
+   }else if(previousStatus==='running' && newStatus!=='running'){
+    var elapsed=Math.max(1, Math.round((Date.now()-Number(stepObj.startedAt||Date.now()))/1000));
+    var finalFull=_appendElapsedSuffix(stepObj.fullDetail||stepObj.summaryDetail, elapsed);
+    var finalSummary=_appendElapsedSuffix(stepObj.summaryDetail||stepObj.fullDetail, elapsed);
+    stepObj.fullDetail=finalFull;
+    stepObj.summaryDetail=_collapseProcessDetail(finalSummary||finalFull, stepObj.phase, newStatus);
+    _syncProcessDetailDisplay(stepObj);
+   }
+  }
   stepObj.status=newStatus;
   if(stepObj.kind==='process'){
    stepObj.root.className='msg assistant process-msg'+(newStatus==='running'?' is-running':'')+(newStatus==='error'?' is-error':'');
    if(stepObj.line) stepObj.line.className='process-line '+(newStatus==='error'?'error':(newStatus==='running'?'running':'done'));
-   if(stepObj.markerEl) stepObj.markerEl.textContent=_processMarkerText(stepObj.label, newStatus);
+   if(stepObj.markerEl) _setProcessMarker(stepObj.markerEl, stepObj.displayLabel||stepObj.label, newStatus);
    _syncProcessPhase(stepObj);
    return;
   }
@@ -777,14 +1049,29 @@ function _ensureTraceDetached(){
  }
 
  function _applyStepDetail(stepObj, detail, fullDetail){
-  if(!stepObj || !stepObj.detailEl) return;
-  stepObj.summaryDetail=String(detail||'').trim();
-  stepObj.fullDetail=String(fullDetail||'').trim();
-  if(stepObj.kind==='process'){
-   if(stepObj.labelEl) stepObj.labelEl.textContent=stepObj.displayLabel||stepObj.label||t('chat.process');
-   _syncProcessDetailDisplay(stepObj);
-   return;
+ if(!stepObj || !stepObj.detailEl) return;
+ if(stepObj.kind==='process'){
+  var displayLabel=stepObj.displayLabel||stepObj.label||t('chat.process');
+  var previousFull=String(stepObj.fullDetail||'').trim();
+  var previousSummary=String(stepObj.summaryDetail||previousFull).trim();
+  var cleanedFull=_cleanProcessDetail(fullDetail||detail, stepObj.label, displayLabel, stepObj.status);
+  var cleanedSummary=_cleanProcessDetail(detail||fullDetail, stepObj.label, displayLabel, stepObj.status);
+  cleanedFull=_mergeProcessDetailWithPrevious(cleanedFull, previousFull||previousSummary);
+  cleanedSummary=_mergeProcessDetailWithPrevious(cleanedSummary, previousSummary||previousFull);
+  if(stepObj.status==='running'){
+   cleanedFull=_preserveProcessWaitSuffix(cleanedFull, previousFull||previousSummary);
+   cleanedSummary=_preserveProcessWaitSuffix(cleanedSummary, previousSummary||previousFull);
   }
+  if(!cleanedFull) cleanedFull=cleanedSummary;
+  if(!cleanedSummary) cleanedSummary=cleanedFull;
+  stepObj.summaryDetail=_collapseProcessDetail(cleanedSummary||cleanedFull, stepObj.phase, stepObj.status);
+  stepObj.fullDetail=cleanedFull||stepObj.summaryDetail;
+  if(stepObj.labelEl) stepObj.labelEl.textContent=stepObj.displayLabel||stepObj.label||t('chat.process');
+  _syncProcessDetailDisplay(stepObj);
+  return;
+ }
+ stepObj.summaryDetail=String(detail||'').trim();
+  stepObj.fullDetail=String(fullDetail||'').trim();
   stepObj.detailEl.textContent=stepObj.fullDetail||stepObj.summaryDetail;
   if(stepObj.status==='running'){
    pendingState.activitySummary=_buildActivitySummary({
@@ -799,9 +1086,17 @@ function _ensureTraceDetached(){
 
  function _applyStepMeta(stepObj, meta){
   if(!stepObj || !meta) return;
-  stepObj.label=meta.rawLabel;
-  stepObj.phase=meta.phase;
-  stepObj.toolKey=meta.toolKey;
+ stepObj.label=meta.rawLabel;
+ stepObj.phase=meta.phase;
+ stepObj.toolKey=meta.toolKey;
+  stepObj.stepKey=meta.stepKey;
+  stepObj.reasonKind=meta.reasonKind;
+  stepObj.goal=meta.goal;
+  stepObj.decisionNote=meta.decisionNote;
+  stepObj.handoffNote=meta.handoffNote;
+  stepObj.expectedOutput=meta.expectedOutput;
+  stepObj.nextUserNeed=meta.nextUserNeed;
+  stepObj.toolName=meta.toolName;
   stepObj.displayLabel=meta.displayLabel;
   if(stepObj.labelEl) stepObj.labelEl.textContent=meta.displayLabel||t('chat.process');
   if(stepObj.kind==='process') _syncProcessPhase(stepObj);
@@ -814,7 +1109,15 @@ function _ensureTraceDetached(){
    detail:meta.summaryDetail||meta.fullDetail,
    full_detail:meta.fullDetail||meta.summaryDetail,
    status:meta.status,
-   phase:meta.phase
+   phase:meta.phase,
+   step_key:meta.stepKey,
+   reason_kind:meta.reasonKind,
+   goal:meta.goal,
+   decision_note:meta.decisionNote,
+   handoff_note:meta.handoffNote,
+   expected_output:meta.expectedOutput,
+   next_user_need:meta.nextUserNeed,
+   tool_name:meta.toolName
   });
   step.label=meta.rawLabel;
   step.displayLabel=meta.displayLabel;
@@ -822,12 +1125,21 @@ function _ensureTraceDetached(){
   step.fullDetail=meta.fullDetail;
   step.phase=meta.phase;
   step.toolKey=meta.toolKey;
+  step.stepKey=meta.stepKey;
+  step.reasonKind=meta.reasonKind;
+  step.goal=meta.goal;
+  step.decisionNote=meta.decisionNote;
+  step.handoffNote=meta.handoffNote;
+  step.expectedOutput=meta.expectedOutput;
+  step.nextUserNeed=meta.nextUserNeed;
+  step.toolName=meta.toolName;
   chat.insertBefore(step.root, pendingState.root);
   return step;
  }
 
  function _canMergeStep(existing, meta){
   if(!existing || !meta) return false;
+  if(existing.stepKey && meta.stepKey && existing.stepKey===meta.stepKey) return true;
   if(existing.phase==='thinking' && meta.phase==='thinking') return true;
   if(existing.phase==='tool' && meta.phase==='tool' && existing.toolKey && existing.toolKey===meta.toolKey) return true;
   if(existing.label===meta.rawLabel && existing.phase===meta.phase) return true;
@@ -916,7 +1228,7 @@ function _renderPendingPlan(plan){
    steps.push(_createActivityStep(meta));
   }
 
-  chat.scrollTop=chat.scrollHeight;
+  _stickChatToBottom();
  }
 
  function _collapseSteps(){
@@ -952,10 +1264,7 @@ function _renderPendingPlan(plan){
   bubble.className='bubble';
   var lineEl=document.createElement('span');
   lineEl.className='stream-live-line';
-  var cursor=document.createElement('span');
-  cursor.className='typing-cursor';
   bubble.appendChild(lineEl);
-  bubble.appendChild(cursor);
   var meta=document.createElement('div');
   meta.className='msg-meta';
   var nameSpan=document.createElement('span');
@@ -971,24 +1280,32 @@ function _renderPendingPlan(plan){
   _streamBubble=bubble;
   _streamLineEl=lineEl;
   _streamLiveText='';
+  _streamRenderedText='';
   _streamFlushBuffer='';
   _streamStarted=true;
+  _suppressTypingCursor=false;
   _streamTokenCount=0;
   _lastRenderedBlockCount=0;
   _destroyStreamMeasureHost();
   // 思考步骤结束、回复开始 → 强制滚到底部，确保用户能看到新内容
-  chat.scrollTop=chat.scrollHeight;
+  _stickChatToBottom();
  }
 
  var _scrollRAF=0; // scroll 节流
- var _renderTimer=0; // 渐进渲染节流
- var _streamTokenCount=0; // 流式 token 计数，前 N 个无条件滚动
-  var _lastRenderedBlockCount=0; // 上次渲染的块数，用于 fade-in 新块
- var _streamLineEl=null;
- var _streamLiveText='';
- var _streamFlushBuffer='';
- var _streamMeasureHost=null;
- var _streamMeasureLine=null;
+var _renderTimer=0; // 渐进渲染节流
+var _streamTokenCount=0; // 流式 token 计数，前 N 个无条件滚动
+ var _lastRenderedBlockCount=0; // 上次渲染的块数，用于 fade-in 新块
+var _streamLineEl=null;
+var _streamLiveText='';
+var _streamRenderedText='';
+var _streamFlushBuffer='';
+var _streamMeasureHost=null;
+var _streamMeasureLine=null;
+
+ // Stream UI invariants:
+ // 1. Completed fragments must be promoted above pendingState.root so the newest text stays at the bottom.
+ // 2. Fragment promotion prefers explicit newline, then visual-line overflow as fallback.
+ // 3. Finalization may complete the trailing remainder, but must not flatten already promoted fragments back into one block.
 
  // 判断是否在底部附近（阈值 120px），避免强制跳视图打断用户回翻
  function _nearBottom(){
@@ -1064,7 +1381,10 @@ function _renderPendingPlan(plan){
  function _streamLineHtml(line){
   var text=String(line||'');
   if(!text) return '<div class="bubble-spacer"></div>';
-  return '<div class="bubble-p">'+escapeHtml(text)+'</div>';
+  var html=escapeHtml(text);
+  html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  html=html.replace(/`([^`]+)`/g,'<code class="bubble-inline-code">$1</code>');
+  return '<div class="bubble-p">'+html+'</div>';
  }
 
  function _countStreamVisualLines(text){
@@ -1103,83 +1423,235 @@ function _renderPendingPlan(plan){
   return best;
  }
 
- function _insertStreamPart(lineText){
-  var part=createReplyPartMessage(_streamLineHtml(lineText));
-  _streamParts.push(part);
-  chat.insertBefore(part.root, pendingState.root);
+ function _removeTrailingStreamParts(keepCount){
+  while(_streamParts.length>keepCount){
+   var stalePart=_streamParts.pop();
+   if(stalePart && stalePart.root && stalePart.root.parentNode){
+    stalePart.root.parentNode.removeChild(stalePart.root);
+   }
+  }
+ }
+
+ function _syncPromotedStreamParts(parts){
+  var normalized=Array.isArray(parts) ? parts : [];
+  var anchor=pendingState.root;
+  for(var i=normalized.length-1;i>=0;i--){
+   var html=_streamLineHtml(normalized[i]);
+   var part=_streamParts[i];
+   if(!part){
+    part=createReplyPartMessage(html);
+    _streamParts[i]=part;
+   }else if(part.bubble && part.bubble.innerHTML!==html){
+    part.bubble.innerHTML=html;
+   }
+   if(part.root && (part.root.parentNode!==chat || part.root.nextSibling!==anchor)){
+    chat.insertBefore(part.root, anchor);
+   }
+   anchor=part.root;
+  }
+  _removeTrailingStreamParts(normalized.length);
+ }
+
+ function _scheduleProgressiveRender(delay){
+  if(_renderTimer || !_streamBubble) return;
+  _renderTimer=setTimeout(_progressiveRender, Math.max(0, Number(delay)||0));
+ }
+
+ function _takeStreamRenderChunk(){
+  if(!_streamFlushBuffer) return '';
+  var chars=Array.from(_streamFlushBuffer);
+  if(!chars.length) return '';
+  var maxChars=chars.length>120 ? 32 : 16;
+  if(chars.length<=maxChars){
+   var fullChunk=_streamFlushBuffer;
+   _streamFlushBuffer='';
+   return fullChunk;
+  }
+  var minChars=Math.max(1, maxChars-8);
+  var cut=maxChars;
+  for(var i=maxChars;i>=minChars;i--){
+   if(/[\s,.;:!?\u3001\u3002\uFF01\uFF1F\uFF1B\uFF1A]/.test(chars[i-1])){
+    cut=i;
+    break;
+   }
+  }
+ var chunk=chars.slice(0, cut).join('');
+ _streamFlushBuffer=chars.slice(cut).join('');
+ return chunk;
+}
+
+ function _findTypingCursorHost(root){
+  if(!root) return null;
+  var blocks=root.querySelectorAll('.bubble-p,.bubble-h1,.bubble-h2,.bubble-h3,.bubble-quote,li,pre.bubble-code');
+  if(!blocks.length) return null;
+  var last=blocks[blocks.length-1];
+  if(last && last.tagName && last.tagName.toLowerCase()==='pre'){
+   var code=last.querySelector('code');
+   if(code) return code;
+  }
+  return last;
+ }
+
+ function _attachTypingCursor(){
+  return;
+ }
+
+ function _hideTypingCursor(){
+  if(!_streamBubble) return;
+  var cursor=_streamBubble.querySelector('.typing-cursor');
+  if(cursor && cursor.parentNode) cursor.parentNode.removeChild(cursor);
+ }
+
+ function _normalizeStreamCompareText(text){
+  return String(text||'').replace(/\s+/g,' ').trim();
+ }
+
+function _chooseFinalStreamText(replyText, streamedText){
+ var reply=String(replyText||'');
+ var streamed=String(streamedText||'');
+  if(!reply) return streamed;
+  if(!streamed) return reply;
+  var replyNorm=_normalizeStreamCompareText(reply);
+  var streamedNorm=_normalizeStreamCompareText(streamed);
+  if(!replyNorm) return streamed || reply;
+  if(!streamedNorm) return reply;
+  if(streamedNorm.length>replyNorm.length+8 && streamedNorm.indexOf(replyNorm)===0){
+   return streamed;
+  }
+  if(replyNorm.length>streamedNorm.length+8 && replyNorm.indexOf(streamedNorm)===0){
+   return reply;
+  }
+  if(streamedNorm.length>replyNorm.length+24){
+   return streamed;
+  }
+  return reply;
+ }
+
+ function _chooseFinalStreamHtml(finalText, replyText, renderedHtml){
+  var html=String(renderedHtml||'').trim();
+  if(!html) return '';
+  var finalNorm=_normalizeStreamCompareText(finalText);
+  var replyNorm=_normalizeStreamCompareText(replyText);
+  if(!finalNorm || !replyNorm) return '';
+  return finalNorm===replyNorm ? html : '';
  }
 
  function _renderCurrentStreamLine(){
   if(!_streamBubble) return;
-  var cursor=_streamBubble.querySelector('.typing-cursor');
-  if(!_streamLineEl){
-   _streamLineEl=document.createElement('span');
-   _streamLineEl.className='stream-live-line';
-   _streamBubble.innerHTML='';
-   _streamBubble.appendChild(_streamLineEl);
-   if(cursor) _streamBubble.appendChild(cursor);
+  _streamBubble.innerHTML=_streamLineHtml(_streamLiveText)||'<div class="bubble-spacer"></div>';
+  _attachTypingCursor();
+ }
+
+ function _splitStreamFragments(text){
+  var remaining=String(text||'').replace(/\r/g,'');
+  var parts=[];
+  while(true){
+   if(!remaining) break;
+   // Treat leading blank lines as paragraph separators only; do not promote them as empty reply parts.
+   while(remaining.charAt(0)==='\n'){
+    remaining=remaining.slice(1);
+   }
+   if(!remaining) break;
+   var newlineIndex=remaining.indexOf('\n');
+   if(newlineIndex>=0){
+    // Only explicit newlines create promoted fragments. Sentence punctuation alone stays in the same message.
+    var paragraphPart=remaining.slice(0, newlineIndex);
+    if(paragraphPart) parts.push(paragraphPart);
+    remaining=remaining.slice(newlineIndex+1);
+    continue;
+   }
+   if(_fitsSingleStreamLine(remaining)) break;
+   var chars=Array.from(remaining);
+   var splitCount=_findStreamBreakIndex(remaining);
+   if(splitCount<=0) splitCount=1;
+   if(splitCount>=chars.length) splitCount=chars.length-1;
+   parts.push(chars.slice(0, splitCount).join(''));
+   remaining=chars.slice(splitCount).join('');
   }
-  if(_streamLineEl.textContent!==_streamLiveText){
-   _streamLineEl.textContent=_streamLiveText;
-  }
-  if(!cursor){
-   cursor=document.createElement('span');
-   cursor.className='typing-cursor';
-  }
-  if(cursor.parentNode!==_streamBubble) _streamBubble.appendChild(cursor);
+  return {
+   parts:parts,
+   live:remaining
+  };
+ }
+
+ function _renderStreamSnapshot(text){
+  var snapshot=_splitStreamFragments(text);
+  _syncPromotedStreamParts(snapshot.parts);
+  _streamLiveText=snapshot.live;
+  _renderCurrentStreamLine();
+  _lastRenderedBlockCount=snapshot.parts.length+(_streamLiveText?1:0);
  }
 
  function _consumeStreamChunk(chunk){
   var incoming=String(chunk||'').replace(/\r/g,'');
   if(!incoming) return;
-  _streamLiveText+=incoming;
-  while(true){
-   var newlineIndex=_streamLiveText.indexOf('\n');
-   if(newlineIndex>=0){
-    _insertStreamPart(_streamLiveText.slice(0, newlineIndex));
-    _streamLiveText=_streamLiveText.slice(newlineIndex+1);
-    continue;
-   }
-   if(_fitsSingleStreamLine(_streamLiveText)) break;
-   var chars=Array.from(_streamLiveText);
-   var splitCount=_findStreamBreakIndex(_streamLiveText);
-   if(splitCount<=0) splitCount=1;
-   if(splitCount>=chars.length) splitCount=chars.length-1;
-   _insertStreamPart(chars.slice(0, splitCount).join(''));
-   _streamLiveText=chars.slice(splitCount).join('');
-  }
+  _streamRenderedText+=incoming;
+  _renderStreamSnapshot(_streamRenderedText);
  }
 
  function _progressiveRender(){
   _renderTimer=0;
   if(!_streamBubble) return;
-  var chunk=_streamFlushBuffer;
-  _streamFlushBuffer='';
+  var chunk=_takeStreamRenderChunk();
   if(chunk) _consumeStreamChunk(chunk);
-  _renderCurrentStreamLine();
-  _lastRenderedBlockCount=_streamParts.length+(_streamLiveText?1:0);
   _streamTokenCount++;
   if(_streamTokenCount<=5 || _nearBottom()){
    if(!_scrollRAF){
     _scrollRAF=requestAnimationFrame(function(){
-     chat.scrollTop=chat.scrollHeight;
+     _stickChatToBottom();
      _scrollRAF=0;
     });
    }
   }
+  if(_streamFlushBuffer){
+   _scheduleProgressiveRender(_streamTokenCount<=6 ? 12 : 16);
+  }
+ }
+
+function _appendStreamToken(token){
+  if(!_streamStarted) _initStreamBubble();
+  _streamText+=token;
+  _streamFlushBuffer+=token;
+  // 大 chunk 也拆成多帧显示，避免视觉上像一次性整段吐出。
+  _scheduleProgressiveRender(_streamTokenCount<3 ? 8 : 16);
  }
 
  function _appendStreamToken(token){
   if(!_streamStarted) _initStreamBubble();
   _streamText+=token;
   _streamFlushBuffer+=token;
-  // 节流渐进渲染：只增量处理底部 live 行，避免整段重排
-  if(!_renderTimer){
-   _renderTimer=setTimeout(_progressiveRender, 16);
+  // Large chunks still advance over multiple frames so the newest fragment stays anchored at the bottom.
+  _scheduleProgressiveRender(_streamTokenCount<3 ? 8 : 16);
+ }
+
+ function _resetActiveStreamRender(){
+  if(_renderTimer){
+   clearTimeout(_renderTimer);
+   _renderTimer=0;
+  }
+  if(_scrollRAF){
+   cancelAnimationFrame(_scrollRAF);
+   _scrollRAF=0;
+  }
+  _clearStreamParts();
+  _destroyStreamMeasureHost();
+  _streamBubble=null;
+  _streamLineEl=null;
+  _streamText='';
+  _streamLiveText='';
+  _streamRenderedText='';
+  _streamFlushBuffer='';
+  _streamTokenCount=0;
+  _lastRenderedBlockCount=0;
+  _streamStarted=false;
+  _suppressTypingCursor=false;
+  if(pendingState.contentArea){
+   pendingState.contentArea.innerHTML='';
+   pendingState.contentArea.style.display='none';
   }
  }
 
- function _finalizeStream(fullText){
+function _finalizeStream(fullText, renderedHtml){
   if(!_streamBubble) return;
   if(_renderTimer){
    clearTimeout(_renderTimer);
@@ -1188,22 +1660,17 @@ function _renderPendingPlan(plan){
   if(_streamFlushBuffer){
    _consumeStreamChunk(_streamFlushBuffer);
    _streamFlushBuffer='';
-   _renderCurrentStreamLine();
   }
-  var finalLineHtml='';
-  if(_streamLiveText){
-   finalLineHtml=_streamLineHtml(_streamLiveText);
-  }else if(_streamParts.length){
-   var lastPart=_streamParts.pop();
-   if(lastPart && lastPart.bubble){
-    finalLineHtml=lastPart.bubble.innerHTML;
-   }
-   if(lastPart && lastPart.root && lastPart.root.parentNode){
-    lastPart.root.parentNode.removeChild(lastPart.root);
-   }
-  }else{
-   finalLineHtml=formatBubbleText(fullText);
-  }
+  var finalText=String(fullText||'');
+  if(finalText) _streamRenderedText=finalText;
+  var finalRenderText=String(_streamRenderedText||finalText||'');
+  // Streaming may temporarily promote fragments as standalone reply-part messages.
+  // Once the reply is complete, collapse everything back into one fully formatted bubble
+  // so live messages match history re-rendering and keep list/paragraph hierarchy intact.
+  _clearStreamParts();
+  _streamLiveText='';
+  var finalLineHtml=renderAssistantBubbleHtml(finalRenderText, renderedHtml)||'<div class="bubble-spacer"></div>';
+  _streamRenderedText=finalRenderText;
   _streamBubble.innerHTML=finalLineHtml||'<div class="bubble-spacer"></div>';
   var fadingBlocks=_streamBubble.querySelectorAll('.block-fade-in');
   for(var fi=0;fi<fadingBlocks.length;fi++){fadingBlocks[fi].classList.remove('block-fade-in');}
@@ -1249,7 +1716,7 @@ function _renderPendingPlan(plan){
    }
   }
   _collapseSteps();
-  chat.scrollTop=chat.scrollHeight;
+  _stickChatToBottom();
   _destroyStreamMeasureHost();
   if(!pendingState.persisted){
    _snapshotChatHistory();
@@ -1260,8 +1727,18 @@ function _renderPendingPlan(plan){
     stepsMap[tsKey]=pendingState.steps.map(function(s){
      return {
       label:s.label||'',
-      detail:(s.detailEl&&s.detailEl.textContent)||'',
-      status:s.status||'done'
+      detail:s.summaryDetail||s.fullDetail||((s.detailEl&&s.detailEl.dataset&&s.detailEl.dataset.rawDetail)||''),
+      full_detail:s.fullDetail||s.summaryDetail||((s.detailEl&&s.detailEl.dataset&&s.detailEl.dataset.rawDetail)||''),
+      status:s.status||'done',
+      step_key:s.stepKey||'',
+      phase:s.phase||'',
+      reason_kind:s.reasonKind||'',
+      goal:s.goal||'',
+      decision_note:s.decisionNote||'',
+      handoff_note:s.handoffNote||'',
+      expected_output:s.expectedOutput||'',
+      next_user_need:s.nextUserNeed||'',
+      tool_name:s.toolName||''
      };
     });
     // 只保留最近 200 条
@@ -1274,14 +1751,14 @@ function _renderPendingPlan(plan){
   }
  }
 
- function _renderReplyViaStream(text){
+ function _renderReplyViaStream(text, renderedHtml){
   var finalText=String(text||_streamText||'').trim();
   if(!finalText) finalText=t('chat.error.retry');
   if(!_streamStarted){
    _initStreamBubble();
   }
   _streamText=finalText;
-  _finalizeStream(finalText);
+  _finalizeStream(finalText, renderedHtml);
  }
 
  try{
@@ -1334,12 +1811,15 @@ function _renderPendingPlan(plan){
          }
         }catch(e){}
        }else if(currentEvent==='plan'){
-        _renderPendingPlan(parsed);
+       _renderPendingPlan(parsed);
        }else if(currentEvent==='reply'){
         replyText=parsed.reply||t('chat.error.retry');
+        replyHtml=parsed.reply_html||'';
         if(parsed.image) replyImage=parsed.image;
         // 本轮回复完成 → 复位状态点为金色
         try{ setTimeout(function(){_setCodDot('flash');},600); }catch(e){}
+        _suppressTypingCursor=true;
+        _hideTypingCursor();
        }else if(currentEvent==='agent_step'){
         if(parsed.phase==='complete'){
          for(var si=0;si<pendingState.steps.length;si++){
@@ -1348,22 +1828,60 @@ function _renderPendingPlan(plan){
          }else if(parsed.phase==='waiting'){
           var _waitLabel=String(parsed.label||'').trim();
           var _waitDetail=String(parsed.detail||'').trim();
+          var _waitStepKey=String(parsed.step_key||'').trim();
           var _runningStep=null;
           for(var wi=pendingState.steps.length-1;wi>=0;wi--){
-           if(pendingState.steps[wi] && pendingState.steps[wi].status==='running'){
+           if(pendingState.steps[wi] && pendingState.steps[wi].status==='running' && _waitStepKey && pendingState.steps[wi].stepKey===_waitStepKey){
             _runningStep=pendingState.steps[wi];
             break;
            }
           }
+          if(!_runningStep){
+           for(var wj=pendingState.steps.length-1;wj>=0;wj--){
+            if(pendingState.steps[wj] && pendingState.steps[wj].status==='running'){
+             _runningStep=pendingState.steps[wj];
+             break;
+            }
+           }
+          }
           if(_runningStep){
-           if(_waitLabel && _runningStep.label!==_waitLabel){
-            addStep({label:_waitLabel,detail:_waitDetail||_waitLabel,status:'running',full_detail:_waitDetail||_waitLabel});
+           if(_waitLabel && _runningStep.label!==_waitLabel && (!_waitStepKey || _runningStep.stepKey!==_waitStepKey)){
+            addStep({
+             label:_waitLabel,
+             detail:_waitDetail||_waitLabel,
+             status:'running',
+             full_detail:_waitDetail||_waitLabel,
+             step_key:_waitStepKey,
+             phase:parsed.phase||'waiting',
+             reason_kind:parsed.reason_kind||'',
+             goal:parsed.goal||'',
+             decision_note:parsed.decision_note||'',
+             handoff_note:parsed.handoff_note||'',
+             expected_output:parsed.expected_output||'',
+             next_user_need:parsed.next_user_need||'',
+             tool_name:parsed.tool_name||''
+            });
            }else if(_waitDetail){
-            _applyStepDetail(_runningStep, _waitDetail, _waitDetail);
-            chat.scrollTop=chat.scrollHeight;
+           if(parsed.step_key) _runningStep.stepKey=parsed.step_key;
+           _applyStepDetail(_runningStep, _waitDetail, _waitDetail);
+            _stickChatToBottom();
            }
           }else if(_waitLabel || _waitDetail){
-           addStep({label:_waitLabel||t('chat.process'),detail:_waitDetail||_waitLabel,status:'running',full_detail:_waitDetail||_waitLabel});
+           addStep({
+            label:_waitLabel||t('chat.process'),
+            detail:_waitDetail||_waitLabel,
+            status:'running',
+            full_detail:_waitDetail||_waitLabel,
+            step_key:_waitStepKey,
+            phase:parsed.phase||'waiting',
+            reason_kind:parsed.reason_kind||'',
+            goal:parsed.goal||'',
+            decision_note:parsed.decision_note||'',
+            handoff_note:parsed.handoff_note||'',
+            expected_output:parsed.expected_output||'',
+            next_user_need:parsed.next_user_need||'',
+            tool_name:parsed.tool_name||''
+           });
           }
          }
        }else if(currentEvent==='thinking'){
@@ -1376,9 +1894,12 @@ function _renderPendingPlan(plan){
         // agent 暂停等用户选择 → 渲染选项卡片
         _renderAskUser(parsed, pendingState);
        }else if(currentEvent==='stream'){
-        _appendStreamToken(parsed.token||'');
+       _appendStreamToken(parsed.token||'');
+       }else if(currentEvent==='stream_reset'){
+        _resetActiveStreamRender();
        }else if(currentEvent==='reply'){
         replyText=parsed.reply||t('chat.error.retry');
+        replyHtml=parsed.reply_html||'';
         if(parsed.image) replyImage=parsed.image;
        }else if(currentEvent==='repair'){
         repairData=parsed;
@@ -1404,12 +1925,13 @@ function _renderPendingPlan(plan){
    }
   }
 
-  if(_streamStarted){
-   // 流式已经显示了内容，用 reply 事件的完整文本做最终格式化
-   var finalText=replyText||_streamText||t('chat.error.retry');
-   _finalizeStream(finalText);
-  }else if(replyText){
-   _renderReplyViaStream(replyText);
+if(_streamStarted){
+  // 流式已经显示了内容，用 reply 事件的完整文本做最终格式化
+  var finalText=_chooseFinalStreamText(replyText, _streamText)||t('chat.error.retry');
+  var finalHtml=_chooseFinalStreamHtml(finalText, replyText, replyHtml);
+  _finalizeStream(finalText, finalHtml);
+ }else if(replyText){
+   _renderReplyViaStream(replyText, replyHtml);
   }else{
    finalizePendingAssistantMessage(pendingState, t('chat.error.retry'));
   }
@@ -1419,10 +1941,12 @@ function _renderPendingPlan(plan){
  }catch(e){
   if(e.name==='AbortError'){
    // 用户点了停止，显示已有的部分回复或提示
-   if(_streamStarted&&_streamText){
-    _finalizeStream(_streamText);
+if(_streamStarted&&_streamText){
+    var abortText=_chooseFinalStreamText(replyText, _streamText)||_streamText;
+    var abortHtml=_chooseFinalStreamHtml(abortText, replyText, replyHtml);
+    _finalizeStream(abortText, abortHtml);
    }else if(replyText){
-    _renderReplyViaStream(replyText);
+    _renderReplyViaStream(replyText, replyHtml);
    }else{
     finalizePendingAssistantMessage(pendingState, t('chat.stopped')||'已停止');
    }
@@ -1432,7 +1956,7 @@ function _renderPendingPlan(plan){
  }
  _abortController=null;
  _exitStopMode();
- chat.scrollTop=chat.scrollHeight;
+ _stickChatToBottom();
 }
 
 // ── 当前任务板（输入框上方） ──
@@ -1668,50 +2192,131 @@ function _renderAskUser(data, pendingState){
   return;
  }
 
- // 在输入框上方插入选项卡片
+ function _setAskUserError(errorEl, text){
+  if(!errorEl) return;
+  var value=String(text||'').trim();
+  errorEl.textContent=value;
+  errorEl.style.display=value?'block':'none';
+ }
+
+ function _buildAskUserCustomAnswer(text){
+  var trimmed=String(text||'').trim();
+  if(trimmed){
+   return {
+    answer:'我不选上面的候选项，我的真实意思是：'+trimmed,
+    preview:trimmed.length>26?trimmed.slice(0,26)+'...':trimmed
+   };
+  }
+  return {
+   answer:'我不选上面的候选项，请重新理解我的意思，并换一个方向来问我或给我新的方案。',
+   preview:'拒绝这些选项，请重新理解'
+  };
+ }
+
  var card=document.createElement('div');
  card.className='ask-user-card';
  card.innerHTML='<div class="ask-user-question">'+escapeHtml(question)+'</div>';
  var optionsDiv=document.createElement('div');
  optionsDiv.className='ask-user-options';
- // LLM 给的选项
- options.forEach(function(opt){
-  var btn=document.createElement('button');
-  btn.className='ask-user-option';
-  btn.textContent=opt;
-  btn.onclick=function(){
-   var btns=optionsDiv.querySelectorAll('button');
-   for(var i=0;i<btns.length;i++){btns[i].disabled=true;btns[i].classList.remove('selected');}
-   btn.classList.add('selected');
-   // 在输入框上方挂进度条
-   _addTaskProgress(question, opt);
-   // 收起选项卡片
-   setTimeout(function(){ _dismissAskUserCard(slot, card); },400);
-   fetch('/chat/answer',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({question_id:qid,answer:opt})
-   });
-  };
-  optionsDiv.appendChild(btn);
- });
- // 系统兜底：都不满意
- var noneBtn=document.createElement('button');
- noneBtn.className='ask-user-option ask-user-none';
- noneBtn.textContent='都不满意';
- noneBtn.onclick=function(){
-  var btns=optionsDiv.querySelectorAll('button');
-  for(var i=0;i<btns.length;i++){btns[i].disabled=true;btns[i].classList.remove('selected');}
-  noneBtn.classList.add('selected');
-  _addTaskProgress(question, '都不满意，重新推荐');
-  setTimeout(function(){ _dismissAskUserCard(slot, card); },400);
+ var customTrigger=document.createElement('button');
+ customTrigger.type='button';
+ customTrigger.className='ask-user-option ask-user-none';
+ customTrigger.textContent='以上都不选，我自己补充';
+ var customPanel=document.createElement('div');
+ customPanel.className='ask-user-custom-panel';
+ customPanel.innerHTML='<div class="ask-user-custom-hint">不想选上面的项时，直接写给 Nova。留空提交也会按“拒绝这些选项，请重新理解”处理。</div>';
+ var customInput=document.createElement('textarea');
+ customInput.className='ask-user-custom-input';
+ customInput.rows=3;
+ customInput.placeholder='直接写你真正想表达的意思；如果只是想拒绝这些选项，也可以留空后提交。';
+ var customSubmit=document.createElement('button');
+ customSubmit.type='button';
+ customSubmit.className='ask-user-custom-submit';
+ customSubmit.textContent='提交我的补充';
+ var errorEl=document.createElement('div');
+ errorEl.className='ask-user-error';
+ customPanel.appendChild(customInput);
+ customPanel.appendChild(customSubmit);
+
+ function _setAskUserDisabled(disabled){
+  var btns=card.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++) btns[i].disabled=!!disabled;
+  customInput.disabled=!!disabled;
+ }
+
+ function _setCustomPanelOpen(open){
+  customPanel.style.display=open?'block':'none';
+  customTrigger.classList.toggle('selected', !!open);
+  if(open){
+   setTimeout(function(){ customInput.focus(); },0);
+  }
+ }
+
+ function _submitAskUserAnswer(answerText, progressText, selectedBtn, keepCustomOpen){
+  var choiceBtns=card.querySelectorAll('.ask-user-option');
+  if(!qid){
+   _setAskUserError(errorEl, '这轮选项已经失效了，重新让 Nova 提一次就好。');
+   return;
+  }
+  _setAskUserError(errorEl, '');
+  for(var i=0;i<choiceBtns.length;i++) choiceBtns[i].classList.remove('selected');
+  if(selectedBtn) selectedBtn.classList.add('selected');
+  _setAskUserDisabled(true);
   fetch('/chat/answer',{
    method:'POST',
    headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({question_id:qid,answer:'都不满意，请换其他方案'})
+   body:JSON.stringify({question_id:qid,answer:answerText})
+  }).then(function(resp){
+   return resp.json().catch(function(){ return {ok:false}; });
+  }).then(function(payload){
+   if(!(payload&&payload.ok)) throw new Error('ask_user_submit_failed');
+   _addTaskProgress(question, progressText);
+   setTimeout(function(){ _dismissAskUserCard(slot, card); },400);
+  }).catch(function(){
+   _setAskUserDisabled(false);
+   if(keepCustomOpen){
+    _setCustomPanelOpen(true);
+   }else if(selectedBtn){
+    selectedBtn.classList.remove('selected');
+   }
+   _setAskUserError(errorEl, '这次没有提交成功，可能这轮选项已过期了。你可以再试一次。');
   });
+ }
+
+ // LLM 给的选项
+ options.forEach(function(opt){
+  var btn=document.createElement('button');
+  btn.type='button';
+  btn.className='ask-user-option';
+  btn.textContent=opt;
+  btn.onclick=function(){
+   _setCustomPanelOpen(false);
+   _submitAskUserAnswer(opt, opt, btn, false);
+  };
+  optionsDiv.appendChild(btn);
+ });
+
+ customTrigger.onclick=function(){
+  if(customTrigger.disabled) return;
+  _setAskUserError(errorEl, '');
+  _setCustomPanelOpen(customPanel.style.display!=='block');
  };
- optionsDiv.appendChild(noneBtn);
+
+ customSubmit.onclick=function(){
+  var built=_buildAskUserCustomAnswer(customInput.value);
+  _submitAskUserAnswer(built.answer, built.preview, customTrigger, true);
+ };
+
+ customInput.addEventListener('keydown', function(event){
+  if(event.key==='Enter' && (event.ctrlKey || event.metaKey)){
+   event.preventDefault();
+   customSubmit.click();
+  }
+ });
+
+ optionsDiv.appendChild(customTrigger);
+ optionsDiv.appendChild(customPanel);
+ optionsDiv.appendChild(errorEl);
  card.appendChild(optionsDiv);
  if(slot){
   slot.innerHTML='';
@@ -1719,9 +2324,9 @@ function _renderAskUser(data, pendingState){
   slot.appendChild(card);
  }else{
   // fallback：插到聊天区底部
-  var chat=document.getElementById('chat');
-  chat.appendChild(card);
-  chat.scrollTop=chat.scrollHeight;
+ var chat=document.getElementById('chat');
+ chat.appendChild(card);
+  _stickChatToBottom();
  }
 }
 

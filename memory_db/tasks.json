@@ -6459,5 +6459,761 @@
       }
     },
     "events": []
+  },
+  {
+    "id": "task_20260402_136",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题",
+    "status": "active",
+    "stage": "1",
+    "priority": "normal",
+    "created_at": "2026-04-02T12:00:53.738714",
+    "updated_at": "2026-04-02T12:05:32.407830",
+    "started_at": "2026-04-02T12:00:53.724704",
+    "completed_at": null,
+    "intent": {
+      "source": "task_plan",
+      "summary": "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题"
+    },
+    "input": {
+      "query": "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题",
+        "mode": "multi_step",
+        "phase": "1",
+        "summary": "正在推进：分析当前文件结构问题",
+        "items": [
+          {
+            "id": "1",
+            "title": "分析当前文件结构问题",
+            "status": "done",
+            "kind": "analysis",
+            "detail": "查看哪些文件存在层级归属混淆问题"
+          },
+          {
+            "id": "2",
+            "title": "检查记忆系统文件",
+            "status": "done",
+            "kind": "inspection",
+            "detail": "检查 memory_db/ 目录下的文件，看是否有层级归属错误"
+          },
+          {
+            "id": "3",
+            "title": "检查技能系统文件",
+            "status": "done",
+            "kind": "inspection",
+            "detail": "检查 core/skills/ 目录下的文件"
+          },
+          {
+            "id": "4",
+            "title": "整理和修复",
+            "status": "done",
+            "kind": "action",
+            "detail": "根据发现的问题进行整理和修复"
+          },
+          {
+            "id": "5",
+            "title": "验证修复结果",
+            "status": "running",
+            "kind": "verification",
+            "detail": "验证文件结构是否清晰，层级归属是否正确"
+          }
+        ],
+        "current_item_id": "5",
+        "updated_at": "2026-04-02T12:00:53.724704"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "正在推进：分析当前文件结构问题"
+    },
+    "memory": {
+      "last_user_reference": "整理文件结构，解决“层级归属”与“物理目录归属”混淆的问题",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-02T12:05:32.380151"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "整理文件结构 解决 层级归属 与 物理目录归属 混淆的问题"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-02T12:00:53.755458",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T12:00:53.794191",
+        "summary": "正在推进：分析当前文件结构问题",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T12:01:06.259166",
+        "summary": "正在推进：分析当前文件结构问题",
+        "phase": "1",
+        "current_item_id": "2"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T12:01:45.285444",
+        "summary": "正在推进：分析当前文件结构问题",
+        "phase": "1",
+        "current_item_id": "3"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T12:02:24.531364",
+        "summary": "正在推进：分析当前文件结构问题",
+        "phase": "1",
+        "current_item_id": "4"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T12:05:32.407830",
+        "summary": "正在推进：分析当前文件结构问题",
+        "phase": "1",
+        "current_item_id": "5"
+      }
+    ]
+  },
+  {
+    "id": "task_20260402_137",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_136",
+    "kind": "plan_step",
+    "title": "分析当前文件结构问题",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T12:00:53.826386",
+    "updated_at": "2026-04-02T12:05:32.439067",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "查看哪些文件存在层级归属混淆问题"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "analysis"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_138",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_136",
+    "kind": "plan_step",
+    "title": "检查记忆系统文件",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T12:00:53.858038",
+    "updated_at": "2026-04-02T12:05:32.454696",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "检查 memory_db/ 目录下的文件，看是否有层级归属错误"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "inspection"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_139",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_136",
+    "kind": "plan_step",
+    "title": "检查技能系统文件",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T12:00:53.904367",
+    "updated_at": "2026-04-02T12:05:32.487029",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "检查 core/skills/ 目录下的文件"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "inspection"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_140",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_136",
+    "kind": "plan_step",
+    "title": "整理和修复",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T12:00:53.952047",
+    "updated_at": "2026-04-02T12:05:32.520741",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "根据发现的问题进行整理和修复"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "action"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_141",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_136",
+    "kind": "plan_step",
+    "title": "验证修复结果",
+    "status": "active",
+    "stage": "running",
+    "priority": "normal",
+    "created_at": "2026-04-02T12:00:53.999035",
+    "updated_at": "2026-04-02T12:05:32.550627",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "验证文件结构是否清晰，层级归属是否正确"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "verification"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_142",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": null,
+    "kind": "generic",
+    "title": "整理桌面上的临时文件到对应文件夹",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T18:58:40.296675",
+    "updated_at": "2026-04-02T19:02:54.255700",
+    "started_at": "2026-04-02T18:58:40.296675",
+    "completed_at": "2026-04-02T19:02:54.207999",
+    "intent": {
+      "source": "task_plan",
+      "summary": "整理桌面上的临时文件到对应文件夹"
+    },
+    "input": {
+      "query": "整理桌面上的临时文件到对应文件夹"
+    },
+    "context": {},
+    "plan": {
+      "snapshot": {
+        "goal": "整理桌面上的临时文件到对应文件夹",
+        "mode": "multi_step",
+        "phase": "done",
+        "summary": "文件移动工具参数不明确，需要更具体的路径信息",
+        "items": [
+          {
+            "id": "1",
+            "title": "检查桌面文件状态",
+            "status": "done",
+            "kind": "inspect",
+            "detail": "确认哪些文件需要整理"
+          },
+          {
+            "id": "2",
+            "title": "移动日期标记的导出结果文件",
+            "status": "done",
+            "kind": "move",
+            "detail": "文件移动工具参数不明确，需要更具体的路径信息"
+          },
+          {
+            "id": "3",
+            "title": "移动测试/临时文件",
+            "status": "done",
+            "kind": "move",
+            "detail": "移动222.txt、hello2.json等测试文件到临时文档"
+          },
+          {
+            "id": "4",
+            "title": "移动截图文件到Nova截图文件夹",
+            "status": "done",
+            "kind": "move",
+            "detail": "将QQ截图文件移动到Nova截图文件夹"
+          },
+          {
+            "id": "5",
+            "title": "验证整理结果",
+            "status": "done",
+            "kind": "verify",
+            "detail": "检查文件是否已正确移动"
+          }
+        ],
+        "current_item_id": "5",
+        "updated_at": "2026-04-02T18:58:40.296675"
+      }
+    },
+    "artifacts": {},
+    "result": {
+      "summary": "文件移动工具参数不明确，需要更具体的路径信息"
+    },
+    "memory": {
+      "last_user_reference": "整理桌面上的临时文件到对应文件夹",
+      "resume_tokens": [
+        "继续",
+        "接着",
+        "然后",
+        "continue",
+        "resume"
+      ],
+      "last_active_at": "2026-04-02T19:02:54.207999"
+    },
+    "domain": {
+      "task_plan": {
+        "enabled": true,
+        "source": "task_plan",
+        "goal_key": "整理桌面上的临时文件到对应文件夹"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-02T18:58:40.343981",
+        "summary": "Task plan created"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T18:58:40.378129",
+        "summary": "正在推进：检查桌面文件状态",
+        "phase": "1",
+        "current_item_id": "1"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T18:58:48.670530",
+        "summary": "正在推进：检查桌面文件状态",
+        "phase": "1",
+        "current_item_id": "2"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T19:00:49.352220",
+        "summary": "文件移动工具参数不明确，需要更具体的路径信息",
+        "phase": "blocked",
+        "current_item_id": "2"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T19:02:14.634392",
+        "summary": "文件移动工具参数不明确，需要更具体的路径信息",
+        "phase": "blocked",
+        "current_item_id": "3"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T19:02:20.711423",
+        "summary": "文件移动工具参数不明确，需要更具体的路径信息",
+        "phase": "blocked",
+        "current_item_id": "4"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T19:02:26.513550",
+        "summary": "文件移动工具参数不明确，需要更具体的路径信息",
+        "phase": "blocked",
+        "current_item_id": "5"
+      },
+      {
+        "type": "plan_updated",
+        "at": "2026-04-02T19:02:54.255700",
+        "summary": "文件移动工具参数不明确，需要更具体的路径信息",
+        "phase": "done",
+        "current_item_id": "5"
+      }
+    ]
+  },
+  {
+    "id": "task_20260402_143",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_142",
+    "kind": "plan_step",
+    "title": "检查桌面文件状态",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T18:58:40.428966",
+    "updated_at": "2026-04-02T19:02:54.287158",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "确认哪些文件需要整理"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "1"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "1",
+        "kind": "inspect"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_144",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_142",
+    "kind": "plan_step",
+    "title": "移动日期标记的导出结果文件",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T18:58:40.461766",
+    "updated_at": "2026-04-02T19:02:54.320898",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "文件移动工具参数不明确，需要更具体的路径信息"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "2"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "2",
+        "kind": "move"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_145",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_142",
+    "kind": "plan_step",
+    "title": "移动测试/临时文件",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T18:58:40.511002",
+    "updated_at": "2026-04-02T19:02:54.358147",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "移动222.txt、hello2.json等测试文件到临时文档"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "3"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "3",
+        "kind": "move"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_146",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_142",
+    "kind": "plan_step",
+    "title": "移动截图文件到Nova截图文件夹",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T18:58:40.546382",
+    "updated_at": "2026-04-02T19:02:54.372102",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "将QQ截图文件移动到Nova截图文件夹"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "4"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "4",
+        "kind": "move"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_147",
+    "project_id": "proj_20260330_023",
+    "parent_task_id": "task_20260402_142",
+    "kind": "plan_step",
+    "title": "验证整理结果",
+    "status": "completed",
+    "stage": "done",
+    "priority": "normal",
+    "created_at": "2026-04-02T18:58:40.596950",
+    "updated_at": "2026-04-02T19:02:54.406176",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {},
+    "input": {},
+    "context": {
+      "detail": "检查文件是否已正确移动"
+    },
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {
+      "plan_item_id": "5"
+    },
+    "domain": {
+      "task_plan_item": {
+        "item_id": "5",
+        "kind": "verify"
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_148",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": null,
+    "kind": "development",
+    "title": "整理桌面临时文件",
+    "status": "planned",
+    "stage": "planned",
+    "priority": "normal",
+    "created_at": "2026-04-02T19:00:42.142891",
+    "updated_at": "2026-04-02T19:00:42.330842",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_flow",
+      "summary": "整理桌面临时文件"
+    },
+    "input": {
+      "query": "整理桌面临时文件"
+    },
+    "context": {},
+    "plan": {
+      "steps": [
+        "定位相关文件",
+        "确认复现方式",
+        "决定先改哪里"
+      ]
+    },
+    "artifacts": {},
+    "result": {
+      "understanding": "当前目标更像开发/修复任务，需要先确认问题范围、涉及文件和验证方式。",
+      "next_steps": [
+        "定位相关文件",
+        "确认复现方式",
+        "决定先改哪里"
+      ]
+    },
+    "memory": {
+      "last_user_reference": "整理桌面临时文件",
+      "resume_tokens": [
+        "继续",
+        "处理",
+        "修复",
+        "开始"
+      ],
+      "last_active_at": null
+    },
+    "domain": {
+      "development": {
+        "source": "task_intake"
+      }
+    },
+    "events": [
+      {
+        "type": "created",
+        "at": "2026-04-02T19:00:42.179421",
+        "summary": "Development task created"
+      }
+    ]
+  },
+  {
+    "id": "task_20260402_149",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": "task_20260402_148",
+    "kind": "plan_step",
+    "title": "定位相关文件",
+    "status": "planned",
+    "stage": "queued",
+    "priority": "normal",
+    "created_at": "2026-04-02T19:00:42.204686",
+    "updated_at": "2026-04-02T19:00:42.204686",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_substep",
+      "summary": "定位相关文件"
+    },
+    "input": {
+      "query": "定位相关文件"
+    },
+    "context": {},
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {},
+    "domain": {
+      "development_step": {
+        "index": 1
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_150",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": "task_20260402_148",
+    "kind": "plan_step",
+    "title": "确认复现方式",
+    "status": "planned",
+    "stage": "queued",
+    "priority": "normal",
+    "created_at": "2026-04-02T19:00:42.230151",
+    "updated_at": "2026-04-02T19:00:42.230151",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_substep",
+      "summary": "确认复现方式"
+    },
+    "input": {
+      "query": "确认复现方式"
+    },
+    "context": {},
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {},
+    "domain": {
+      "development_step": {
+        "index": 2
+      }
+    },
+    "events": []
+  },
+  {
+    "id": "task_20260402_151",
+    "project_id": "proj_20260324_012",
+    "parent_task_id": "task_20260402_148",
+    "kind": "plan_step",
+    "title": "决定先改哪里",
+    "status": "planned",
+    "stage": "queued",
+    "priority": "normal",
+    "created_at": "2026-04-02T19:00:42.281319",
+    "updated_at": "2026-04-02T19:00:42.281319",
+    "started_at": null,
+    "completed_at": null,
+    "intent": {
+      "source": "development_substep",
+      "summary": "决定先改哪里"
+    },
+    "input": {
+      "query": "决定先改哪里"
+    },
+    "context": {},
+    "plan": {},
+    "artifacts": {},
+    "result": {},
+    "memory": {},
+    "domain": {
+      "development_step": {
+        "index": 3
+      }
+    },
+    "events": []
   }
 ]
