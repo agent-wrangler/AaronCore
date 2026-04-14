@@ -51,21 +51,23 @@ function _winClose() {
   var bar=document.getElementById('topBar');
   if(!bar)return;
   var dragging=false, lastX=0, lastY=0;
-  var lastClickTime=0;
+  function _isInteractiveTarget(target){
+    return !!(target && target.closest && target.closest('button, a, input, textarea, select, option, summary, [data-no-window-drag="true"]'));
+  }
 
   bar.addEventListener('mousedown',function(e){
-    if(e.target.closest('button'))return;
-    var now=Date.now();
-    if(now-lastClickTime<300){
-      _winMaximize();
-      lastClickTime=0;
-      return;
-    }
-    lastClickTime=now;
+    if(e.button!==0) return;
+    if(_isInteractiveTarget(e.target)) return;
     dragging=true;
     lastX=e.screenX;
     lastY=e.screenY;
     e.preventDefault();
+  });
+
+  bar.addEventListener('dblclick',function(e){
+    if(_isInteractiveTarget(e.target)) return;
+    dragging=false;
+    _winMaximize();
   });
 
   document.addEventListener('mousemove',function(e){
@@ -78,6 +80,10 @@ function _winClose() {
   });
 
   document.addEventListener('mouseup',function(){
+    dragging=false;
+  });
+
+  document.addEventListener('mouseleave',function(){
     dragging=false;
   });
 

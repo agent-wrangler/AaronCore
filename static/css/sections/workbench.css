@@ -3,35 +3,36 @@
 
 /* ===== Desktop Workbench Refresh ===== */
 .top-bar{
-  height:68px;
-  padding:0 14px 0 18px;
-  gap:14px;
+  height:42px;
+  padding:0 0 0 10px;
+  gap:6px;
   background:linear-gradient(180deg,rgba(19,23,31,0.96) 0%,rgba(17,20,28,0.92) 100%);
   backdrop-filter:blur(18px);
+  overflow:hidden;
 }
 
 .top-bar-brand{
   display:flex;
   align-items:center;
-  gap:12px;
+  gap:6px;
   min-width:0;
   -webkit-app-region:no-drag;
 }
 
 .nova-mark{
-  width:38px;
-  height:38px;
-  border-radius:13px;
+  width:28px;
+  height:28px;
+  border-radius:0;
   display:flex;
   align-items:center;
   justify-content:center;
   flex-shrink:0;
-  background:linear-gradient(145deg,#f8fafc 0%,#cbd5e1 100%);
-  color:#0f172a;
+  background:transparent;
+  color:inherit;
   font-size:17px;
   font-weight:800;
   letter-spacing:-0.04em;
-  box-shadow:0 10px 24px rgba(15,23,42,0.18);
+  box-shadow:none;
 }
 
 .nova-brand-copy{
@@ -42,10 +43,10 @@
 
 .nova-logo{
   gap:0;
-  font-size:17px;
-  font-weight:700;
+  font-size:13px;
+  font-weight:500;
   line-height:1.05;
-  letter-spacing:-0.02em;
+  letter-spacing:0;
 }
 
 .nova-logo:before{
@@ -66,6 +67,11 @@
   align-items:center;
   justify-content:center;
   gap:8px;
+}
+
+.top-bar-hit-area{
+  align-self:stretch;
+  min-width:34px;
 }
 
 .top-pill{
@@ -111,30 +117,116 @@
 .top-bar-controls{
   display:flex;
   align-items:center;
-  gap:6px;
+  align-self:stretch;
+  height:100%;
+  gap:0;
   margin-left:auto;
+  margin-right:-1px;
   padding-left:0;
   border-left:none;
+  overflow:hidden;
+  border-top-right-radius:16px;
 }
 
 .top-btn{
-  width:38px;
-  height:38px;
-  border-radius:12px;
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.08);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+  width:42px;
+  height:100%;
+  align-self:stretch;
+  border-radius:0;
+  position:relative;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  color:rgba(203,213,225,0.78);
+  transition:background 0.16s ease,color 0.16s ease,opacity 0.16s ease;
+  overflow:visible;
 }
 
 .top-btn svg{
-  width:17px;
-  height:17px;
+  width:14px;
+  height:14px;
+  position:relative;
+  z-index:1;
 }
 
 .win-btn{
-  width:34px;
-  height:34px;
-  border-radius:12px;
+  width:42px;
+  height:100%;
+  border-radius:0;
+  background:transparent !important;
+}
+
+.top-bar .win-close{
+  width:46px;
+  margin-right:-1px;
+  padding-right:1px;
+  border-top-right-radius:16px;
+}
+
+.top-bar .win-close::after{
+  content:"";
+  position:absolute;
+  top:0;
+  right:-14px;
+  bottom:0;
+  width:18px;
+  border-top-right-radius:16px;
+  background:transparent;
+  pointer-events:none;
+  transition:background 0.16s ease;
+}
+
+.window-shell.is-maximized .top-bar-controls{
+  border-top-right-radius:0;
+}
+
+.window-shell.is-maximized .top-bar .win-close{
+  border-top-right-radius:0;
+}
+
+.top-bar .top-btn:hover{
+  background:rgba(255,255,255,0.09) !important;
+  color:#e2e8f0;
+  transform:none;
+}
+
+.top-bar .top-btn:active{
+  background:rgba(255,255,255,0.12);
+  transform:none;
+}
+
+.top-bar .win-close:hover{
+  background:rgba(239,68,68,0.22) !important;
+  color:#fda4af;
+}
+
+.top-bar .win-close:hover::after{
+  background:rgba(239,68,68,0.22);
+}
+
+body.light .top-bar .top-btn{
+  background:transparent;
+  border:none;
+  color:#5f6b7b;
+  box-shadow:none;
+}
+
+body.light .top-bar .top-btn:hover{
+  background:rgba(15,23,42,0.08) !important;
+  color:#334155;
+}
+
+body.light .top-bar .top-btn:active{
+  background:rgba(15,23,42,0.09);
+}
+
+body.light .top-bar .win-close:hover{
+  background:rgba(239,68,68,0.16) !important;
+  color:#dc2626;
+}
+
+body.light .top-bar .win-close:hover::after{
+  background:rgba(239,68,68,0.16);
 }
 
 .sidebar{
@@ -885,16 +977,16 @@ body.light .top-pill-live{
 }
 
 body.light .top-btn{
-  background:rgba(255,250,244,0.92);
-  border-color:rgba(114,105,94,0.14);
-  color:#655d52;
-  box-shadow:none;
+  background:transparent !important;
+  border-color:transparent !important;
+  color:#5f6b7b;
+  box-shadow:none !important;
 }
 
 body.light .top-btn:hover{
-  background:#ffffff;
-  color:#2f2b25;
-  border-color:rgba(114,105,94,0.2);
+  background:rgba(15,23,42,0.08) !important;
+  color:#334155;
+  border-color:transparent !important;
 }
 
 body.light .chat-shell.run-panel-open .chat-stage{

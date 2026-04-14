@@ -2,12 +2,22 @@
 // Source: app.js lines 1770-1966
 
 // ── 模型选择器 ──
+function _syncModelDropdownState(isOpen){
+ var dd=document.getElementById('modelDropdown');
+ var btn=document.getElementById('modelSelectorBtn');
+ var wrap=btn&&btn.closest?btn.closest('.model-selector-wrap'):null;
+ var open=!!isOpen;
+ if(dd) dd.style.display=open?'block':'none';
+ if(btn) btn.setAttribute('aria-expanded', open?'true':'false');
+ if(wrap&&wrap.classList) wrap.classList.toggle('is-open', open);
+}
+
 function toggleModelDropdown(e){
  e.stopPropagation();
  var dd=document.getElementById('modelDropdown');
  if(!dd)return;
  if(dd.style.display!=='none'){
-  dd.style.display='none';
+  _closeModelDropdown();
   return;
  }
  var models=window._novaModels||{};
@@ -93,15 +103,14 @@ function toggleModelDropdown(e){
   console.log('[models][sidebar] click', modelId);
   _sidebarSwitchModel(modelId);
  };
- dd.style.display='block';
+ _syncModelDropdownState(true);
  // 点击其他地方关闭
  setTimeout(function(){
   document.addEventListener('click',_closeModelDropdown,{once:true});
  },0);
 }
 function _closeModelDropdown(){
- var dd=document.getElementById('modelDropdown');
- if(dd) dd.style.display='none';
+ _syncModelDropdownState(false);
 }
 function _resetModelSwitchButtons(){
  var items=document.querySelectorAll('[onclick*="switchModel"],[onclick*="_sidebarSwitchModel"],[data-model-action="switch"]');
@@ -154,8 +163,7 @@ function _emitSidebarModelSwitchNote(fromLabel, toLabel){
 }
 function _sidebarSwitchModel(mid){
  // 即时关闭 dropdown
- var dd=document.getElementById('modelDropdown');
- if(dd) dd.style.display='none';
+ _closeModelDropdown();
  var previousModel=window._novaCurrentModel||'';
   if(mid===previousModel) return;
   console.log('[models][sidebar] switch start', mid, 'current=', previousModel||'');
@@ -205,7 +213,9 @@ function updateImageBtnState(){
  var current=window._novaCurrentModel||'';
  // 只要有任何一个模型支持 vision 就启用（会自动 fallback）
  var anyVision=Object.keys(models).some(function(k){return models[k].vision;});
- btn.disabled=!anyVision;
+ btn.disabled=false;
+ btn.classList.toggle('is-inactive', !anyVision);
+ btn.setAttribute('aria-disabled', anyVision ? 'false' : 'true');
  btn.title=anyVision?t('model.upload.title'):t('model.no.vision');
 }
 

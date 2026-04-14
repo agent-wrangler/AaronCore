@@ -12,6 +12,7 @@ document.write(String.raw`
     <div class="nova-logo">AaronCore</div>
    </div>
   </div>
+  <div class="top-bar-spacer top-bar-hit-area" aria-hidden="true"></div>
   <div class="top-bar-controls">
    <button class="top-btn win-btn" onclick="_winMinimize()" title="Minimize" data-i18n-title="window.minimize">
     <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
