@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
+const { app, dialog } = require('electron');
 
 function resolveExistingRoot(candidate) {
   if (!candidate) return '';
@@ -79,6 +79,81 @@ function resolveAaronCoreRoot() {
   return resolveExistingRoot(path.resolve(__dirname, '..'));
 }
 
+function shouldEnableAutoUpdate() {
+  if (!app.isPackaged) return false;
+  if (process.platform !== 'win32') return false;
+  if (process.env.AARONCORE_DISABLE_AUTO_UPDATE === '1') return false;
+  // electron-builder portable builds are not a good target for in-app updates.
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return false;
+  // Local unpacked builds are still part of the development/distribution path.
+  if (String(process.execPath || '').toLowerCase().includes('win-unpacked')) return false;
+  return true;
+}
+
+function setupAutoUpdate() {
+  if (!shouldEnableAutoUpdate()) return;
+
+  let autoUpdater;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (error) {
+    console.warn('[updater] electron-updater unavailable:', error && (error.stack || error.message) || error);
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('error', (error) => {
+    console.warn('[updater] update check failed:', error && (error.stack || error.message) || error);
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[updater] update available:', info && info.version ? info.version : 'unknown');
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('[updater] no update available');
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    const currentVersion = app.getVersion();
+    const nextVersion = info && info.version ? String(info.version) : '';
+    const detailLines = [
+      `Current version: ${currentVersion}`,
+      nextVersion ? `New version: ${nextVersion}` : '',
+      'The update has been downloaded and is ready to install.',
+    ].filter(Boolean);
+
+    try {
+      const result = await dialog.showMessageBox({
+        type: 'info',
+        buttons: ['Restart and Update', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+        title: 'AaronCore Update Ready',
+        message: 'A new AaronCore version has finished downloading.',
+        detail: detailLines.join('\n'),
+      });
+
+      if (result.response === 0) {
+        setImmediate(() => autoUpdater.quitAndInstall(false, true));
+      }
+    } catch (error) {
+      console.warn('[updater] failed to show update dialog:', error && (error.stack || error.message) || error);
+    }
+  });
+
+  app.whenReady().then(() => {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((error) => {
+        console.warn('[updater] checkForUpdates threw:', error && (error.stack || error.message) || error);
+      });
+    }, 15000);
+  });
+}
+
 const aaroncoreRoot = resolveAaronCoreRoot();
 
 process.env.AARONCORE_ROOT = aaroncoreRoot;
@@ -90,5 +165,7 @@ process.env.AARONCORE_SHELL_DIR = shellDir;
 process.env.NOVACORE_SHELL_DIR = shellDir;
 process.env.AARONCORE_BACKEND_ENTRY = backendEntry;
 process.env.NOVACORE_BACKEND_ENTRY = backendEntry;
+
+setupAutoUpdate();
 
 require(path.join(shellDir, 'main.js'));

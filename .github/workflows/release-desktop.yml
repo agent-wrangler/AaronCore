@@ -1,0 +1,32 @@
+name: release-desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "desktop-v*"
+
+jobs:
+  windows-nsis:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install desktop packaging dependencies
+        working-directory: desktop_runtime_35
+        run: npm install
+
+      - name: Build and publish NSIS release
+        working-directory: desktop_runtime_35
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run dist:nsis -- --publish always

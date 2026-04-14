@@ -11,6 +11,9 @@
     "dist:portable": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win portable",
     "dist:nsis": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win nsis"
   },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
   "devDependencies": {
     "electron": "35.7.5",
     "electron-builder": "^26.0.12"
@@ -82,6 +85,13 @@
     "directories": {
       "output": "../../AaronCoreDesktop"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "agent-wrangler",
+        "repo": "AaronCore"
+      }
+    ],
     "win": {
       "icon": "../static/icon/aaroncore.ico",
       "signAndEditExecutable": false,
@@ -90,6 +100,9 @@
         "portable",
         "nsis"
       ]
+    },
+    "nsis": {
+      "artifactName": "AaronCore-Setup-${version}.${ext}"
     }
   }
 }
