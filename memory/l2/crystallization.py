@@ -8,65 +8,15 @@ from collections.abc import Callable
 from datetime import datetime
 
 
-KNOWN_CITIES = [
-    "常州",
-    "北京",
-    "上海",
-    "苏州",
-    "南京",
-    "杭州",
-    "广州",
-    "深圳",
-    "大理",
-    "成都",
-    "重庆",
-    "武汉",
-    "长沙",
-    "西安",
-    "天津",
-    "青岛",
-    "厦门",
-    "昆明",
-    "贵阳",
-    "郑州",
-    "济南",
-    "合肥",
-    "福州",
-    "南昌",
-    "哈尔滨",
-    "长春",
-    "沈阳",
-    "大连",
-    "无锡",
-    "宁波",
-    "温州",
-    "东莞",
-    "佛山",
-    "珠海",
-    "三亚",
-    "拉萨",
-    "乌鲁木齐",
-    "呼和浩特",
-    "银川",
-    "兰州",
-    "西宁",
-    "海口",
-    "南宁",
-    "石家庄",
-    "太原",
-]
-
-
 def try_crystallize(
     entry,
     *,
     is_real_knowledge_query: Callable[[str, str], bool],
     to_l7: Callable[[str, str], None],
     to_l8: Callable[[str, str], None],
-    try_update_city: Callable[[str], None],
     mark_crystal: Callable[[str], None],
     to_l3: Callable[..., None],
-    to_l4: Callable[[str, str], None],
+    to_l4: Callable[..., None],
 ) -> None:
     importance = entry.get("importance", 0)
     memory_type = entry.get("memory_type", "general")
@@ -74,6 +24,7 @@ def try_crystallize(
     ai_text = entry.get("ai_text", "")
     context_tag = entry.get("context_tag")
     knowledge_query = entry.get("knowledge_query")
+    profile_updates = entry.get("profile_updates") if isinstance(entry.get("profile_updates"), dict) else {}
 
     if memory_type == "correction":
         to_l7(text, ai_text)
@@ -84,16 +35,14 @@ def try_crystallize(
         if knowledge_query:
             to_l8(text, ai_text)
 
-    try_update_city(text)
-
     if importance <= 0.7:
         return
 
     mark_crystal(entry["id"])
     if memory_type in ("event", "milestone", "general", "decision"):
         to_l3(text, memory_type, ai_text=ai_text, context_tag=context_tag)
-    if memory_type in ("fact", "preference", "goal", "rule"):
-        to_l4(text, memory_type)
+    if memory_type in ("fact", "preference", "goal", "rule") or profile_updates:
+        to_l4(text, memory_type, profile_updates=profile_updates)
 
 
 def mark_crystal(
@@ -229,42 +178,11 @@ def append_l4_changelog(persona: dict, content: str) -> None:
         persona["_changelog"] = changelog[-50:]
 
 
-def try_update_city(
-    text,
-    *,
-    load_json_fn: Callable[[object, object], dict],
-    write_json_fn: Callable[[object, object], None],
-    l4_file,
-    append_l4_changelog: Callable[[dict, str], None],
-    debug_write: Callable[[str, dict], None],
-) -> None:
-    try:
-        match = re.search(
-            r"(?:\u6211\u5728|\u6211\u4f4f|\u5750\u6807|\u4eba\u5728|\u5b9a\u5c45)([^\s\uff0c,\u3002\u3001\uff01!\uff1f?\u7684\u4e86]+)",
-            text,
-        )
-        if not match:
-            return
-        candidate = match.group(1).strip()
-        for city in KNOWN_CITIES:
-            if city in candidate:
-                persona = load_json_fn(l4_file, {})
-                user_profile = persona.setdefault("user_profile", {})
-                old_city = str(user_profile.get("city", "")).strip()
-                if old_city != city:
-                    user_profile["city"] = city
-                    append_l4_changelog(persona, f"用户更新了地址：{city}")
-                    write_json_fn(l4_file, persona)
-                    debug_write("l2_city_update", {"old": old_city, "new": city})
-                return
-    except Exception as exc:
-        debug_write("l2_city_update_err", {"err": str(exc)})
-
-
 def to_l4(
     text,
     memory_type,
     *,
+    profile_updates: dict | None = None,
     load_json_fn: Callable[[object, object], dict],
     write_json_fn: Callable[[object, object], None],
     l4_file,
@@ -278,6 +196,23 @@ def to_l4(
     try:
         persona = load_json_fn(l4_file, {})
         updated = False
+        profile_updates = profile_updates if isinstance(profile_updates, dict) else {}
+        user_profile_updates = profile_updates.get("user_profile") if isinstance(profile_updates.get("user_profile"), dict) else {}
+        update_labels: list[str] = []
+
+        if user_profile_updates:
+            user_profile = persona.setdefault("user_profile", {})
+            location = str(user_profile_updates.get("location") or "").strip()
+            city = str(user_profile_updates.get("city") or "").strip()
+            if location and str(user_profile.get("location") or "").strip() != location:
+                user_profile["location"] = location
+                updated = True
+                update_labels.append("更新了用户位置")
+            if city and str(user_profile.get("city") or "").strip() != city:
+                user_profile["city"] = city
+                updated = True
+                if "更新了用户位置" not in update_labels:
+                    update_labels.append("更新了用户位置")
         if "\u6211\u53eb" in text:
             match = re.search(r"\u6211\u53eb([^\s\uff0c,\u3002\u3001\uff01!\uff1f?]+)", text)
             if match:
@@ -314,7 +249,7 @@ def to_l4(
                 "rule": "新增了交互规则",
                 "goal": "记录了用户目标",
             }
-            label = changelog_labels.get(memory_type, "更新了用户画像")
+            label = update_labels[0] if update_labels else changelog_labels.get(memory_type, "更新了用户画像")
             append_l4_changelog(persona, f"{label}：{text[:50]}")
             write_json_fn(l4_file, persona)
             debug_write("l2_crystal_l4", {"text": text[:50]})

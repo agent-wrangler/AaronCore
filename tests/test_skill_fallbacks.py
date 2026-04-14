@@ -289,13 +289,14 @@ class RunEventMappingTests(unittest.TestCase):
                 {"role": "user", "content": "看看项目目录"},
                 {"role": "nova", "content": "项目在 C:/Users/36459/NovaNotes/app.py"},
             ],
-            "l4": {"user_profile": {"city": "Shanghai", "identity": "developer"}},
+            "l4": {"user_profile": {"location": "Bay Area", "city": "Shanghai", "identity": "developer"}},
             "context_data": {"fs_target": {"path": "C:/Users/36459/NovaNotes", "option": "inspect"}},
             "task_plan": {"goal": "检查目录结构", "items": [{"id": "1", "title": "看目录"}]},
         }
 
         context = reply_formatter_module._build_tool_exec_context(bundle)
 
+        self.assertEqual(context.get("user_location"), "Bay Area")
         self.assertEqual(context.get("user_city"), "Shanghai")
         self.assertEqual(context.get("user_identity"), "developer")
         self.assertEqual(len(context.get("recent_history") or []), 2)

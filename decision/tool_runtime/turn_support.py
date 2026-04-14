@@ -17,6 +17,9 @@ def build_tool_exec_context(
     if isinstance(l4, dict):
         up = l4.get("user_profile") or {}
         if isinstance(up, dict):
+            user_location = str(up.get("location") or up.get("city") or "").strip()
+            if user_location:
+                skill_context["user_location"] = user_location
             user_city = str(up.get("city") or "").strip()
             if user_city:
                 skill_context["user_city"] = user_city

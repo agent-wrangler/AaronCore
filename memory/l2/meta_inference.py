@@ -140,6 +140,23 @@ def extract_json_object(raw: str) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+def normalize_profile_updates(payload: dict | None) -> dict:
+    data = payload if isinstance(payload, dict) else {}
+    user_profile = data.get("user_profile") if isinstance(data.get("user_profile"), dict) else {}
+    normalized_user_profile = {}
+    for field in ("location", "city"):
+        value = str(user_profile.get(field) or "").strip()
+        if not value:
+            continue
+        value = re.sub(r"\s+", " ", value)
+        if "\n" in value or len(value) > 80:
+            continue
+        normalized_user_profile[field] = value
+    if normalized_user_profile.get("city") and not normalized_user_profile.get("location"):
+        normalized_user_profile["location"] = normalized_user_profile["city"]
+    return {"user_profile": normalized_user_profile} if normalized_user_profile else {}
+
+
 def call_memory_meta_llm(prompt: str, *, llm_call, think, debug_write: Callable[[str, dict], None]) -> dict | None:
     raw = ""
     try:
@@ -434,6 +451,7 @@ def infer_memory_meta(
             build_signal_profile=build_signal_profile,
             normalize_signal_text=normalize_signal_text,
         ),
+        "profile_updates": {},
     }
     if not (llm_call or think):
         return default
@@ -444,7 +462,7 @@ def infer_memory_meta(
         f"User message: {str(text or '')[:280]}\n"
         f"Assistant reply: {str(ai_text or '')[:320]}\n\n"
         "Return exactly one JSON object with the following fields:\n"
-        f'{{"importance": 0.0, "memory_type": "general", "knowledge_query": false, "context_tag": "{DAILY_TAG}"}}\n'
+        f'{{"importance": 0.0, "memory_type": "general", "knowledge_query": false, "context_tag": "{DAILY_TAG}", "profile_updates": {{"user_profile": {{"location": "", "city": ""}}}}}}\n'
         "Requirements:\n"
         "- importance must be between 0 and 1.\n"
         "- memory_type must be one of "
@@ -454,6 +472,15 @@ def infer_memory_meta(
         "- Only label as preference when the user clearly states a stable user "
         "preference, aversion, style preference, or naming preference.\n"
         "- Only label as fact when it is a stable user fact.\n"
+        "- profile_updates.user_profile.location may be set only when the user "
+        "explicitly reveals their own stable current location or base in this "
+        "message. Do not infer it from requests, examples, travel plans, or "
+        "casual mentions.\n"
+        "- profile_updates.user_profile.city may be set only when that explicit "
+        "location is clearly a city. Leave it empty for regions, countries, "
+        "neighborhoods, or ambiguous places.\n"
+        "- Leave profile_updates as an empty object when there is no explicit "
+        "stable profile update grounded in the user's own statement.\n"
         "- knowledge_query means this turn is a genuine knowledge Q&A worth "
         "condensing into L8, not small talk or meta-chat.\n"
         f"- context_tag should be a short 2-6 character topic tag; use {DAILY_TAG} when unsure.\n"
@@ -484,4 +511,5 @@ def infer_memory_meta(
         "memory_type": memory_type,
         "knowledge_query": knowledge_query,
         "context_tag": context_tag,
+        "profile_updates": normalize_profile_updates(payload.get("profile_updates")),
     }

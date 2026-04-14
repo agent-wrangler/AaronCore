@@ -60,6 +60,32 @@ class WeatherSkillTests(unittest.TestCase):
         with patch.object(weather, "PERSONA_PATH", Path(self._tmpdir.name) / "persona.json"):
             self.assertIn("哪个城市", weather.execute("天气怎么样"))
 
+    def test_execute_uses_profile_location_when_city_missing(self):
+        persona_path = Path(self._tmpdir.name) / "persona.json"
+        persona_path.write_text(
+            json.dumps({"user_profile": {"location": "Seattle"}}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        with patch.object(weather, "PERSONA_PATH", persona_path), patch.object(
+            weather, "_resolve_city_coords", return_value=("Seattle", (47.61, -122.33))
+        ), patch.object(weather, "get_weather", return_value="📍 Seattle现在 12°C，多云"), patch.object(
+            weather, "get_forecast_window", return_value="Seattle今天天气：\n📍 今天：8~14°C，多云"
+        ):
+            reply = weather.execute("天气怎么样")
+
+        self.assertIn("Seattle", reply)
+
+    def test_execute_uses_user_location_context_when_city_missing(self):
+        with patch.object(
+            weather, "_resolve_city_coords", return_value=("Bay Area", (37.77, -122.42))
+        ), patch.object(weather, "get_weather", return_value="📍 Bay Area现在 15°C，多云"), patch.object(
+            weather, "get_forecast_window", return_value="Bay Area今天天气：\n📍 今天：10~17°C，多云"
+        ):
+            reply = weather.execute("天气怎么样", {"user_location": "Bay Area"})
+
+        self.assertIn("Bay Area", reply)
+
 
 if __name__ == "__main__":
     unittest.main()

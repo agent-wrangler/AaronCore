@@ -113,9 +113,9 @@ def condense_l4(l4: dict) -> str:
     dislike = up.get("dislike", "")
     if dislike:
         parts.append(f"\u7528\u6237\u53cd\u611f\uff1a{dislike}")
-    city = up.get("city", "")
-    if city:
-        parts.append(f"\u7528\u6237\u6240\u5728\u57ce\u5e02\uff1a{city}")
+    location = up.get("location") or up.get("city") or ""
+    if location:
+        parts.append(f"\u7528\u6237\u6240\u5728\u4f4d\u7f6e\uff1a{location}")
     rp = lp.get("relationship_profile") or {}
     rel = rp.get("relationship", "")
     if rel:

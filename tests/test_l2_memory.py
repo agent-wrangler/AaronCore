@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from memory import l2_memory
+from memory.l2 import meta_inference
 
 
 class _NoopThread:
@@ -325,6 +326,7 @@ class L2MemoryTests(unittest.TestCase):
                 "memory_type": "rule",
                 "knowledge_query": False,
                 "context_tag": "技术",
+                "profile_updates": {"user_profile": {"location": "Seattle", "city": "Seattle"}},
             }
 
             with patch.object(l2_memory, "L2_FILE", l2_file), patch.object(
@@ -342,6 +344,7 @@ class L2MemoryTests(unittest.TestCase):
             self.assertEqual(stored[0]["memory_type"], "rule")
             self.assertEqual(stored[0]["context_tag"], "技术")
             self.assertFalse(stored[0]["knowledge_query"])
+            self.assertEqual(stored[0]["profile_updates"], {"user_profile": {"location": "Seattle", "city": "Seattle"}})
             self.assertNotIn("keywords", stored[0])
 
     def test_try_crystallize_uses_entry_knowledge_query_flag(self):
@@ -355,8 +358,6 @@ class L2MemoryTests(unittest.TestCase):
         }
 
         with patch.object(l2_memory, "_to_l8") as to_l8, patch.object(
-            l2_memory, "_try_update_city"
-        ), patch.object(
             l2_memory, "_mark_crystal"
         ), patch.object(
             l2_memory, "_is_real_knowledge_query", side_effect=AssertionError("should not fallback")
@@ -375,15 +376,52 @@ class L2MemoryTests(unittest.TestCase):
             "context_tag": "工程",
         }
 
-        with patch.object(l2_memory, "_to_l3") as to_l3, patch.object(
-            l2_memory, "_try_update_city"
-        ), patch.object(
-            l2_memory, "_mark_crystal"
-        ):
+        with patch.object(l2_memory, "_to_l3") as to_l3, patch.object(l2_memory, "_mark_crystal"):
             l2_memory._try_crystallize(entry)
 
         to_l3.assert_called_once()
         self.assertEqual(to_l3.call_args.kwargs["context_tag"], "工程")
+
+    def test_try_crystallize_passes_structured_profile_updates_to_l4(self):
+        entry = {
+            "id": "m3",
+            "importance": 0.85,
+            "memory_type": "general",
+            "user_text": "我现在常住西雅图。",
+            "ai_text": "收到，我记一下。",
+            "profile_updates": {"user_profile": {"location": "Seattle", "city": "Seattle"}},
+        }
+
+        with patch.object(l2_memory, "_to_l4") as to_l4, patch.object(
+            l2_memory, "_mark_crystal"
+        ), patch.object(l2_memory, "_to_l3"):
+            l2_memory._try_crystallize(entry)
+
+        to_l4.assert_called_once_with(
+            "我现在常住西雅图。",
+            "general",
+            profile_updates={"user_profile": {"location": "Seattle", "city": "Seattle"}},
+        )
+
+    def test_to_l4_stores_structured_profile_updates(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text("{}", encoding="utf-8")
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4(
+                    "我现在常住西雅图。",
+                    "fact",
+                    profile_updates={"user_profile": {"location": "Seattle", "city": "Seattle"}},
+                )
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual((stored.get("user_profile") or {}).get("location"), "Seattle")
+            self.assertEqual((stored.get("user_profile") or {}).get("city"), "Seattle")
+            self.assertIn("_changelog", stored)
+            self.assertEqual(len(stored["_changelog"]), 1)
+            self.assertIn("更新了用户位置", stored["_changelog"][0]["content"])
 
     def test_to_l4_stores_explicit_interaction_rule(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -480,6 +518,32 @@ class L2MemoryTests(unittest.TestCase):
 
             stored = json.loads(persona_file.read_text(encoding="utf-8"))
             self.assertEqual(stored, {})
+
+    def test_infer_memory_meta_normalizes_structured_profile_updates(self):
+        def llm_call(_prompt: str) -> str:
+            return json.dumps(
+                {
+                    "importance": 0.91,
+                    "memory_type": "fact",
+                    "knowledge_query": False,
+                    "context_tag": "个人",
+                    "profile_updates": {"user_profile": {"location": "  Seattle  ", "city": "Seattle"}},
+                },
+                ensure_ascii=False,
+            )
+
+        result = meta_inference.infer_memory_meta(
+            "我现在常住西雅图。",
+            "收到。",
+            llm_call=llm_call,
+            think=None,
+            debug_write=lambda *_: None,
+            build_signal_profile=lambda _text: set(),
+            normalize_signal_text=lambda text: str(text or "").strip(),
+        )
+
+        self.assertEqual(result["memory_type"], "fact")
+        self.assertEqual(result["profile_updates"], {"user_profile": {"location": "Seattle", "city": "Seattle"}})
 
     def test_to_l4_skips_architecture_discussion_misclassified_as_preference(self):
         with tempfile.TemporaryDirectory() as tmpdir:

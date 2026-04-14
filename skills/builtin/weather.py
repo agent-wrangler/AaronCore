@@ -41,9 +41,13 @@ def _load_user_default_city() -> str:
     try:
         if PERSONA_PATH.exists():
             data = json.loads(PERSONA_PATH.read_text(encoding="utf-8"))
-            city = str((data.get("user_profile") or {}).get("city") or "").strip()
-            if city in CITIES:
+            user_profile = data.get("user_profile") or {}
+            city = str(user_profile.get("city") or "").strip()
+            if city:
                 return city
+            location = str(user_profile.get("location") or "").strip()
+            if location:
+                return location
     except Exception:
         pass
     return ""
@@ -278,6 +282,8 @@ def execute(query, context=None):
         city = str(context["city"]).strip()
     if not city and isinstance(context, dict) and context.get("user_city"):
         city = str(context["user_city"]).strip()
+    if not city and isinstance(context, dict) and context.get("user_location"):
+        city = str(context["user_location"]).strip()
     if not city:
         city = _load_user_default_city()
     if not city:

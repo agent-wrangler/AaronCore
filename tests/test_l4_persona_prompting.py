@@ -78,7 +78,7 @@ class L4PersonaPromptingTests(unittest.TestCase):
         self.assertIn("用户：用户是主人", text)
         self.assertIn("用户偏好：喜欢自然一点、别太模板化", text)
         self.assertIn("用户反感：不喜欢废话和重复确认", text)
-        self.assertIn("用户所在城市：常州", text)
+        self.assertIn("用户所在位置：常州", text)
 
 
 if __name__ == "__main__":
