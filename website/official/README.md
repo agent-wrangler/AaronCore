@@ -104,7 +104,7 @@ Vercel also works well for static sites, but for private Git repositories the pe
 
 ## GitHub Pages note
 
-The repo still contains a GitHub Pages workflow at `.github/workflows/deploy-site.yml`, but that path is mainly useful if the repository is public again or the GitHub plan and organization settings allow private-repo Pages publishing.
+This site now ships through Cloudflare Pages. If GitHub Pages is ever reintroduced later, add a dedicated workflow only after the repository and Pages settings actually support that path again.
 
 ## DNS and mailbox later
 
