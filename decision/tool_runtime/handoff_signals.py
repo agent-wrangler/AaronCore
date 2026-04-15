@@ -1,6 +1,89 @@
 """Post-LLM tool handoff and mixed-output compatibility signals."""
 
+from dataclasses import dataclass
+
 from decision.tool_runtime.parallel_runtime import get_tool_parallel_profile
+
+
+_HANDOFF_CHATTER_PREFIX_RE = (
+    r"^(?:(?:\u4e3b\u4eba|ok(?:ay)?|sure|alright|"
+    r"\u597d(?:\u7684|\u561e|\u5440|\u54e6|\u5427)?)[\s,\u3001\uff0c!！.。\-]*)+"
+)
+_CHINESE_HANDOFF_LEAD_RE = (
+    r"^(?:(?:\u8fd9\u6b21|\u73b0\u5728|\u63a5\u4e0b\u6765)[\s,\u3001\uff0c]*)?"
+    r"(?:\u8ba9\u6211(?:\u5148|\u7ee7\u7eed)?|"
+    r"\u6211(?:\u5148|\u6765|\u53bb|\u7ee7\u7eed|\u8fd9\u5c31|\u9a6c\u4e0a|\u76f4\u63a5)|"
+    r"\u5148|\u7a0d\u7b49|\u7b49\u6211)"
+)
+_CHINESE_HANDOFF_ACTION_RE = (
+    r"(?:\u770b(?:\u770b)?|\u67e5(?:\u770b)?|\u68c0(?:\u67e5)?|\u641c(?:\u7d22)?|"
+    r"\u8bfb(?:\u53d6)?|\u68b3\u7406|\u5206\u6790|\u5904\u7406|\u786e\u8ba4|\u5b9a\u4f4d|"
+    r"\u56de\u5fc6|\u5199|\u6539|\u4fee|\u521b\u5efa|\u6253\u5f00|\u8fd0\u884c|"
+    r"\u5b89\u88c5|\u63d0\u4ea4|\u63a8\u9001|\u8fc7\u4e00\u904d|\u641e\u5b9a)"
+)
+_ENGLISH_HANDOFF_LEAD_RE = (
+    r"^(?:(?:ok(?:ay)?|sure|alright)[\s,!.]*)?"
+    r"(?:(?:let\s+me|just\s+let\s+me|"
+    r"i(?:'ll| will| am going to|'m going to| am wrapping|'m wrapping)|"
+    r"first[, ]+i(?:'ll| will))(?:\s+go\s+)?)"
+)
+_ENGLISH_HANDOFF_ACTION_RE = (
+    r"\b(?:check|inspect|look(?:\s+into)?|search|find|review|analy[sz]e|verify|"
+    r"edit|modify|update|write|create|open|read|fix|run|plan|wrap(?:\s+this\s+up)?|"
+    r"wrapping)\b"
+)
+_RESULT_EVIDENCE_PATTERNS = (
+    r"https?://",
+    r"[A-Za-z]:\\",
+    r"/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+",
+    r"`[^`]+`",
+    r"\b[A-Za-z0-9_.-]+\.(?:py|js|ts|tsx|jsx|json|md|txt|html|css|ya?ml|toml|ini|cfg|sh|ps1)\b",
+    r"\b(?:sqlite|flask|electron|localstorage)\s+\+",
+    r"\b(?:[A-C]|\d+)\b\s*\|",
+    r"\b\d+\s*(?:%|h|hr|hrs|hour|hours|min|mins|minute|minutes|sec|secs|second|seconds|times?)\b",
+    r"\b\d+\s*(?:to|-)\s*\d+\s*(?:degrees?|deg)\b",
+)
+
+
+@dataclass(frozen=True)
+class _HandoffShape:
+    visible: str
+    analysis_visible: str
+    raw_lines: list[str]
+    analysis_lines: list[str]
+    paragraphs: list[str]
+    sentences: list[str]
+    sentence_candidates: list[str]
+    last_line: str
+    last_line_candidate: str
+    fallback_candidate: str
+    line_count: int
+    paragraph_count: int
+    sentence_count: int
+    plain_line_count: int
+    numbered_count: int
+    bullet_count: int
+    has_code: bool
+    has_table: bool
+    char_count: int
+    structured_summary_shape: bool
+
+
+@dataclass(frozen=True)
+class _TrailingHandoffSplit:
+    body_text: str
+    tail_text: str
+    split_kind: str
+    body_shape: _HandoffShape
+    tail_shape: _HandoffShape
+
+
+@dataclass(frozen=True)
+class _PhraseIntent:
+    candidate: str
+    language: str
+    has_action: bool
+    short_followup: bool
 
 
 def _prefers_explicit_tool_call(tool_name: str) -> bool:
@@ -30,12 +113,341 @@ def _allows_phrase_handoff_assist(tool_name: str) -> bool:
 
 
 def _split_visible_sentences(text: str, *, re_mod) -> list[str]:
-    return [part.strip() for part in re_mod.split(r"[。！？?]\s*|\n+", str(text or "")) if part.strip()]
+    return [
+        part.strip()
+        for part in re_mod.split(r"[\u3002\uff01\uff1f!?]+\s*|\n+", str(text or ""))
+        if part.strip()
+    ]
 
 
-def _contains_any_token(text: str, tokens: tuple[str, ...]) -> bool:
-    raw = str(text or "")
-    return any(token in raw for token in tokens)
+def _visible_lines(text: str) -> list[str]:
+    return [line.strip() for line in str(text or "").replace("\r", "\n").splitlines() if line.strip()]
+
+
+def _visible_paragraphs(text: str, *, re_mod) -> list[str]:
+    return [part.strip() for part in re_mod.split(r"\n\s*\n", str(text or "")) if part.strip()]
+
+
+def _normalize_segment(raw: str, *, re_mod) -> str:
+    segment = re_mod.sub(r"^[\s#>*`\-\u2014\u2013\d\.\)\(]+", "", str(raw or "")).strip()
+    segment = re_mod.sub(r"^[^A-Za-z0-9\u4e00-\u9fff]+", "", segment).strip()
+    return segment
+
+
+def _strip_chatter_prefix(raw: str, *, re_mod) -> str:
+    segment = str(raw or "").strip()
+    if not segment:
+        return ""
+    stripped = re_mod.sub(_HANDOFF_CHATTER_PREFIX_RE, "", segment, flags=re_mod.I).strip()
+    return stripped or segment
+
+
+def _strip_list_marker(raw: str, *, re_mod) -> str:
+    return re_mod.sub(r"^(?:\d+\.\s+|[-*+\u2022]\s+)", "", str(raw or "")).strip()
+
+
+def _is_numbered_line(line: str, *, re_mod) -> bool:
+    return bool(re_mod.match(r"^\d+\.\s+\S+", str(line or "")))
+
+
+def _is_bullet_line(line: str, *, re_mod) -> bool:
+    return bool(re_mod.match(r"^(?:\d+\.|[-*+\u2022])\s+\S+", str(line or "")))
+
+
+def _clean_handoff_candidate(raw: str, *, re_mod) -> str:
+    candidate = _normalize_segment(raw, re_mod=re_mod) or str(raw or "").strip()
+    candidate = _strip_chatter_prefix(candidate, re_mod=re_mod)
+    candidate = _strip_list_marker(candidate, re_mod=re_mod)
+    return candidate.strip()
+
+
+def _extract_segment_handoff_intent(segment: str, *, re_mod) -> _PhraseIntent | None:
+    text = _clean_handoff_candidate(segment, re_mod=re_mod)
+    if not text or len(text) > 120:
+        return None
+
+    if re_mod.search(_ENGLISH_HANDOFF_LEAD_RE, text, flags=re_mod.I):
+        if not re_mod.search(_ENGLISH_HANDOFF_ACTION_RE, text, flags=re_mod.I):
+            return None
+        return _PhraseIntent(
+            candidate=text,
+            language="en",
+            has_action=True,
+            short_followup=False,
+        )
+
+    if not re_mod.search(_CHINESE_HANDOFF_LEAD_RE, text, flags=re_mod.I):
+        return None
+
+    has_action = bool(re_mod.search(_CHINESE_HANDOFF_ACTION_RE, text, flags=re_mod.I))
+    short_followup = not has_action and len(text) <= 16
+    if not has_action and not short_followup:
+        return None
+    return _PhraseIntent(
+        candidate=text,
+        language="zh",
+        has_action=has_action,
+        short_followup=short_followup,
+    )
+
+
+def _extract_handoff_shape(text: str, *, clean_visible_reply_text, re_mod) -> _HandoffShape:
+    visible = clean_visible_reply_text(text)
+    analysis_visible = re_mod.sub(r"```.*?```", "\n", visible, flags=re_mod.S).strip()
+
+    raw_lines = _visible_lines(visible)
+    analysis_lines = _visible_lines(analysis_visible)
+    paragraphs = _visible_paragraphs(analysis_visible, re_mod=re_mod)
+    sentences = _split_visible_sentences(analysis_visible, re_mod=re_mod)
+
+    sentence_candidates: list[str] = []
+    for sentence in sentences:
+        candidate = _clean_handoff_candidate(sentence, re_mod=re_mod)
+        if candidate:
+            sentence_candidates.append(candidate)
+
+    numbered_lines = [line for line in analysis_lines if _is_numbered_line(line, re_mod=re_mod)]
+    bullet_lines = [line for line in analysis_lines if _is_bullet_line(line, re_mod=re_mod)]
+    table_lines = [line for line in raw_lines if line.startswith("|") and line.endswith("|")]
+    plain_lines = [
+        line
+        for line in analysis_lines
+        if not _is_bullet_line(line, re_mod=re_mod) and not (line.startswith("|") and line.endswith("|"))
+    ]
+    last_line = analysis_lines[-1] if analysis_lines else ""
+    last_line_candidate = _clean_handoff_candidate(last_line, re_mod=re_mod)
+    fallback_candidate = _clean_handoff_candidate(analysis_visible, re_mod=re_mod) if analysis_visible else ""
+
+    structured_summary_shape = (
+        3 <= len(analysis_lines) <= 5
+        and 1 <= len(numbered_lines) <= 3
+        and bool(last_line)
+        and not _is_numbered_line(last_line, re_mod=re_mod)
+        and len(visible) <= 260
+    )
+
+    return _HandoffShape(
+        visible=visible,
+        analysis_visible=analysis_visible,
+        raw_lines=raw_lines,
+        analysis_lines=analysis_lines,
+        paragraphs=paragraphs,
+        sentences=sentences,
+        sentence_candidates=sentence_candidates,
+        last_line=last_line,
+        last_line_candidate=last_line_candidate,
+        fallback_candidate=fallback_candidate,
+        line_count=len(analysis_lines),
+        paragraph_count=len(paragraphs),
+        sentence_count=len(sentences),
+        plain_line_count=len(plain_lines),
+        numbered_count=len(numbered_lines),
+        bullet_count=len(bullet_lines),
+        has_code="```" in visible,
+        has_table=bool(table_lines),
+        char_count=len(visible),
+        structured_summary_shape=structured_summary_shape,
+    )
+
+
+def _has_result_payload_shape(shape: _HandoffShape, *, re_mod) -> bool:
+    if not shape.visible:
+        return False
+
+    if shape.has_code or shape.has_table:
+        return True
+    if shape.line_count > 6:
+        return True
+    if shape.sentence_count > 5:
+        return True
+
+    if shape.bullet_count >= 2:
+        if shape.structured_summary_shape and _extract_segment_handoff_intent(
+            shape.last_line_candidate,
+            re_mod=re_mod,
+        ):
+            return False
+        return True
+
+    if any(re_mod.search(pattern, shape.visible, flags=re_mod.I) for pattern in _RESULT_EVIDENCE_PATTERNS):
+        return True
+
+    if (
+        shape.plain_line_count >= 3
+        and shape.sentence_count >= 3
+        and shape.char_count > 180
+    ):
+        return True
+
+    return False
+
+
+def _is_phrase_candidate_shape(shape: _HandoffShape, *, re_mod) -> bool:
+    if not shape.visible:
+        return False
+    if shape.has_code or shape.has_table:
+        return False
+    if shape.line_count > 5:
+        return False
+    if shape.sentence_count > 5:
+        return False
+    return not _has_result_payload_shape(shape, re_mod=re_mod)
+
+
+def _is_short_handoff_shape(shape: _HandoffShape, *, re_mod) -> bool:
+    if not _is_phrase_candidate_shape(shape, re_mod=re_mod):
+        return False
+    if shape.line_count > 4:
+        return False
+    if shape.sentence_count > 4:
+        return False
+    return shape.numbered_count == 0
+
+
+def _is_structured_handoff_shape(shape: _HandoffShape, *, re_mod) -> bool:
+    if not _is_phrase_candidate_shape(shape, re_mod=re_mod):
+        return False
+    if not shape.structured_summary_shape:
+        return False
+    return bool(shape.last_line)
+
+
+def _iter_shape_intent_segments(shape: _HandoffShape) -> list[str]:
+    segments = list(shape.sentence_candidates)
+    if segments:
+        return segments
+    if shape.fallback_candidate:
+        return [shape.fallback_candidate]
+    return []
+
+
+def _extract_shape_handoff_intent(shape: _HandoffShape, *, re_mod) -> _PhraseIntent | None:
+    if not _is_phrase_candidate_shape(shape, re_mod=re_mod):
+        return None
+
+    for candidate in _iter_shape_intent_segments(shape):
+        intent = _extract_segment_handoff_intent(candidate, re_mod=re_mod)
+        if intent is not None:
+            return intent
+    return None
+
+
+def _tail_matches_handoff_shape(shape: _HandoffShape, *, re_mod) -> bool:
+    if _is_structured_handoff_shape(shape, re_mod=re_mod):
+        return _extract_segment_handoff_intent(shape.last_line, re_mod=re_mod) is not None
+    if _is_short_handoff_shape(shape, re_mod=re_mod):
+        return _extract_shape_handoff_intent(shape, re_mod=re_mod) is not None
+    return False
+
+
+def _body_supports_trailing_handoff(shape: _HandoffShape, *, re_mod) -> bool:
+    if not shape.visible:
+        return False
+    if _is_short_handoff_shape(shape, re_mod=re_mod):
+        return False
+    if _is_structured_handoff_shape(shape, re_mod=re_mod):
+        return False
+    if _has_result_payload_shape(shape, re_mod=re_mod):
+        return True
+    return (
+        shape.line_count >= 2
+        or shape.paragraph_count >= 2
+        or shape.char_count >= 72
+    )
+
+
+def _build_trailing_handoff_split(
+    body_text: str,
+    tail_text: str,
+    *,
+    split_kind: str,
+    clean_visible_reply_text,
+    re_mod,
+) -> _TrailingHandoffSplit | None:
+    body_clean = clean_visible_reply_text(body_text)
+    tail_clean = clean_visible_reply_text(tail_text)
+    if not body_clean or not tail_clean:
+        return None
+
+    body_shape = _extract_handoff_shape(
+        body_clean,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
+    tail_shape = _extract_handoff_shape(
+        tail_clean,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
+    if not _body_supports_trailing_handoff(body_shape, re_mod=re_mod):
+        return None
+    if not _tail_matches_handoff_shape(tail_shape, re_mod=re_mod):
+        return None
+    return _TrailingHandoffSplit(
+        body_text=body_clean,
+        tail_text=tail_clean,
+        split_kind=split_kind,
+        body_shape=body_shape,
+        tail_shape=tail_shape,
+    )
+
+
+def _extract_trailing_handoff_split(
+    text: str,
+    *,
+    clean_visible_reply_text,
+    re_mod,
+) -> _TrailingHandoffSplit | None:
+    visible = clean_visible_reply_text(text)
+    if not visible:
+        return None
+
+    whole_shape = _extract_handoff_shape(
+        visible,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
+    if _is_short_handoff_shape(whole_shape, re_mod=re_mod):
+        return None
+    if _is_structured_handoff_shape(whole_shape, re_mod=re_mod):
+        return None
+
+    paragraphs = _visible_paragraphs(visible, re_mod=re_mod)
+    if len(paragraphs) >= 2:
+        split = _build_trailing_handoff_split(
+            "\n\n".join(paragraphs[:-1]).strip(),
+            paragraphs[-1].strip(),
+            split_kind="paragraph",
+            clean_visible_reply_text=clean_visible_reply_text,
+            re_mod=re_mod,
+        )
+        if split:
+            return split
+
+    lines = _visible_lines(visible)
+    if len(lines) >= 2:
+        split = _build_trailing_handoff_split(
+            "\n".join(lines[:-1]).strip(),
+            lines[-1].strip(),
+            split_kind="last_line",
+            clean_visible_reply_text=clean_visible_reply_text,
+            re_mod=re_mod,
+        )
+        if split:
+            return split
+
+    if len(lines) >= 3:
+        split = _build_trailing_handoff_split(
+            "\n".join(lines[:-2]).strip(),
+            "\n".join(lines[-2:]).strip(),
+            split_kind="two_line_tail",
+            clean_visible_reply_text=clean_visible_reply_text,
+            re_mod=re_mod,
+        )
+        if split:
+            return split
+
+    return None
 
 
 def _looks_like_answer_payload(
@@ -44,255 +456,87 @@ def _looks_like_answer_payload(
     clean_visible_reply_text,
     re_mod,
 ) -> bool:
-    visible = clean_visible_reply_text(text)
-    if not visible:
-        return False
-    if "```" in visible:
-        return True
-
-    lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
-    if any(line.startswith("|") and line.endswith("|") for line in lines):
-        return True
-    if len(lines) > 6:
-        return True
-
-    sentence_count = len(_split_visible_sentences(visible, re_mod=re_mod))
-    if sentence_count > 5:
-        return True
-
-    bullet_count = len([line for line in lines if re_mod.match(r"^(?:\d+\.|[-*•])\s+\S+", line)])
-    if bullet_count >= 2:
-        return True
-
-    answer_like_patterns = (
-        r"https?://",
-        r"[A-Za-z]:\\",
-        r"(?:SQLite|Flask|Electron|LocalStorage)\s+\+",
-        r"\b(?:A|B|C)\b\s*\|",
-        r"\b\d+\s*(?:%|h|hr|hrs|hour|hours|min|mins|minute|minutes|sec|secs|second|seconds|times?)\b",
-        r"\b\d+\s*(?:to|-)\s*\d+\s*(?:degrees?|deg|°)\b",
-        r"\d+\s*(?:到|-)\s*\d+\s*(?:度|°)",
+    shape = _extract_handoff_shape(
+        text,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
     )
-    return any(re_mod.search(pattern, visible, flags=re_mod.I) for pattern in answer_like_patterns)
+    return _has_result_payload_shape(shape, re_mod=re_mod)
 
 
 def looks_like_tool_preamble(
     text: str,
     *,
     clean_visible_reply_text,
-    contains_tool_handoff_phrase,
     re_mod,
 ) -> bool:
-    visible = clean_visible_reply_text(text)
-    if not visible or "```" in visible:
-        return False
-    if _looks_like_answer_payload(
-        visible,
+    shape = _extract_handoff_shape(
+        text,
         clean_visible_reply_text=clean_visible_reply_text,
         re_mod=re_mod,
-    ):
+    )
+    if not _is_short_handoff_shape(shape, re_mod=re_mod):
         return False
-
-    lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
-    if len(lines) > 4:
-        return False
-    if any(re_mod.match(r"^\d+\.", line) for line in lines):
-        return False
-    if any(line.startswith("|") and line.endswith("|") for line in lines):
-        return False
-
-    sentence_count = len(_split_visible_sentences(visible, re_mod=re_mod))
-    if sentence_count > 4:
-        return False
-
-    return contains_tool_handoff_phrase(visible)
+    return _extract_shape_handoff_intent(shape, re_mod=re_mod) is not None
 
 
 def contains_tool_handoff_phrase(text: str, *, clean_visible_reply_text, re_mod) -> bool:
-    visible = clean_visible_reply_text(text)
-    if not visible:
-        return False
-
-    def _normalize_segment(raw: str) -> str:
-        segment = re_mod.sub(r"^[\s#>*`\-\u2014\u2013\d\.\)\(]+", "", str(raw or "")).strip()
-        segment = re_mod.sub(r"^[^A-Za-z0-9\u4e00-\u9fff]+", "", segment).strip()
-        return segment
-
-    normalized = _normalize_segment(visible) or visible
-    lowered = normalized.lower()
-    sentence_candidates = []
-    for part in _split_visible_sentences(visible, re_mod=re_mod):
-        candidate = _normalize_segment(part)
-        if candidate:
-            sentence_candidates.append(candidate)
-    later_candidates = sentence_candidates[1:] if len(sentence_candidates) > 1 else []
-
-    strong_preamble_prefixes = (
-        "我来",
-        "我先",
-        "我帮你",
-        "让我",
-        "先帮你",
-        "先看",
-        "先查",
-        "稍等",
-        "等我",
+    shape = _extract_handoff_shape(
+        text,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
     )
-    weak_preamble_prefixes = (
-        "好",
-        "行",
-        "那我",
-    )
-    action_stems = (
-        "看",
-        "查",
-        "梳理",
-        "定位",
-        "检索",
-        "分析",
-        "处理",
-        "确认",
-        "整理",
-        "回忆",
-        "执行",
-        "创建",
-        "写",
-        "打开",
-        "搜索",
-        "检查",
-        "记忆",
-        "一步到位",
-    )
-
-    if any(normalized.startswith(prefix) for prefix in strong_preamble_prefixes):
-        return True
-
-    if any(
-        any(candidate.startswith(prefix) for prefix in strong_preamble_prefixes)
-        and _contains_any_token(candidate, action_stems)
-        for candidate in later_candidates
-    ):
-        return True
-
-    action_hit = _contains_any_token(normalized, action_stems)
-    if not action_hit:
-        english_prefixes = (
-            "i will ",
-            "i'll ",
-            "let me ",
-            "first, i will ",
-            "first, i'll ",
-            "i am going to ",
-            "i'm going to ",
-            "i am wrapping ",
-            "i'm wrapping ",
-        )
-        english_actions = (
-            " update ",
-            " write ",
-            " create ",
-            " check ",
-            " inspect ",
-            " look ",
-            " search ",
-            " review ",
-            " analyze ",
-            " verify ",
-            " edit ",
-            " modify ",
-            " open ",
-            " wrap ",
-            " wrapping ",
-        )
-        if any(
-            any(candidate.lower().startswith(prefix) for prefix in english_prefixes)
-            and any(action in f" {candidate.lower()} " for action in english_actions)
-            for candidate in later_candidates
-        ):
-            return True
-        if not any(lowered.startswith(prefix) for prefix in english_prefixes):
-            return False
-        return any(action in f" {lowered} " for action in english_actions)
-
-    if any(normalized.startswith(prefix) for prefix in weak_preamble_prefixes) or normalized.startswith("先"):
-        return True
-
-    return any(
-        (
-            any(candidate.startswith(prefix) for prefix in weak_preamble_prefixes)
-            or candidate.startswith("先")
-        )
-        and _contains_any_token(candidate, action_stems)
-        for candidate in later_candidates
-    )
+    return _extract_shape_handoff_intent(shape, re_mod=re_mod) is not None
 
 
 def looks_like_structured_tool_handoff(
     text: str,
     *,
     clean_visible_reply_text,
-    contains_tool_handoff_phrase,
     re_mod,
 ) -> bool:
-    visible = clean_visible_reply_text(text)
-    if not visible or "```" in visible:
+    shape = _extract_handoff_shape(
+        text,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
+    if not _is_structured_handoff_shape(shape, re_mod=re_mod):
         return False
 
-    lines = [line.strip(" -") for line in visible.replace("\r", "\n").splitlines() if line.strip()]
-    if len(lines) < 3 or len(lines) > 5:
+    handoff_line = shape.last_line
+    if not handoff_line:
         return False
-    if any(line.startswith("|") and line.endswith("|") for line in lines):
-        return False
+    return _extract_segment_handoff_intent(handoff_line, re_mod=re_mod) is not None
 
-    numbered_lines = [line for line in lines if re_mod.match(r"^\d+\.\s+\S+", line)]
-    if not numbered_lines or len(numbered_lines) > 3:
-        return False
 
-    handoff_line = lines[-1]
-    if re_mod.match(r"^\d+\.", handoff_line):
-        return False
-    if len(visible) > 220:
-        return False
-
-    return contains_tool_handoff_phrase(handoff_line)
+def split_trailing_tool_handoff(
+    text: str,
+    *,
+    clean_visible_reply_text,
+    re_mod,
+) -> tuple[str, str] | None:
+    split = _extract_trailing_handoff_split(
+        text,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
+    if not split:
+        return None
+    return split.body_text, split.tail_text
 
 
 def looks_like_trailing_tool_handoff(
     text: str,
     *,
     clean_visible_reply_text,
-    looks_like_tool_preamble,
-    looks_like_structured_tool_handoff,
     re_mod,
 ) -> bool:
-    visible = clean_visible_reply_text(text)
-    if not visible:
-        return False
-
-    trailing_visible = re_mod.sub(r"```.*?```", "\n", visible, flags=re_mod.S).strip()
-    if not trailing_visible:
-        return False
-
-    lines = [line.strip(" -") for line in trailing_visible.replace("\r", "\n").splitlines() if line.strip()]
-    paragraphs = [part.strip() for part in re_mod.split(r"\n\s*\n", trailing_visible) if part.strip()]
-
-    candidates = []
-    if paragraphs:
-        candidates.append(paragraphs[-1])
-    if len(lines) >= 2:
-        candidates.append("\n".join(lines[-2:]))
-    if lines:
-        candidates.append(lines[-1])
-
-    seen = set()
-    for candidate in candidates:
-        candidate = str(candidate or "").strip()
-        if not candidate or candidate == trailing_visible or candidate in seen:
-            continue
-        seen.add(candidate)
-        if looks_like_tool_preamble(candidate) or looks_like_structured_tool_handoff(candidate):
-            return True
-    return False
+    split = _extract_trailing_handoff_split(
+        text,
+        clean_visible_reply_text=clean_visible_reply_text,
+        re_mod=re_mod,
+    )
+    return split is not None
 
 
 def stream_tool_call_name(tool_calls_signal: list[dict] | None) -> str:
@@ -359,8 +603,7 @@ def resolve_stream_tool_calls_signal(
         keep_mixed = should_keep_stream_tool_call_with_visible_text(tool_calls_signal, visible_joined)
         keep_short_preface = (
             _prefers_explicit_tool_call(tool_name)
-            and
-            len(visible_joined) <= 120
+            and len(visible_joined) <= 120
             and not _looks_like_answer_payload(
                 visible_joined,
                 clean_visible_reply_text=clean_visible_reply_text,

@@ -720,6 +720,7 @@ def _finalize_tool_reply(
         looks_like_tool_preamble=_looks_like_tool_preamble,
         looks_like_structured_tool_handoff=_looks_like_structured_tool_handoff,
         looks_like_trailing_tool_handoff=_looks_like_trailing_tool_handoff,
+        split_trailing_tool_handoff=_split_trailing_tool_handoff,
         build_tool_closeout_reply=_build_tool_closeout_reply,
         re_mod=_re,
     )
@@ -743,7 +744,6 @@ def _looks_like_tool_preamble(text: str) -> bool:
     return _handoff_signals.looks_like_tool_preamble(
         text,
         clean_visible_reply_text=_clean_visible_reply_text,
-        contains_tool_handoff_phrase=_contains_tool_handoff_phrase,
         re_mod=_re,
     )
 
@@ -758,7 +758,6 @@ def _looks_like_structured_tool_handoff(text: str) -> bool:
     return _handoff_signals.looks_like_structured_tool_handoff(
         text,
         clean_visible_reply_text=_clean_visible_reply_text,
-        contains_tool_handoff_phrase=_contains_tool_handoff_phrase,
         re_mod=_re,
     )
 
@@ -766,8 +765,13 @@ def _looks_like_trailing_tool_handoff(text: str) -> bool:
     return _handoff_signals.looks_like_trailing_tool_handoff(
         text,
         clean_visible_reply_text=_clean_visible_reply_text,
-        looks_like_tool_preamble=_looks_like_tool_preamble,
-        looks_like_structured_tool_handoff=_looks_like_structured_tool_handoff,
+        re_mod=_re,
+    )
+
+def _split_trailing_tool_handoff(text: str) -> tuple[str, str] | None:
+    return _handoff_signals.split_trailing_tool_handoff(
+        text,
+        clean_visible_reply_text=_clean_visible_reply_text,
         re_mod=_re,
     )
 
@@ -837,6 +841,13 @@ def _summarize_tool_response_text(text: str) -> str:
 
 def _fallback_tool_reply(tool_response: str) -> str:
     return _closeout_helpers.fallback_tool_reply(tool_response, format_skill_fallback=format_skill_fallback)
+
+
+def _build_missing_execution_closeout_reply(*, reason: str = "", summary: str = "") -> str:
+    return _closeout_helpers.build_missing_execution_closeout_reply(
+        reason=reason,
+        summary=summary,
+    )
 
 
 def _has_only_preamble_text(chunks: list, *, current_tool_success: bool) -> bool:

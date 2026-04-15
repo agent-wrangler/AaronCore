@@ -580,6 +580,14 @@ class RunEventMappingTests(unittest.TestCase):
         )
         self.assertFalse(reply_formatter_module._looks_like_tool_preamble("好的，有需要随时叫我哦～"))
         self.assertTrue(
+            reply_formatter_module._looks_like_tool_preamble(
+                "Sure, let me inspect the current config and verify what is still wired up."
+            )
+        )
+        self.assertTrue(reply_formatter_module._contains_tool_handoff_phrase("Let me check the current config."))
+        self.assertTrue(reply_formatter_module._contains_tool_handoff_phrase("Let me inspect the current config"))
+        self.assertFalse(reply_formatter_module._contains_tool_handoff_phrase("Let me know if you need anything else."))
+        self.assertTrue(
             reply_formatter_module._looks_like_trailing_tool_handoff(
                 "主人，你说到点子上了！这确实是个很关键的问题。\n\n"
                 "我理解你的感受：\n"
@@ -589,6 +597,32 @@ class RunEventMappingTests(unittest.TestCase):
                 "让我先回忆一下我们最近的开发任务："
             )
         )
+        self.assertTrue(
+            reply_formatter_module._looks_like_trailing_tool_handoff(
+                "I already checked `settings.js` and found the old listener override.\n"
+                "Move store init before the click handler to stop the duplicate trigger.\n"
+                "Let me check the rest of the interaction path too."
+            )
+        )
+
+    def test_handoff_words_do_not_override_payload_shape(self):
+        payload_text = (
+            "Let me inspect this first, but I already have the concrete results below.\n"
+            "- C:\\project\\app.py\n"
+            "- C:\\project\\tests\\test_app.py\n"
+            "- C:\\project\\README.md"
+        )
+        self.assertFalse(reply_formatter_module._contains_tool_handoff_phrase(payload_text))
+        self.assertFalse(reply_formatter_module._looks_like_tool_preamble(payload_text))
+
+    def test_handoff_words_do_not_override_code_payload_shape(self):
+        payload_text = (
+            "Let me check this quickly. I already captured the actual config below.\n\n"
+            "```python\nmax_tokens = 4096\ncontext_window = 8192\n```"
+        )
+
+        self.assertFalse(reply_formatter_module._contains_tool_handoff_phrase(payload_text))
+        self.assertFalse(reply_formatter_module._looks_like_tool_preamble(payload_text))
 
     def test_stream_safe_readonly_tool_call_is_kept_with_short_soft_visible_text(self):
         tool_calls = [
@@ -1227,41 +1261,29 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertEqual(done.get("tool_used"), "recall_memory")
         self.assertEqual(done.get("success"), True)
 
-    def test_unified_reply_with_tools_stream_uses_llm_closeout_after_missing_execution_exhausted(self):
+    def test_unified_reply_with_tools_stream_uses_runtime_closeout_after_missing_execution_exhausted(self):
         call_count = {"value": 0}
-
-        def fake_stream(_cfg, messages, **kwargs):
+        def fake_stream(_cfg, _messages, **_kwargs):
             call_count["value"] += 1
-            tools = kwargs.get("tools")
-            if call_count["value"] == 1:
-                yield "我刚刚查看了 `RUNTIME.md`，在 `RUNTIME.md` 里看到这个 agent 应该做了一个多月。"
-                yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 5}}
-                return
-            if tools:
-                yield "刚才那段先别当结果，我还是没有真正查到。"
-                yield {"_usage": {"prompt_tokens": 5, "completion_tokens": 4}}
-                return
-            yield "刚才那段不能当结果，这轮实际上没有完成真正的读取；要确认的话，我需要重新执行那次检查。"
-            yield {"_usage": {"prompt_tokens": 4, "completion_tokens": 3}}
-
+            yield "Let me check `RUNTIME.md`; I found this agent has been around for more than a month."
+            yield {"_usage": {"prompt_tokens": 6, "completion_tokens": 5}}
         bundle = {
-            "user_input": "我们做这个agent多久了",
+            "user_input": "check how long this agent has been around",
             "l1": [],
             "l4": {},
             "dialogue_context": "",
         }
-
         with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
             reply_formatter_module, "_llm_call", lambda *_a, **_k: {"content": ""}
         ), patch.object(reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"), patch.object(
             reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"
         ):
             chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], lambda *_a: {}))
-
         visible_text = "".join(chunk for chunk in chunks if isinstance(chunk, str))
-        self.assertIn("刚才那段不能当结果", visible_text)
-        self.assertIn("重新执行那次检查", visible_text)
-        self.assertNotIn("还没有实际调用读取文件或目录的工具", visible_text)
+        self.assertEqual(call_count["value"], 1)
+        self.assertIn("这一步先停在这里", visible_text)
+        self.assertIn("还没有拿到新的读取或检查结果", visible_text)
+        self.assertNotIn("刚才那段不能当结果", visible_text)
         done = chunks[-1]
         self.assertEqual(done.get("_done"), True)
         self.assertIsNone(done.get("tool_used"))
@@ -3516,42 +3538,29 @@ class InitialToolHandoffRetryRegressionTests(unittest.TestCase):
         self.assertEqual(result.get("success"), True)
         self.assertIn("至少三月上旬就已经在做了", result.get("reply", ""))
 
-    def test_unified_reply_with_tools_non_stream_uses_llm_closeout_after_missing_execution_exhausted(self):
+    def test_unified_reply_with_tools_non_stream_uses_runtime_closeout_after_missing_execution_exhausted(self):
         call_count = {"value": 0}
-
-        def fake_llm_call(_cfg, messages, tools=None, **_kwargs):
+        def fake_llm_call(_cfg, _messages, tools=None, **_kwargs):
             call_count["value"] += 1
-            if call_count["value"] == 1:
-                return {
-                    "content": "我刚刚查看了 `RUNTIME.md`，在 `RUNTIME.md` 里看到这个 agent 应该做了一个多月。",
-                    "usage": {"prompt_tokens": 6, "completion_tokens": 5},
-                }
-            if tools:
-                return {
-                    "content": "刚才那段先别当结果，我还是没有真正查到。",
-                    "usage": {"prompt_tokens": 5, "completion_tokens": 4},
-                }
             return {
-                "content": "刚才那段不能当结果，这轮实际上没有完成真正的读取；要确认的话，我需要重新执行那次检查。",
-                "usage": {"prompt_tokens": 4, "completion_tokens": 3},
+                "content": "Let me check `RUNTIME.md`; I found this agent has been around for more than a month.",
+                "usage": {"prompt_tokens": 6, "completion_tokens": 5},
             }
-
         bundle = {
-            "user_input": "我们做这个agent多久了",
+            "user_input": "check how long this agent has been around",
             "l1": [],
             "l4": {},
             "dialogue_context": "",
         }
-
         with patch.object(reply_formatter_module, "_llm_call", side_effect=fake_llm_call), patch.object(
             reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
         ), patch.object(reply_formatter_module, "_build_tool_call_user_prompt", return_value="user"):
             result = reply_formatter_module.unified_reply_with_tools(bundle, [], lambda *_a: {})
-
-        self.assertEqual(call_count["value"], 2)
+        self.assertEqual(call_count["value"], 1)
         self.assertIsNone(result.get("tool_used"))
-        self.assertIn("刚才那段不能当结果", result.get("reply", ""))
-        self.assertNotIn("还没有实际调用读取文件或目录的工具", result.get("reply", ""))
+        self.assertIn("这一步先停在这里", result.get("reply", ""))
+        self.assertIn("还没有拿到新的读取或检查结果", result.get("reply", ""))
+        self.assertNotIn("刚才那段不能当结果", result.get("reply", ""))
 
 
 class StructuredToolHandoffRegressionTests(unittest.TestCase):
@@ -3931,3 +3940,5 @@ class TargetProtocolPathResolutionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

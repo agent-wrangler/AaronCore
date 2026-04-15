@@ -33,6 +33,38 @@ def fallback_tool_reply(tool_response: str, *, format_skill_fallback) -> str:
     return format_skill_fallback_text(text)
 
 
+def build_missing_execution_closeout_reply(*, reason: str = "", summary: str = "") -> str:
+    reason_key = str(reason or "").strip()
+    base_reply = {
+        "local_inspection_without_tool": "这一步先停在这里，还没有拿到新的读取或检查结果。",
+        "completion_without_tool": "这一步先停在这里，还没有拿到新的执行结果。",
+        "preamble_without_tool": "这一步先停在这里，还没有拿到新的实际结果。",
+    }.get(reason_key, "这一步先停在这里，还没有拿到新的实际结果。")
+
+    summary_text = str(summary or "").strip()
+    if not summary_text:
+        return base_reply
+
+    lowered = summary_text.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "claimed local inspection",
+            "claimed completion",
+            "without a real",
+            "tool result",
+            "local_inspection_without_tool",
+            "completion_without_tool",
+            "preamble_without_tool",
+        )
+    ):
+        return base_reply
+
+    if summary_text in base_reply:
+        return base_reply
+    return _build_closeout_text(base_reply, summary=summary_text)
+
+
 def _extract_process_meta(run_meta: dict | None) -> dict:
     if not isinstance(run_meta, dict):
         return {}
@@ -207,6 +239,7 @@ def finalize_tool_reply(
     looks_like_tool_preamble,
     looks_like_structured_tool_handoff,
     looks_like_trailing_tool_handoff,
+    split_trailing_tool_handoff,
     build_tool_closeout_reply,
     re_mod,
 ) -> str:
@@ -224,6 +257,7 @@ def finalize_tool_reply(
         looks_like_tool_preamble=looks_like_tool_preamble,
         looks_like_structured_tool_handoff=looks_like_structured_tool_handoff,
         looks_like_trailing_tool_handoff=looks_like_trailing_tool_handoff,
+        split_trailing_tool_handoff=split_trailing_tool_handoff,
         re_mod=re_mod,
     )
     if cleaned and not (
@@ -272,36 +306,19 @@ def strip_trailing_tool_handoff(
     looks_like_tool_preamble,
     looks_like_structured_tool_handoff,
     looks_like_trailing_tool_handoff,
+    split_trailing_tool_handoff,
     re_mod,
 ) -> str:
     cleaned = clean_visible_reply_text(text)
     if not cleaned or not looks_like_trailing_tool_handoff(cleaned):
         return cleaned
 
-    paragraphs = [part.strip() for part in re_mod.split(r"\n\s*\n", cleaned) if part.strip()]
-    lines = [line.strip() for line in cleaned.replace("\r", "\n").splitlines() if line.strip()]
-    candidates: list[tuple[str, str]] = []
-
-    if len(paragraphs) >= 2:
-        candidates.append(("\n\n".join(paragraphs[:-1]).strip(), paragraphs[-1].strip()))
-    if len(lines) >= 2:
-        candidates.append(("\n".join(lines[:-1]).strip(), lines[-1].strip()))
-    if len(lines) >= 3:
-        candidates.append(("\n".join(lines[:-2]).strip(), "\n".join(lines[-2:]).strip()))
-
-    for remaining, tail in candidates:
-        if not remaining or not tail:
-            continue
-        if not (
-            looks_like_tool_preamble(tail)
-            or looks_like_structured_tool_handoff(tail)
+    split = split_trailing_tool_handoff(cleaned) if callable(split_trailing_tool_handoff) else None
+    if split:
+        stripped, _tail = split
+        if stripped and not (
+            looks_like_tool_preamble(stripped) or looks_like_structured_tool_handoff(stripped)
         ):
-            continue
-        stripped = clean_visible_reply_text(remaining)
-        if not stripped:
-            continue
-        if looks_like_tool_preamble(stripped) or looks_like_structured_tool_handoff(stripped):
-            continue
-        return stripped
+            return clean_visible_reply_text(stripped)
 
     return cleaned
