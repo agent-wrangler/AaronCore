@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260407p">
+  <link rel="stylesheet" href="./styles.css?v=20260416p1">
 </head>
-<body data-page="papers">
+<body data-page="papers" data-paper-lang-active="en">
   <div class="ambient" aria-hidden="true">
     <div class="ambient-grid"></div>
     <div class="ambient-scan"></div>
@@ -38,145 +38,348 @@
     </a>
 
     <nav class="topnav">
-      <a href="./index.html" data-i18n="nav.home">Home</a>
-      <a href="./product.html" data-i18n="nav.product">Product</a>
-      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
-      <a href="./papers.html" data-i18n="nav.papers">Papers</a>
-      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+      <a href="./index.html">Home</a>
+      <a href="./product.html">Product</a>
+      <a href="./docs.html">Docs</a>
+      <a href="./papers.html">Papers</a>
+      <a href="./changelog.html">Changelog</a>
     </nav>
 
     <div class="top-actions">
-      <div class="lang-switch" id="langSwitch">
-        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
-        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
-          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
-          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">中文</span><span class="code">ZH</span></button>
-          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">日本語</span><span class="code">JA</span></button>
-          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">한국어</span><span class="code">KO</span></button>
-        </div>
+      <div class="paper-top-switch" aria-label="Language toggle">
+        <button class="paper-top-lang is-active" type="button" data-paper-lang-set="en" aria-pressed="true">EN</button>
+        <button class="paper-top-lang" type="button" data-paper-lang-set="zh" aria-pressed="false">中文</button>
       </div>
-      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./index.html#join-beta">Join Beta</a>
+      <a class="top-cta" data-link-field="betaUrl" href="./index.html#join-beta">Join Beta</a>
     </div>
   </header>
 
-  <main class="page">
+  <main class="page paper-page">
     <section class="section section-light">
-      <div class="section-intro reveal">
-        <span class="section-tag">Working papers</span>
-        <h1 class="page-title">Theses from building continuity into an agent</h1>
-        <p class="page-subtitle">
-          These are not neutral docs. They are position papers from the AaronCore direction: memory as runtime, continuity as a systems problem, and state as the thing that keeps work from dissolving between turns.
-        </p>
-      </div>
+      <article class="paper-hero reveal">
+        <div class="paper-hero-head">
+          <div class="paper-kicker-row">
+            <span class="section-tag">Working paper 01</span>
+            <span class="paper-issue">April 2026</span>
+          </div>
 
-      <div class="papers-lead reveal">
-        <div>
-          <h3>What this page is for</h3>
-          <p>
-            Product pages explain what AaronCore does. This page explains what it believes. The target is not a feature checklist. The target is a clearer vocabulary for what current agents still keep breaking.
-          </p>
-        </div>
-        <div class="docs-cta-actions">
-          <a class="button button-secondary" href="./product.html#proof">See product proof</a>
-          <a class="button button-primary" href="mailto:hello@aaroncore.com">Discuss by email</a>
-        </div>
-      </div>
+          <div data-paper-lang="en">
+            <h1 class="page-title paper-page-title">Continuity is the product</h1>
+            <p class="page-subtitle paper-page-subtitle">
+              Most assistants do not fail because they answer badly. They fail because they keep dropping the thread. AaronCore is built from the belief that memory, continuity, and runtime state have to be designed together.
+            </p>
+          </div>
 
-      <div class="papers-index reveal">
-        <article class="paper-card">
-          <span class="card-kicker">Paper 01</span>
-          <h3><a class="paper-anchor" href="#paper-memory-runtime">Memory is not a feature</a></h3>
-          <p>When memory is bolted on after the model speaks, continuity stays synthetic. AaronCore treats memory as part of the runtime boundary itself.</p>
-        </article>
-        <article class="paper-card">
-          <span class="card-kicker">Paper 02</span>
-          <h3><a class="paper-anchor" href="#paper-continuity-breaks">Continuity breaks before intelligence</a></h3>
-          <p>The most painful failure in current assistants is not that they cannot answer. It is that they cannot stay with the same line of work long enough to feel coherent.</p>
-        </article>
-        <article class="paper-card">
-          <span class="card-kicker">Paper 03</span>
-          <h3><a class="paper-anchor" href="#paper-state-over-prompts">State beats prompt tricks</a></h3>
-          <p>Continuation cannot depend on clever wording. It needs explicit runtime state: task plans, blockers, last actions, verification, and the next unresolved step.</p>
+          <div data-paper-lang="zh">
+            <h1 class="page-title paper-page-title">连续性才是产品本体</h1>
+            <p class="page-subtitle paper-page-subtitle">
+              现在的大多数助手，不是输在单次回答不够聪明，而是输在总会掉线。AaronCore 想做的，是把记忆、连续性和运行时状态当成同一个问题来设计。
+            </p>
+          </div>
+        </div>
+
+        <div class="paper-meta-grid">
+          <div class="paper-meta-cell">
+            <span class="paper-meta-label">
+              <span data-paper-lang="en">Edition</span>
+              <span data-paper-lang="zh">版本</span>
+            </span>
+            <strong>Working paper 01</strong>
+          </div>
+          <div class="paper-meta-cell">
+            <span class="paper-meta-label">
+              <span data-paper-lang="en">Focus</span>
+              <span data-paper-lang="zh">主题</span>
+            </span>
+            <strong>
+              <span data-paper-lang="en">Memory, continuity, and state</span>
+              <span data-paper-lang="zh">记忆、连续性与状态</span>
+            </strong>
+          </div>
+          <div class="paper-meta-cell">
+            <span class="paper-meta-label">
+              <span data-paper-lang="en">Reading time</span>
+              <span data-paper-lang="zh">阅读时间</span>
+            </span>
+            <strong>
+              <span data-paper-lang="en">About 7 minutes</span>
+              <span data-paper-lang="zh">约 7 分钟</span>
+            </strong>
+          </div>
+          <div class="paper-meta-cell">
+            <span class="paper-meta-label">
+              <span data-paper-lang="en">Language</span>
+              <span data-paper-lang="zh">语言</span>
+            </span>
+            <div class="paper-inline-switch">
+              <button class="paper-inline-lang is-active" type="button" data-paper-lang-set="en" aria-pressed="true">English</button>
+              <button class="paper-inline-lang" type="button" data-paper-lang-set="zh" aria-pressed="false">中文</button>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section section-heavy paper-reading-shell">
+      <div class="paper-layout">
+        <aside class="paper-aside reveal">
+          <div class="paper-side-card">
+            <span class="section-tag">
+              <span data-paper-lang="en">Abstract</span>
+              <span data-paper-lang="zh">摘要</span>
+            </span>
+            <div data-paper-lang="en">
+              <p>
+                AaronCore starts from a blunt claim: users do not experience intelligence as isolated answers. They experience it as whether the system can stay with the same line of work, remember the pressure around it, and continue without making them rebuild context from scratch. This note argues for three design commitments: memory belongs to runtime, continuity fails before intelligence, and explicit state matters more than prompt cleverness.
+              </p>
+            </div>
+            <div data-paper-lang="zh">
+              <p>
+                AaronCore 的起点很直接：用户感受到的，并不是一条条孤立回答里的“聪明”，而是系统能不能沿着同一条工作线继续走下去，记得住这件事的上下文和压力，不让人反复从头解释。所以这篇短文只讲三件事：记忆必须属于运行时，连续性的问题早于智能问题，显式状态比提示词小技巧更重要。
+              </p>
+            </div>
+          </div>
+
+          <div class="paper-side-card">
+            <span class="section-tag">
+              <span data-paper-lang="en">Contents</span>
+              <span data-paper-lang="zh">目录</span>
+            </span>
+            <div data-paper-lang="en">
+              <nav class="paper-outline">
+                <a href="#opening">Opening</a>
+                <a href="#thesis-memory">Thesis I · Memory is runtime</a>
+                <a href="#thesis-continuity">Thesis II · Continuity fails first</a>
+                <a href="#thesis-state">Thesis III · State beats prompt tricks</a>
+                <a href="#closing">Closing</a>
+              </nav>
+            </div>
+            <div data-paper-lang="zh">
+              <nav class="paper-outline">
+                <a href="#opening">开场</a>
+                <a href="#thesis-memory">论点一 · 记忆属于运行时</a>
+                <a href="#thesis-continuity">论点二 · 先坏掉的是连续性</a>
+                <a href="#thesis-state">论点三 · 状态比提示词更重要</a>
+                <a href="#closing">结尾</a>
+              </nav>
+            </div>
+          </div>
+
+          <div class="paper-side-card">
+            <span class="section-tag">
+              <span data-paper-lang="en">Claims</span>
+              <span data-paper-lang="zh">核心判断</span>
+            </span>
+            <div data-paper-lang="en">
+              <ul class="paper-claims">
+                <li>Memory has to shape the turn, not annotate it afterward.</li>
+                <li>The user feels discontinuity before they diagnose weak intelligence.</li>
+                <li>Long-running work needs explicit state, not continuation theater.</li>
+              </ul>
+            </div>
+            <div data-paper-lang="zh">
+              <ul class="paper-claims">
+                <li>记忆必须参与当前这一轮，而不是事后给回答贴标签。</li>
+                <li>用户先感受到的是掉线，而不是“模型不够聪明”。</li>
+                <li>长任务需要显式状态，不能靠“继续一下”的表演感撑着。</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+
+        <article class="paper-article reveal">
+          <section class="paper-section-long" id="opening">
+            <div data-paper-lang="en">
+              <span class="card-kicker">Opening</span>
+              <h2>Most agents do not collapse in public. They dissolve in the middle of work.</h2>
+              <p>
+                We keep asking for smarter models while tolerating a primitive failure: the system keeps waking up at the surface of the conversation. It can sound sharp for one turn, then force the user to restate the task, the mood, the constraints, and the unfinished edge of the work. That is not a minor interface flaw. That is the place where the product breaks.
+              </p>
+              <p>
+                If the thread cannot hold, every other capability starts leaking value. Memory becomes decoration. Tool use turns into isolated episodes. Personality becomes a thin style layer pasted on top of reset after reset. The user may still get local wins, but the feeling of forward motion never compounds.
+              </p>
+              <blockquote class="paper-pullquote">
+                The real test is not whether an agent can answer. It is whether the work still feels alive five turns later.
+              </blockquote>
+            </div>
+
+            <div data-paper-lang="zh">
+              <span class="card-kicker">开场</span>
+              <h2>大多数 agent 不是当场崩掉，而是在做事的中途慢慢散掉。</h2>
+              <p>
+                我们一直在追求更聪明的模型，却默认接受一个更原始的问题：系统总是只活在对话表面。它这一轮可以说得很好，下一轮却又逼着用户把任务、语气、限制条件、还有没做完的那点边缘，全都重新讲一遍。这不是一个小小的交互瑕疵，这恰恰就是产品真正断开的地方。
+              </p>
+              <p>
+                一旦线头接不住，其他能力都会开始漏价值。记忆会变成装饰，工具调用会变成零碎片段，人格感只剩下一层贴在不断重启之上的风格皮肤。用户也许还能拿到几次局部收益，但“事情在往前走”的感觉根本累积不起来。
+              </p>
+              <blockquote class="paper-pullquote">
+                真正的考验不是 agent 能不能答，而是五轮之后，这件事还像不像一件活着的事。
+              </blockquote>
+            </div>
+          </section>
+
+          <section class="paper-section-long" id="thesis-memory">
+            <div data-paper-lang="en">
+              <span class="card-kicker">Thesis I</span>
+              <h2>Memory is not a feature. It is part of runtime.</h2>
+              <p>
+                Most systems still treat memory like storage attached after the fact. The model speaks first. Then retrieval, notes, or profile snippets arrive to decorate the answer. That architecture can produce a memory demo, but it rarely produces a remembered interaction.
+              </p>
+              <p>
+                Once memory enters only after the model has already formed its response, it can annotate the turn but it cannot define the situation. It cannot decide whether this moment should feel like a recap, a return to an unfinished thread, a preference reminder, or a quiet continuation of the same line of work.
+              </p>
+              <p>
+                That is why AaronCore keeps different forms of memory apart. Recent context, longer-lived task state, user posture, relationship texture, and execution traces should not be thrown into one bucket. They carry different authority, decay differently, and should come back through different paths.
+              </p>
+            </div>
+
+            <div data-paper-lang="zh">
+              <span class="card-kicker">论点一</span>
+              <h2>记忆不是外挂功能，它本来就该属于运行时。</h2>
+              <p>
+                现在很多系统依然把记忆当成一种“事后补充”的存储层。模型先说话，然后检索结果、笔记碎片、用户画像再被塞回来给这条回答做装饰。这样的结构可以做出记忆演示，却很难做出真正“被记住”的交互体验。
+              </p>
+              <p>
+                如果记忆只在模型已经形成回答之后才进场，它最多只能给这一轮加注释，却不能定义这一轮到底是什么。它无法决定此刻应该像一次回顾、像回到一条没做完的线、像提醒一个偏好，还是像同一件工作自然地继续往前走。
+              </p>
+              <p>
+                所以 AaronCore 不想把各种记忆都扔进一个桶里。近期上下文、持续中的任务状态、用户的交流姿态、关系质感、执行轨迹，这些东西权重不同、衰减方式不同、回来的入口也应该不同。真正有用的不是“记了很多”，而是“该回来的，能以对的方式回来”。
+              </p>
+            </div>
+          </section>
+
+          <section class="paper-section-long" id="thesis-continuity">
+            <div data-paper-lang="en">
+              <span class="card-kicker">Thesis II</span>
+              <h2>Users feel broken continuity before they diagnose weak intelligence.</h2>
+              <p>
+                People often call assistants shallow when what they really mean is discontinuous. A system can summarize a document, write code, or call a tool. But if it returns on the next turn like a stranger, intelligence never compounds. The user has to rebuild the scene before the model can even be clever again.
+              </p>
+              <p>
+                That is why continuity should be treated as a first-order systems concern. It sits between memory and action. It determines whether the next reply belongs to a live trajectory or whether the system has silently collapsed back into another isolated completion.
+              </p>
+              <p>
+                Continuity is the difference between a clever completion and a working collaborator. A strong single turn is impressive. A line of work that can actually stay alive is what makes the relationship feel real.
+              </p>
+            </div>
+
+            <div data-paper-lang="zh">
+              <span class="card-kicker">论点二</span>
+              <h2>用户最先感受到的，不是智能弱，而是连续性先坏了。</h2>
+              <p>
+                很多人会说一个助手“浅”“不靠谱”“不够聪明”，但真正让人难受的往往不是这层东西，而是它不连续。系统当然可以总结文档、写代码、调工具，可如果下一轮回来时像个陌生人一样，那么所谓的智能根本没机会累积。用户得先把场景重建一遍，模型才有资格重新表现。
+              </p>
+              <p>
+                所以连续性应该被当成一等系统问题来看。它站在记忆和行动之间，决定下一条回复到底是不是同一条轨迹上的延续，还是系统已经悄悄塌回了一次新的、孤立的完成。
+              </p>
+              <p>
+                连续性区分的，不只是“会答题”和“不会答题”，而是“像一个聪明的完成器”和“像一个能一起做事的协作者”。一轮很强当然会让人惊讶，但一件事真的能活着往前推进，才会让关系感和信任感开始出现。
+              </p>
+            </div>
+          </section>
+
+          <section class="paper-section-long" id="thesis-state">
+            <div data-paper-lang="en">
+              <span class="card-kicker">Thesis III</span>
+              <h2>State beats prompt tricks when work has to survive time.</h2>
+              <p>
+                Prompting is useful for local behavior. It is weak infrastructure for long-running work. As soon as continuation depends on phrasing alone, the system starts acting through theater: detect a keyword, pretend to remember the branch, guess what the user must mean by “continue.”
+              </p>
+              <p>
+                Explicit state gives continuity something firmer. Which task is active. Which step ran last. What blocked. What changed. What still needs verification. What target the system believes it is acting on. Once those facts exist outside the wording of the latest turn, continuation stops depending on guesswork.
+              </p>
+              <p>
+                This matters for honesty as much as reliability. A system with explicit state can say what it knows, what it tried, what failed, and why the next step follows. That makes progress legible. And legibility matters, because trust does not come from polished prose. It comes from a path the user can inspect.
+              </p>
+            </div>
+
+            <div data-paper-lang="zh">
+              <span class="card-kicker">论点三</span>
+              <h2>一旦事情要跨时间继续，状态就比提示词小技巧更重要。</h2>
+              <p>
+                提示词很适合塑造局部行为，但它不是长任务的基础设施。只要“继续做下去”这件事还依赖措辞本身，系统就会滑向一种表演：看见某个关键词，假装记得上一条分支，靠猜来理解用户嘴里的“继续”到底指什么。
+              </p>
+              <p>
+                显式状态给连续性提供了更硬的支点。当前激活的任务是什么，上一步实际跑到了哪里，卡点是什么，哪些东西已经改动，哪些还没验证，系统认为自己现在在对哪个目标做动作。这些事实一旦独立于最新一句话存在下来，后续推进就不再主要依赖猜测。
+              </p>
+              <p>
+                这件事不仅关系到稳定性，也关系到诚实。一个拥有显式状态的系统，才能清楚地说出自己知道什么、试过什么、哪里失败了、为什么下一步会是这个。进展一旦变得可读，信任才会开始成立。真正让人放心的，不是漂亮的话术，而是一条能被看见的推进路径。
+              </p>
+            </div>
+          </section>
+
+          <section class="paper-section-long" id="closing">
+            <div data-paper-lang="en">
+              <span class="card-kicker">Closing</span>
+              <h2>The point is not magic. The point is that work should accumulate.</h2>
+              <p>
+                AaronCore does not need perfect memory or perfect intelligence to feel materially better. It needs the thread to survive. Once memory, continuity, and state are designed together, an agent stops feeling like a sequence of lucky turns and starts feeling like a place where work can gather weight.
+              </p>
+              <p>
+                That is the direction of these papers. Not hype, not a feature catalog, and not borrowed philosophy. Just a cleaner language for the thing we are actually trying to build: an agent that can stay with the work long enough for the user to feel it.
+              </p>
+            </div>
+
+            <div data-paper-lang="zh">
+              <span class="card-kicker">结尾</span>
+              <h2>重点不是神奇，而是事情应该能累积。</h2>
+              <p>
+                AaronCore 不需要完美记忆，也不需要完美智能，才会让体验明显变好。它只需要让那根线别断。只要记忆、连续性和状态是一起设计的，agent 就不会再像一连串运气好的单回合，而会更像一个能让工作慢慢长出重量的地方。
+              </p>
+              <p>
+                这也是这组文章想做的事。不是造势，不是功能清单，也不是借来的哲学腔调。只是给我们真正想做的那个东西，找一套更清楚的语言：一个能陪着同一件事走得更久，让用户切实感受到“它还在接着做”的 agent。
+              </p>
+            </div>
+          </section>
         </article>
       </div>
     </section>
 
-    <section class="section section-heavy">
-      <div class="papers-stack">
-        <article class="paper-section reveal" id="paper-memory-runtime">
-          <div class="paper-meta">
-            <span class="section-tag">Paper 01</span>
-            <span class="paper-byline">Memory architecture</span>
-          </div>
-          <h2>Memory is not a feature</h2>
-          <div class="paper-body">
-            <p>
-              Most systems still talk about memory as if it were a plugin. The assistant answers first, then reaches backward for a note, a retrieval hit, or a thin user profile. The result is familiar: the product can claim memory, but the conversation still feels restarted every time it matters.
-            </p>
-            <p>
-              AaronCore takes the opposite posture. Memory is not something added after thought. It is part of the runtime that shapes what counts as the current situation. That changes the design question. The goal stops being "how much can we store?" and becomes "what memory should participate in this turn, and through which layer?"
-            </p>
-            <p>
-              Once memory is treated as runtime, layers matter. Recent dialogue, session understanding, long-horizon experience, persona rules, execution traces, and learned methods should not collapse into one bucket. They carry different authority. They decay differently. They should come back through different paths.
-            </p>
-            <p>
-              This is why raw retrieval is not enough. Search can fetch text. It cannot decide whether the current moment calls for a flashback, a recap, a user-preference reminder, or a task-level continuation. The point of memory is not recall for its own sake. The point is to alter what happens next.
+    <section class="section section-light">
+      <div class="paper-next reveal">
+        <div class="section-intro">
+          <span class="section-tag">
+            <span data-paper-lang="en">Next papers</span>
+            <span data-paper-lang="zh">下一篇想写的</span>
+          </span>
+          <div data-paper-lang="en">
+            <h2 class="paper-next-title">More notes are coming, but they should feel like real essays.</h2>
+            <p class="paper-next-copy">
+              The next layer will probably go into relationship state, memory hygiene, and why desktop runtime matters when an agent has to keep the same line of work alive.
             </p>
           </div>
-        </article>
-
-        <article class="paper-section reveal" id="paper-continuity-breaks">
-          <div class="paper-meta">
-            <span class="section-tag">Paper 02</span>
-            <span class="paper-byline">Agent continuity</span>
-          </div>
-          <h2>Continuity breaks before intelligence</h2>
-          <div class="paper-body">
-            <p>
-              A lot of frustration with assistants gets misdiagnosed as an intelligence problem. Users say the model is shallow, forgetful, unreliable, or not serious enough. Often the underlying failure is more basic: the system lost continuity before intelligence ever had a chance to matter.
-            </p>
-            <p>
-              An assistant can be locally impressive and still globally discontinuous. It can answer one turn well, summarize a PDF, write a script, or call a tool. But if the same system wakes up like a stranger on the next turn, the user's sense of progress collapses. The work has to be re-explained. The relationship has to be re-established. The thread thins out into fragments.
-            </p>
-            <p>
-              This is why continuity should be treated as a first-order systems concern, not a nice-to-have. It sits between memory and action. It decides whether the current reply belongs to a live trajectory or to yet another isolated completion. Without continuity, even a strong model feels like an endless series of amnesic resets.
-            </p>
-            <p>
-              AaronCore is trying to push on exactly this seam. Not by promising omniscience, but by refusing to accept restart as the default shape of interaction. The more ambitious claim is not "the model knows more." The more ambitious claim is "the work can keep going."
+          <div data-paper-lang="zh">
+            <h2 class="paper-next-title">后面还会继续写，但我希望它们更像真正的文章。</h2>
+            <p class="paper-next-copy">
+              下一层大概率会写关系状态、记忆卫生，以及为什么当 agent 要把同一件事一直接下去时，桌面运行时会变得很关键。
             </p>
           </div>
-        </article>
-
-        <article class="paper-section reveal" id="paper-state-over-prompts">
-          <div class="paper-meta">
-            <span class="section-tag">Paper 03</span>
-            <span class="paper-byline">Runtime state</span>
-          </div>
-          <h2>State beats prompt tricks</h2>
-          <div class="paper-body">
-            <p>
-              Prompting can shape tone, style, and immediate behavior. It is much worse at sustaining work across time. As soon as continuation depends on wording alone, the system starts leaning on heuristics: detect a keyword, assume a follow-up, guess the user's intention from the last line. This looks clever until the moment the thread branches, stalls, or resumes after interruption.
-            </p>
-            <p>
-              Long-running work needs anchors stronger than phrasing. It needs explicit state: what task is active, what step was last attempted, what blocked, what changed, what still needs verification, and what target the system believes it is acting on. Without that substrate, "continue" becomes theater.
-            </p>
-            <p>
-              This is one of AaronCore's strongest design commitments. Let the model reason about the next move, but let runtime state hold the continuity. Plans, stores, execution traces, blockers, and verification should live as system facts, not as fragile prompt residue.
-            </p>
-            <p>
-              The payoff is not only reliability. It is also honesty. Once state is explicit, the system can say what it knows, what it tried, what failed, and why the next step follows. That makes continuation legible. And legibility matters, because trust does not come from elegant prose. It comes from a path the user can actually inspect.
-            </p>
-          </div>
-        </article>
-      </div>
-
-      <div class="papers-close reveal">
-        <div>
-          <h3>More essays will land here</h3>
-          <p>
-            The next layer is likely to cover relationship state, memory hygiene, and why desktop runtimes matter for agent continuity. If you want to read drafts or argue with the premises, send a note.
-          </p>
         </div>
+
+        <div class="paper-next-grid">
+          <article class="paper-next-card">
+            <span class="card-kicker">Paper 02</span>
+            <h3>
+              <span data-paper-lang="en">Relationship state is not just personalization</span>
+              <span data-paper-lang="zh">关系状态不只是个性化</span>
+            </h3>
+          </article>
+          <article class="paper-next-card">
+            <span class="card-kicker">Paper 03</span>
+            <h3>
+              <span data-paper-lang="en">Memory hygiene decides whether continuity stays sharp</span>
+              <span data-paper-lang="zh">记忆卫生决定连续性能不能保持锋利</span>
+            </h3>
+          </article>
+          <article class="paper-next-card">
+            <span class="card-kicker">Paper 04</span>
+            <h3>
+              <span data-paper-lang="en">Desktop is where long-running agents stop pretending</span>
+              <span data-paper-lang="zh">桌面环境是长任务 agent 不再表演的地方</span>
+            </h3>
+          </article>
+        </div>
+
         <div class="docs-cta-actions">
           <a class="button button-primary" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
           <a class="button button-secondary" href="./docs.html">Read docs</a>
@@ -212,5 +415,51 @@
   </footer>
 
   <script src="./app.js?v=20260407p"></script>
+  <script>
+    (() => {
+      const STORAGE_KEY = "aaroncore_site_lang";
+      const buttons = Array.from(document.querySelectorAll("[data-paper-lang-set]"));
+
+      const normalizeLang = (value) => {
+        const raw = String(value || "").trim().toLowerCase();
+        return raw === "zh" ? "zh" : "en";
+      };
+
+      const applyPaperLang = (lang) => {
+        const active = normalizeLang(lang);
+        document.body.dataset.paperLangActive = active;
+        document.documentElement.lang = active === "zh" ? "zh-CN" : "en";
+        buttons.forEach((button) => {
+          const isActive = button.getAttribute("data-paper-lang-set") === active;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+      };
+
+      const setPaperLang = (lang) => {
+        const active = normalizeLang(lang);
+        try {
+          window.localStorage.setItem(STORAGE_KEY, active);
+        } catch (error) {
+          console.warn("Unable to persist paper language.", error);
+        }
+        applyPaperLang(active);
+      };
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          setPaperLang(button.getAttribute("data-paper-lang-set"));
+        });
+      });
+
+      let savedLang = "en";
+      try {
+        savedLang = window.localStorage.getItem(STORAGE_KEY) || "en";
+      } catch (error) {
+        console.warn("Unable to read saved paper language.", error);
+      }
+      applyPaperLang(savedLang);
+    })();
+  </script>
 </body>
 </html>
