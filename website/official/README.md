@@ -46,7 +46,7 @@ Release-state values stay in `releaseConfig`:
 ## Current public-facing details
 
 - Primary domain: `aaroncore.com`
-- Public contact: `GitHub Issues`
+- Public contact: `hello@aaroncore.com`
 - Current state: official site first, no public build yet
 - Current tone: memory, continuity, action
 
@@ -61,41 +61,50 @@ python -m http.server 8080
 
 Then open [http://localhost:8080](http://localhost:8080).
 
-## GitHub Pages deployment
+## Recommended deployment: Cloudflare Pages
 
-This repo now includes a GitHub Pages workflow:
+This site is already static output, so the lowest-friction overseas deployment is Cloudflare Pages.
 
-- `.github/workflows/deploy-site.yml`
+Why it fits this repo well:
 
-What it does:
+- works with private GitHub repositories
+- no build step is required for the current site
+- global CDN by default
+- preview deployments on new pushes
 
-1. watches `master`
-2. only reacts when `website/official/**` or the workflow itself changes
-3. uploads `website/official/` as the Pages artifact
-4. deploys the static site through GitHub Pages
+### One-time Cloudflare setup
 
-### One-time GitHub setup
+1. Create a Pages project in Cloudflare.
+2. Choose **Connect to Git**.
+3. Authorize GitHub and select this repository.
+4. Use these build settings:
 
-1. Open the repository on GitHub.
-2. Go to `Settings -> Pages`.
-3. Under **Build and deployment**, choose **GitHub Actions** as the source.
-4. Push to `master` or run the workflow manually from the **Actions** tab.
+   - Framework preset: `None`
+   - Build command: leave empty
+   - Build output directory: `website/official`
+   - Root directory: leave empty
+
+5. Deploy.
+
+For the current site, Cloudflare can publish the contents of `website/official/` directly.
 
 ### Custom domain later
 
-If you want GitHub Pages to serve your own domain:
+If you want the Pages project to serve `aaroncore.com` later:
 
-1. Add your domain in `Settings -> Pages`.
+1. Add the custom domain in Cloudflare Pages.
 2. Update DNS at your provider.
-3. Optionally add a `CNAME` file inside `website/official/` containing just the domain name.
+3. If the DNS zone is also moved into Cloudflare, the domain hookup becomes simpler.
 
-For example:
+If DNS stays elsewhere, keep the domain at the current provider and follow the DNS records Cloudflare gives you for the Pages project.
 
-```text
-aaroncore.com
-```
+## Vercel alternative
 
-If you plan to switch between GitHub Pages and another host, it is safer to add the custom domain in GitHub first and only commit the `CNAME` file once the final domain path is settled.
+Vercel also works well for static sites, but for private Git repositories the permissions and plan rules are a little more particular. If you want the least setup friction for a private repo, Cloudflare Pages is the safer default.
+
+## GitHub Pages note
+
+The repo still contains a GitHub Pages workflow at `.github/workflows/deploy-site.yml`, but that path is mainly useful if the repository is public again or the GitHub plan and organization settings allow private-repo Pages publishing.
 
 ## DNS and mailbox later
 

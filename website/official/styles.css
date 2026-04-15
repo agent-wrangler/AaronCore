@@ -2324,6 +2324,23 @@ img {
   margin-top: 32px;
 }
 
+.cta-contact {
+  margin: 18px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cta-contact-link {
+  color: var(--cyan-deep);
+  font-weight: 600;
+}
+
+.cta-contact-link:hover {
+  text-decoration: underline;
+}
+
 .hero-note {
   margin: 24px 0 0;
   color: var(--muted-soft);

@@ -2,9 +2,9 @@ const siteConfig = {
   productName: "AaronCore",
   brandSubline: "Memory that comes back naturally",
   primaryDomain: "aaroncore.com",
-  contactLabel: "GitHub Issues",
-  contactUrl: "https://github.com/agent-wrangler/AaronCore/issues",
-  contactStatus: "public contact lives on GitHub for now",
+  contactLabel: "hello@aaroncore.com",
+  contactUrl: "mailto:hello@aaroncore.com",
+  contactStatus: "direct email for access, partnerships, and questions",
   launchState: "Official site first",
   releaseRoute: "aaroncore.com / future download channel",
   metaDescription:
