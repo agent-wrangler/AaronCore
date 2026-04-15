@@ -2,8 +2,9 @@ const siteConfig = {
   productName: "AaronCore",
   brandSubline: "Memory that comes back naturally",
   primaryDomain: "aaroncore.com",
-  contactEmail: "hi@aaroncore.com",
-  contactStatus: "setup pending",
+  contactLabel: "GitHub Issues",
+  contactUrl: "https://github.com/agent-wrangler/AaronCore/issues",
+  contactStatus: "public contact lives on GitHub for now",
   launchState: "Official site first",
   releaseRoute: "aaroncore.com / future download channel",
   metaDescription:
@@ -59,10 +60,9 @@ function applySiteState() {
   setMeta('meta[property="og:description"]', siteConfig.ogDescription);
 
   setField("site", "primaryDomain", siteConfig.primaryDomain);
-  setField("site", "contactEmail", siteConfig.contactEmail);
+  setField("site", "contactLabel", siteConfig.contactLabel);
   setField("site", "launchState", siteConfig.launchState);
   setField("site", "releaseRoute", siteConfig.releaseRoute);
-  setField("site", "mailboxStatusLine", `Mailbox status: ${siteConfig.contactStatus}.`);
 
   document.querySelectorAll("[data-link-field]").forEach((node) => {
     const hrefKey = node.getAttribute("data-link-field");
@@ -201,7 +201,7 @@ const I18N = {
     "docs.card.bounds.h": "Boundaries",
     "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
     "docs.card.release.h": "Beta + download",
-    "docs.card.release.p": "Public builds attach when ready. Until then, the beta mailbox is the honest path.",
+    "docs.card.release.p": "Public builds attach when ready. Until then, GitHub is the honest path.",
     "docs.deep.h": "Want the deeper architecture write-up?",
     "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
@@ -212,7 +212,7 @@ const I18N = {
     "changelog.r2.h": "Official landing refresh",
     "changelog.r2.p": "Expanded the landing narrative with stronger sections for capabilities, proof, trust, and release posture.",
     "changelog.r3.h": "Public beta build",
-    "changelog.r3.p": "Not attached yet. The honest default: mailbox-first early access until downloads are wired.",
+    "changelog.r3.p": "Not attached yet. The honest default: GitHub-first early access until downloads are wired.",
 
     "lang.button": "Lang",
     "lang.en": "English",

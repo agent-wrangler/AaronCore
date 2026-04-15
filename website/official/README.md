@@ -26,7 +26,8 @@ The current page follows this sequence:
 Mutable values live in `app.js`:
 
 - `siteConfig.primaryDomain`
-- `siteConfig.contactEmail`
+- `siteConfig.contactLabel`
+- `siteConfig.contactUrl`
 - `siteConfig.contactStatus`
 - `siteConfig.launchState`
 - `siteConfig.releaseRoute`
@@ -45,7 +46,7 @@ Release-state values stay in `releaseConfig`:
 ## Current public-facing details
 
 - Primary domain: `aaroncore.com`
-- Reserved mailbox: `hi@aaroncore.com`
+- Public contact: `GitHub Issues`
 - Current state: official site first, no public build yet
 - Current tone: memory, continuity, action
 
