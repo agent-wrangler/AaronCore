@@ -10,11 +10,11 @@
 
 ## 一句话定位
 
-AaronCore 不是“把记忆文件读回来”的 agent，而是一个把记忆、人物延续、用户关系和任务状态接进主运行链的 continuous agent runtime。
+AaronCore 不是“把记忆文件读回来”的 agent，而是一个把记忆、人物延续、用户关系和任务状态接进主运行链的 memory-first agent project。
 
 更稳妥的公开表达：
 
-- memory-first continuous agent runtime
+- memory-first agent project
 - single-window continuity
 - memory participates in the current turn, not only in storage
 - task state is being connected into the same runtime substrate

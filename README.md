@@ -1,8 +1,10 @@
 # AaronCore
 
-AaronCore is a memory-first continuous agent runtime.
+AaronCore is a memory-first agent project.
 
-It is built around a simple idea: an agent should not feel like a stranger every turn. Memory, relationship continuity, and task state should participate in the current run, not live only as files to be read back later.
+It explores how understanding, continuity, and action can grow from memory. The goal is to help agents move beyond isolated, one-off responses and develop a more persistent, coherent sense of progress through memory.
+
+Technical support and thoughtful collaboration are warmly welcome.
 
 ## What AaronCore Is Trying To Do
 

@@ -47,7 +47,7 @@ Release-state values stay in `releaseConfig`:
 - Primary domain: `aaroncore.com`
 - Reserved mailbox: `hi@aaroncore.com`
 - Current state: official site first, no public build yet
-- Current tone: memory, flashback, continuity
+- Current tone: memory, continuity, action
 
 ## Local preview
 

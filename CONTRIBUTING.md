@@ -2,7 +2,11 @@
 
 Thanks for taking an interest in AaronCore.
 
-This project is not just a generic tool agent. Its core direction is a memory-first continuous runtime. Because of that, some parts of the codebase are much more sensitive than others.
+What makes this project more unusual is its author: someone who could not write a single line of code started AaronCore from zero and pushed it to its current stage within just one month.
+
+Now AaronCore is looking for technical support, collaboration, and shared belief from people who care about the future of agents. If you are interested in memory systems, long-horizon agents, continuity, reasoning, or agent infrastructure, your support may help this direction truly keep moving forward.
+
+This project is not just a generic tool agent. Its core direction is a memory-first agent runtime built for continuity. Because of that, some parts of the codebase are much more sensitive than others.
 
 This document is here to make collaboration easier without losing the core architecture.
 
