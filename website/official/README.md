@@ -21,6 +21,13 @@ The current page follows this sequence:
 4. Memory highlights
 5. Beta CTA
 
+Secondary public pages:
+
+- `product.html`
+- `docs.html`
+- `papers.html`
+- `changelog.html`
+
 ## Where to edit public-facing values
 
 Mutable values live in `app.js`:

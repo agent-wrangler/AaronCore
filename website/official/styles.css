@@ -480,6 +480,111 @@ img {
   gap: 10px;
 }
 
+.papers-lead,
+.papers-close {
+  margin-top: 22px;
+  padding: 20px 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.papers-lead h3,
+.papers-close h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.papers-lead p,
+.papers-close p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.8;
+  max-width: 68ch;
+}
+
+.papers-index {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.paper-card {
+  padding: 18px 18px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+}
+
+.paper-card h3 {
+  margin: 10px 0 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+
+.paper-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.paper-anchor {
+  color: inherit;
+}
+
+.paper-anchor:hover {
+  color: var(--accent);
+}
+
+.papers-stack {
+  display: grid;
+  gap: 22px;
+}
+
+.paper-section {
+  padding: 28px 30px;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.paper-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.paper-byline {
+  color: var(--muted-soft);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
+.paper-section h2 {
+  margin: 18px 0 0;
+  font-size: clamp(2rem, 3vw, 2.9rem);
+  letter-spacing: -0.02em;
+}
+
+.paper-body {
+  margin-top: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.paper-body p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.92;
+  max-width: 74ch;
+}
+
 .timeline {
   margin-top: 26px;
   display: grid;
@@ -604,7 +709,8 @@ img {
 
 @media (max-width: 900px) {
   .product-grid,
-  .docs-index {
+  .docs-index,
+  .papers-index {
     grid-template-columns: 1fr;
   }
 
@@ -612,8 +718,15 @@ img {
     grid-template-columns: 1fr;
   }
 
+  .papers-lead,
+  .papers-close,
   .proof-block {
     grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .paper-section {
+    padding: 24px 20px;
   }
 }
 .hero {

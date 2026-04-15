@@ -50,6 +50,8 @@ function applySiteState() {
       ? "Product"
       : page === "docs"
         ? "Docs"
+        : page === "papers"
+          ? "Papers"
         : page === "changelog"
           ? "Changelog"
           : "AI that remembers you";
@@ -86,6 +88,7 @@ const I18N = {
     "nav.home": "Home",
     "nav.product": "Product",
     "nav.docs": "Docs",
+    "nav.papers": "Papers",
     "nav.changelog": "Changelog",
     "cta.joinBeta": "Join Beta",
     "cta.earlyAccess": "Join Beta",
@@ -706,6 +709,7 @@ function initTopNavActiveState() {
     home: "./index.html",
     product: "./product.html",
     docs: "./docs.html",
+    papers: "./papers.html",
     changelog: "./changelog.html"
   };
 

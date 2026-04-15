@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Papers</title>
+  <meta name="description" content="Working papers from AaronCore on memory, continuity, and runtime state in agent systems.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260407p">
+</head>
+<body data-page="papers">
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory that comes back naturally</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
+      <a href="./papers.html" data-i18n="nav.papers">Papers</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">中文</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">日本語</span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">한국어</span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./index.html#join-beta">Join Beta</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="section section-light">
+      <div class="section-intro reveal">
+        <span class="section-tag">Working papers</span>
+        <h1 class="page-title">Theses from building continuity into an agent</h1>
+        <p class="page-subtitle">
+          These are not neutral docs. They are position papers from the AaronCore direction: memory as runtime, continuity as a systems problem, and state as the thing that keeps work from dissolving between turns.
+        </p>
+      </div>
+
+      <div class="papers-lead reveal">
+        <div>
+          <h3>What this page is for</h3>
+          <p>
+            Product pages explain what AaronCore does. This page explains what it believes. The target is not a feature checklist. The target is a clearer vocabulary for what current agents still keep breaking.
+          </p>
+        </div>
+        <div class="docs-cta-actions">
+          <a class="button button-secondary" href="./product.html#proof">See product proof</a>
+          <a class="button button-primary" href="mailto:hello@aaroncore.com">Discuss by email</a>
+        </div>
+      </div>
+
+      <div class="papers-index reveal">
+        <article class="paper-card">
+          <span class="card-kicker">Paper 01</span>
+          <h3><a class="paper-anchor" href="#paper-memory-runtime">Memory is not a feature</a></h3>
+          <p>When memory is bolted on after the model speaks, continuity stays synthetic. AaronCore treats memory as part of the runtime boundary itself.</p>
+        </article>
+        <article class="paper-card">
+          <span class="card-kicker">Paper 02</span>
+          <h3><a class="paper-anchor" href="#paper-continuity-breaks">Continuity breaks before intelligence</a></h3>
+          <p>The most painful failure in current assistants is not that they cannot answer. It is that they cannot stay with the same line of work long enough to feel coherent.</p>
+        </article>
+        <article class="paper-card">
+          <span class="card-kicker">Paper 03</span>
+          <h3><a class="paper-anchor" href="#paper-state-over-prompts">State beats prompt tricks</a></h3>
+          <p>Continuation cannot depend on clever wording. It needs explicit runtime state: task plans, blockers, last actions, verification, and the next unresolved step.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section section-heavy">
+      <div class="papers-stack">
+        <article class="paper-section reveal" id="paper-memory-runtime">
+          <div class="paper-meta">
+            <span class="section-tag">Paper 01</span>
+            <span class="paper-byline">Memory architecture</span>
+          </div>
+          <h2>Memory is not a feature</h2>
+          <div class="paper-body">
+            <p>
+              Most systems still talk about memory as if it were a plugin. The assistant answers first, then reaches backward for a note, a retrieval hit, or a thin user profile. The result is familiar: the product can claim memory, but the conversation still feels restarted every time it matters.
+            </p>
+            <p>
+              AaronCore takes the opposite posture. Memory is not something added after thought. It is part of the runtime that shapes what counts as the current situation. That changes the design question. The goal stops being "how much can we store?" and becomes "what memory should participate in this turn, and through which layer?"
+            </p>
+            <p>
+              Once memory is treated as runtime, layers matter. Recent dialogue, session understanding, long-horizon experience, persona rules, execution traces, and learned methods should not collapse into one bucket. They carry different authority. They decay differently. They should come back through different paths.
+            </p>
+            <p>
+              This is why raw retrieval is not enough. Search can fetch text. It cannot decide whether the current moment calls for a flashback, a recap, a user-preference reminder, or a task-level continuation. The point of memory is not recall for its own sake. The point is to alter what happens next.
+            </p>
+          </div>
+        </article>
+
+        <article class="paper-section reveal" id="paper-continuity-breaks">
+          <div class="paper-meta">
+            <span class="section-tag">Paper 02</span>
+            <span class="paper-byline">Agent continuity</span>
+          </div>
+          <h2>Continuity breaks before intelligence</h2>
+          <div class="paper-body">
+            <p>
+              A lot of frustration with assistants gets misdiagnosed as an intelligence problem. Users say the model is shallow, forgetful, unreliable, or not serious enough. Often the underlying failure is more basic: the system lost continuity before intelligence ever had a chance to matter.
+            </p>
+            <p>
+              An assistant can be locally impressive and still globally discontinuous. It can answer one turn well, summarize a PDF, write a script, or call a tool. But if the same system wakes up like a stranger on the next turn, the user's sense of progress collapses. The work has to be re-explained. The relationship has to be re-established. The thread thins out into fragments.
+            </p>
+            <p>
+              This is why continuity should be treated as a first-order systems concern, not a nice-to-have. It sits between memory and action. It decides whether the current reply belongs to a live trajectory or to yet another isolated completion. Without continuity, even a strong model feels like an endless series of amnesic resets.
+            </p>
+            <p>
+              AaronCore is trying to push on exactly this seam. Not by promising omniscience, but by refusing to accept restart as the default shape of interaction. The more ambitious claim is not "the model knows more." The more ambitious claim is "the work can keep going."
+            </p>
+          </div>
+        </article>
+
+        <article class="paper-section reveal" id="paper-state-over-prompts">
+          <div class="paper-meta">
+            <span class="section-tag">Paper 03</span>
+            <span class="paper-byline">Runtime state</span>
+          </div>
+          <h2>State beats prompt tricks</h2>
+          <div class="paper-body">
+            <p>
+              Prompting can shape tone, style, and immediate behavior. It is much worse at sustaining work across time. As soon as continuation depends on wording alone, the system starts leaning on heuristics: detect a keyword, assume a follow-up, guess the user's intention from the last line. This looks clever until the moment the thread branches, stalls, or resumes after interruption.
+            </p>
+            <p>
+              Long-running work needs anchors stronger than phrasing. It needs explicit state: what task is active, what step was last attempted, what blocked, what changed, what still needs verification, and what target the system believes it is acting on. Without that substrate, "continue" becomes theater.
+            </p>
+            <p>
+              This is one of AaronCore's strongest design commitments. Let the model reason about the next move, but let runtime state hold the continuity. Plans, stores, execution traces, blockers, and verification should live as system facts, not as fragile prompt residue.
+            </p>
+            <p>
+              The payoff is not only reliability. It is also honesty. Once state is explicit, the system can say what it knows, what it tried, what failed, and why the next step follows. That makes continuation legible. And legibility matters, because trust does not come from elegant prose. It comes from a path the user can actually inspect.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <div class="papers-close reveal">
+        <div>
+          <h3>More essays will land here</h3>
+          <p>
+            The next layer is likely to cover relationship state, memory hygiene, and why desktop runtimes matter for agent continuity. If you want to read drafts or argue with the premises, send a note.
+          </p>
+        </div>
+        <div class="docs-cta-actions">
+          <a class="button button-primary" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+          <a class="button button-secondary" href="./docs.html">Read docs</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Domain</span>
+        <strong data-site-field="primaryDomain">aaroncore.com</strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Contact</span>
+        <strong>
+          <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+        </strong>
+      </div>
+      <div class="footer-item">
+        <span class="fact-label">Year</span>
+        <strong id="yearSlot"></strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260407p"></script>
+</body>
+</html>
