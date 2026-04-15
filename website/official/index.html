@@ -64,15 +64,7 @@
 
   <main class="page">
     <section class="hero screen-block" id="product">
-      <div class="screen-marker reveal">
-        <span class="screen-number">01</span>
-        <span class="screen-label" data-i18n="screen.hero.label">First Screen</span>
-      </div>
       <div class="screen-group">
-        <div class="screen-submarker reveal">
-          <span class="screen-subnumber">01A</span>
-          <span class="screen-sublabel" data-i18n="screen.heroIntro.label">Brand Opening</span>
-        </div>
         <div class="hero-shell hero-copy-shell reveal">
           <div class="hero-intro">
             <div class="hero-core-visual" aria-hidden="true">
@@ -201,38 +193,34 @@
         </div>
       </div>
       <div class="screen-group">
-        <div class="screen-submarker reveal">
-          <span class="screen-subnumber">01B</span>
-          <span class="screen-sublabel" data-i18n="screen.runtime.label">Memory Runtime</span>
-        </div>
         <div class="hero-shell hero-runtime-shell reveal">
           <div class="hero-stage">
             <div class="stage-main">
               <section class="stage-display runtime-overview">
                 <div class="display-copy">
-                  <span class="display-kicker" data-i18n="home.stage.kicker">Memory runtime</span>
-                  <h2 data-i18n="home.stage.h">Memory that shows up in conversation, not just in storage.</h2>
+                  <span class="display-kicker" data-i18n="home.stage.kicker">Desktop runtime</span>
+                  <h2 data-i18n="home.stage.h">One desktop loop for memory, tools, task state, and verification.</h2>
                   <p>
-                    <span data-i18n="home.stage.p">AaronCore can surface old threads as natural flashbacks, answer "what did we talk about today?", and keep your preferences in the loop.</span>
+                    <span data-i18n="home.stage.p">AaronCore keeps context live while it routes the next step, runs tools, tracks progress, and leaves a result you can actually check.</span>
                   </p>
                 </div>
 
                 <div class="display-route">
                   <article class="route-node">
-                    <span>Memory</span>
-                    <strong>written</strong>
+                    <span>Context</span>
+                    <strong>loaded</strong>
                   </article>
                   <article class="route-node">
-                    <span>Flashback</span>
+                    <span>Tools</span>
                     <strong>ready</strong>
                   </article>
                   <article class="route-node">
-                    <span>Recall</span>
-                    <strong>available</strong>
+                    <span>Task</span>
+                    <strong>tracked</strong>
                   </article>
                   <article class="route-node">
-                    <span>Persona</span>
-                    <strong>aligned</strong>
+                    <span>Verify</span>
+                    <strong>ready</strong>
                   </article>
                 </div>
 
@@ -240,142 +228,248 @@
 
               <div class="runtime-row runtime-summary">
                 <section class="stage-side-card runtime-panel display-panel-accent">
-                  <span class="panel-label" data-i18n="home.panel.exec.label">What you feel</span>
-                  <strong data-i18n="home.panel.exec.h">The assistant can naturally pick up old threads without making you repeat yourself.</strong>
-                  <p data-i18n="home.panel.exec.p">Flashback hints, time recall, and persona memory all feed back into the reply.</p>
+                  <span class="panel-label" data-i18n="home.panel.exec.label">What it does</span>
+                  <strong data-i18n="home.panel.exec.h">The runtime can hold context, call tools, and keep moving without dropping the thread.</strong>
+                  <p data-i18n="home.panel.exec.p">Task state, routing, and tool results stay attached while the work advances.</p>
                 </section>
 
                 <section class="stage-side-card runtime-panel">
-                  <span class="panel-label" data-i18n="home.panel.posture.label">Why it lands</span>
-                  <strong data-i18n="home.panel.posture.h">Chat feels remembered, not restarted</strong>
-                  <p data-i18n="home.panel.posture.p">Preferences, relationship tone, and ongoing work stay attached instead of resetting every session.</p>
+                  <span class="panel-label" data-i18n="home.panel.posture.label">Why it matters</span>
+                  <strong data-i18n="home.panel.posture.h">Continuity turns into forward motion</strong>
+                  <p data-i18n="home.panel.posture.p">Memory matters because it stays connected to execution, verification, and the current desktop session.</p>
                 </section>
               </div>
 
               <div class="runtime-row runtime-detail">
                 <section class="stage-side-card runtime-stack-card">
-                  <span class="side-label">Memory loop</span>
+                  <span class="side-label">Execution flow</span>
                   <div class="rail-stack">
                     <article class="rail-card is-active" data-runtime-step>
                       <span>01</span>
                       <div>
-                        <strong data-i18n="home.rail.1.h">Remember</strong>
-                        <p data-i18n="home.rail.1.p">keep preferences, rules, and relationship posture attached</p>
+                        <strong data-i18n="home.rail.1.h">Anchor</strong>
+                        <p data-i18n="home.rail.1.p">load current context, task state, and user intent</p>
                       </div>
                     </article>
                     <article class="rail-card" data-runtime-step>
                       <span>02</span>
                       <div>
-                        <strong data-i18n="home.rail.2.h">Flash back</strong>
-                        <p data-i18n="home.rail.2.p">surface old threads through state resonance</p>
+                        <strong data-i18n="home.rail.2.h">Route</strong>
+                        <p data-i18n="home.rail.2.p">activate the right surface: chat, tool use, recall, or verification</p>
                       </div>
                     </article>
                     <article class="rail-card" data-runtime-step>
                       <span>03</span>
                       <div>
-                        <strong data-i18n="home.rail.3.h">Recall</strong>
-                        <p data-i18n="home.rail.3.p">answer what you discussed today, yesterday, or last week</p>
+                        <strong data-i18n="home.rail.3.h">Act</strong>
+                        <p data-i18n="home.rail.3.p">run tools and push the task forward inside the same runtime</p>
                       </div>
                     </article>
                     <article class="rail-card" data-runtime-step>
                       <span>04</span>
                       <div>
-                        <strong data-i18n="home.rail.4.h">Stay consistent</strong>
-                        <p data-i18n="home.rail.4.p">keep tone and continuity steady across turns</p>
+                        <strong data-i18n="home.rail.4.h">Verify</strong>
+                        <p data-i18n="home.rail.4.p">check the result and keep a trace of what actually changed</p>
                       </div>
                     </article>
                   </div>
                 </section>
 
                 <section class="stage-side-card runtime-stack-card">
-                  <span class="side-label">Live memory</span>
+                  <span class="side-label">Runtime state</span>
                   <div class="rail-log">
-                    <div class="stream-line is-active" data-runtime-log>l4 loaded: preferences, interaction rules, and relationship tone</div>
-                    <div class="stream-line" data-runtime-log>flashback hint: an older repair thread resurfaced naturally</div>
-                    <div class="stream-line" data-runtime-log>time recall ready: today&apos;s conversation can be summarized on demand</div>
-                    <div class="stream-line" data-runtime-log>memory hygiene: low-signal noise stays out of long-term continuity</div>
+                    <div class="stream-line is-active" data-runtime-log>context loaded: current task, latest reply, and session posture</div>
+                    <div class="stream-line" data-runtime-log>route resolved: chat, tool call, or recall selected for this turn</div>
+                    <div class="stream-line" data-runtime-log>task state updated: progress and blocker status stay attached</div>
+                    <div class="stream-line" data-runtime-log>verification ready: result and trace can be checked before closing</div>
                   </div>
                 </section>
               </div>
             </div>
 
-            <div class="stage-footer">
-              <div class="stage-metric">
-                <span class="fact-label">Primary Domain</span>
-                <strong data-site-field="primaryDomain">aaroncore.com</strong>
-              </div>
-              <div class="stage-metric">
-                <span class="fact-label">Primary Mail</span>
-                <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
-              </div>
-              <div class="stage-metric">
-                <span class="fact-label">Release Target</span>
-                <strong data-release-field="version">Beta pending</strong>
-              </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-medium runtime-showcase-section" id="runtime-showcase">
+      <div class="runtime-client-card hero-shell reveal" role="group" aria-label="AaronCore Desktop client shell with chat, thinking process, composer, and run panel">
+        <div class="runtime-client-window">
+          <div class="runtime-client-topbar">
+            <div class="runtime-client-brand">
+              <img src="./assets/aaroncore-logo-mark-bracket-transparent.svg?v=20260408p10" alt="AaronCore mark">
+              <span>AaronCore</span>
             </div>
+            <div class="runtime-client-topbar-spacer" aria-hidden="true"></div>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <section class="section section-light screen-block" id="architecture">
-      <div class="screen-marker reveal">
-        <span class="screen-number">02</span>
-        <span class="screen-label" data-i18n="screen.arch.label">Second Screen</span>
-      </div>
-      <div class="section-intro reveal">
-        <span class="section-tag">Memory, Done Right</span>
-        <h2 data-i18n="home.how.h">Why the conversations feel different</h2>
-        <p>
-          <span data-i18n="home.how.p">AaronCore does not just keep more context. It separates memory into layers, filters noise, and feeds the right memory back at the right moment.</span>
-        </p>
-      </div>
+          <div class="runtime-client-body">
+            <div class="runtime-client-main">
+              <section class="runtime-client-chat-stage">
+                <div class="runtime-client-chat-scroll">
+                  <div class="runtime-client-event-note">memory hint loaded · quiet-stay preference matched · run panel open</div>
 
-      <div class="process-shell reveal">
-        <div class="process-line" aria-hidden="true"></div>
-        <article class="process-node">
-          <span class="node-index">01</span>
-          <h3 data-i18n="home.how.step1.h">Flashback feels natural</h3>
-          <p data-i18n="home.how.step1.p">old threads resurface through state resonance, not crude keyword spam</p>
-        </article>
-        <article class="process-node">
-          <span class="node-index">02</span>
-          <h3 data-i18n="home.how.step2.h">Time recall is built in</h3>
-          <p data-i18n="home.how.step2.p">you can ask what you talked about today, yesterday, or last week</p>
-        </article>
-        <article class="process-node">
-          <span class="node-index">03</span>
-          <h3 data-i18n="home.how.step3.h">Persona keeps showing up</h3>
-          <p data-i18n="home.how.step3.p">preferences, dislikes, city, relationship, and rules feed back into replies</p>
-        </article>
-        <article class="process-node">
-          <span class="node-index">04</span>
-          <h3 data-i18n="home.how.step4.h">Memory stays clean</h3>
-          <p data-i18n="home.how.step4.p">low-signal turns and polluted context are filtered before they become memory</p>
-        </article>
-      </div>
-    </section>
+                  <article class="runtime-client-msg runtime-client-msg-user">
+                    <span class="runtime-client-msg-role">你</span>
+                    <p>我下周去东京 3 天，想住安静一点的街区。白天逛设计店、书店和咖啡馆，晚上去两家气氛好的 jazz bar，帮我排一个不赶路的行程。</p>
+                  </article>
 
-    <section class="section section-medium" id="signal">
-      <div class="signal-shell reveal">
-        <div class="section-intro signal-intro">
-          <span class="section-tag">Memory Proof</span>
-          <h2 data-i18n="home.signal.h">A memory proof</h2>
-          <p>
-            <span data-i18n="home.signal.p">These features are implemented in the stack already. The point is not bigger storage. The point is better conversation.</span>
-          </p>
-        </div>
-        <div class="signal-body">
-          <div class="signal-code" role="figure" aria-label="Compact execution chain example">
-            <pre><code>User: "Did that fix actually work?"
-Flashback: the older settings thread resurfaces from memory.
-Persona: style preferences and interaction rules stay active.
-User: "What did we talk about today?"
-Recall: chat history plus L2 memory snippets are summarized back.</code></pre>
-          </div>
-          <div class="signal-actions">
-            <a class="button button-primary" href="./product.html#proof">Open full product proof</a>
-            <a class="button button-secondary" href="./docs.html">Read the docs map</a>
+                  <section class="runtime-client-thinking" aria-label="Thinking trace">
+                    <div class="runtime-client-thinking-head">
+                      <span class="runtime-client-thinking-name">AaronCore</span>
+                      <span class="runtime-client-thinking-state">thinking</span>
+                    </div>
+
+                    <article class="runtime-client-thinking-bubble">
+                      <span class="runtime-client-thinking-label">THOUGHT</span>
+                      <p>先把住宿落在清澄白河或代代木上原这种更安静的片区，再把书店、设计店、咖啡和夜间 jazz bar 串成低折返路线，顺手补一版雨天备选。</p>
+                    </article>
+
+                    <div class="runtime-client-plan-strip">
+                      <div class="runtime-client-plan-title">Tokyo 3-Day Plan</div>
+                      <div class="runtime-client-plan-summary">住宿片区、白天路线、书店咖啡、夜间 jazz bar 和雨天备选一起落成一个节奏松的三日行程。</div>
+                      <div class="runtime-client-plan-tags">
+                        <span class="is-done">memory</span>
+                        <span class="is-done">curate</span>
+                        <span class="is-running">draft</span>
+                        <span>verify</span>
+                      </div>
+                    </div>
+
+                    <div class="runtime-client-step-list">
+                      <div class="runtime-client-step is-done">
+                        <span class="runtime-client-step-dot" aria-hidden="true"></span>
+                        <div>
+                          <strong>memory</strong>
+                          <p>接住偏安静、不赶路、白天逛设计店和书店、晚上去 jazz bar 这组偏好。</p>
+                        </div>
+                      </div>
+                      <div class="runtime-client-step is-done">
+                        <span class="runtime-client-step-dot" aria-hidden="true"></span>
+                        <div>
+                          <strong>curate</strong>
+                          <p>筛出清澄白河、代官山、神保町和下北泽这些更顺路的街区组合，再挂上两家夜场质量高的 jazz bar。</p>
+                        </div>
+                      </div>
+                      <div class="runtime-client-step is-running">
+                        <span class="runtime-client-step-dot" aria-hidden="true"></span>
+                        <div>
+                          <strong>draft</strong>
+                          <p>把三天拆成低折返路线，控制每天不超过 3 次地铁换乘，并补一个雨天版本。</p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <article class="runtime-client-msg runtime-client-msg-assistant">
+                    <span class="runtime-client-msg-role">AaronCore</span>
+                    <div class="runtime-client-assistant-copy">
+                      <p>可以，先给你一版节奏偏松的方向:</p>
+                      <ul>
+                        <li>D1 住清澄白河，白天把仓库改造店、咖啡馆和河边散步放一起，晚上去银座听一场更稳妥。</li>
+                        <li>D2 代官山和中目黑，设计店、书店和晚饭顺路串起来，不让整天都耗在换乘上。</li>
+                        <li>D3 神保町加下北泽，二手书店、唱片店和雨天备选都落在同一天，尾声会更轻一点。</li>
+                      </ul>
+                    </div>
+                  </article>
+                </div>
+
+                <div class="runtime-client-composer">
+                  <div class="runtime-client-input-shell" aria-label="Chat composer">
+                    <div class="runtime-client-input-stage">
+                      <span class="runtime-client-input-placeholder">把第二天再放松一点，再加一家可以坐到很晚的 jazz bar...</span>
+                    </div>
+                    <div class="runtime-client-input-toolbar">
+                      <button class="runtime-client-model" type="button">
+                        <span>未知</span>
+                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                          <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                      <button class="runtime-client-tool-btn" type="button" aria-label="Attach file">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M8.5 12.5 13.8 7.2a3 3 0 1 1 4.2 4.2l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.4-7.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                      <div class="runtime-client-input-toolbar-spacer"></div>
+                      <span class="runtime-client-shortcut">Enter 发送 · Shift+Enter 换行</span>
+                      <button class="runtime-client-tool-btn" type="button" aria-label="Voice input">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 5a2.5 2.5 0 0 1 2.5 2.5v4a2.5 2.5 0 0 1-5 0v-4A2.5 2.5 0 0 1 12 5Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                          <path d="M7.5 11.5a4.5 4.5 0 1 0 9 0M12 16v3M9.5 19h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="runtime-client-run-panel" aria-label="Run panel">
+                <div class="runtime-client-run-header">
+                  <div class="runtime-client-run-header-top">
+                    <div class="runtime-client-run-kicker">[RUN #014 | READY]</div>
+                    <button class="runtime-client-run-close" type="button" aria-label="Collapse run panel">
+                      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                        <path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="runtime-client-run-status">STATUS: [RUN] TOOLING (3/4)</div>
+                  <div class="runtime-client-run-elapsed">ELAPSED: 00:18</div>
+                  <div class="runtime-client-run-meta">TOKENS: ~412 / ~168 (in/out)</div>
+                  <div class="runtime-client-run-outputs">TOOLS: 1 MEMORY PASS | 1 ROUTE PASS | 1 RAIN CHECK</div>
+                </div>
+
+                <div class="runtime-client-run-stream">
+                  <article class="runtime-client-run-entry is-done">
+                    <div class="runtime-client-run-entry-head">
+                      <div class="runtime-client-run-entry-title">
+                        <span class="runtime-client-run-entry-index">[01]</span>
+                        <span class="runtime-client-run-entry-label">memory</span>
+                      </div>
+                      <span class="runtime-client-run-entry-state">done</span>
+                    </div>
+                    <p>从上下文里取回“住安静街区、白天逛设计店和书店、晚上去 jazz bar、行程不要赶”的偏好。</p>
+                  </article>
+
+                  <article class="runtime-client-run-entry is-done">
+                    <div class="runtime-client-run-entry-head">
+                      <div class="runtime-client-run-entry-title">
+                        <span class="runtime-client-run-entry-index">[02]</span>
+                        <span class="runtime-client-run-entry-label">curate</span>
+                      </div>
+                      <span class="runtime-client-run-entry-state">done</span>
+                    </div>
+                    <p>先收拢清澄白河、代官山/中目黑、神保町、下北泽四组候选街区，再挂上两家夜场质量更稳的 jazz bar。</p>
+                  </article>
+
+                  <article class="runtime-client-run-entry is-running">
+                    <div class="runtime-client-run-entry-head">
+                      <div class="runtime-client-run-entry-title">
+                        <span class="runtime-client-run-entry-index">[03]</span>
+                        <span class="runtime-client-run-entry-label">draft</span>
+                        <span class="runtime-client-run-entry-live" aria-hidden="true"><span></span><span></span><span></span></span>
+                      </div>
+                      <span class="runtime-client-run-entry-state">running</span>
+                    </div>
+                    <p>正在把 D1 清澄白河、D2 代官山/中目黑、D3 神保町/下北泽 排成低折返路线，控制每天不超过 3 次地铁换乘。</p>
+                  </article>
+
+                  <article class="runtime-client-run-entry">
+                    <div class="runtime-client-run-entry-head">
+                      <div class="runtime-client-run-entry-title">
+                        <span class="runtime-client-run-entry-index">[04]</span>
+                        <span class="runtime-client-run-entry-label">verify</span>
+                      </div>
+                      <span class="runtime-client-run-entry-state">pending</span>
+                    </div>
+                    <p>最后复核夜间返程距离、第二天疲劳度和雨天替代点，避免出现“看起来丰富但实际上太累”的动线。</p>
+                  </article>
+
+                  <div class="runtime-client-run-tail">AGENT STANDBY · awaiting final visual pass...</div>
+                </div>
+              </aside>
+            </div>
           </div>
         </div>
       </div>
@@ -412,10 +506,9 @@ Recall: chat history plus L2 memory snippets are summarized back.</code></pre>
       <div class="cta-shell reveal">
         <div class="cta-copy">
           <span class="section-tag">Beta</span>
-          <h2 data-i18n="home.cta.h">If you want AI that remembers, start here</h2>
-          <p class="cta-subtitle" data-i18n="footer.tagline">For people who want AI to remember, not restart.</p>
+          <h2 data-i18n="home.cap.h">Built for execution, not just answers</h2>
           <p>
-            <span data-i18n="home.cta.p">AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.</span>
+            <span data-i18n="home.cap.p">Memory, execution, routing, and verification live inside one runtime designed to move work forward.</span>
           </p>
           <div class="hero-actions">
             <a class="button button-primary" data-link-field="betaUrl" data-link-label="betaLabel" href="#join-beta">Join Beta</a>
@@ -425,17 +518,13 @@ Recall: chat history plus L2 memory snippets are summarized back.</code></pre>
 
         <div class="cta-side">
           <article class="release-card">
-            <span class="fact-label">Release Target</span>
-            <strong data-release-field="version">Beta pending</strong>
-            <p data-site-field="releaseRoute">aaroncore.com / future download channel</p>
-            <a class="button button-secondary release-button disabled" id="downloadBtn" href="#join-beta" aria-disabled="true">Download Pending</a>
-            <span class="download-note" id="downloadNote">Public build is not attached yet.</span>
+            <strong data-i18n="home.cap.route.h">Capabilities routed by context</strong>
+            <p data-i18n="home.cap.route.p">The runtime activates the right surface at the right time — without noisy keyword theatrics.</p>
           </article>
 
           <article class="release-card">
-            <span class="fact-label">Primary Mailbox</span>
-            <strong data-site-field="contactEmail">hi@aaroncore.com</strong>
-            <p data-site-field="mailboxStatusLine">Mailbox status: setup pending.</p>
+            <strong data-i18n="home.cap.repair.h">Correct through evidence, not prettier retries</strong>
+            <p data-i18n="home.cap.repair.p">When something slips, the loop narrows the failure, repairs the path, and verifies again.</p>
           </article>
         </div>
       </div>
@@ -447,7 +536,6 @@ Recall: chat history plus L2 memory snippets are summarized back.</code></pre>
       <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
       <div>
         <strong>AaronCore</strong>
-        <span data-site-field="footerTagline" data-i18n="footer.tagline">For people who want AI to remember, not restart.</span>
       </div>
     </div>
 
