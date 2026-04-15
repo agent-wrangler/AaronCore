@@ -48,7 +48,7 @@ AaronCore 是一个以 LLM / native `tool_call` 为主导的桌面 AI 系统。
 python agent_final.py
 
 # desktop
-start_nova.bat
+start_aaroncore.bat
 
 # all tests
 python -m unittest discover tests/

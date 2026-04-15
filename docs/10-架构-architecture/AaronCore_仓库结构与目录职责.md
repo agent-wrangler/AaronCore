@@ -68,7 +68,7 @@
 
 ## 当前关键入口
 
-- `start_nova.bat`
+- `start_aaroncore.bat`
   桌面启动入口。
 - `agent_final.py`
   Python 后端入口。

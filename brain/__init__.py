@@ -164,6 +164,10 @@ def llm_call(cfg: dict, messages: list, *, temperature: float = 0.7,
              max_tokens: int = 2000, timeout: int = 25,
              tools: list | None = None) -> dict:
     """统一 LLM 调用，返回 {"content": str, "usage": dict, "tool_calls": list|None}"""
+    cfg = _provider_runtime.normalize_model_config(
+        cfg,
+        fallback_model=str((cfg or {}).get("model") or ""),
+    )
     if _is_codex_cli_provider(cfg):
         return _llm_call_codex_cli(cfg, messages, temperature=temperature,
                                    max_tokens=max_tokens, timeout=timeout,
@@ -211,6 +215,10 @@ def _llm_call_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                      tools: list | None = None) -> dict:
     """OpenAI 兼容格式调用"""
     try:
+        cfg = _provider_runtime.normalize_model_config(
+            cfg,
+            fallback_model=str((cfg or {}).get("model") or ""),
+        )
         messages = _normalize_openai_messages(messages)
         base_url = _build_openai_base_url(cfg.get("base_url", ""), cfg)
         def _send(req_cfg: dict):
@@ -257,6 +265,10 @@ def _llm_call_anthropic(cfg: dict, messages: list, *, temperature: float = 0.7,
                         max_tokens: int = 2000, timeout: int = 25,
                         tools: list | None = None) -> dict:
     """Anthropic 兼容格式调用"""
+    cfg = _provider_runtime.normalize_model_config(
+        cfg,
+        fallback_model=str((cfg or {}).get("model") or ""),
+    )
     url = _build_anthropic_url(cfg["base_url"])
     system_text, chat_msgs = _split_system_and_messages(messages)
     anthropic_msgs = _convert_messages_for_anthropic_tools(chat_msgs)
@@ -317,6 +329,10 @@ def llm_call_stream(cfg: dict, messages: list, *, temperature: float = 0.7,
                     tools: list | None = None):
     """流式 LLM 调用，yield 每个 delta token (str)。结束后 yield 一个 dict 表示 usage。
     如果 LLM 返回 tool_calls，yield {"_tool_calls": [...]} 信号。"""
+    cfg = _provider_runtime.normalize_model_config(
+        cfg,
+        fallback_model=str((cfg or {}).get("model") or ""),
+    )
     if _is_codex_cli_provider(cfg):
         yield from _llm_stream_codex_cli(
             cfg,
@@ -343,6 +359,10 @@ def llm_call_stream(cfg: dict, messages: list, *, temperature: float = 0.7,
 def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
                        max_tokens: int = 2000, timeout: int = 25,
                        tools: list | None = None):
+    cfg = _provider_runtime.normalize_model_config(
+        cfg,
+        fallback_model=str((cfg or {}).get("model") or ""),
+    )
     yield from _stream_runtime.stream_openai(
         cfg,
         messages,
@@ -596,6 +616,10 @@ def _llm_stream_openai(cfg: dict, messages: list, *, temperature: float = 0.7,
 def _llm_stream_anthropic(cfg: dict, messages: list, *, temperature: float = 0.7,
                           max_tokens: int = 2000, timeout: int = 25,
                           tools: list | None = None):
+    cfg = _provider_runtime.normalize_model_config(
+        cfg,
+        fallback_model=str((cfg or {}).get("model") or ""),
+    )
     yield from _stream_runtime.stream_anthropic(
         cfg,
         messages,

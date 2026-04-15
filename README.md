@@ -68,7 +68,7 @@ That means the codebase already reflects the actual direction, but the packaging
 
 Current local entrypoints in this repo:
 
-- `start_nova.bat` - current local desktop launch script in this workspace
+- `start_aaroncore.bat` - current local desktop launch script in this workspace
 - `agent_final.py` - Python backend entrypoint
 - `desktop_runtime_35/` - Electron desktop wrapper and packaging runtime
 - `website/official/` - static official site source, ready for GitHub Pages style deployment
@@ -129,7 +129,11 @@ Then:
    - `cd desktop_runtime_35`
    - `npm install`
 4. Return to the repo root and start AaronCore:
-   - `start_nova.bat`
+   - `start_aaroncore.bat`
+
+Legacy compatibility note:
+
+- `start_nova.bat` still works as a thin wrapper for older local shortcuts or habits.
 
 If you only want the public site locally:
 

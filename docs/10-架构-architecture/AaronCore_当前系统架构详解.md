@@ -107,7 +107,7 @@
 
 当前推荐的 Windows 桌面启动入口是：
 
-- `start_nova.bat`
+- `start_aaroncore.bat`
 
 打包桌面链路以 Electron wrapper 为主，相关目录是：
 

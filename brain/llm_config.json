@@ -5,56 +5,84 @@
       "vision": false,
       "transport": "openai_api",
       "base_url": "https://api.deepseek.com/v1",
-      "api_key": ""
+      "api_key": "",
+      "provider": "openai",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key",
+      "provider_key": "deepseek"
     },
     "gpt-4o": {
       "base_url": "codex://local",
       "model": "gpt-4o",
       "vision": false,
       "transport": "codex_cli",
-      "auth_mode": "codex_cli"
+      "auth_mode": "codex_cli",
+      "provider": "openai",
+      "api_mode": "codex_cli",
+      "provider_key": "openai"
     },
     "gpt-5.4": {
       "base_url": "codex://local",
       "model": "gpt-5.4",
       "vision": false,
       "transport": "codex_cli",
-      "auth_mode": "codex_cli"
+      "auth_mode": "codex_cli",
+      "provider": "openai",
+      "api_mode": "codex_cli",
+      "provider_key": "openai"
     },
     "gpt-5.4-mini": {
       "base_url": "codex://local",
       "model": "gpt-5.4-mini",
       "vision": false,
       "transport": "codex_cli",
-      "auth_mode": "codex_cli"
+      "auth_mode": "codex_cli",
+      "provider": "openai",
+      "api_mode": "codex_cli",
+      "provider_key": "openai"
     },
     "minimax": {
       "api_key": "",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
       "model": "MiniMax-M2.7",
       "vision": false,
-      "transport": "openai_api"
+      "transport": "openai_api",
+      "provider": "minimax",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key",
+      "provider_key": "minimax"
     },
     "MiniMax-M2.7-highspeed": {
       "api_key": "",
       "base_url": "https://api.minimaxi.com/anthropic/v1",
       "model": "MiniMax-M2.7-highspeed",
       "vision": false,
-      "transport": "openai_api"
+      "transport": "openai_api",
+      "provider": "minimax",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key",
+      "provider_key": "minimax"
     },
     "gpt-5.4-nano": {
       "model": "gpt-5.4-nano",
       "vision": false,
       "transport": "codex_cli",
       "base_url": "codex://local",
-      "auth_mode": "codex_cli"
+      "auth_mode": "codex_cli",
+      "provider": "openai",
+      "api_mode": "codex_cli",
+      "provider_key": "openai"
     },
     "deepseek-reasoner": {
       "model": "deepseek-reasoner",
       "vision": false,
       "transport": "openai_api",
       "api_key": "",
-      "base_url": "https://api.deepseek.com/v1"
+      "base_url": "https://api.deepseek.com/v1",
+      "provider": "openai",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key",
+      "provider_key": "deepseek"
     },
     "MiniMax-M2.5": {
       "model": "MiniMax-M2.5",
@@ -64,7 +92,10 @@
       "api_key": "",
       "derived": true,
       "source_model": "minimax",
-      "provider_key": "minimax"
+      "provider_key": "minimax",
+      "provider": "minimax",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key"
     },
     "MiniMax-M2.5-highspeed": {
       "model": "MiniMax-M2.5-highspeed",
@@ -74,7 +105,10 @@
       "api_key": "",
       "derived": true,
       "source_model": "minimax",
-      "provider_key": "minimax"
+      "provider_key": "minimax",
+      "provider": "minimax",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key"
     },
     "MiniMax-M2": {
       "model": "MiniMax-M2",
@@ -84,7 +118,10 @@
       "api_key": "",
       "derived": true,
       "source_model": "minimax",
-      "provider_key": "minimax"
+      "provider_key": "minimax",
+      "provider": "minimax",
+      "api_mode": "chat_completions",
+      "auth_mode": "api_key"
     }
   },
   "default": "deepseek-chat"

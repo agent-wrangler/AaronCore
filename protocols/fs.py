@@ -357,6 +357,7 @@ def is_aaroncore_protected_write_target(target: str | Path | None) -> bool:
     protected_files = {
         Path('agent_final.py'),
         Path('output.html'),
+        Path('start_aaroncore.bat'),
         Path('start_nova.bat'),
         Path('AGENTS.md'),
         Path('CLAUDE.md'),

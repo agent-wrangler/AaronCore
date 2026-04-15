@@ -8,7 +8,7 @@ $packagedTargets = @(
   (Join-Path $userProfile 'NovaCoreDesktop\win-unpacked\NovaCore.exe') # legacy exe fallback
 )
 $packagedTarget = $packagedTargets | Where-Object { Test-Path $_ } | Select-Object -First 1
-$fallbackTarget = Join-Path $root 'start_nova.bat'
+$fallbackTarget = Join-Path $root 'start_aaroncore.bat'
 $target = if ($packagedTarget) { $packagedTarget } else { $fallbackTarget }
 $iconCandidates = @(
   Join-Path $root 'static\icon\ico-sizes\aaroncore-desktop-multi.ico'
