@@ -5,7 +5,7 @@ This directory is the dedicated Electron desktop wrapper for AaronCore.
 Development:
 
 ```powershell
-cd C:\Users\36459\AaronCore\desktop_runtime_35
+cd desktop_runtime_35
 npm install
 npm run start
 ```
@@ -13,7 +13,7 @@ npm run start
 Packaging:
 
 ```powershell
-cd C:\Users\36459\AaronCore\desktop_runtime_35
+cd desktop_runtime_35
 npm install
 npm run dist:portable
 ```
@@ -21,7 +21,7 @@ npm run dist:portable
 Official Windows installer release:
 
 ```powershell
-cd C:\Users\36459\AaronCore\desktop_runtime_35
+cd desktop_runtime_35
 npm install
 npm run dist:nsis
 ```

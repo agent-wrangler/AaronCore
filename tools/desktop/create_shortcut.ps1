@@ -1,10 +1,11 @@
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $desktop = [Environment]::GetFolderPath('Desktop')
+$userProfile = [Environment]::GetFolderPath('UserProfile')
 $shortcutPath = Join-Path $desktop 'AaronCore.lnk'
 $packagedTargets = @(
-  'C:\Users\36459\AaronCoreDesktop\win-unpacked\AaronCore.exe'
-  'C:\Users\36459\NovaCoreDesktop\win-unpacked\AaronCore.exe' # legacy fallback
-  'C:\Users\36459\NovaCoreDesktop\win-unpacked\NovaCore.exe' # legacy exe fallback
+  (Join-Path $userProfile 'AaronCoreDesktop\win-unpacked\AaronCore.exe')
+  (Join-Path $userProfile 'NovaCoreDesktop\win-unpacked\AaronCore.exe') # legacy fallback
+  (Join-Path $userProfile 'NovaCoreDesktop\win-unpacked\NovaCore.exe') # legacy exe fallback
 )
 $packagedTarget = $packagedTargets | Where-Object { Test-Path $_ } | Select-Object -First 1
 $fallbackTarget = Join-Path $root 'start_nova.bat'

@@ -8,11 +8,11 @@
 
 在你这台机器上，桌面版 `.exe` 当前优先连的是开发仓库：
 
-- 代码根：`C:\Users\36459\AaronCore`
-- 后端入口：`C:\Users\36459\AaronCore\agent_final.py`
-- 状态目录：`C:\Users\36459\AaronCore\memory_db`
+- 代码根：`<repo root>`
+- 后端入口：`<repo root>/agent_final.py`
+- 状态目录：`<repo root>/state_data`
 
-不是默认退回打包目录里的 `resources/novacore/memory_db`。
+不是默认退回打包目录里的 `resources/aaroncore/state_data`。
 
 ## 实际启动链
 
@@ -26,13 +26,13 @@
 
 对应文件：
 
-- [desktop_runtime_35/main.js](C:/Users/36459/AaronCore/desktop_runtime_35/main.js)
-- [shell/main.js](C:/Users/36459/AaronCore/shell/main.js)
-- [agent_final.py](C:/Users/36459/AaronCore/agent_final.py)
+- [desktop_runtime_35/main.js](../../desktop_runtime_35/main.js)
+- [shell/main.js](../../shell/main.js)
+- [agent_final.py](../../agent_final.py)
 
 ## `.exe` 怎么决定代码根目录
 
-关键逻辑在 [desktop_runtime_35/main.js](C:/Users/36459/AaronCore/desktop_runtime_35/main.js)。
+关键逻辑在 [desktop_runtime_35/main.js](../../desktop_runtime_35/main.js)。
 
 打包态下，`NOVACORE_ROOT` 的优先级是：
 
@@ -46,24 +46,24 @@
 
 当前目录关系是：
 
-- 桌面目录：`C:\Users\36459\AaronCoreDesktop`
-- 开发仓库：`C:\Users\36459\AaronCore`
+- 桌面目录：`<user profile>/AaronCoreDesktop`
+- 开发仓库：`<repo root>`
 
-`desktop_runtime_35/main.js` 会把 `NovaCoreDesktop` 去掉 `Desktop` 后缀，尝试找同级的 `NovaCore`。这一台机器刚好存在，所以 `.exe` 会优先命中开发仓库。
+`desktop_runtime_35/main.js` 会把桌面目录名去掉 `Desktop` 后缀，再尝试寻找同级开发仓库目录；当前这台机器刚好能命中，所以 `.exe` 会优先连开发仓库。
 
 ## 后端怎么读数据目录
 
-状态目录不是 shell 决定的，而是 [core/runtime_state/state_loader.py](C:/Users/36459/AaronCore/core/runtime_state/state_loader.py) 决定的。
+状态目录不是 shell 决定的，而是 [storage/paths.py](../../storage/paths.py) 决定的。
 
 里面当前的主路径是：
 
-- `PRIMARY_STATE_DIR = ENGINE_DIR / "memory_db"`
+- `PRIMARY_STATE_DIR = MEMORY_STORE_DIR`
 
 而 `ENGINE_DIR` 最终来自当前运行的 `NOVACORE_ROOT`。
 
 所以当 `.exe` 连的是开发仓库时，主状态目录自然就是：
 
-- `C:\Users\36459\AaronCore\memory_db`
+- `<repo root>/state_data/memory_store`
 
 ## 为什么容易误判成“用了打包目录”
 
@@ -89,10 +89,10 @@
 如果还不确定，再看：
 
 - 当前 `8090` 是哪个 `python.exe` 在监听
-- 它的命令行是不是 `C:\Users\36459\AaronCore\agent_final.py`
+- 它的命令行是不是 `<repo root>/agent_final.py`
 
 ## 一句话记忆
 
 在这台机器上：
 
-**`.exe` 不是优先吃打包资源，而是优先吃同级开发仓库；只要开发仓库存在，数据就是开发仓库那份 `memory_db`。`**
+**`.exe` 不是优先吃打包资源，而是优先吃同级开发仓库；只要开发仓库存在，数据就是开发仓库那份 `state_data/`。**

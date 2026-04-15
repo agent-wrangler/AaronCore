@@ -16,6 +16,8 @@ tmp_home_live.html
 .tmp_settings_check.js
 .tmp_server_stdout.log
 .tmp_server_stderr.log
+app_data/state/*.json
+core/state_data/*.json
 state_data/story_state.json
 state_data/conversation_history.txt
 state_data/msg_history.json
@@ -75,6 +77,7 @@ state_data/task_store/task_relations.json
 brain/llm_config.local.json
 *.png
 output.html.codex_backup
+archive/backups/
 .claude/
 static/live2d/_tmp_cubism/
 static/live2d/_tmp/

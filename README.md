@@ -32,7 +32,7 @@ AaronCore currently follows these design ideas:
 2. memory as runtime substrate, not an optional add-on
 3. explicit task state instead of purely prompt-time continuation tricks
 4. on-demand knowledge retrieval instead of blindly preloading everything
-5. a Windows-first desktop runtime around a Python backend
+5. a desktop runtime around a Python backend
 
 ## Architecture Snapshot
 
@@ -68,11 +68,21 @@ That means the codebase already reflects the actual direction, but the packaging
 
 Current local entrypoints in this repo:
 
-- `start_nova.bat` - recommended Windows desktop launch entry
+- `start_nova.bat` - current local desktop launch script in this workspace
 - `agent_final.py` - Python backend entrypoint
 - `desktop_runtime_35/` - Electron desktop wrapper and packaging runtime
+- `website/official/` - static official site source, ready for GitHub Pages style deployment
 
-This project is currently Windows-first in day-to-day use.
+The desktop/runtime surface is still being organized, and packaging details may continue to evolve as the public release matures.
+
+## Official Site
+
+The static official site lives in `website/official/`.
+
+- local preview: `cd website/official` then `python -m http.server 8080`
+- GitHub Pages workflow: `.github/workflows/deploy-site.yml`
+
+If the repository is public, GitHub Pages can deploy this directory through GitHub Actions without needing a separate application server.
 
 ## Local Config Overrides
 
@@ -99,6 +109,32 @@ If this repo is used as a future clean public checkout, the local setup flow sho
 4. Let AaronCore create real runtime state files locally during use.
 
 For public-repo hygiene, templates and defaults should be committed, while personal truth data should remain local.
+
+## Quick Start
+
+For a clean local checkout today, assume:
+
+- Python 3.11+
+- Node.js 20+
+- Windows for the desktop wrapper path
+
+Then:
+
+1. Copy the local example configs into real local-only files:
+   - `brain/llm_config.local.example.json` -> `brain/llm_config.local.json`
+   - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
+   - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
+2. Fill in your own local API keys and machine-specific settings.
+3. Install the desktop wrapper dependencies:
+   - `cd desktop_runtime_35`
+   - `npm install`
+4. Return to the repo root and start AaronCore:
+   - `start_nova.bat`
+
+If you only want the public site locally:
+
+- `cd website/official`
+- `python -m http.server 8080`
 
 ## Read This First
 
@@ -147,3 +183,9 @@ What happens when memory is treated as the starting point of understanding, cont
 - Detailed internal docs are currently more complete in Chinese.
 - The codebase is evolving quickly.
 - Main-chain boundaries matter here; changes around memory, continuity, routing, and runtime state should be handled carefully.
+
+## License
+
+This project is released under the MIT License.
+
+See [LICENSE](LICENSE).

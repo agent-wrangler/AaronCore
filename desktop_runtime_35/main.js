@@ -26,10 +26,10 @@ function isAaronCoreRepoRoot(candidate) {
   }
 }
 
-// Packaged desktop builds still prefer the nearby development repo when it exists.
-// On this machine:
-// - exe dir:      C:\Users\36459\NovaCoreDesktop\win-unpacked
-// - dev repo dir: C:\Users\36459\NovaCore
+// Packaged desktop builds still prefer a nearby development repo when it exists.
+// Example layout:
+// - exe dir:      C:\Users\example\AaronCoreDesktop\win-unpacked
+// - dev repo dir: C:\Users\example\AaronCore
 // This keeps the desktop app connected to the live workspace and its state_data
 // instead of silently falling back to packaged resources.
 function resolvePackagedDevRoot() {
@@ -67,7 +67,7 @@ function resolveAaronCoreRoot() {
   if (app.isPackaged) {
     // Resolution order for packaged exe:
     // 1. explicit AARONCORE_DEV_ROOT (or legacy NOVACORE_DEV_ROOT)
-    // 2. sibling dev repo (NovaCoreDesktop -> AaronCore / NovaCore)
+    // 2. sibling dev repo (strip Desktop suffix, then try AaronCore / NovaCore)
     // 3. packaged resources/aaroncore fallback
     const devRoot = resolvePackagedDevRoot();
     if (devRoot) return devRoot;

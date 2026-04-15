@@ -93,3 +93,7 @@ This saves a lot of review time.
 AaronCore is under active development. Some documentation is still catching up with the code, and some detailed docs are currently in Chinese.
 
 When code and docs disagree, the current code wins.
+
+## License
+
+By contributing to AaronCore, you agree that your contributions will be released under the MIT License used by this repository.

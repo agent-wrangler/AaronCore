@@ -54,11 +54,47 @@ Release-state values stay in `releaseConfig`:
 Run a static file server from this directory:
 
 ```powershell
-cd C:\Users\36459\AaronCore\website\official
+cd website/official
 python -m http.server 8080
 ```
 
 Then open [http://localhost:8080](http://localhost:8080).
+
+## GitHub Pages deployment
+
+This repo now includes a GitHub Pages workflow:
+
+- `.github/workflows/deploy-site.yml`
+
+What it does:
+
+1. watches `master`
+2. only reacts when `website/official/**` or the workflow itself changes
+3. uploads `website/official/` as the Pages artifact
+4. deploys the static site through GitHub Pages
+
+### One-time GitHub setup
+
+1. Open the repository on GitHub.
+2. Go to `Settings -> Pages`.
+3. Under **Build and deployment**, choose **GitHub Actions** as the source.
+4. Push to `master` or run the workflow manually from the **Actions** tab.
+
+### Custom domain later
+
+If you want GitHub Pages to serve your own domain:
+
+1. Add your domain in `Settings -> Pages`.
+2. Update DNS at your provider.
+3. Optionally add a `CNAME` file inside `website/official/` containing just the domain name.
+
+For example:
+
+```text
+aaroncore.com
+```
+
+If you plan to switch between GitHub Pages and another host, it is safer to add the custom domain in GitHub first and only commit the `CNAME` file once the final domain path is settled.
 
 ## DNS and mailbox later
 
