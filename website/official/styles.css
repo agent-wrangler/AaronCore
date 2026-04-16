@@ -5968,16 +5968,16 @@ html[lang="zh-CN"] .hero-title {
 .beta-form-status {
   min-height: 1.5em;
   margin: 0;
-  color: var(--muted);
+  color: var(--text);
   line-height: 1.6;
 }
 
 .beta-form-status.is-success {
-  color: var(--lime-deep);
+  color: #a8d8b7;
 }
 
 .beta-form-status.is-error {
-  color: var(--red);
+  color: #ff9c92;
 }
 
 .beta-submit:disabled {
