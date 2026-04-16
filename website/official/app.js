@@ -641,8 +641,8 @@ Object.assign(I18N.en, {
   "docs.index.order.desc": "Paper first. Product second. Changelog when you want the latest public changes.",
   "docs.index.item.paper.type": "Paper",
   "docs.index.item.paper.date": "April 16, 2026",
-  "docs.index.item.paper.title": "Continuity Is the Product",
-  "docs.index.item.paper.desc": "The core argument on continuity, memory, and runtime state.",
+  "docs.index.item.paper.title": "The Core of Agent Products Is Continuity",
+  "docs.index.item.paper.desc": "Why continuity sits at the core of agent products, and how memory and runtime state make it real.",
   "docs.index.item.product.type": "Product",
   "docs.index.item.product.date": "April 16, 2026",
   "docs.index.item.product.title": "Product",
@@ -661,8 +661,8 @@ Object.assign(I18N.zh, {
   "docs.index.order.desc": "先看论文，再看产品页；如果你想知道公开表面最近变了什么，再看更新记录。",
   "docs.index.item.paper.type": "论文",
   "docs.index.item.paper.date": "2026年4月16日",
-  "docs.index.item.paper.title": "连续性就是产品",
-  "docs.index.item.paper.desc": "关于连续性、记忆和运行时状态的核心文章。",
+  "docs.index.item.paper.title": "Agent 产品的核心是连续性",
+  "docs.index.item.paper.desc": "为什么连续性是 Agent 产品的核心，以及记忆与运行时状态如何让它成立。",
   "docs.index.item.product.type": "产品",
   "docs.index.item.product.date": "2026年4月16日",
   "docs.index.item.product.title": "产品页",
@@ -681,7 +681,7 @@ Object.assign(I18N.ja, {
   "docs.index.order.desc": "まず論文、次に製品ページ。公開面で最近何が変わったかを見たいときだけ更新履歴を読めば十分です。",
   "docs.index.item.paper.type": "論文",
   "docs.index.item.paper.date": "2026年4月16日",
-  "docs.index.item.paper.title": "Continuity Is the Product",
+  "docs.index.item.paper.title": "The Core of Agent Products Is Continuity",
   "docs.index.item.paper.desc": "連続性、記憶、ランタイム状態についての中核となる文章。",
   "docs.index.item.product.type": "製品",
   "docs.index.item.product.date": "2026年4月16日",
@@ -701,7 +701,7 @@ Object.assign(I18N.ko, {
   "docs.index.order.desc": "먼저 논문, 그다음 제품 페이지. 공개 표면에서 최근 무엇이 바뀌었는지 보고 싶을 때만 변경 기록을 보면 됩니다.",
   "docs.index.item.paper.type": "논문",
   "docs.index.item.paper.date": "2026년 4월 16일",
-  "docs.index.item.paper.title": "Continuity Is the Product",
+  "docs.index.item.paper.title": "The Core of Agent Products Is Continuity",
   "docs.index.item.paper.desc": "연속성, 기억, 런타임 상태에 대한 핵심 글입니다.",
   "docs.index.item.product.type": "제품",
   "docs.index.item.product.date": "2026년 4월 16일",
@@ -1187,6 +1187,41 @@ function initDocsIndexNav() {
   if (!tabs.length || !records.length) {
     return;
   }
+
+  const readPublishedAt = (record) => {
+    const raw = String(record.getAttribute("data-docs-published-at") || "").trim();
+    if (!raw) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    const stamp = Date.parse(raw);
+    return Number.isFinite(stamp) ? stamp : Number.NEGATIVE_INFINITY;
+  };
+
+  const groupedRecords = new Map();
+  records.forEach((record, index) => {
+    const parent = record.parentElement;
+    if (!parent) {
+      return;
+    }
+    if (!groupedRecords.has(parent)) {
+      groupedRecords.set(parent, []);
+    }
+    groupedRecords.get(parent).push({ record, index });
+  });
+
+  groupedRecords.forEach((items, parent) => {
+    items
+      .sort((left, right) => {
+        const timeDelta = readPublishedAt(right.record) - readPublishedAt(left.record);
+        if (timeDelta !== 0) {
+          return timeDelta;
+        }
+        return left.index - right.index;
+      })
+      .forEach(({ record }) => {
+        parent.appendChild(record);
+      });
+  });
 
   const validFilters = new Set(["all", ...tabs
     .map((tab) => String(tab.getAttribute("data-docs-filter") || "").trim().toLowerCase())
@@ -2151,8 +2186,12 @@ Object.assign(I18N.en, {
   "docs.index.order.desc": "Essays carry the full argument. Notes pull out the claims worth revisiting.",
   "docs.index.item.essay.type": "Research Note",
   "docs.index.item.essay.date": "April 16, 2026",
-  "docs.index.item.essay.title": "Continuity Is the Product",
-  "docs.index.item.essay.desc": "Memory, continuity, and runtime state as the starting point for AaronCore.",
+  "docs.index.item.essay.title": "The Core of Agent Products Is Continuity",
+  "docs.index.item.essay.desc": "Why continuity sits at the core of agent products, and how memory and runtime state make it real.",
+  "docs.index.item.intentExperiment.type": "Experiment",
+  "docs.index.item.intentExperiment.date": "April 16, 2026",
+  "docs.index.item.intentExperiment.title": "From Intent Routing to Interaction Governance",
+  "docs.index.item.intentExperiment.desc": "An archived exploration of false tool triggers, action governance, and why this path did not become AaronCore's main architecture.",
   "docs.index.item.memory.type": "Research Note",
   "docs.index.item.memory.date": "April 16, 2026",
   "docs.index.item.memory.title": "Memory Is Not a Feature",
@@ -2179,8 +2218,12 @@ Object.assign(I18N.zh, {
   "docs.index.order.desc": "\u6587\u7ae0\u627f\u8f7d\u5b8c\u6574\u8bba\u8ff0\uff0c\u7b14\u8bb0\u62bd\u51fa\u5176\u4e2d\u503c\u5f97\u53cd\u590d\u91cd\u8bfb\u7684\u90e8\u5206\u3002",
   "docs.index.item.essay.type": "\u7814\u7a76\u7b14\u8bb0",
   "docs.index.item.essay.date": "2026\u5e744\u670816\u65e5",
-  "docs.index.item.essay.title": "\u8fde\u7eed\u6027\u5c31\u662f\u4ea7\u54c1",
-  "docs.index.item.essay.desc": "\u4ece\u8bb0\u5fc6\u3001\u8fde\u7eed\u6027\u548c\u8fd0\u884c\u65f6\u72b6\u6001\u51fa\u53d1\uff0c\u8bf4\u6e05 AaronCore \u7684\u8d77\u70b9\u3002",
+  "docs.index.item.essay.title": "Agent \u4ea7\u54c1\u7684\u6838\u5fc3\u662f\u8fde\u7eed\u6027",
+  "docs.index.item.essay.desc": "\u4e3a\u4ec0\u4e48\u8fde\u7eed\u6027\u662f Agent \u4ea7\u54c1\u7684\u6838\u5fc3\uff0c\u4ee5\u53ca\u8bb0\u5fc6\u4e0e\u8fd0\u884c\u65f6\u72b6\u6001\u5982\u4f55\u8ba9\u5b83\u6210\u7acb\u3002",
+  "docs.index.item.intentExperiment.type": "\u5b9e\u9a8c",
+  "docs.index.item.intentExperiment.date": "2026\u5e744\u670816\u65e5",
+  "docs.index.item.intentExperiment.title": "\u4ece\u610f\u56fe\u8def\u7531\u5230\u4ea4\u4e92\u6cbb\u7406",
+  "docs.index.item.intentExperiment.desc": "\u4e00\u6b21\u5173\u4e8e\u8bef\u89e6\u53d1\u3001\u884c\u52a8\u6cbb\u7406\u4e0e\u67b6\u6784\u8fb9\u754c\u7684\u5f52\u6863\u63a2\u7d22\uff0c\u4e5f\u8bf4\u660e\u4e86\u4e3a\u4ec0\u4e48\u8fd9\u6761\u8def\u6ca1\u6709\u6210\u4e3a AaronCore \u7684\u4e3b\u7ebf\u3002",
   "docs.index.item.memory.type": "\u7814\u7a76\u7b14\u8bb0",
   "docs.index.item.memory.date": "2026\u5e744\u670816\u65e5",
   "docs.index.item.memory.title": "\u8bb0\u5fc6\u4e0d\u662f\u529f\u80fd",
@@ -2207,8 +2250,12 @@ Object.assign(I18N.ja, {
   "docs.index.order.desc": "\u8ad6\u8003\u304c\u5168\u4f53\u306e\u8ad6\u7406\u3092\u62c5\u3044\u3001\u30ce\u30fc\u30c8\u304c\u7e70\u308a\u8fd4\u3057\u623b\u308a\u305f\u3044\u8ad6\u70b9\u3092\u62bd\u51fa\u3057\u307e\u3059\u3002",
   "docs.index.item.essay.type": "\u7814\u7a76\u30ce\u30fc\u30c8",
   "docs.index.item.essay.date": "2026\u5e744\u670816\u65e5",
-  "docs.index.item.essay.title": "Continuity Is the Product",
+  "docs.index.item.essay.title": "The Core of Agent Products Is Continuity",
   "docs.index.item.essay.desc": "AaronCore \u3092\u8a9e\u308b\u4e0a\u3067\u306e\u51fa\u767a\u70b9\u3068\u3057\u3066\u3001\u8a18\u61b6\u3001\u9023\u7d9a\u6027\u3001\u30e9\u30f3\u30bf\u30a4\u30e0\u72b6\u614b\u3092\u6271\u3044\u307e\u3059\u3002",
+  "docs.index.item.intentExperiment.type": "Experiment",
+  "docs.index.item.intentExperiment.date": "2026\u5e744\u670816\u65e5",
+  "docs.index.item.intentExperiment.title": "From Intent Routing to Interaction Governance",
+  "docs.index.item.intentExperiment.desc": "An archived exploration of false tool triggers, action governance, and why this path did not become AaronCore's main architecture.",
   "docs.index.item.memory.type": "\u7814\u7a76\u30ce\u30fc\u30c8",
   "docs.index.item.memory.date": "2026\u5e744\u670816\u65e5",
   "docs.index.item.memory.title": "Memory Is Not a Feature",
@@ -2235,8 +2282,12 @@ Object.assign(I18N.ko, {
   "docs.index.order.desc": "\uae00\uc740 \uc804\uccb4 \ub17c\uc9c0\ub97c \ub2f4\uace0, \ub178\ud2b8\ub294 \ub2e4\uc2dc \ubcfc \uac00\uce58\uac00 \uc788\ub294 \ub17c\uc810\ub9cc \uac00\ub824 \ub0c5\ub2c8\ub2e4.",
   "docs.index.item.essay.type": "\uc5f0\uad6c \ub178\ud2b8",
   "docs.index.item.essay.date": "2026\ub144 4\uc6d4 16\uc77c",
-  "docs.index.item.essay.title": "Continuity Is the Product",
+  "docs.index.item.essay.title": "The Core of Agent Products Is Continuity",
   "docs.index.item.essay.desc": "\uae30\uc5b5, \uc5f0\uc18d\uc131, \ub7f0\ud0c0\uc784 \uc0c1\ud0dc\ub97c AaronCore\uc758 \ucd9c\ubc1c\uc810\uc73c\ub85c \ub2e4\ub8f9\ub2c8\ub2e4.",
+  "docs.index.item.intentExperiment.type": "Experiment",
+  "docs.index.item.intentExperiment.date": "2026\ub144 4\uc6d4 16\uc77c",
+  "docs.index.item.intentExperiment.title": "From Intent Routing to Interaction Governance",
+  "docs.index.item.intentExperiment.desc": "An archived exploration of false tool triggers, action governance, and why this path did not become AaronCore's main architecture.",
   "docs.index.item.memory.type": "\uc5f0\uad6c \ub178\ud2b8",
   "docs.index.item.memory.date": "2026\ub144 4\uc6d4 16\uc77c",
   "docs.index.item.memory.title": "Memory Is Not a Feature",
