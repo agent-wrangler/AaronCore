@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Beta</title>
+  <meta name="description" content="Join the AaronCore beta waitlist. The first public beta is being actively prepared.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=20260416p40">
+</head>
+<body data-page="beta">
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory that comes back naturally</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">中文</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">日本語</span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">한국어</span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="contactUrl" data-i18n="cta.emailWaitlist" href="mailto:hello@aaroncore.com">Email Waitlist</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="section section-light">
+      <div class="section-intro reveal">
+        <h1 class="page-title" data-i18n="beta.title">Join the AaronCore beta</h1>
+        <p class="page-subtitle">
+          <span data-i18n="beta.subtitle">The first public beta is being prepared. Leave an email and AaronCore will reach out when the next batch opens.</span>
+        </p>
+      </div>
+    </section>
+
+    <section class="section section-medium">
+      <div class="cta-shell reveal">
+        <div class="cta-copy beta-copy">
+          <h2 data-i18n="beta.status.h">Current rollout</h2>
+          <p>
+            <span data-i18n="beta.status.p">AaronCore is not opening the beta broadly yet. Access starts from the waitlist and expands in small batches.</span>
+          </p>
+
+          <div class="beta-status">
+            <div class="beta-status-row">
+              <span data-i18n="home.beta.state.label">Current state</span>
+              <strong data-i18n="home.beta.state.value">Developer is actively preparing the beta</strong>
+            </div>
+            <div class="beta-status-row">
+              <span data-i18n="beta.access.label">Access model</span>
+              <strong data-i18n="beta.access.value">Waitlist first. Invitations go out in small batches.</strong>
+            </div>
+            <div class="beta-status-row">
+              <span data-i18n="home.beta.inbox.label">Waitlist inbox</span>
+              <strong>
+                <a class="cta-contact-link" data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="cta-system beta-system">
+          <form class="beta-form" data-beta-form>
+            <label class="beta-form-label" id="betaUseCaseLabel" for="betaUseCaseTrigger" data-i18n="home.beta.form.usecase.label">What do you want to use AaronCore for?</label>
+            <div class="beta-select-shell is-placeholder" data-beta-select>
+              <input id="betaUseCase" name="useCase" type="hidden" value="">
+              <button
+                class="beta-input beta-select-trigger"
+                id="betaUseCaseTrigger"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-labelledby="betaUseCaseLabel betaUseCaseTrigger"
+                data-beta-select-trigger>
+                <span class="beta-select-trigger-text" data-beta-select-trigger-text data-placeholder-key="home.beta.form.usecase.placeholder">Choose a use case</span>
+                <svg class="beta-select-trigger-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
+              <div class="beta-select-menu" data-beta-select-menu role="listbox" aria-labelledby="betaUseCaseLabel" hidden>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="memory" data-i18n="home.beta.form.usecase.memory">Long-term memory</button>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="coding" data-i18n="home.beta.form.usecase.coding">Coding</button>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="research" data-i18n="home.beta.form.usecase.research">Research</button>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="writing" data-i18n="home.beta.form.usecase.writing">Writing</button>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="assistant" data-i18n="home.beta.form.usecase.assistant">Daily assistance</button>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="execution" data-i18n="home.beta.form.usecase.execution">Multi-step execution</button>
+                <button class="beta-select-option" type="button" role="option" data-beta-select-option data-value="other" data-i18n="home.beta.form.usecase.other">Other</button>
+              </div>
+            </div>
+            <div class="beta-trap" aria-hidden="true">
+              <label class="beta-form-label" for="betaWebsite">Website</label>
+              <input class="beta-input" id="betaWebsite" name="website" type="text" tabindex="-1" autocomplete="off">
+            </div>
+            <label class="beta-form-label" for="betaEmail" data-i18n="home.beta.form.label">Leave your email</label>
+            <div class="beta-form-row">
+              <input
+                class="beta-input"
+                id="betaEmail"
+                name="email"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                placeholder="you@example.com"
+                required
+                aria-describedby="betaJoinNote">
+              <button class="button button-primary beta-submit" type="submit" data-i18n="home.beta.form.submit">Join the waitlist</button>
+            </div>
+            <p class="beta-form-note" id="betaJoinNote" data-i18n="home.beta.form.note">Submitting adds you directly to the AaronCore waitlist.</p>
+            <p class="beta-form-status" data-beta-status role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Contact</span>
+        <strong>
+          <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+        </strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260416p29"></script>
+</body>
+</html>

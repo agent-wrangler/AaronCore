@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260407p">
+  <link rel="stylesheet" href="./styles.css?v=20260416p40">
 </head>
 <body data-page="home">
   <div class="ambient" aria-hidden="true">
@@ -44,8 +44,7 @@
     <nav class="topnav">
       <a href="./index.html" data-i18n="nav.home">Home</a>
       <a href="./product.html" data-i18n="nav.product">Product</a>
-      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
-      <a href="./papers.html" data-i18n="nav.papers">Papers</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
       <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
     </nav>
 
@@ -59,7 +58,7 @@
           <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">한국어</span><span class="code">KO</span></button>
         </div>
       </div>
-      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="#join-beta">Join Beta</a>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./beta.html">Join Beta</a>
     </div>
   </header>
 
@@ -172,11 +171,6 @@
                   <span data-i18n="hero.lede">AaronCore does not treat memory as a standalone feature. It turns memory into the starting point for understanding, continuity, and action.</span>
                 </p>
 
-                <div class="hero-actions">
-                  <a class="button button-secondary" href="./product.html#proof" data-i18n="cta.seeProof">See product proof</a>
-                  <a class="button button-primary" data-link-field="betaUrl" data-i18n="cta.joinBeta" href="#join-beta">Join Beta</a>
-                </div>
-
                 <p class="hero-note" data-i18n="hero.note">Memory · Continuity · Action</p>
               </div>
             </div>
@@ -199,7 +193,6 @@
             <div class="stage-main">
               <section class="stage-display runtime-overview">
                 <div class="display-copy">
-                  <span class="display-kicker" data-i18n="home.stage.kicker">Desktop runtime</span>
                   <h2 data-i18n="home.stage.h">One desktop loop for memory, tools, task state, and verification.</h2>
                   <p>
                     <span data-i18n="home.stage.p">AaronCore keeps context live while it routes the next step, runs tools, tracks progress, and leaves a result you can actually check.</span>
@@ -227,23 +220,8 @@
 
               </section>
 
-              <div class="runtime-row runtime-summary">
-                <section class="stage-side-card runtime-panel display-panel-accent">
-                  <span class="panel-label" data-i18n="home.panel.exec.label">What it does</span>
-                  <strong data-i18n="home.panel.exec.h">The runtime can hold context, call tools, and keep moving without dropping the thread.</strong>
-                  <p data-i18n="home.panel.exec.p">Task state, routing, and tool results stay attached while the work advances.</p>
-                </section>
-
-                <section class="stage-side-card runtime-panel">
-                  <span class="panel-label" data-i18n="home.panel.posture.label">Why it matters</span>
-                  <strong data-i18n="home.panel.posture.h">Continuity turns into forward motion</strong>
-                  <p data-i18n="home.panel.posture.p">Memory matters because it stays connected to execution, verification, and the current desktop session.</p>
-                </section>
-              </div>
-
               <div class="runtime-row runtime-detail">
                 <section class="stage-side-card runtime-stack-card">
-                  <span class="side-label">Execution flow</span>
                   <div class="rail-stack">
                     <article class="rail-card is-active" data-runtime-step>
                       <span>01</span>
@@ -277,7 +255,6 @@
                 </section>
 
                 <section class="stage-side-card runtime-stack-card">
-                  <span class="side-label">Runtime state</span>
                   <div class="rail-log">
                     <div class="stream-line is-active" data-runtime-log>context loaded: current task, latest reply, and session posture</div>
                     <div class="stream-line" data-runtime-log>route resolved: chat, tool call, or recall selected for this turn</div>
@@ -293,253 +270,62 @@
       </div>
     </section>
 
-    <section class="section section-medium runtime-showcase-section" id="runtime-showcase">
-      <div class="runtime-client-card hero-shell reveal" role="group" aria-label="AaronCore Desktop client shell with chat, thinking process, composer, and run panel">
-        <div class="runtime-client-window">
-          <div class="runtime-client-topbar">
-            <div class="runtime-client-brand">
-              <img src="./assets/aaroncore-logo-mark-bracket-transparent.svg?v=20260408p10" alt="AaronCore mark">
-              <span>AaronCore</span>
-            </div>
-            <div class="runtime-client-topbar-spacer" aria-hidden="true"></div>
-          </div>
-
-          <div class="runtime-client-body">
-            <div class="runtime-client-main">
-              <section class="runtime-client-chat-stage">
-                <div class="runtime-client-chat-scroll">
-                  <div class="runtime-client-event-note">memory hint loaded · quiet-stay preference matched · run panel open</div>
-
-                  <article class="runtime-client-msg runtime-client-msg-user">
-                    <span class="runtime-client-msg-role">你</span>
-                    <p>我下周去东京 3 天，想住安静一点的街区。白天逛设计店、书店和咖啡馆，晚上去两家气氛好的 jazz bar，帮我排一个不赶路的行程。</p>
-                  </article>
-
-                  <section class="runtime-client-thinking" aria-label="Thinking trace">
-                    <div class="runtime-client-thinking-head">
-                      <span class="runtime-client-thinking-name">AaronCore</span>
-                      <span class="runtime-client-thinking-state">thinking</span>
-                    </div>
-
-                    <article class="runtime-client-thinking-bubble">
-                      <span class="runtime-client-thinking-label">THOUGHT</span>
-                      <p>先把住宿落在清澄白河或代代木上原这种更安静的片区，再把书店、设计店、咖啡和夜间 jazz bar 串成低折返路线，顺手补一版雨天备选。</p>
-                    </article>
-
-                    <div class="runtime-client-plan-strip">
-                      <div class="runtime-client-plan-title">Tokyo 3-Day Plan</div>
-                      <div class="runtime-client-plan-summary">住宿片区、白天路线、书店咖啡、夜间 jazz bar 和雨天备选一起落成一个节奏松的三日行程。</div>
-                      <div class="runtime-client-plan-tags">
-                        <span class="is-done">memory</span>
-                        <span class="is-done">curate</span>
-                        <span class="is-running">draft</span>
-                        <span>verify</span>
-                      </div>
-                    </div>
-
-                    <div class="runtime-client-step-list">
-                      <div class="runtime-client-step is-done">
-                        <span class="runtime-client-step-dot" aria-hidden="true"></span>
-                        <div>
-                          <strong>memory</strong>
-                          <p>接住偏安静、不赶路、白天逛设计店和书店、晚上去 jazz bar 这组偏好。</p>
-                        </div>
-                      </div>
-                      <div class="runtime-client-step is-done">
-                        <span class="runtime-client-step-dot" aria-hidden="true"></span>
-                        <div>
-                          <strong>curate</strong>
-                          <p>筛出清澄白河、代官山、神保町和下北泽这些更顺路的街区组合，再挂上两家夜场质量高的 jazz bar。</p>
-                        </div>
-                      </div>
-                      <div class="runtime-client-step is-running">
-                        <span class="runtime-client-step-dot" aria-hidden="true"></span>
-                        <div>
-                          <strong>draft</strong>
-                          <p>把三天拆成低折返路线，控制每天不超过 3 次地铁换乘，并补一个雨天版本。</p>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <article class="runtime-client-msg runtime-client-msg-assistant">
-                    <span class="runtime-client-msg-role">AaronCore</span>
-                    <div class="runtime-client-assistant-copy">
-                      <p>可以，先给你一版节奏偏松的方向:</p>
-                      <ul>
-                        <li>D1 住清澄白河，白天把仓库改造店、咖啡馆和河边散步放一起，晚上去银座听一场更稳妥。</li>
-                        <li>D2 代官山和中目黑，设计店、书店和晚饭顺路串起来，不让整天都耗在换乘上。</li>
-                        <li>D3 神保町加下北泽，二手书店、唱片店和雨天备选都落在同一天，尾声会更轻一点。</li>
-                      </ul>
-                    </div>
-                  </article>
-                </div>
-
-                <div class="runtime-client-composer">
-                  <div class="runtime-client-input-shell" aria-label="Chat composer">
-                    <div class="runtime-client-input-stage">
-                      <span class="runtime-client-input-placeholder">把第二天再放松一点，再加一家可以坐到很晚的 jazz bar...</span>
-                    </div>
-                    <div class="runtime-client-input-toolbar">
-                      <button class="runtime-client-model" type="button">
-                        <span>未知</span>
-                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                          <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                      </button>
-                      <button class="runtime-client-tool-btn" type="button" aria-label="Attach file">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M8.5 12.5 13.8 7.2a3 3 0 1 1 4.2 4.2l-7.1 7.1a5 5 0 0 1-7.1-7.1l7.4-7.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                      </button>
-                      <div class="runtime-client-input-toolbar-spacer"></div>
-                      <span class="runtime-client-shortcut">Enter 发送 · Shift+Enter 换行</span>
-                      <button class="runtime-client-tool-btn" type="button" aria-label="Voice input">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M12 5a2.5 2.5 0 0 1 2.5 2.5v4a2.5 2.5 0 0 1-5 0v-4A2.5 2.5 0 0 1 12 5Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
-                          <path d="M7.5 11.5a4.5 4.5 0 1 0 9 0M12 16v3M9.5 19h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <aside class="runtime-client-run-panel" aria-label="Run panel">
-                <div class="runtime-client-run-header">
-                  <div class="runtime-client-run-header-top">
-                    <div class="runtime-client-run-kicker">[RUN #014 | READY]</div>
-                    <button class="runtime-client-run-close" type="button" aria-label="Collapse run panel">
-                      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                        <path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                  <div class="runtime-client-run-status">STATUS: [RUN] TOOLING (3/4)</div>
-                  <div class="runtime-client-run-elapsed">ELAPSED: 00:18</div>
-                  <div class="runtime-client-run-meta">TOKENS: ~412 / ~168 (in/out)</div>
-                  <div class="runtime-client-run-outputs">TOOLS: 1 MEMORY PASS | 1 ROUTE PASS | 1 RAIN CHECK</div>
-                </div>
-
-                <div class="runtime-client-run-stream">
-                  <article class="runtime-client-run-entry is-done">
-                    <div class="runtime-client-run-entry-head">
-                      <div class="runtime-client-run-entry-title">
-                        <span class="runtime-client-run-entry-index">[01]</span>
-                        <span class="runtime-client-run-entry-label">memory</span>
-                      </div>
-                      <span class="runtime-client-run-entry-state">done</span>
-                    </div>
-                    <p>从上下文里取回“住安静街区、白天逛设计店和书店、晚上去 jazz bar、行程不要赶”的偏好。</p>
-                  </article>
-
-                  <article class="runtime-client-run-entry is-done">
-                    <div class="runtime-client-run-entry-head">
-                      <div class="runtime-client-run-entry-title">
-                        <span class="runtime-client-run-entry-index">[02]</span>
-                        <span class="runtime-client-run-entry-label">curate</span>
-                      </div>
-                      <span class="runtime-client-run-entry-state">done</span>
-                    </div>
-                    <p>先收拢清澄白河、代官山/中目黑、神保町、下北泽四组候选街区，再挂上两家夜场质量更稳的 jazz bar。</p>
-                  </article>
-
-                  <article class="runtime-client-run-entry is-running">
-                    <div class="runtime-client-run-entry-head">
-                      <div class="runtime-client-run-entry-title">
-                        <span class="runtime-client-run-entry-index">[03]</span>
-                        <span class="runtime-client-run-entry-label">draft</span>
-                        <span class="runtime-client-run-entry-live" aria-hidden="true"><span></span><span></span><span></span></span>
-                      </div>
-                      <span class="runtime-client-run-entry-state">running</span>
-                    </div>
-                    <p>正在把 D1 清澄白河、D2 代官山/中目黑、D3 神保町/下北泽 排成低折返路线，控制每天不超过 3 次地铁换乘。</p>
-                  </article>
-
-                  <article class="runtime-client-run-entry">
-                    <div class="runtime-client-run-entry-head">
-                      <div class="runtime-client-run-entry-title">
-                        <span class="runtime-client-run-entry-index">[04]</span>
-                        <span class="runtime-client-run-entry-label">verify</span>
-                      </div>
-                      <span class="runtime-client-run-entry-state">pending</span>
-                    </div>
-                    <p>最后复核夜间返程距离、第二天疲劳度和雨天替代点，避免出现“看起来丰富但实际上太累”的动线。</p>
-                  </article>
-
-                  <div class="runtime-client-run-tail">AGENT STANDBY · awaiting final visual pass...</div>
-                </div>
-              </aside>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="section section-medium" id="difference">
       <div class="difference-shell reveal">
         <div class="section-intro difference-intro">
-          <span class="section-tag">Memory Highlights</span>
-          <h2 data-i18n="home.diff.h">What makes the memory feel stronger</h2>
+          <h2 data-i18n="home.diff.h">Persistent memory keeps the token budget for execution.</h2>
           <p>
-            <span data-i18n="home.diff.p">AaronCore is built around memory the user can actually feel: natural flashback, time recall, and cleaner long-term continuity.</span>
+            <span data-i18n="home.diff.p">When context, preference, and task state stay live, the runtime stops reloading the same background every turn. That is where token savings start: less recap, less prompt overhead, more room for tools, state progression, and verification.</span>
           </p>
         </div>
+
+        <div class="difference-bench" aria-label="Token benchmark">
+          <article class="difference-stat">
+            <span data-i18n="home.diff.stat.1.label">50-message session</span>
+            <strong>40%</strong>
+            <p data-i18n="home.diff.stat.saved">saved from prompt recap</p>
+          </article>
+          <article class="difference-stat">
+            <span data-i18n="home.diff.stat.2.label">100-message session</span>
+            <strong>70%</strong>
+            <p data-i18n="home.diff.stat.saved">saved from prompt recap</p>
+          </article>
+          <article class="difference-stat">
+            <span data-i18n="home.diff.stat.3.label">200-message session</span>
+            <strong>85%</strong>
+            <p data-i18n="home.diff.stat.saved">saved from prompt recap</p>
+          </article>
+        </div>
+        <p class="difference-bench-note" data-i18n="home.diff.stat.note">Balanced 4000-token recent budget benchmark based on long-session replay estimates.</p>
 
         <div class="difference-grid">
-          <article class="difference-card">
-            <span class="card-kicker">Flashback</span>
-            <h3 data-i18n="home.diff.c1">Old threads can come back like memory, not search results</h3>
-          </article>
-          <article class="difference-card feature">
-            <span class="card-kicker">Time Recall</span>
-            <h3 data-i18n="home.diff.c2">You can ask what you discussed today, yesterday, or last week</h3>
-          </article>
-          <article class="difference-card">
-            <span class="card-kicker">Memory Hygiene</span>
-            <h3 data-i18n="home.diff.c3">Noise is filtered so continuity stays sharp instead of bloated</h3>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section cta-section" id="join-beta">
-      <div class="cta-shell reveal">
-        <div class="cta-copy">
-          <span class="section-tag">Beta</span>
-          <h2 data-i18n="home.cap.h">Built for execution, not just answers</h2>
-          <p>
-            <span data-i18n="home.cap.p">Memory, execution, routing, and verification live inside one runtime designed to move work forward.</span>
-          </p>
-            <div class="hero-actions">
-              <a class="button button-primary" data-link-field="betaUrl" data-link-label="betaLabel" href="#join-beta">Join Beta</a>
-              <a class="button button-secondary" href="./docs.html" data-i18n="nav.docs">Docs</a>
+          <article class="difference-card difference-card-primary">
+            <div class="difference-card-copy">
+              <h3 data-i18n="home.diff.c1">Memory persistence replaces repeated setup</h3>
+              <p data-i18n="home.diff.c1.p">The user should not have to restate identity, preference, and the active task every turn. Those belong to the same line of work.</p>
             </div>
-            <p class="cta-contact">
-              <span class="fact-label">Contact</span>
-              <a
-                class="cta-contact-link"
-                data-site-field="contactLabel"
-                data-link-field="contactUrl"
-                data-link-label="contactLabel"
-                href="mailto:hello@aaroncore.com"
-              >hello@aaroncore.com</a>
-            </p>
-          </div>
-
-        <div class="cta-side">
-          <article class="release-card">
-            <strong data-i18n="home.cap.route.h">Capabilities routed by context</strong>
-            <p data-i18n="home.cap.route.p">The runtime activates the right surface at the right time — without noisy keyword theatrics.</p>
           </article>
-
-          <article class="release-card">
-            <strong data-i18n="home.cap.repair.h">Correct through evidence, not prettier retries</strong>
-            <p data-i18n="home.cap.repair.p">When something slips, the loop narrows the failure, repairs the path, and verifies again.</p>
+          <article class="difference-card difference-card-primary">
+            <div class="difference-card-copy">
+              <h3 data-i18n="home.diff.c2">Bring back the useful past, not the whole transcript</h3>
+              <p data-i18n="home.diff.c2.p">Token savings do not come from deleting memory. They come from surfacing the relevant past instead of replaying the entire history on every pass.</p>
+            </div>
+          </article>
+          <article class="difference-band">
+            <div class="difference-card-copy difference-band-copy">
+              <h3 data-i18n="home.diff.c3">Spend the budget on action, not recap</h3>
+              <p data-i18n="home.diff.c3.p">A lighter context leaves more room for tool use, task state, and verification instead of paying again for background reconstruction.</p>
+            </div>
+            <div class="difference-band-list" aria-label="Execution surfaces">
+              <span data-i18n="home.diff.band.1">Tools</span>
+              <span data-i18n="home.diff.band.2">Task state</span>
+              <span data-i18n="home.diff.band.3">Verification</span>
+            </div>
           </article>
         </div>
       </div>
     </section>
+
   </main>
 
   <footer class="footer reveal">
@@ -552,23 +338,15 @@
 
     <div class="footer-meta">
       <div class="footer-item">
-        <span class="fact-label">Domain</span>
-        <strong data-site-field="primaryDomain">aaroncore.com</strong>
-      </div>
-        <div class="footer-item">
-          <span class="fact-label">Contact</span>
-          <strong>
-            <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
-          </strong>
-        </div>
-      <div class="footer-item">
-        <span class="fact-label">Year</span>
-        <strong id="yearSlot"></strong>
+        <span class="fact-label">Contact</span>
+        <strong>
+          <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+        </strong>
       </div>
     </div>
   </footer>
 
-  <script src="./app.js?v=20260407p"></script>
+  <script src="./app.js?v=20260416p29"></script>
 </body>
 </html>
 

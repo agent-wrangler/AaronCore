@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AaronCore | Docs</title>
-  <meta name="description" content="Start with how memory shows up in practice: recall, continuity, persona, hygiene, and boundaries.">
+  <title>AaronCore | Research</title>
+  <meta name="description" content="Research catalogue for AaronCore: research notes, experiments, milestones, and open-source results.">
   <meta name="theme-color" content="#0d0d0d">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260407p">
+  <link rel="stylesheet" href="./styles.css?v=20260416p40">
 </head>
 <body data-page="docs">
   <div class="ambient" aria-hidden="true">
@@ -40,8 +40,7 @@
     <nav class="topnav">
       <a href="./index.html" data-i18n="nav.home">Home</a>
       <a href="./product.html" data-i18n="nav.product">Product</a>
-      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
-      <a href="./papers.html" data-i18n="nav.papers">Papers</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
       <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
     </nav>
 
@@ -55,83 +54,72 @@
           <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">한국어</span><span class="code">KO</span></button>
         </div>
       </div>
-      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./index.html#join-beta">Join Beta</a>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./beta.html">Join Beta</a>
     </div>
   </header>
 
   <main class="page">
     <section class="section section-light">
-      <div class="section-intro reveal">
-        <span class="section-tag">Docs</span>
-        <h1 class="page-title" data-i18n="docs.title">A map to the memory system</h1>
-        <p class="page-subtitle">
-          <span data-i18n="docs.subtitle">Start with how memory shows up in practice: recall, continuity, persona, hygiene, and boundaries.</span>
-        </p>
+      <div class="docs-head reveal">
+        <h1 class="docs-page-title" data-i18n="nav.docs">Research</h1>
+        <nav class="docs-nav" aria-label="Research navigation">
+          <a href="#docs-all" class="is-active" data-docs-filter="all" data-i18n="docs.index.nav.all">All</a>
+          <a href="#docs-research-notes" data-docs-filter="research-notes" data-i18n="docs.index.nav.researchNotes">Research Notes</a>
+          <a href="#docs-experiments" data-docs-filter="experiments" data-i18n="docs.index.nav.experiments">Experiments &amp; Explorations</a>
+          <a href="#docs-milestones" data-docs-filter="milestones" data-i18n="docs.index.nav.milestones">Milestones</a>
+          <a href="#docs-open-source" data-docs-filter="open-source" data-i18n="docs.index.nav.openSource">Open Source Results</a>
+        </nav>
       </div>
 
-      <div class="docs-cta reveal">
-        <div>
-          <h3 data-i18n="docs.terms.h">Core terms</h3>
-          <p>
-            <span data-i18n="docs.terms.p">Flashback = old-thread resonance. Recall = summarize conversation by time. Persona = preferences, relationship, and style continuity. Hygiene = filter noisy memory before it sticks.</span>
-          </p>
-        </div>
-        <div class="docs-cta-actions">
-          <a class="button button-secondary" href="./product.html#proof">See memory proof</a>
-        </div>
-      </div>
+      <div class="docs-feed reveal" id="docs-all">
+        <div class="docs-feed-list">
+          <a class="docs-record docs-record-primary" href="./papers.html" id="docs-continuity-product" data-docs-record="research-notes">
+            <div class="docs-record-meta">
+              <span class="docs-record-type" data-i18n="docs.index.item.essay.type">Research Note</span>
+              <span class="docs-record-date" data-i18n="docs.index.item.essay.date">April 16, 2026</span>
+            </div>
+            <div class="docs-record-body">
+              <h2 class="docs-record-title" data-i18n="docs.index.item.essay.title">Continuity Is the Product</h2>
+              <p data-i18n="docs.index.item.essay.desc">Memory, continuity, and runtime state as the starting point for AaronCore.</p>
+            </div>
+          </a>
 
-      <div class="docs-index reveal">
-        <article class="docs-card">
-          <span class="card-kicker">Overview</span>
-          <h3 data-i18n="docs.card.overview.h">What the memory system is</h3>
-          <p data-i18n="docs.card.overview.p">A layered memory stack that writes, filters, recalls, and reinjects memory back into conversation.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Flashback</span>
-          <h3 data-i18n="docs.card.memory.h">Flashback</h3>
-          <p data-i18n="docs.card.memory.p">Old repair threads, emotional cues, or project states can resurface as natural hints instead of keyword dumps.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Recall</span>
-          <h3 data-i18n="docs.card.exec.h">Time recall</h3>
-          <p data-i18n="docs.card.exec.p">Ask what you talked about today, yesterday, or last week and get a recap from chat history plus memory snippets.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Persona</span>
-          <h3 data-i18n="docs.card.tools.h">Persona continuity</h3>
-          <p data-i18n="docs.card.tools.p">Preferences, dislikes, city, relationship posture, and interaction rules feed back into how AaronCore replies.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Hygiene</span>
-          <h3 data-i18n="docs.card.verify.h">Memory hygiene</h3>
-          <p data-i18n="docs.card.verify.p">Think blocks, low-signal turns, and polluted context are filtered so long-term continuity stays cleaner.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Retrieval</span>
-          <h3 data-i18n="docs.card.repair.h">Retrieval posture</h3>
-          <p data-i18n="docs.card.repair.p">Flashback is driven by resonance and continuity, not just plain keyword hits.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Boundaries</span>
-          <h3 data-i18n="docs.card.bounds.h">Boundaries</h3>
-          <p data-i18n="docs.card.bounds.p">The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.</p>
-        </article>
-        <article class="docs-card">
-          <span class="card-kicker">Release</span>
-          <h3 data-i18n="docs.card.release.h">Beta + download</h3>
-          <p data-i18n="docs.card.release.p">Public builds attach when ready. Until then, GitHub is the honest path.</p>
-        </article>
-      </div>
+          <a class="docs-record" href="./papers.html#paper-memory-runtime" id="docs-memory" data-docs-record="research-notes">
+            <div class="docs-record-meta">
+              <span class="docs-record-type" data-i18n="docs.index.item.memory.type">Research Note</span>
+              <span class="docs-record-date" data-i18n="docs.index.item.memory.date">April 16, 2026</span>
+            </div>
+            <div class="docs-record-body">
+              <h2 class="docs-record-title" data-i18n="docs.index.item.memory.title">Memory Is Not a Feature</h2>
+              <p data-i18n="docs.index.item.memory.desc">Why memory belongs to runtime behavior instead of a detachable feature list.</p>
+            </div>
+          </a>
 
-      <div class="docs-cta reveal">
-        <div>
-          <h3 data-i18n="docs.deep.h">Want the deeper architecture write-up?</h3>
-          <p data-i18n="docs.deep.p">The public docs can expand later. This page is the short map to the memory features users actually feel.</p>
+          <a class="docs-record" href="./papers.html#paper-continuity-breaks" id="docs-continuity" data-docs-record="research-notes">
+            <div class="docs-record-meta">
+              <span class="docs-record-type" data-i18n="docs.index.item.continuity.type">Research Note</span>
+              <span class="docs-record-date" data-i18n="docs.index.item.continuity.date">April 16, 2026</span>
+            </div>
+            <div class="docs-record-body">
+              <h2 class="docs-record-title" data-i18n="docs.index.item.continuity.title">Continuity Breaks Before Intelligence</h2>
+              <p data-i18n="docs.index.item.continuity.desc">Why agents fail when work stops accumulating across turns, even before model quality becomes the bottleneck.</p>
+            </div>
+          </a>
+
+          <a class="docs-record" href="./papers.html#paper-state-over-prompts" id="docs-state" data-docs-record="research-notes">
+            <div class="docs-record-meta">
+              <span class="docs-record-type" data-i18n="docs.index.item.state.type">Research Note</span>
+              <span class="docs-record-date" data-i18n="docs.index.item.state.date">April 16, 2026</span>
+            </div>
+            <div class="docs-record-body">
+              <h2 class="docs-record-title" data-i18n="docs.index.item.state.title">State Beats Prompt Tricks</h2>
+              <p data-i18n="docs.index.item.state.desc">Why explicit task state matters more than clever phrasing once execution starts.</p>
+            </div>
+          </a>
         </div>
-        <div class="docs-cta-actions">
-          <a class="button button-primary" data-link-field="betaUrl" data-link-label="betaLabel" href="./index.html#join-beta">Join Beta</a>
-          <a class="button button-secondary" href="./changelog.html">Read changelog</a>
+
+        <div class="docs-empty" data-docs-empty hidden>
+          <p class="docs-empty-label" data-i18n="docs.index.empty.label">No entries yet</p>
         </div>
       </div>
     </section>
@@ -147,23 +135,15 @@
 
     <div class="footer-meta">
       <div class="footer-item">
-        <span class="fact-label">Domain</span>
-        <strong data-site-field="primaryDomain">aaroncore.com</strong>
-      </div>
-      <div class="footer-item">
         <span class="fact-label">Contact</span>
         <strong>
           <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
         </strong>
       </div>
-      <div class="footer-item">
-        <span class="fact-label">Year</span>
-        <strong id="yearSlot"></strong>
-      </div>
     </div>
   </footer>
 
-  <script src="./app.js?v=20260407p"></script>
+  <script src="./app.js?v=20260416p29"></script>
 </body>
 </html>
 

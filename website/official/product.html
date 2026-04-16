@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AaronCore | Product</title>
-  <meta name="description" content="AaronCore turns memory into a live part of conversation and work: recall, continuity, persona, and a clearer path to action.">
+  <meta name="description" content="AaronCore keeps memory, state, and action in the same thread.">
   <meta name="theme-color" content="#0d0d0d">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260407p">
+  <link rel="stylesheet" href="./styles.css?v=20260416p41">
 </head>
 <body data-page="product">
   <div class="ambient" aria-hidden="true">
@@ -40,8 +40,7 @@
     <nav class="topnav">
       <a href="./index.html" data-i18n="nav.home">Home</a>
       <a href="./product.html" data-i18n="nav.product">Product</a>
-      <a href="./docs.html" data-i18n="nav.docs">Docs</a>
-      <a href="./papers.html" data-i18n="nav.papers">Papers</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
       <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
     </nav>
 
@@ -55,67 +54,15 @@
           <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">한국어</span><span class="code">KO</span></button>
         </div>
       </div>
-      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./index.html#join-beta">Join Beta</a>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./beta.html">Join Beta</a>
     </div>
   </header>
 
-  <main class="page">
-    <section class="section section-light">
-      <div class="section-intro reveal">
-        <span class="section-tag">Product</span>
-        <h1 class="page-title" data-i18n="product.title">Memory that comes back when it matters</h1>
-        <p class="page-subtitle">
-          <span data-i18n="product.subtitle">AaronCore turns memory into a live part of conversation and work: recall, continuity, persona, and a clearer path to action.</span>
-        </p>
-      </div>
-
-      <div class="product-grid reveal">
-        <article class="product-card">
-          <span class="card-kicker">Flashback</span>
-          <h3 data-i18n="product.card.continuity.h">Flashback can feel natural</h3>
-          <p data-i18n="product.card.continuity.p">When the current state resonates with an older thread, AaronCore can bring it back without making the user restate everything.</p>
-        </article>
-        <article class="product-card">
-          <span class="card-kicker">Time Recall</span>
-          <h3 data-i18n="product.card.tools.h">You can ask for time recall</h3>
-          <p data-i18n="product.card.tools.p">It can answer questions like what you talked about today, yesterday, or last week using history plus relevant memory snippets.</p>
-        </article>
-        <article class="product-card">
-          <span class="card-kicker">Persona</span>
-          <h3 data-i18n="product.card.verify.h">It remembers how to talk to you</h3>
-          <p data-i18n="product.card.verify.p">Preferences, dislikes, relationship posture, and interaction rules are condensed back into the reply path.</p>
-        </article>
-        <article class="product-card">
-          <span class="card-kicker">Hygiene</span>
-          <h3 data-i18n="product.card.repair.h">Memory stays sharp, not bloated</h3>
-          <p data-i18n="product.card.repair.p">Low-signal turns, think blocks, and polluted context are filtered so continuity gets cleaner over time.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section section-heavy" id="proof">
-      <div class="section-intro reveal">
-        <span class="section-tag">Memory proof</span>
-        <h2 data-i18n="product.proof.h">What memory looks like in practice</h2>
-        <p data-i18n="product.proof.p">The memory system is not just storage. It comes back into the reply as flashback, recap, and persona continuity.</p>
-      </div>
-
-      <div class="proof-block reveal">
-        <div class="proof-code" role="figure" aria-label="Execution chain example">
-          <pre><code>User: "Did that fix actually work?"
-Flashback: resurface the earlier settings thread from L2/L3.
-Reply: continue that same repair thread naturally.
-User: "What did we talk about today?"
-Recall: summarize today's messages plus relevant memory snippets.
-Persona: keep preference + interaction style active.</code></pre>
-        </div>
-        <div class="proof-copy">
-          <h3 data-i18n="product.proof.side.h">Designed to feel remembered, not artificially stuffed</h3>
-          <p>
-            <span data-i18n="product.proof.side.p">The goal is not to dump a search result into chat. The goal is to bring back the right memory at the right moment, naturally.</span>
-          </p>
-          <a class="button button-secondary" href="./docs.html">Read docs overview</a>
-        </div>
+  <main class="page product-poster-page">
+    <section class="product-poster" id="proof">
+      <div class="product-poster-inner reveal">
+        <h1 class="product-poster-title" data-i18n="product.title">AaronCore</h1>
+        <p class="product-poster-line" data-i18n="product.subtitle">Memory, state, and action stay in the same thread.</p>
       </div>
     </section>
   </main>
@@ -130,23 +77,15 @@ Persona: keep preference + interaction style active.</code></pre>
 
     <div class="footer-meta">
       <div class="footer-item">
-        <span class="fact-label">Domain</span>
-        <strong data-site-field="primaryDomain">aaroncore.com</strong>
-      </div>
-      <div class="footer-item">
         <span class="fact-label">Contact</span>
         <strong>
           <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
         </strong>
       </div>
-      <div class="footer-item">
-        <span class="fact-label">Year</span>
-        <strong id="yearSlot"></strong>
-      </div>
     </div>
   </footer>
 
-  <script src="./app.js?v=20260407p"></script>
+  <script src="./app.js?v=20260416p30"></script>
 </body>
 </html>
 

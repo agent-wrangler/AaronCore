@@ -105,6 +105,34 @@ If you want the Pages project to serve `aaroncore.com` later:
 
 If DNS stays elsewhere, keep the domain at the current provider and follow the DNS records Cloudflare gives you for the Pages project.
 
+## Beta waitlist backend
+
+The beta page now supports a real waitlist submit flow through Cloudflare Pages Functions.
+
+Important layout detail:
+
+- Static site output stays in `website/official/`
+- Pages Functions live at the repo root in `functions/`
+
+That placement matters because the current Pages project still uses the repository root as its project root, while `website/official/` is only the output directory.
+
+### What to set in Cloudflare
+
+1. Create a D1 database.
+2. In your Pages project, go to **Settings** > **Bindings** > **Add** > **D1 database bindings**.
+3. Bind the database with the variable name `WAITLIST_DB`.
+4. Redeploy the Pages project.
+
+The `/api/waitlist` Function will create the `beta_waitlist` table automatically on first successful write, so no manual schema migration is required for the basic setup.
+
+### Local development
+
+If you want to test the waitlist locally with Wrangler, run the Pages project against the static output directory and attach the D1 binding:
+
+```powershell
+npx wrangler pages dev website/official --d1 WAITLIST_DB=<your-d1-database-id>
+```
+
 ## Vercel alternative
 
 Vercel also works well for static sites, but for private Git repositories the permissions and plan rules are a little more particular. If you want the least setup friction for a private repo, Cloudflare Pages is the safer default.
