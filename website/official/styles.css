@@ -5807,6 +5807,21 @@ html[lang="zh-CN"] .hero-title {
   background: var(--surface-selected);
 }
 
+.beta-input:-webkit-autofill,
+.beta-input:-webkit-autofill:hover,
+.beta-input:-webkit-autofill:focus,
+.beta-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--cyan-deep);
+  caret-color: var(--cyan-deep);
+  -webkit-box-shadow:
+    0 0 0 1000px var(--surface-selected) inset,
+    0 0 0 1px var(--line-strong) inset;
+  box-shadow:
+    0 0 0 1000px var(--surface-selected) inset,
+    0 0 0 1px var(--line-strong) inset;
+  transition: background-color 99999s ease-in-out 0s;
+}
+
 .beta-select-shell {
   position: relative;
 }
