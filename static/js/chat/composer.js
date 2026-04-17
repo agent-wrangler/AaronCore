@@ -41,10 +41,6 @@
   for(var i=0;i<items.length;i++){
    if(items[i].type.indexOf('image')!==-1){
      e.preventDefault();
-     if(!_canUseVisionUpload()){
-      _notifyVisionUploadUnavailable();
-      return;
-     }
      var file=items[i].getAsFile();
      if(file) readImageFile(file);
      return;
@@ -54,15 +50,12 @@
 })();
 
 function _canUseVisionUpload(){
- var models=window._novaModels||{};
- return Object.keys(models).some(function(key){
-  return !!(models[key]&&models[key].vision);
- });
+ return true;
 }
 
 function _notifyVisionUploadUnavailable(){
- var title=(typeof t==='function') ? t('model.no.vision') : 'No vision model available';
- var detail=(typeof t==='function') ? t('model.no.vision.detail') : 'Configure a vision-capable model before uploading images.';
+ var title=(typeof t==='function') ? t('model.upload.title') : 'Upload image';
+ var detail='Image upload is temporarily unavailable.';
  if(window._currentTab===1 && typeof addChatEventNote==='function'){
   addChatEventNote('warning', 'IMAGE', title, detail);
   return;
@@ -72,21 +65,165 @@ function _notifyVisionUploadUnavailable(){
  }catch(_err){}
 }
 
-function triggerImageUpload(){
- if(!_canUseVisionUpload()){
-  _notifyVisionUploadUnavailable();
-  return false;
+var _chatImagePreviewState={
+ host:null,
+ image:null,
+ keybound:false
+};
+
+function _closeChatImagePreview(){
+ var host=_chatImagePreviewState.host;
+ if(!host) return;
+ host.classList.remove('is-open');
+ host.setAttribute('aria-hidden','true');
+ document.body.classList.remove('chat-image-preview-open');
+}
+
+function _ensureChatImagePreviewHost(){
+ if(_chatImagePreviewState.host&&_chatImagePreviewState.host.parentNode) return _chatImagePreviewState.host;
+ var host=document.createElement('div');
+ host.id='chatImagePreviewHost';
+ host.className='chat-image-preview';
+ host.setAttribute('aria-hidden','true');
+ host.innerHTML=''
+  +'<div class="chat-image-preview-backdrop"></div>'
+  +'<div class="chat-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">'
+  +'<button type="button" class="chat-image-preview-close" aria-label="Close preview">&times;</button>'
+  +'<img class="chat-image-preview-img" alt="preview" />'
+  +'</div>';
+ var backdrop=host.querySelector('.chat-image-preview-backdrop');
+ var dialog=host.querySelector('.chat-image-preview-dialog');
+ var closeBtn=host.querySelector('.chat-image-preview-close');
+ var image=host.querySelector('.chat-image-preview-img');
+ backdrop.onclick=_closeChatImagePreview;
+ closeBtn.onclick=_closeChatImagePreview;
+ host.addEventListener('click',function(evt){
+  if(evt.target===host) _closeChatImagePreview();
+ });
+ dialog.addEventListener('click',function(evt){
+  evt.stopPropagation();
+ });
+ document.body.appendChild(host);
+ _chatImagePreviewState.host=host;
+ _chatImagePreviewState.image=image;
+ if(!_chatImagePreviewState.keybound){
+  document.addEventListener('keydown',function(evt){
+   if(evt.key==='Escape'&&_chatImagePreviewState.host&&_chatImagePreviewState.host.classList.contains('is-open')){
+    _closeChatImagePreview();
+   }
+  });
+  _chatImagePreviewState.keybound=true;
  }
+ return host;
+}
+
+function openChatImagePreview(src,alt){
+ var url=String(src||'').trim();
+ if(!url) return false;
+ _ensureChatImagePreviewHost();
+ _chatImagePreviewState.image.src=url;
+ _chatImagePreviewState.image.alt=String(alt||'preview');
+ _chatImagePreviewState.host.classList.add('is-open');
+ _chatImagePreviewState.host.setAttribute('aria-hidden','false');
+ document.body.classList.add('chat-image-preview-open');
+ return false;
+}
+
+function bindChatImagePreview(img,src,alt){
+ if(!img) return;
+ var url=String(src||img.src||'').trim();
+ if(!url) return;
+ img.setAttribute('data-chat-preview-src', url);
+ img.style.cursor='zoom-in';
+ img.setAttribute('role','button');
+ img.tabIndex=0;
+ img.onclick=function(evt){
+  if(evt){
+   evt.preventDefault();
+   evt.stopPropagation();
+  }
+  openChatImagePreview(url,alt||img.alt||'preview');
+  return false;
+ };
+ img.onkeydown=function(evt){
+  var key=evt&&evt.key;
+  if(key!=='Enter'&&key!==' ') return;
+  evt.preventDefault();
+  openChatImagePreview(url,alt||img.alt||'preview');
+ };
+}
+
+function _normalizeChatAttachments(imageUrl,attachments){
+ var list=[];
+ if(Array.isArray(attachments)){
+  attachments.forEach(function(item){
+   if(!item) return;
+   if(typeof item==='string'){
+    var rawUrl=String(item||'').trim();
+    if(rawUrl) list.push({type:'image',url:rawUrl,alt:'image'});
+    return;
+   }
+   var itemType=String(item.type||'image').trim().toLowerCase()||'image';
+   var raw=String(item.url||item.imageUrl||item.src||item.path||'').trim();
+   if(!raw) return;
+   list.push({
+    type:itemType,
+    url:raw,
+    alt:String(item.alt||item.name||'image').trim()||'image'
+   });
+  });
+ }
+ if(!list.length){
+  var fallback=String(imageUrl||'').trim();
+  if(fallback) list.push({type:'image',url:fallback,alt:'image'});
+ }
+ return list.filter(function(item){
+  return item&&item.type==='image'&&String(item.url||'').trim();
+ });
+}
+
+function _appendChatBubbleImages(bubble,imageUrl,attachments){
+ if(!bubble) return 0;
+ var list=_normalizeChatAttachments(imageUrl,attachments);
+ if(!list.length) return 0;
+ var host=document.createElement('div');
+ host.className='bubble-attachments'+(list.length>1?' is-multi':'');
+ list.forEach(function(item,idx){
+  var img=document.createElement('img');
+  img.className='bubble-image';
+  img.src=item.url;
+  img.alt=item.alt||('image '+String(idx+1));
+  bindChatImagePreview(img,item.url,img.alt);
+  host.appendChild(img);
+ });
+ bubble.appendChild(host);
+ return list.length;
+}
+
+function rebindChatImagePreviews(root){
+ var host=(root&&root.querySelectorAll)?root:document;
+ if(!host||!host.querySelectorAll) return 0;
+ var count=0;
+ host.querySelectorAll('img.bubble-image').forEach(function(img){
+  var src=String(img.getAttribute('data-chat-preview-src')||img.getAttribute('src')||'').trim();
+  if(!src) return;
+  bindChatImagePreview(img,src,img.alt||'image');
+  count++;
+ });
+ return count;
+}
+
+window.openChatImagePreview=openChatImagePreview;
+window.bindChatImagePreview=bindChatImagePreview;
+window._rebindChatImagePreviews=rebindChatImagePreviews;
+
+function triggerImageUpload(){
  var input=document.getElementById('imageFileInput');
  if(input) input.click();
  return false;
 }
 
 function readImageFile(file){
- if(!_canUseVisionUpload()){
-  _notifyVisionUploadUnavailable();
-  return;
- }
  if(!file||file.size>10*1024*1024)return;
  if(_pendingImages.length>=MAX_IMAGES) return;
  var reader=new FileReader();
@@ -99,11 +236,6 @@ function readImageFile(file){
 }
 
 function handleImageFile(input){
- if(!_canUseVisionUpload()){
-  _notifyVisionUploadUnavailable();
-  if(input) input.value='';
-  return;
- }
  if(input.files){
   for(var i=0;i<input.files.length&&_pendingImages.length<MAX_IMAGES;i++){
    readImageFile(input.files[i]);
@@ -123,6 +255,7 @@ function renderImagePreviews(){
   item.className='image-preview-item';
   var img=document.createElement('img');
   img.src=dataUrl; img.alt='preview';
+  bindChatImagePreview(img,dataUrl,'preview');
   var btn=document.createElement('button');
   btn.className='image-preview-remove';
   btn.title=t('chat.remove.image');
@@ -182,7 +315,7 @@ function _stopGeneration(){
  }
 }
 
-function addMessage(sender,text,type,imageUrl,renderedHtml){
+function addMessage(sender,text,type,imageUrl,renderedHtml,attachments){
  var chat=document.getElementById('chat');
  var msgDiv=document.createElement('div');
  msgDiv.className='msg '+(type==='user'?'user':'assistant');
@@ -214,13 +347,7 @@ function addMessage(sender,text,type,imageUrl,renderedHtml){
    bubble.classList.add('assistant-reply-markdown');
   }
  }
- if(imageUrl){
-  var img=document.createElement('img');
-  img.className='bubble-image';
-  img.src=imageUrl;
-  img.alt='图片';
-  bubble.appendChild(img);
- }
+ _appendChatBubbleImages(bubble,imageUrl,attachments);
  if(text){
   var textNode=document.createElement('div');
   textNode.className='bubble-body';

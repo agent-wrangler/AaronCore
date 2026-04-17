@@ -19,6 +19,22 @@ class ChatHistoryTransactionTests(unittest.TestCase):
         self.assertEqual(tx.pending_user_entry, entry)
         self.assertEqual(saved[-1][-1]["content"], "hello")
 
+    def test_append_pending_user_persists_attachments(self):
+        saved = []
+        history = []
+        tx = ChatHistoryTransaction(
+            history,
+            save_msg_history=lambda items: saved.append([dict(item) for item in items]),
+        )
+
+        entry = tx.append_pending_user(
+            "hello",
+            attachments=[{"type": "image", "path": "20260417/test.png", "mime": "image/png"}],
+        )
+
+        self.assertEqual(entry["attachments"][0]["path"], "20260417/test.png")
+        self.assertEqual(saved[-1][-1]["attachments"][0]["mime"], "image/png")
+
     def test_persist_assistant_entry_marks_transaction_saved(self):
         history = []
         saved = []
@@ -71,6 +87,24 @@ class ChatHistoryTransactionTests(unittest.TestCase):
         self.assertTrue(removed)
         self.assertEqual(history, [])
         self.assertEqual(saved[-1], [])
+
+    def test_rollback_cleans_up_pending_attachments(self):
+        deleted = []
+        history = []
+        tx = ChatHistoryTransaction(
+            history,
+            save_msg_history=lambda _items: None,
+            delete_attachments=lambda attachments: deleted.extend(list(attachments or [])),
+        )
+        tx.append_pending_user(
+            "hello",
+            attachments=[{"type": "image", "path": "20260417/test.png", "mime": "image/png"}],
+        )
+
+        removed = tx.rollback_pending_user("fatal")
+
+        self.assertTrue(removed)
+        self.assertEqual(deleted, [{"type": "image", "path": "20260417/test.png", "mime": "image/png"}])
 
     def test_rollback_skips_when_assistant_history_already_saved(self):
         history = []

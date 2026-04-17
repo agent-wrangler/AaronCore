@@ -12,7 +12,7 @@ async function send(){
  var image=images.length>0?images[0]:null;
  if(text===''&&!image)return;
 
- addMessage(t('chat.you'),text,'user',image);
+ addMessage(t('chat.you'),text,'user',image,'',images);
  inp.value='';
  inp.style.height='auto';
  _pendingImages=[];

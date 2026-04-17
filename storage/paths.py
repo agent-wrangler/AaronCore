@@ -1,20 +1,39 @@
+import os
 from pathlib import Path
 
 
 ENGINE_DIR = Path(__file__).resolve().parents[1]
+_DATA_ROOT_ENV_KEYS = ("AARONCORE_DATA_DIR", "NOVACORE_DATA_DIR")
+
+
+def _resolve_data_root() -> Path:
+    for key in _DATA_ROOT_ENV_KEYS:
+        raw = str(os.environ.get(key) or "").strip()
+        if raw:
+            try:
+                return Path(raw).expanduser().resolve()
+            except Exception:
+                return Path(raw).expanduser()
+    return ENGINE_DIR
+
+
+DATA_ROOT_DIR = _resolve_data_root()
+USES_EXTERNAL_DATA_ROOT = DATA_ROOT_DIR != ENGINE_DIR
 CORE_DIR = ENGINE_DIR / "core"
-STATE_DATA_DIR = ENGINE_DIR / "state_data"
+STATE_DATA_DIR = DATA_ROOT_DIR / "state_data"
 MEMORY_STORE_DIR = STATE_DATA_DIR / "memory_store"
 TASK_STORE_DIR = STATE_DATA_DIR / "task_store"
 CONTENT_STORE_DIR = STATE_DATA_DIR / "content_store"
 RUNTIME_STORE_DIR = STATE_DATA_DIR / "runtime_store"
+CHAT_UPLOADS_DIR = RUNTIME_STORE_DIR / "chat_uploads"
 PRIMARY_STATE_DIR = MEMORY_STORE_DIR
-LEGACY_STATE_DIR = ENGINE_DIR / "memory"
-LOGS_DIR = ENGINE_DIR / "logs"
+LEGACY_STATE_DIR = DATA_ROOT_DIR / "memory" if USES_EXTERNAL_DATA_ROOT else ENGINE_DIR / "memory"
+LOGS_DIR = DATA_ROOT_DIR / "logs"
 HTML_FILE = ENGINE_DIR / "output.html"
-RESTORED_OUTPUT_JS_FILE = ENGINE_DIR / ".tmp_settings_check.js"
-LLM_CONFIG_FILE = ENGINE_DIR / "brain" / "llm_config.json"
-LLM_LOCAL_CONFIG_FILE = ENGINE_DIR / "brain" / "llm_config.local.json"
+RESTORED_OUTPUT_JS_FILE = DATA_ROOT_DIR / ".tmp_settings_check.js" if USES_EXTERNAL_DATA_ROOT else ENGINE_DIR / ".tmp_settings_check.js"
+LLM_CONFIG_TEMPLATE_FILE = ENGINE_DIR / "brain" / "llm_config.json"
+LLM_CONFIG_FILE = DATA_ROOT_DIR / "brain" / "llm_config.json" if USES_EXTERNAL_DATA_ROOT else LLM_CONFIG_TEMPLATE_FILE
+LLM_LOCAL_CONFIG_FILE = DATA_ROOT_DIR / "brain" / "llm_config.local.json" if USES_EXTERNAL_DATA_ROOT else ENGINE_DIR / "brain" / "llm_config.local.json"
 
 PRIMARY_HISTORY_FILE = MEMORY_STORE_DIR / "msg_history.json"
 LEGACY_HISTORY_FILE = LEGACY_STATE_DIR / "msg_history.json"

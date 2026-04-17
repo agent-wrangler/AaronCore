@@ -67,6 +67,10 @@ from routes.chat_trace_semantics import (
 from routes.chat_thinking_trace import ChatThinkingTraceState
 from routes.chat_trace_state import ChatTraceState
 from routes.chat_stream_markdown import MarkdownIncrementalStream
+from storage.chat_attachments import (
+    delete_chat_attachments as _delete_chat_attachments,
+    persist_inline_chat_images as _persist_inline_chat_images,
+)
 try:
     from routes import companion as _comp
 except Exception:
@@ -210,6 +214,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             save_msg_history=S.save_msg_history,
             add_to_history=S.add_to_history,
             debug_write=S.debug_write,
+            delete_attachments=_delete_chat_attachments,
         )
 
         pending_awareness = _get_pending_awareness_events()
@@ -227,7 +232,14 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         )
 
         # 先把当前用户消息存入持久历史（但不影响 _history_for_context，避免 L1 重复）
-        _history_tx.append_pending_user(msg)
+        _user_attachments = []
+        if user_images:
+            try:
+                _user_attachments = _persist_inline_chat_images(user_images)
+            except Exception as exc:
+                S.debug_write("chat_image_persist_failed", {"count": len(user_images), "error": str(exc)})
+                _user_attachments = []
+        _history_tx.append_pending_user(msg, attachments=_user_attachments)
 
         # ── CoD / tool_call 开关提前判断 ──
         _tool_call_unavailable_reason = _get_tool_call_unavailable_reason()

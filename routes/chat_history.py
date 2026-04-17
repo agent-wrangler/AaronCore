@@ -14,16 +14,21 @@ class ChatHistoryTransaction:
         save_msg_history,
         add_to_history=None,
         debug_write=None,
+        delete_attachments=None,
     ) -> None:
         self.history = history
         self.save_msg_history = save_msg_history
         self.add_to_history = add_to_history
         self.debug_write = debug_write
+        self.delete_attachments = delete_attachments
         self.pending_user_entry: dict | None = None
         self.assistant_history_saved = False
 
-    def append_pending_user(self, content: str) -> dict:
+    def append_pending_user(self, content: str, *, attachments: list[dict] | None = None) -> dict:
         entry = {"role": "user", "content": content, "time": datetime.now().isoformat()}
+        normalized_attachments = [dict(item) for item in list(attachments or []) if isinstance(item, dict)]
+        if normalized_attachments:
+            entry["attachments"] = normalized_attachments
         self.history.append(entry)
         self.save_msg_history(self.history)
         self.pending_user_entry = entry
@@ -56,6 +61,7 @@ class ChatHistoryTransaction:
             reason=reason,
             save_msg_history=self.save_msg_history,
             debug_write=self.debug_write,
+            delete_attachments=self.delete_attachments,
         )
 
 
@@ -122,6 +128,7 @@ def rollback_pending_user_turn(
     reason: str,
     save_msg_history,
     debug_write=None,
+    delete_attachments=None,
 ) -> bool:
     if assistant_history_saved:
         return False
@@ -134,6 +141,13 @@ def rollback_pending_user_turn(
         if callable(debug_write):
             debug_write("history_user_turn_rollback_failed", {"reason": reason, "error": str(exc)})
         return False
+    attachments = pending_entry.get("attachments") if isinstance(pending_entry, dict) else None
+    if attachments and callable(delete_attachments):
+        try:
+            delete_attachments(attachments)
+        except Exception as exc:
+            if callable(debug_write):
+                debug_write("history_user_attachment_cleanup_failed", {"reason": reason, "error": str(exc)})
     if callable(debug_write):
         debug_write("history_user_turn_rolled_back", {"reason": reason})
     return True

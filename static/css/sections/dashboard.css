@@ -554,6 +554,105 @@ body.light .image-preview-item { border-color: rgba(0,0,0,0.1); }
 }
 .bubble-image:only-child { margin-bottom: 0; }
 
+.bubble-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.bubble-attachments.is-multi {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 280px;
+}
+
+.bubble .bubble-attachments:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-attachments .bubble-image {
+  margin-bottom: 0;
+}
+
+.bubble-attachments.is-multi .bubble-image {
+  width: 100%;
+  max-width: none;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.chat-image-preview-open {
+  overflow: hidden;
+}
+
+.chat-image-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.chat-image-preview.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-image-preview-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.76);
+  backdrop-filter: blur(4px);
+}
+
+.chat-image-preview-dialog {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: min(92vw, 1440px);
+  max-height: 92vh;
+}
+
+.chat-image-preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 88vh;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.chat-image-preview-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.chat-image-preview-close:hover {
+  background: rgba(30, 41, 59, 0.98);
+}
+
 /* ── 模型选择器 ── */
 .model-selector-wrap { position: relative; width: 100%; --model-selector-radius: 10px; }
 

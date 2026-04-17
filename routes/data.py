@@ -10,6 +10,7 @@ from core.markdown_render import render_markdown_html
 from core.process_history import normalize_process_payload
 from memory.l2_memory import classify_retention_bucket
 from memory.l8_learning import classify_l8_entry_kind, should_show_l8_timeline_entry
+from storage.chat_attachments import build_public_chat_attachments
 from storage.stats_store import MODEL_PRICES, get_model_price
 
 router = APIRouter()
@@ -1281,6 +1282,11 @@ async def get_history(limit: int = 40, offset: int = 0):
     formatted = []
     for item in chunk:
         row = dict(item)
+        attachments = build_public_chat_attachments(row.get("attachments"))
+        if attachments:
+            row["attachments"] = attachments
+        else:
+            row.pop("attachments", None)
         normalized_process = normalize_process_payload(row.get("process"))
         if normalized_process:
             row["process"] = normalized_process

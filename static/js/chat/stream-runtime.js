@@ -263,12 +263,17 @@ function _createStreamRuntime(bindings){
    img.className='bubble-image';
    img.src=replyImage;
    img.alt='reply image';
+   img.setAttribute('data-chat-preview-src', replyImage);
    img.style.maxWidth='100%';
    img.style.maxHeight='400px';
    img.style.borderRadius='8px';
    img.style.marginTop='8px';
-   img.style.cursor='pointer';
-   img.onclick=function(){window.open(replyImage,'_blank');};
+   if(typeof bindChatImagePreview==='function'){
+    bindChatImagePreview(img,replyImage,'reply image');
+   }else{
+    img.style.cursor='pointer';
+    img.onclick=function(){window.open(replyImage,'_blank');};
+   }
    state.streamBubble.appendChild(img);
   }
   var meta=state.streamBubble.parentNode.querySelector('.msg-meta');

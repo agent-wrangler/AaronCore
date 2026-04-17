@@ -7,6 +7,7 @@ import requests
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
+from storage.paths import CHAT_UPLOADS_DIR
 
 from core.runtime_state.state_loader import (
     ENGINE_DIR, CORE_DIR, PRIMARY_STATE_DIR, LOGS_DIR,
@@ -224,6 +225,12 @@ def _knowledge_llm_call(prompt: str) -> str:
         except Exception:
             pass
     return result.get("content", "")
+
+
+def _should_autostart_vision() -> tuple[bool, str]:
+    from core.vision import can_autostart_background_capture
+
+    return can_autostart_background_capture()
 
 
 # ── 依赖注入：初始化各 core 模块 ──
@@ -513,6 +520,8 @@ from pathlib import Path as _Path
 _screenshots_dir = _Path.home() / 'Desktop' / 'Nova截图'
 _screenshots_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/screenshots", _StaticFiles(directory=str(_screenshots_dir)), name="screenshots")
+CHAT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/chat-uploads", _StaticFiles(directory=str(CHAT_UPLOADS_DIR)), name="chat_uploads")
 
 from routes.health import router as _health_router
 from routes.models import router as _models_router
@@ -525,11 +534,15 @@ from routes.lab import router as _lab_router
 
 # ── 视觉感知模块初始化 ──
 try:
-    from core.vision import init as _vision_init, start as _vision_start
-    from brain import vision_llm_call as _vision_llm_call
-    _vision_init(llm_call=_vision_llm_call, debug_write=debug_write)
-    _vision_start()
-    print("[agent_final] vision module started")
+    _vision_enabled, _vision_reason = _should_autostart_vision()
+    if _vision_enabled:
+        from core.vision import init as _vision_init, start as _vision_start
+        from brain import vision_llm_call as _vision_llm_call
+        _vision_init(llm_call=_vision_llm_call, debug_write=debug_write)
+        _vision_start()
+        print("[agent_final] vision module started")
+    else:
+        print(f"[agent_final] vision module skipped: {_vision_reason}")
 except Exception as _ve:
     print(f"[agent_final] vision module skipped: {_ve}")
 
