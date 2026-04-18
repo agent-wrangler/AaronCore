@@ -83,6 +83,68 @@ class TaskPlanSkillTests(unittest.TestCase):
         self.assertIn("Inspect the current chain", plan_step_titles)
         self.assertIn("Build the planner tool", plan_step_titles)
 
+    def test_current_plan_step_child_carries_runtime_execution_metadata(self):
+        task_store_module.save_task_plan_snapshot(
+            "continue AaronCore coding lane",
+            {
+                "goal": "continue AaronCore coding lane",
+                "summary": "Verification failed after a parallel inspection batch",
+                "items": [
+                    {"id": "inspect", "title": "Inspect the current chain", "status": "done"},
+                    {"id": "verify", "title": "Verify the patch", "status": "running", "detail": "Tests are still failing"},
+                ],
+                "current_item_id": "verify",
+                "phase": "verify",
+                "runtime_status": "verify_failed",
+                "next_action": "retry_or_close",
+                "last_tool": "run_command",
+                "last_action_summary": "Ran pytest for the modified module",
+                "last_result_summary": "pytest still reports the output file missing",
+                "attempt_kind": "retry",
+                "execution_lane": "verify",
+                "previous_tool": "write_file",
+                "parallel_tools": ["read_file", "list_files"],
+                "parallel_size": 2,
+                "verification": {
+                    "verified": False,
+                    "detail": "Output file is still missing",
+                },
+            },
+        )
+
+        verify_step = next(
+            task for task in self.data.tasks
+            if task.get("kind") == "plan_step" and task.get("title") == "Verify the patch"
+        )
+        inspect_step = next(
+            task for task in self.data.tasks
+            if task.get("kind") == "plan_step" and task.get("title") == "Inspect the current chain"
+        )
+
+        self.assertEqual((verify_step.get("context") or {}).get("runtime_status"), "verify_failed")
+        self.assertEqual((verify_step.get("context") or {}).get("blocker"), "Output file is still missing")
+        self.assertEqual((verify_step.get("context") or {}).get("verification_status"), "failed")
+        self.assertEqual((verify_step.get("context") or {}).get("verification_detail"), "Output file is still missing")
+        self.assertEqual((verify_step.get("memory") or {}).get("last_tool"), "run_command")
+        self.assertEqual((verify_step.get("memory") or {}).get("attempt_kind"), "retry")
+        self.assertEqual((verify_step.get("memory") or {}).get("execution_lane"), "verify")
+        self.assertEqual((verify_step.get("memory") or {}).get("previous_tool"), "write_file")
+        self.assertEqual((verify_step.get("memory") or {}).get("parallel_tools"), ["read_file", "list_files"])
+        self.assertEqual((verify_step.get("memory") or {}).get("parallel_size"), 2)
+        self.assertTrue(bool((verify_step.get("domain") or {}).get("task_plan_item", {}).get("is_current")))
+        self.assertFalse(bool((inspect_step.get("memory") or {}).get("last_tool")))
+        self.assertFalse(bool((inspect_step.get("domain") or {}).get("task_plan_item", {}).get("is_current")))
+
+        working_state = task_store_module.get_active_task_working_state("continue AaronCore coding lane")
+        current_step_task = (working_state or {}).get("current_step_task") or {}
+        self.assertEqual(current_step_task.get("task_id"), verify_step.get("id"))
+        self.assertEqual(current_step_task.get("status"), "active")
+        self.assertEqual(current_step_task.get("runtime_status"), "verify_failed")
+        self.assertEqual(current_step_task.get("blocker"), "Output file is still missing")
+        self.assertEqual(current_step_task.get("attempt_kind"), "retry")
+        self.assertEqual(current_step_task.get("execution_lane"), "verify")
+        self.assertEqual(current_step_task.get("parallel_tools"), ["read_file", "list_files"])
+
     def test_advance_marks_current_item_done_and_next_item_running(self):
         task_plan_module.execute(
             "",
@@ -507,6 +569,14 @@ class TaskPlanSkillTests(unittest.TestCase):
                 "phase": "verify",
                 "runtime_status": "verify_failed",
                 "next_action": "retry_or_close",
+                "last_tool": "run_command",
+                "last_action_summary": "Ran the verification command",
+                "last_result_summary": "pytest still reports the output file missing",
+                "attempt_kind": "retry",
+                "execution_lane": "verify",
+                "previous_tool": "write_file",
+                "parallel_tools": ["read_file", "list_files"],
+                "parallel_size": 2,
                 "verification": {
                     "verified": False,
                     "detail": "Output file is still missing",
@@ -520,11 +590,35 @@ class TaskPlanSkillTests(unittest.TestCase):
 
         self.assertEqual(working_state.get("query_mode"), "verify")
         self.assertEqual(working_state.get("runtime_status"), "verify_failed")
+        self.assertEqual(working_state.get("blocker"), "Output file is still missing")
         self.assertEqual(working_state.get("verification_status"), "failed")
         self.assertEqual(working_state.get("verification_detail"), "Output file is still missing")
+        self.assertEqual(working_state.get("last_tool"), "run_command")
+        self.assertEqual(working_state.get("last_action_summary"), "Ran the verification command")
+        self.assertEqual(working_state.get("last_result_summary"), "pytest still reports the output file missing")
+        self.assertEqual(working_state.get("attempt_kind"), "retry")
+        self.assertEqual(working_state.get("execution_lane"), "verify")
+        self.assertEqual(working_state.get("previous_tool"), "write_file")
+        self.assertEqual(working_state.get("parallel_tools"), ["read_file", "list_files"])
+        self.assertEqual(working_state.get("parallel_size"), 2)
+        self.assertEqual((working_state.get("current_step_task") or {}).get("status"), "active")
+        self.assertEqual((working_state.get("current_step_task") or {}).get("runtime_status"), "verify_failed")
+        self.assertEqual((working_state.get("current_step_task") or {}).get("blocker"), "Output file is still missing")
+        self.assertEqual((working_state.get("current_step_task") or {}).get("last_tool"), "run_command")
+        self.assertEqual((working_state.get("current_step_task") or {}).get("execution_lane"), "verify")
         self.assertIn("answer the current task verification state first", session_context.get("user_state") or "")
+        self.assertIn("Latest tool used: run_command", context)
+        self.assertIn("Latest action summary: Ran the verification command", context)
+        self.assertIn("Latest result summary: pytest still reports the output file missing", context)
+        self.assertIn("Current execution lane: verify", context)
+        self.assertIn("Latest attempt kind: retry", context)
+        self.assertIn("Previous tool before latest step: write_file", context)
+        self.assertIn("Latest parallel tool batch: read_file, list_files", context)
+        self.assertIn("Current plan-step task status: active", context)
+        self.assertIn("Current plan-step runtime status: verify_failed", context)
+        self.assertIn("Current blocker: Output file is still missing", context)
         self.assertIn("Latest verification status: failed", context)
-        self.assertIn("Latest verification detail: Output file is still missing", context)
+        self.assertNotIn("Latest verification detail: Output file is still missing", context)
 
     def test_task_plan_can_remember_and_retrieve_fs_target(self):
         _task, snapshot = task_store_module.save_task_plan_snapshot(
@@ -584,7 +678,7 @@ class TaskPlanSkillTests(unittest.TestCase):
             },
         )
 
-        resumed = task_store_module.get_active_task_plan_snapshot("它在哪")
+        resumed = task_store_module.get_active_task_plan_snapshot("它在哪?")
 
         self.assertIsInstance(resumed, dict)
         self.assertTrue(bool(resumed.get("task_id")))
@@ -601,7 +695,7 @@ class TaskPlanSkillTests(unittest.TestCase):
             },
         )
 
-        resumed = task_store_module.get_active_task_plan_snapshot("之前做的那个记录笔记的文件夹在哪啊")
+        resumed = task_store_module.get_active_task_plan_snapshot("之前做的那个记录笔记的文件夹在哪?")
 
         self.assertIsInstance(resumed, dict)
         self.assertTrue(bool(resumed.get("task_id")))
@@ -689,7 +783,7 @@ class TaskPlanSkillTests(unittest.TestCase):
             "找回丢失物品",
             {
                 "goal": "找回丢失物品",
-                "summary": "通过系统化回溯与排查，定位并取回丢失物品。",
+                "summary": "通过系统化回溯与排查，定位并取回丢失物品",
                 "items": [{"id": "trace_back", "title": "回溯活动路径", "status": "running"}],
                 "current_item_id": "trace_back",
                 "phase": "immediate_search",
@@ -724,7 +818,7 @@ class TaskPlanSkillTests(unittest.TestCase):
             "找回丢失物品",
             {
                 "goal": "找回丢失物品",
-                "summary": "通过系统化回溯与排查，定位并取回丢失物品。",
+                "summary": "通过系统化回溯与排查，定位并取回丢失物品",
                 "items": [{"id": "trace_back", "title": "回溯活动路径", "status": "running"}],
                 "current_item_id": "trace_back",
                 "phase": "immediate_search",

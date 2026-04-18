@@ -43,6 +43,23 @@ _RESULT_EVIDENCE_PATTERNS = (
     r"\b\d+\s*(?:%|h|hr|hrs|hour|hours|min|mins|minute|minutes|sec|secs|second|seconds|times?)\b",
     r"\b\d+\s*(?:to|-)\s*\d+\s*(?:degrees?|deg)\b",
 )
+_RESULT_GROUNDED_MARKER_RE = (
+    r"(?:\u95ee\u9898|\u539f\u56e0|\u6839\u56e0)(?:\u5df2\u7ecf)?(?:\u5b9a\u4f4d\u5230|\u5b9a\u4f4d\u5728|\u627e\u5230|\u67e5\u5230|\u786e\u8ba4)"
+    r"|(?:\u539f\u56e0\u662f|\u6839\u56e0\u662f|\u7ed3\u8bba\u662f)"
+    r"|(?:\u5df2\u7ecf|\u5df2)(?:\u5b9a\u4f4d|\u627e\u5230|\u67e5\u5230|\u786e\u8ba4|\u770b\u5230|\u4fee\u597d)"
+    r"|(?:\u5b9a\u4f4d\u5230|\u5b9a\u4f4d\u5728|\u627e\u5230|\u67e5\u5230)"
+    r"|(?:\u6539\u6210|\u6539\u4e3a|\u4fee\u6210|\u4fee\u597d|\u4e0d\u4f1a\u518d|\u4e0d\u518d)"
+    r"|(?:found|located|identified|updated|changed|fixed|no\s+longer)"
+)
+_WEATHER_RANGE_RE = (
+    r"\b\d+\s*(?:to|-)\s*\d+\s*(?:degrees?|deg|°c|℃)\b"
+    r"|\b\d+\s*(?:\u5230|-)\s*\d+\s*(?:\u5ea6|℃)\b"
+)
+_WEATHER_WORD_RE = (
+    r"(?:\u6674|\u9634|\u591a\u4e91|\u9635\u96e8|\u5c0f\u96e8|\u4e2d\u96e8|\u5927\u96e8|"
+    r"\u96f7\u9635\u96e8|\u5c0f\u96ea|\u4e2d\u96ea|\u5927\u96ea|\u9634\u8f6c|\u96e8\u8f6c|"
+    r"weather|forecast|sunny|cloudy|overcast|rain|rainy|showers?|storm|thunderstorms?|snow|snowy|drizzle)"
+)
 
 
 @dataclass(frozen=True)
@@ -115,7 +132,7 @@ def _allows_phrase_handoff_assist(tool_name: str) -> bool:
 def _split_visible_sentences(text: str, *, re_mod) -> list[str]:
     return [
         part.strip()
-        for part in re_mod.split(r"[\u3002\uff01\uff1f!?]+\s*|\n+", str(text or ""))
+        for part in re_mod.split(r"[\u3002\uff01\uff1f!?]+\s*|\.\s+(?=[A-Z])|\n+", str(text or ""))
         if part.strip()
     ]
 
@@ -255,6 +272,18 @@ def _has_result_payload_shape(shape: _HandoffShape, *, re_mod) -> bool:
         return False
 
     if shape.has_code or shape.has_table:
+        return True
+    # Treat compact grounded answers as payload before the broader length heuristics kick in.
+    # This keeps short weather/results replies from being mistaken for handoff chatter.
+    if (
+        re_mod.search(_WEATHER_RANGE_RE, shape.visible, flags=re_mod.I)
+        and re_mod.search(_WEATHER_WORD_RE, shape.visible, flags=re_mod.I)
+    ):
+        return True
+    if (
+        (shape.paragraph_count >= 2 or shape.sentence_count >= 2)
+        and re_mod.search(_RESULT_GROUNDED_MARKER_RE, shape.visible, flags=re_mod.I)
+    ):
         return True
     if shape.line_count > 6:
         return True

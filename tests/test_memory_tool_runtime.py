@@ -1,6 +1,8 @@
+import tempfile
 import unittest
 from pathlib import Path
 
+from decision.tool_runtime import inspection_tools as inspection_tools_module
 from decision.tool_runtime.memory_tools import execute_memory_tool, format_recall
 
 TEST_REPO_ROOT = Path(__file__).resolve().parents[1].as_posix()
@@ -151,6 +153,114 @@ class MemoryToolRuntimeTests(unittest.TestCase):
         self.assertEqual(seen.get("l2_kwargs"), {"limit": 5})
         self.assertEqual(seen.get("l3_kwargs"), {"limit": 5, "query": effective_query})
         self.assertIn("AaronCore milestone", recall["response"])
+
+    def test_execute_memory_tool_forwards_context_to_read_and_list_tools(self):
+        seen = {}
+        context = {
+            "execution_lane": "verify",
+            "current_step_task": {"task_id": "task_step_verify", "execution_lane": "verify"},
+            "fs_target": {"path": TEST_REPO_ROOT, "option": "inspect"},
+        }
+
+        def fake_read(arguments, **kwargs):
+            seen["read_arguments"] = arguments
+            seen["read_context"] = kwargs.get("context")
+            return {"success": True, "response": "read ok"}
+
+        def fake_list(arguments, **kwargs):
+            seen["list_arguments"] = arguments
+            seen["list_context"] = kwargs.get("context")
+            return {"success": True, "response": "list ok"}
+
+        read_result = execute_memory_tool(
+            "read_file",
+            {},
+            context=context,
+            debug_write=lambda *_args, **_kwargs: None,
+            l2_search_relevant=lambda *_args, **_kwargs: [],
+            load_l3_long_term=lambda **_kwargs: [],
+            find_relevant_knowledge=lambda *_args, **_kwargs: [],
+            execute_web_search=lambda *_args, **_kwargs: {},
+            execute_self_fix=lambda *_args, **_kwargs: {},
+            execute_read_file=fake_read,
+            execute_list_files_v3=fake_list,
+            execute_discover_tools=lambda *_args, **_kwargs: {},
+            execute_sense_environment=lambda *_args, **_kwargs: {},
+        )
+        list_result = execute_memory_tool(
+            "list_files",
+            {},
+            context=context,
+            debug_write=lambda *_args, **_kwargs: None,
+            l2_search_relevant=lambda *_args, **_kwargs: [],
+            load_l3_long_term=lambda **_kwargs: [],
+            find_relevant_knowledge=lambda *_args, **_kwargs: [],
+            execute_web_search=lambda *_args, **_kwargs: {},
+            execute_self_fix=lambda *_args, **_kwargs: {},
+            execute_read_file=fake_read,
+            execute_list_files_v3=fake_list,
+            execute_discover_tools=lambda *_args, **_kwargs: {},
+            execute_sense_environment=lambda *_args, **_kwargs: {},
+        )
+
+        self.assertEqual(read_result["response"], "read ok")
+        self.assertEqual(list_result["response"], "list ok")
+        self.assertEqual(seen.get("read_arguments"), {})
+        self.assertEqual(seen.get("list_arguments"), {})
+        self.assertIs(seen.get("read_context"), context)
+        self.assertIs(seen.get("list_context"), context)
+
+    def test_read_file_uses_current_step_fs_target_when_file_path_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "pkg" / "main.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("print('ok')\n", encoding="utf-8")
+
+            result = inspection_tools_module.execute_read_file(
+                {},
+                allowed_prefixes=[str(root)],
+                resolve_user_file_target=lambda raw: Path(raw).resolve(),
+                is_allowed_user_target=lambda _path: True,
+                debug_write=lambda *_args, **_kwargs: None,
+                context={
+                    "execution_lane": "verify",
+                    "current_step_task": {"task_id": "task_step_verify", "execution_lane": "verify"},
+                    "fs_target": {"path": str(target), "option": "inspect"},
+                },
+                project_root=root,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertIn("main.py", result["response"])
+        self.assertIn("print('ok')", result["response"])
+
+    def test_list_files_uses_current_step_file_parent_when_directory_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "pkg" / "main.py"
+            sibling = root / "pkg" / "utils.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("print('ok')\n", encoding="utf-8")
+            sibling.write_text("print('util')\n", encoding="utf-8")
+
+            result = inspection_tools_module.execute_list_files_v3(
+                {},
+                resolve_user_file_target=lambda raw: Path(raw).resolve(),
+                normalize_user_special_path=lambda raw: raw,
+                is_allowed_user_target=lambda _path: True,
+                context={
+                    "execution_lane": "verify",
+                    "current_step_task": {"task_id": "task_step_verify", "execution_lane": "verify"},
+                    "fs_target": {"path": str(target), "option": "inspect"},
+                },
+                project_root=root,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertIn("main.py", result["response"])
+        self.assertIn("utils.py", result["response"])
+        self.assertIn(str(target.parent).replace("\\", "/"), result["response"])
 
 
 if __name__ == "__main__":

@@ -142,6 +142,62 @@ def _normalize_verification_payload(data: dict | None) -> dict:
     return normalized
 
 
+def _normalize_runtime_memory_text(value: object, *, limit: int = 240) -> str:
+    text = str(value or "").strip().replace("\r", "\n")
+    if not text:
+        return ""
+    lines = [line.strip(" -") for line in text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    summary = " / ".join(lines[:2]).strip()
+    if len(summary) > limit:
+        return summary[: limit - 3].rstrip() + "..."
+    return summary
+
+
+def _normalize_runtime_token(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
+def _normalize_parallel_tools(value: object, *, limit: int = 6) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    tools = []
+    seen = set()
+    for item in value:
+        name = _normalize_runtime_token(item)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        tools.append(name)
+        if len(tools) >= limit:
+            break
+    return tools
+
+
+def _normalize_parallel_size(value: object, *, fallback: int = 0) -> int:
+    try:
+        size = int(value or 0)
+    except Exception:
+        size = 0
+    if size <= 0:
+        size = int(fallback or 0)
+    return max(size, 0)
+
+
+def _verification_status_from_payload(payload: dict | None) -> str:
+    verification = payload if isinstance(payload, dict) else {}
+    status = _normalize_runtime_token(verification.get("status"))
+    if status:
+        return status
+    verified = verification.get("verified")
+    if verified is True:
+        return "verified"
+    if verified is False:
+        return "failed"
+    return ""
+
+
 def normalize_task_plan_snapshot(
     plan: dict | None,
     *,
@@ -211,6 +267,34 @@ def normalize_task_plan_snapshot(
     next_action = str(data.get("next_action") or "").strip().lower()
     blocker = str(data.get("blocker") or "").strip()
     verification = _normalize_verification_payload(data.get("verification"))
+    verification_status = _verification_status_from_payload(verification)
+    if not blocker and (
+        runtime_status == "verify_failed"
+        or next_action == "retry_or_close"
+        or verification_status == "failed"
+    ):
+        blocker = str(verification.get("detail") or "").strip()
+    last_tool = str(
+        data.get("last_tool")
+        or data.get("tool_used")
+        or data.get("latest_tool")
+        or ""
+    ).strip().lower()
+    last_action_summary = _normalize_runtime_memory_text(
+        data.get("last_action_summary")
+        or data.get("action_summary")
+        or data.get("last_action")
+    )
+    last_result_summary = _normalize_runtime_memory_text(
+        data.get("last_result_summary")
+        or data.get("response_summary")
+        or data.get("last_result")
+    )
+    attempt_kind = _normalize_runtime_token(data.get("attempt_kind"))
+    previous_tool = _normalize_runtime_token(data.get("previous_tool"))
+    execution_lane = _normalize_runtime_token(data.get("execution_lane"))
+    parallel_tools = _normalize_parallel_tools(data.get("parallel_tools"))
+    parallel_size = _normalize_parallel_size(data.get("parallel_size"), fallback=len(parallel_tools))
     if runtime_status:
         normalized["runtime_status"] = runtime_status
     if next_action:
@@ -219,6 +303,22 @@ def normalize_task_plan_snapshot(
         normalized["blocker"] = blocker
     if verification:
         normalized["verification"] = verification
+    if last_tool:
+        normalized["last_tool"] = last_tool
+    if last_action_summary:
+        normalized["last_action_summary"] = last_action_summary
+    if last_result_summary:
+        normalized["last_result_summary"] = last_result_summary
+    if attempt_kind:
+        normalized["attempt_kind"] = attempt_kind
+    if previous_tool:
+        normalized["previous_tool"] = previous_tool
+    if execution_lane:
+        normalized["execution_lane"] = execution_lane
+    if parallel_tools:
+        normalized["parallel_tools"] = parallel_tools
+    if parallel_size > 1:
+        normalized["parallel_size"] = parallel_size
     return normalized
 
 
@@ -293,6 +393,21 @@ def sync_task_plan_children(
     parent_id = str(parent_task.get("id") or "").strip()
     if not parent_id:
         return
+    current_item_id = str(plan.get("current_item_id") or "").strip()
+    runtime_status = _normalize_runtime_token(plan.get("runtime_status"))
+    next_action = _normalize_runtime_token(plan.get("next_action"))
+    blocker = str(plan.get("blocker") or "").strip()
+    verification = _normalize_verification_payload(plan.get("verification"))
+    verification_status = _verification_status_from_payload(verification)
+    verification_detail = str(verification.get("detail") or "").strip()
+    last_tool = _normalize_runtime_token(plan.get("last_tool"))
+    last_action_summary = _normalize_runtime_memory_text(plan.get("last_action_summary"))
+    last_result_summary = _normalize_runtime_memory_text(plan.get("last_result_summary"))
+    attempt_kind = _normalize_runtime_token(plan.get("attempt_kind"))
+    previous_tool = _normalize_runtime_token(plan.get("previous_tool"))
+    execution_lane = _normalize_runtime_token(plan.get("execution_lane"))
+    parallel_tools = _normalize_parallel_tools(plan.get("parallel_tools"))
+    parallel_size = _normalize_parallel_size(plan.get("parallel_size"), fallback=len(parallel_tools))
     existing_children = [task for task in get_child_tasks(parent_id) if task.get("kind") == "plan_step"]
     by_item_id = {}
     for child in existing_children:
@@ -307,14 +422,55 @@ def sync_task_plan_children(
     }
     for index, item in enumerate(plan.get("items") or [], 1):
         item_id = str(item.get("id") or "").strip()
+        is_current = bool(item_id and item_id == current_item_id)
+        context = {"detail": str(item.get("detail") or "").strip()}
+        memory = {"plan_item_id": item_id, "is_current": is_current}
+        domain = {
+            "task_plan_item": {
+                "item_id": item_id,
+                "kind": str(item.get("kind") or "phase").strip() or "phase",
+                "is_current": is_current,
+            }
+        }
+        if is_current:
+            if runtime_status:
+                context["runtime_status"] = runtime_status
+                domain["task_plan_item"]["runtime_status"] = runtime_status
+            if next_action:
+                context["next_action"] = next_action
+            if blocker:
+                context["blocker"] = blocker
+            if verification_status:
+                context["verification_status"] = verification_status
+                domain["task_plan_item"]["verification_status"] = verification_status
+            if verification_detail:
+                context["verification_detail"] = verification_detail
+            if last_tool:
+                memory["last_tool"] = last_tool
+            if last_action_summary:
+                memory["last_action_summary"] = last_action_summary
+            if last_result_summary:
+                memory["last_result_summary"] = last_result_summary
+            if attempt_kind:
+                memory["attempt_kind"] = attempt_kind
+            if previous_tool:
+                memory["previous_tool"] = previous_tool
+            if execution_lane:
+                memory["execution_lane"] = execution_lane
+                context["execution_lane"] = execution_lane
+                domain["task_plan_item"]["execution_lane"] = execution_lane
+            if parallel_tools:
+                memory["parallel_tools"] = parallel_tools
+            if parallel_size > 1:
+                memory["parallel_size"] = parallel_size
         child = by_item_id.get(item_id)
         patch = {
             "title": str(item.get("title") or "").strip(),
             "status": task_plan_item_to_status(item.get("status")),
             "stage": str(item.get("status") or "").strip(),
-            "context": {"detail": str(item.get("detail") or "").strip()},
-            "memory": {"plan_item_id": item_id},
-            "domain": {"task_plan_item": {"item_id": item_id, "kind": str(item.get("kind") or "phase").strip() or "phase"}},
+            "context": context,
+            "memory": memory,
+            "domain": domain,
         }
         if child:
             update_task(child.get("id"), patch)

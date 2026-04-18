@@ -1,7 +1,7 @@
 """Task-plan projections and working-state views."""
 
 
-_BLOCKED_RUNTIME_STATUSES = {"blocked", "waiting_user"}
+_BLOCKED_RUNTIME_STATUSES = {"blocked", "waiting_user", "verify_failed"}
 
 
 def _snapshot_verification(snapshot: dict) -> dict:
@@ -214,6 +214,83 @@ def _last_done_plan_item(items: list[dict], current_item_id: str = "") -> dict:
     return {}
 
 
+def _current_plan_step_task(
+    task: dict,
+    current_item_id: str,
+    *,
+    get_child_tasks,
+) -> dict:
+    parent_task_id = str((task or {}).get("id") or "").strip()
+    item_id = str(current_item_id or "").strip()
+    if not parent_task_id or not item_id or not callable(get_child_tasks):
+        return {}
+    try:
+        children = get_child_tasks(parent_task_id) or []
+    except Exception:
+        return {}
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+        if str(child.get("kind") or "").strip() != "plan_step":
+            continue
+        memory = child.get("memory") if isinstance(child.get("memory"), dict) else {}
+        if str(memory.get("plan_item_id") or "").strip() == item_id:
+            return child
+    return {}
+
+
+def _build_current_step_task_state(step_task: dict) -> dict:
+    step_task = step_task if isinstance(step_task, dict) else {}
+    if not step_task:
+        return {}
+    context = step_task.get("context") if isinstance(step_task.get("context"), dict) else {}
+    memory = step_task.get("memory") if isinstance(step_task.get("memory"), dict) else {}
+    domain = (
+        ((step_task.get("domain") if isinstance(step_task.get("domain"), dict) else {}) or {}).get("task_plan_item")
+        if isinstance((step_task.get("domain") if isinstance(step_task.get("domain"), dict) else {}), dict)
+        else {}
+    )
+    domain = domain if isinstance(domain, dict) else {}
+    parallel_tools = [
+        str(name or "").strip()
+        for name in (memory.get("parallel_tools") or [])
+        if str(name or "").strip()
+    ]
+    try:
+        parallel_size = int(memory.get("parallel_size") or 0)
+    except Exception:
+        parallel_size = 0
+    if parallel_size <= 0:
+        parallel_size = len(parallel_tools)
+    execution_lane = str(
+        context.get("execution_lane")
+        or memory.get("execution_lane")
+        or domain.get("execution_lane")
+        or ""
+    ).strip()
+    return {
+        "task_id": str(step_task.get("id") or "").strip(),
+        "title": str(step_task.get("title") or "").strip(),
+        "status": str(step_task.get("status") or "").strip(),
+        "stage": str(step_task.get("stage") or "").strip(),
+        "detail": str(context.get("detail") or "").strip(),
+        "runtime_status": str(context.get("runtime_status") or "").strip(),
+        "next_action": str(context.get("next_action") or "").strip(),
+        "blocker": str(context.get("blocker") or "").strip(),
+        "verification_status": str(context.get("verification_status") or "").strip(),
+        "verification_detail": str(context.get("verification_detail") or "").strip(),
+        "last_tool": str(memory.get("last_tool") or "").strip(),
+        "last_action_summary": str(memory.get("last_action_summary") or "").strip(),
+        "last_result_summary": str(memory.get("last_result_summary") or "").strip(),
+        "attempt_kind": str(memory.get("attempt_kind") or "").strip(),
+        "previous_tool": str(memory.get("previous_tool") or "").strip(),
+        "execution_lane": execution_lane,
+        "parallel_tools": parallel_tools,
+        "parallel_size": parallel_size,
+        "updated_at": str(step_task.get("updated_at") or "").strip(),
+    }
+
+
 def task_to_working_state(
     task: dict | None,
     *,
@@ -221,6 +298,7 @@ def task_to_working_state(
     task_to_plan_snapshot,
     extract_task_fs_target,
     get_structured_fs_target_for_task_plan,
+    get_child_tasks,
 ) -> dict | None:
     task = normalize_task(task) if isinstance(task, dict) else {}
     if not task:
@@ -239,10 +317,32 @@ def task_to_working_state(
     verification = _snapshot_verification(snapshot)
     verification_status = _verification_status(snapshot)
     verification_detail = str(verification.get("detail") or "").strip()
+    last_tool = str(snapshot.get("last_tool") or "").strip()
+    last_action_summary = str(snapshot.get("last_action_summary") or "").strip()
+    last_result_summary = str(snapshot.get("last_result_summary") or "").strip()
+    attempt_kind = str(snapshot.get("attempt_kind") or "").strip()
+    previous_tool = str(snapshot.get("previous_tool") or "").strip()
+    execution_lane = str(snapshot.get("execution_lane") or "").strip()
+    parallel_tools = [
+        str(name or "").strip()
+        for name in (snapshot.get("parallel_tools") or [])
+        if str(name or "").strip()
+    ]
+    try:
+        parallel_size = int(snapshot.get("parallel_size") or 0)
+    except Exception:
+        parallel_size = 0
+    if parallel_size <= 0:
+        parallel_size = len(parallel_tools)
     current_item_id = str(snapshot.get("current_item_id") or "").strip()
     current_item = _find_plan_item(items, current_item_id)
     current_step = str(current_item.get("title") or "").strip()
     current_step_status = str(current_item.get("status") or "").strip()
+    current_step_task = _build_current_step_task_state(
+        _current_plan_step_task(task, current_item_id, get_child_tasks=get_child_tasks)
+    )
+    if not execution_lane:
+        execution_lane = str(current_step_task.get("execution_lane") or "").strip()
 
     last_done = _last_done_plan_item(items, current_item_id=current_item_id)
     last_completed_step = str(last_done.get("title") or "").strip()
@@ -304,6 +404,7 @@ def task_to_working_state(
         "current_item_id": current_item_id,
         "current_step": current_step,
         "current_step_status": current_step_status,
+        "current_step_task": current_step_task,
         "last_completed_step": last_completed_step,
         "recent_progress": recent_progress,
         "blocker": blocker,
@@ -312,6 +413,14 @@ def task_to_working_state(
         "next_action": next_action,
         "verification_status": verification_status,
         "verification_detail": verification_detail,
+        "last_tool": last_tool,
+        "last_action_summary": last_action_summary,
+        "last_result_summary": last_result_summary,
+        "attempt_kind": attempt_kind,
+        "previous_tool": previous_tool,
+        "execution_lane": execution_lane,
+        "parallel_tools": parallel_tools,
+        "parallel_size": parallel_size,
         "fs_target": fs_path,
         "updated_at": str(task.get("updated_at") or snapshot.get("updated_at") or "").strip(),
         "latest_event": {

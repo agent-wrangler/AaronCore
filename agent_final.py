@@ -2,6 +2,7 @@
 AaronCore 主入口 — 仅负责 app 初始化和路由挂载。
 所有 API 路由请放到 routes/ 目录下对应模块。
 """
+from contextlib import asynccontextmanager
 import sys
 import requests
 
@@ -485,11 +486,6 @@ def build_repair_progress_payload(route: dict | None = None, feedback_rule: dict
         "progress": 22, "poll_ms": 1600, "max_polls": 10,
     }
 
-# ── FastAPI app + 路由挂载 ──
-app = FastAPI()
-
-
-@app.on_event("startup")
 async def _startup_mcp():
     """启动时连接已启用的 MCP server"""
     try:
@@ -497,6 +493,16 @@ async def _startup_mcp():
         await connect_all_enabled()
     except Exception:
         pass
+
+
+# ── FastAPI app + 路由挂载 ──
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    await _startup_mcp()
+    yield
+
+
+app = FastAPI(lifespan=_app_lifespan)
 
 
 # 启动时清理残留的监听状态（重启后旧的监听进程已死）

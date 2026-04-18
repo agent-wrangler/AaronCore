@@ -180,6 +180,79 @@ class RunCommandSkillTests(unittest.TestCase):
         self.assertEqual(result.get("verification", {}).get("observed_state"), "process_exited_early")
         self.assertIn("ModuleNotFoundError", result.get("verification", {}).get("detail", ""))
 
+    def test_execute_verify_lane_uses_fs_target_parent_as_default_workdir(self):
+        target = self.notes_dir / "app.py"
+        target.write_text("print('verify')\n", encoding="utf-8")
+
+        def fake_run(argv, **kwargs):
+            self.assertEqual(kwargs.get("cwd"), str(self.notes_dir))
+            self.assertEqual(argv[1], str(target))
+
+            class Result:
+                returncode = 0
+                stdout = "ok"
+                stderr = ""
+
+            return Result()
+
+        with patch("core.skills.run_command.subprocess.run", side_effect=fake_run):
+            result = run_command_module.execute(
+                "",
+                {
+                    "command": "python app.py",
+                    "fs_target": {"path": str(target), "option": "inspect"},
+                    "execution_lane": "verify",
+                    "current_step_task": {
+                        "task_id": "task_step_verify",
+                        "title": "Verify the patch",
+                        "status": "in_progress",
+                        "execution_lane": "verify",
+                    },
+                },
+            )
+
+        self.assertTrue(result.get("verification", {}).get("verified"))
+        self.assertEqual(result.get("drift", {}).get("reason"), "")
+
+    def test_execute_verify_lane_does_not_auto_background_launch(self):
+        target = self.notes_dir / "app.py"
+        target.write_text("print('verify')\n", encoding="utf-8")
+
+        def fake_run(argv, **kwargs):
+            self.assertEqual(kwargs.get("cwd"), str(self.notes_dir))
+            self.assertEqual(argv[1], str(target))
+
+            class Result:
+                returncode = 0
+                stdout = "ok"
+                stderr = ""
+
+            return Result()
+
+        with patch("core.skills.run_command.subprocess.run", side_effect=fake_run) as run_mock, patch(
+            "core.skills.run_command.subprocess.Popen",
+            side_effect=AssertionError("verify lane should stay foreground unless background is explicit"),
+        ):
+            result = run_command_module.execute(
+                "",
+                {
+                    "command": "python app.py",
+                    "description": "launch local app for verification",
+                    "fs_target": {"path": str(target), "option": "inspect"},
+                    "execution_lane": "verify",
+                    "current_step_task": {
+                        "task_id": "task_step_verify",
+                        "title": "Verify the patch",
+                        "status": "in_progress",
+                        "execution_lane": "verify",
+                    },
+                },
+            )
+
+        self.assertEqual(run_mock.call_count, 1)
+        self.assertTrue(result.get("verification", {}).get("verified"))
+        self.assertEqual(result.get("verification", {}).get("observed_state"), "command_succeeded")
+
 
 class RunCodeGuardTests(unittest.TestCase):
     def test_run_code_rejects_packaging_requests(self):

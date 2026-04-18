@@ -310,6 +310,13 @@ class RunEventMappingTests(unittest.TestCase):
                     "goal": "Continue AaronCore development",
                     "current_step": "Inspect memory recall behavior",
                     "summary": "Current agent work",
+                    "execution_lane": "inspect",
+                    "current_step_task": {
+                        "task_id": "task_step_1",
+                        "title": "Inspect memory recall behavior",
+                        "status": "active",
+                        "execution_lane": "inspect",
+                    },
                 }
             },
             "l4": {},
@@ -320,6 +327,8 @@ class RunEventMappingTests(unittest.TestCase):
 
         self.assertEqual((context.get("working_state") or {}).get("goal"), "Continue AaronCore development")
         self.assertEqual((context.get("working_state") or {}).get("current_step"), "Inspect memory recall behavior")
+        self.assertEqual((context.get("current_step_task") or {}).get("task_id"), "task_step_1")
+        self.assertEqual(context.get("execution_lane"), "inspect")
 
     def test_ensure_tool_call_failure_reply_replaces_preamble_with_failure_summary(self):
         reply = chat_module._ensure_tool_call_failure_reply(
@@ -584,6 +593,11 @@ class RunEventMappingTests(unittest.TestCase):
                 "Sure, let me inspect the current config and verify what is still wired up."
             )
         )
+        self.assertTrue(
+            reply_formatter_module._looks_like_tool_preamble(
+                "That finding matters. Let me inspect the current environment state for hidden processes."
+            )
+        )
         self.assertTrue(reply_formatter_module._contains_tool_handoff_phrase("Let me check the current config."))
         self.assertTrue(reply_formatter_module._contains_tool_handoff_phrase("Let me inspect the current config"))
         self.assertFalse(reply_formatter_module._contains_tool_handoff_phrase("Let me know if you need anything else."))
@@ -663,6 +677,27 @@ class RunEventMappingTests(unittest.TestCase):
             tool_calls,
             ["明天常州 18 到 26 度，阴转小雨。"],
             {"user_input": "明天天气怎么样"},
+            mode="stream_initial",
+        )
+
+        self.assertIsNone(kept)
+
+    def test_stream_safe_readonly_tool_call_is_dropped_for_english_weather_visible_text(self):
+        tool_calls = [
+            {
+                "id": "call_weather_answer_en_1",
+                "type": "function",
+                "function": {
+                    "name": "weather",
+                    "arguments": json.dumps({"city": "Austin"}, ensure_ascii=False),
+                },
+            }
+        ]
+
+        kept, _joined, _visible = reply_formatter_module._resolve_stream_tool_calls_signal(
+            tool_calls,
+            ["Tomorrow in Austin is 18 to 26 degrees, cloudy with light rain."],
+            {"user_input": "What's tomorrow's weather in Austin?"},
             mode="stream_initial",
         )
 
@@ -865,6 +900,39 @@ class RunEventMappingTests(unittest.TestCase):
         self.assertIn(str(target), prompt)
         self.assertIn("prefer read_file / write_file over folder_explore", prompt)
         self.assertIn("Primary coding lane", prompt)
+
+    def test_tool_call_system_prompt_surfaces_verify_lane_guidance(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "app.py"
+            target.write_text("print('ok')\n", encoding="utf-8")
+
+            prompt = reply_formatter_module._build_tool_call_system_prompt(
+                {
+                    "l3": [],
+                    "l4": {},
+                    "l5": {},
+                    "l7": [],
+                    "l8": [],
+                    "l2_memories": [],
+                    "current_model": "test-model",
+                    "context_data": {"fs_target": {"path": str(target), "option": "inspect"}},
+                    "l2": {
+                        "working_state": {
+                            "execution_lane": "verify",
+                            "current_step_task": {
+                                "task_id": "task_step_verify",
+                                "title": "Verify the patch",
+                                "status": "in_progress",
+                                "execution_lane": "verify",
+                            },
+                        }
+                    },
+                }
+            )
+
+        self.assertIn("Current coding lane: verify", prompt)
+        self.assertIn("verification subtask", prompt)
+        self.assertIn("prefer run_command or read_file", prompt)
 
     def test_build_run_event_prefers_meta_facts(self):
         run_event = chat_module._build_run_event(
@@ -2372,10 +2440,170 @@ class RunEventMappingTests(unittest.TestCase):
         filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
         self.assertEqual(
             filtered_names[:4],
-            ["read_file", "write_file", "run_command", "task_plan"],
+            ["write_file", "run_command", "read_file", "task_plan"],
         )
         self.assertIn("web_search", filtered_names)
         self.assertNotIn("folder_explore", filtered_names)
+
+    def test_followup_tools_promote_run_command_after_successful_write_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "task_plan"}},
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "read_file"}},
+                {"type": "function", "function": {"name": "run_command"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                None,
+                {"file_path": str(target)},
+                current_tool_name="write_file",
+                tool_run_meta={"runtime_state": {"status": "done"}},
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertEqual(
+            filtered_names[:4],
+            ["run_command", "read_file", "write_file", "task_plan"],
+        )
+
+    def test_followup_tools_keep_read_first_in_explicit_inspect_lane(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "task_plan"}},
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "run_command"}},
+                {"type": "function", "function": {"name": "list_files"}},
+                {"type": "function", "function": {"name": "read_file"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                None,
+                {"file_path": str(target)},
+                bundle={
+                    "l2": {
+                        "working_state": {
+                            "execution_lane": "inspect",
+                            "current_step_task": {
+                                "task_id": "task_step_inspect",
+                                "title": "Inspect the current chain",
+                                "status": "in_progress",
+                                "execution_lane": "inspect",
+                            },
+                        }
+                    }
+                },
+                current_tool_name="read_file",
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertEqual(
+            filtered_names[:5],
+            ["read_file", "list_files", "task_plan", "run_command", "write_file"],
+        )
+
+    def test_followup_tools_keep_write_first_when_write_file_args_failed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "task_plan"}},
+                {"type": "function", "function": {"name": "run_command"}},
+                {"type": "function", "function": {"name": "read_file"}},
+                {"type": "function", "function": {"name": "write_file"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                {"tool": "write_file", "missing_fields": ["content"], "target": str(target)},
+                {"file_path": str(target)},
+                current_tool_name="write_file",
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertEqual(
+            filtered_names[:4],
+            ["write_file", "read_file", "run_command", "task_plan"],
+        )
+
+    def test_followup_tools_shift_back_to_repair_after_failed_verification(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "task_plan"}},
+                {"type": "function", "function": {"name": "run_command"}},
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "read_file"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                None,
+                {"file_path": str(target)},
+                current_tool_name="run_command",
+                tool_run_meta={"runtime_state": {"status": "verify_failed"}},
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertEqual(
+            filtered_names[:4],
+            ["read_file", "write_file", "run_command", "task_plan"],
+        )
+
+    def test_followup_tools_promote_verify_lane_even_before_run_command(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "templates" / "index.html"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("<html><body>old</body></html>", encoding="utf-8")
+
+            tools = [
+                {"type": "function", "function": {"name": "task_plan"}},
+                {"type": "function", "function": {"name": "write_file"}},
+                {"type": "function", "function": {"name": "list_files"}},
+                {"type": "function", "function": {"name": "read_file"}},
+                {"type": "function", "function": {"name": "run_command"}},
+            ]
+
+            filtered = reply_formatter_module._build_followup_tools_after_arg_failure(
+                tools,
+                None,
+                {"file_path": str(target)},
+                bundle={
+                    "l2": {
+                        "working_state": {
+                            "execution_lane": "verify",
+                            "current_step_task": {
+                                "task_id": "task_step_verify",
+                                "title": "Verify the patch",
+                                "status": "in_progress",
+                                "execution_lane": "verify",
+                            },
+                        }
+                    }
+                },
+                current_tool_name="read_file",
+            )
+
+        filtered_names = [tool.get("function", {}).get("name") for tool in filtered]
+        self.assertEqual(
+            filtered_names[:5],
+            ["run_command", "read_file", "list_files", "write_file", "task_plan"],
+        )
 
     def test_file_protocol_tool_defs_expose_open_instruction_aliases(self):
         defs = tool_adapter_module._build_file_protocol_tool_defs()
@@ -3798,6 +4026,21 @@ class StructuredToolHandoffRegressionTests(unittest.TestCase):
         self.assertIn("问题已经定位到 `settings.js` 的旧监听器覆盖", reply)
         self.assertIn("先注册 store", reply)
         self.assertNotIn("让我继续把剩下的交互链路也过一遍", reply)
+
+    def test_finalize_tool_reply_strips_trailing_handoff_after_english_grounded_answer(self):
+        reply = reply_formatter_module._finalize_tool_reply(
+            "I found the old listener override in `settings.js`.\n\n"
+            "Move store init before the click handler to stop the duplicate trigger.\n\n"
+            "Let me check the rest of the interaction path too.",
+            success=True,
+            action_summary="Found the old listener override",
+            tool_response="Found the old listener override",
+            run_meta={"action": {"display_hint": "Found the old listener override"}},
+        )
+
+        self.assertIn("I found the old listener override in `settings.js`.", reply)
+        self.assertIn("Move store init before the click handler", reply)
+        self.assertNotIn("Let me check the rest of the interaction path too.", reply)
 
     def test_finalize_tool_reply_replaces_structured_handoff_only_reply_with_closeout(self):
         reply = reply_formatter_module._finalize_tool_reply(

@@ -62,7 +62,7 @@ class TaskReplayEvalTests(unittest.TestCase):
                 "goal": goal,
                 "summary": "正在整理桌面文件",
                 "items": [
-                    {"id": "inspect", "title": "检查桌面文件", "status": "done"},
+                    {"id": "inspect", "title": "检查桌面文件夹", "status": "done"},
                     {"id": "sort", "title": "整理分类结构", "status": "running"},
                 ],
                 "current_item_id": "sort",
@@ -217,6 +217,23 @@ class TaskReplayEvalTests(unittest.TestCase):
         self.assertIn("This request is already answerable from the current task runtime state.", context)
         self.assertIn("Latest verification status: failed", context)
 
+    def test_replay_eval_blocker_question_uses_verify_failure_detail(self):
+        self._save_verify_failed_plan()
+        query = "卡住在哪"
+
+        snapshot = task_store_module.get_active_task_plan_snapshot(query)
+        working_state = task_store_module.get_active_task_working_state(query)
+        session_context = session_context_module.extract_session_context([], query)
+        context = self._context(query)
+
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(working_state.get("query_mode"), "blocker")
+        self.assertEqual(working_state.get("runtime_status"), "verify_failed")
+        self.assertEqual(working_state.get("blocker"), "continuity 还会被一句闲聊误续接")
+        self.assertIn("explain the blocker or the missing user action first", session_context.get("user_state") or "")
+        self.assertIn("Current user request: explain the blocker or missing user action first.", context)
+        self.assertIn("Current blocker: continuity 还会被一句闲聊误续接", context)
+
     def test_replay_eval_interrupt_question_answers_interruption_first(self):
         self._save_interrupted_plan()
         query = "what interrupted it just now"
@@ -272,7 +289,7 @@ class TaskReplayEvalTests(unittest.TestCase):
         self.assertIn("Current task directory/file target: C:/Users/36459/NovaNotes/templates/index.html", context)
 
     def test_replay_eval_retry_request_with_known_target_keeps_execution_bias(self):
-        self._save_open_plan(goal="看下桌面的文件夹有哪些", fs_target="C:/Users/36459/Desktop")
+        self._save_open_plan(goal="看下桌面的文件夹有哪", fs_target="C:/Users/36459/Desktop")
         query = "再试试看 能看到桌面的文件夹吗"
 
         snapshot = task_store_module.get_active_task_plan_snapshot(query)
@@ -287,7 +304,7 @@ class TaskReplayEvalTests(unittest.TestCase):
         self.assertNotIn("Current user request:", context)
 
     def test_replay_eval_explicit_path_action_does_not_collapse_into_locate_mode(self):
-        self._save_open_plan(goal="看下桌面的文件夹有哪些", fs_target="C:/Users/36459/Desktop")
+        self._save_open_plan(goal="看下桌面的文件夹有哪", fs_target="C:/Users/36459/Desktop")
         query = r"C:/Users/36459/Desktop/切格瓦拉 这个文件 你去看下"
 
         snapshot = task_store_module.get_active_task_plan_snapshot(query)

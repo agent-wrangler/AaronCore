@@ -92,6 +92,60 @@ _BACKGROUND_SCRIPT_STEMS = {"app", "server", "main", "manage"}
 _BACKGROUND_MODULE_MARKERS = {"flask", "uvicorn", "http.server", "streamlit"}
 
 
+def _coerce_dict(value: object) -> dict:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _context_execution_lane(context: dict | None) -> str:
+    payload = _coerce_dict(context)
+    current_step_task = _coerce_dict(payload.get("current_step_task"))
+    working_state = _coerce_dict(payload.get("working_state"))
+    return str(
+        current_step_task.get("execution_lane")
+        or payload.get("execution_lane")
+        or working_state.get("execution_lane")
+        or ""
+    ).strip().lower()
+
+
+def _context_step_title(context: dict | None) -> str:
+    payload = _coerce_dict(context)
+    current_step_task = _coerce_dict(payload.get("current_step_task"))
+    working_state = _coerce_dict(payload.get("working_state"))
+    return str(
+        current_step_task.get("title")
+        or working_state.get("current_step")
+        or ""
+    ).strip()
+
+
+def _context_fs_target_path(context: dict | None) -> str:
+    payload = _coerce_dict(context)
+    target = _coerce_dict(payload.get("fs_target"))
+    path = str(target.get("path") or "").strip()
+    if path:
+        return path
+    context_data = _coerce_dict(payload.get("context_data"))
+    inherited_target = _coerce_dict(context_data.get("fs_target"))
+    return str(inherited_target.get("path") or "").strip()
+
+
+def _resolve_context_workdir(context: dict | None) -> Path | None:
+    payload = _coerce_dict(context)
+    if not (_context_execution_lane(payload) or _coerce_dict(payload.get("current_step_task"))):
+        return None
+    raw_target = _context_fs_target_path(payload)
+    if not raw_target or raw_target.startswith(("http://", "https://")):
+        return None
+    resolved = _resolve_path(raw_target, base=WORKSPACE_ROOT)
+    if resolved is None:
+        return None
+    candidate = resolved.parent if resolved.suffix else resolved
+    if not _is_allowed_path(candidate):
+        return None
+    return candidate
+
+
 def _allowed_roots() -> list[Path]:
     roots = [WORKSPACE_ROOT.resolve()]
     for name in ("Desktop", "Documents", "Downloads"):
@@ -142,7 +196,10 @@ def _resolve_path(raw: str, *, base: Path | None = None) -> Path | None:
 
 def _resolve_workdir(context: dict) -> Path:
     raw = str(context.get("workdir") or context.get("cwd") or "").strip()
-    workdir = _resolve_path(raw, base=WORKSPACE_ROOT) if raw else WORKSPACE_ROOT.resolve()
+    if raw:
+        workdir = _resolve_path(raw, base=WORKSPACE_ROOT)
+    else:
+        workdir = _resolve_context_workdir(context) or WORKSPACE_ROOT.resolve()
     if workdir is None:
         return WORKSPACE_ROOT.resolve()
     return workdir
@@ -460,6 +517,8 @@ def _command_targets_persistent_process(argv: list[str]) -> bool:
 
 def _should_background_launch(context: dict, argv: list[str], expected_artifacts: list[Path]) -> bool:
     if expected_artifacts:
+        return False
+    if _context_execution_lane(context) == "verify" and _explicit_background_requested(context) is None:
         return False
     explicit = _explicit_background_requested(context)
     if explicit is not None:
@@ -967,7 +1026,7 @@ def execute(query, context=None):
     context = context if isinstance(context, dict) else {}
     raise_if_cancelled(context, detail="run_command cancelled before start")
     command = str(context.get("command") or context.get("cmd") or query or "").strip()
-    description = str(context.get("description") or "").strip()
+    description = str(context.get("description") or "").strip() or _context_step_title(context)
     workdir = _resolve_workdir(context)
 
     if not _is_allowed_path(workdir):

@@ -33,6 +33,60 @@ def _normalize_file_hint(raw_path: str) -> str:
     return path
 
 
+def _coerce_dict(value: object) -> dict:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _context_execution_lane(context: dict | None) -> str:
+    payload = _coerce_dict(context)
+    current_step_task = _coerce_dict(payload.get("current_step_task"))
+    working_state = _coerce_dict(payload.get("working_state"))
+    return str(
+        current_step_task.get("execution_lane")
+        or payload.get("execution_lane")
+        or working_state.get("execution_lane")
+        or ""
+    ).strip().lower()
+
+
+def _context_fs_target_path(context: dict | None) -> str:
+    payload = _coerce_dict(context)
+    target = _coerce_dict(payload.get("fs_target"))
+    path = str(target.get("path") or "").strip()
+    if path:
+        return path
+    context_data = _coerce_dict(payload.get("context_data"))
+    inherited_target = _coerce_dict(context_data.get("fs_target"))
+    return str(inherited_target.get("path") or "").strip()
+
+
+def _current_step_locked(context: dict | None) -> bool:
+    payload = _coerce_dict(context)
+    return bool(_context_execution_lane(payload) or _coerce_dict(payload.get("current_step_task")))
+
+
+def _implicit_read_file_path(context: dict | None) -> str:
+    if not _current_step_locked(context):
+        return ""
+    raw_target = _context_fs_target_path(context)
+    if not raw_target:
+        return ""
+    candidate = Path(raw_target)
+    if candidate.suffix:
+        return str(candidate)
+    return ""
+
+
+def _implicit_directory_path(context: dict | None) -> str:
+    if not _current_step_locked(context):
+        return ""
+    raw_target = _context_fs_target_path(context)
+    if not raw_target:
+        return ""
+    candidate = Path(raw_target)
+    return str(candidate.parent if candidate.suffix else candidate)
+
+
 def execute_read_file(
     arguments: dict,
     *,
@@ -40,10 +94,13 @@ def execute_read_file(
     resolve_user_file_target,
     is_allowed_user_target,
     debug_write,
+    context=None,
     project_root=None,
 ) -> dict:
     root = _project_root(project_root)
-    file_path = _normalize_file_hint(arguments.get("file_path", ""))
+    file_path = _normalize_file_hint(arguments.get("file_path", "")) or _normalize_file_hint(
+        _implicit_read_file_path(context)
+    )
 
     if not file_path:
         return {
@@ -120,10 +177,11 @@ def execute_list_files_v3(
     resolve_user_file_target,
     normalize_user_special_path,
     is_allowed_user_target,
+    context=None,
     project_root=None,
 ) -> dict:
     root = _project_root(project_root)
-    raw_directory = str(arguments.get("directory", "")).strip()
+    raw_directory = str(arguments.get("directory", "")).strip() or str(_implicit_directory_path(context)).strip()
     normalized = normalize_user_special_path(raw_directory).replace("\\", "/").strip().rstrip("/")
     directory = normalized.lstrip("./")
 
