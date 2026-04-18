@@ -128,6 +128,70 @@ def send_and_read(page, message):
     return prev_text or ""
 
 
+def _debug_port_ready(port: int, timeout_sec: float = 15.0) -> bool:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(f'http://127.0.0.1:{port}/json', timeout=1)
+            return True
+        except Exception:
+            time.sleep(0.5)
+    return False
+
+
+def _launch_browser_with_debug_port(browser_exe: str, process_name: str, port: int) -> bool:
+    import subprocess
+
+    env = os.environ.copy()
+    for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"]:
+        env.pop(key, None)
+
+    launch_args = [
+        browser_exe,
+        f"--remote-debugging-port={port}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--new-window",
+    ]
+
+    try:
+        subprocess.Popen(launch_args, env=env)
+    except Exception:
+        return False
+
+    if _debug_port_ready(port, timeout_sec=4.0):
+        return True
+
+    subprocess.call(['taskkill', '/F', '/IM', process_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(1)
+
+    try:
+        subprocess.Popen(launch_args, env=env)
+    except Exception:
+        return False
+
+    return _debug_port_ready(port)
+
+
+def _bundled_browser_candidates():
+    browser_root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "").strip()
+    if not browser_root:
+        return []
+
+    root = Path(browser_root)
+    if not root.exists():
+        return []
+
+    candidates = []
+    for child in sorted(root.iterdir(), reverse=True):
+        if not child.is_dir() or not child.name.startswith("chromium-"):
+            continue
+        chrome_path = child / "chrome-win" / "chrome.exe"
+        if chrome_path.exists():
+            candidates.append(("bundled-chromium", [str(chrome_path)]))
+    return candidates
+
+
 def _ensure_browser(port: int) -> bool:
     """检查浏览器调试端口是否就绪，没有则关掉已有 Brave 再用调试参数重启。"""
     import subprocess
@@ -138,31 +202,34 @@ def _ensure_browser(port: int) -> bool:
     except Exception:
         pass
     # 没有调试端口 → 先杀掉已有 Brave 进程（它没带调试参数，新进程会被合并进去）
-    subprocess.call(['taskkill', '/F', '/IM', 'brave.exe'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1)
-    # 找 Brave 路径
-    brave_paths = [
-        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-        r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+    browser_candidates = _bundled_browser_candidates() + [
+        (
+            "chrome.exe",
+            [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            ],
+        ),
+        (
+            "msedge.exe",
+            [
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            ],
+        ),
+        (
+            "brave.exe",
+            [
+                r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+            ],
+        ),
     ]
-    brave_exe = next((p for p in brave_paths if os.path.exists(p)), None)
-    if not brave_exe:
-        return False
-    env = os.environ.copy()
-    for k in ["HTTP_PROXY","HTTPS_PROXY","http_proxy","https_proxy","ALL_PROXY","all_proxy"]:
-        env.pop(k, None)
-    subprocess.Popen(
-        [brave_exe, f"--remote-debugging-port={port}", "--no-first-run", "--no-default-browser-check"],
-        env=env
-    )
-    # 等待最多 15 秒
-    for _ in range(30):
-        time.sleep(0.5)
-        try:
-            urllib.request.urlopen(f'http://127.0.0.1:{port}/json', timeout=1)
+    # 找 Brave 路径
+    for process_name, browser_paths in browser_candidates:
+        browser_exe = next((path for path in browser_paths if os.path.exists(path)), None)
+        if browser_exe and _launch_browser_with_debug_port(browser_exe, process_name, port):
             return True
-        except Exception:
-            pass
     return False
 
 
@@ -172,7 +239,7 @@ llm_cfg = _load_llm_config()
 
 # 确保浏览器就绪
 if not _ensure_browser(port):
-    print(json.dumps({"ok": False, "error": "浏览器未启动且无法自动打开，请手动启动 Brave 并开启调试端口"}, ensure_ascii=False))
+    print(json.dumps({"ok": False, "error": f"Browser did not start automatically. Please launch Chrome, Edge, or Brave with --remote-debugging-port={port}"}, ensure_ascii=False))
     sys.exit(0)
 
 pw = sync_playwright().start()

@@ -8,6 +8,11 @@ import urllib.request
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from storage.paths import PERSONA_FILE, QQ_MONITOR_DEBUG_LOG_FILE
 
 group_name = sys.argv[1]
 my_name = sys.argv[2] if len(sys.argv) > 2 else '浴火重生'
@@ -37,15 +42,13 @@ _reply_timestamps = []
 
 # ── 日志 ──
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_RUNTIME_STORE_DIR = _REPO_ROOT / 'state_data' / 'runtime_store'
-_MEMORY_STORE_DIR = _REPO_ROOT / 'state_data' / 'memory_store'
-_LOG_FILE = str(_RUNTIME_STORE_DIR / 'qq_monitor_debug.log')
+_LOG_FILE = str(QQ_MONITOR_DEBUG_LOG_FILE)
 
 def _log(msg):
     line = json.dumps({"log": msg, "t": time.strftime("%H:%M:%S")}, ensure_ascii=False)
     print(line, flush=True)
     try:
+        Path(_LOG_FILE).parent.mkdir(parents=True, exist_ok=True)
         with open(_LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(line + '\n')
     except:
@@ -105,7 +108,7 @@ def _load_llm_config():
 def _load_persona():
     """读 persona.json 提取人格信息"""
     try:
-        p = str(_MEMORY_STORE_DIR / 'persona.json')
+        p = str(PERSONA_FILE)
         with open(p, 'r', encoding='utf-8') as f:
             data = json.load(f)
         mode = data.get('active_mode', 'sweet')

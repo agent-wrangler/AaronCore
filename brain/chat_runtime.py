@@ -21,6 +21,24 @@ def _record_usage(usage: dict, *, scene: str, model: str) -> None:
         pass
 
 
+def _build_uploaded_image_context(prompt: str, image_list: list[str]) -> str:
+    if not image_list:
+        return ""
+    try:
+        from core.vision import build_uploaded_image_prompt_context
+
+        context = build_uploaded_image_prompt_context(image_list, user_text=prompt)
+        if str(context or "").strip():
+            return str(context).strip()
+    except Exception:
+        pass
+    return (
+        "[LOCAL_IMAGE_CONTEXT]\n"
+        "用户随消息附带了图片，但当前本地图片分析暂不可用。"
+        "请不要假装直接看到了图片细节；如回答依赖图中文字或局部内容，请明确让用户补充关键信息或重传更清晰截图。"
+    )
+
+
 def think(
     prompt: str,
     *,
@@ -45,28 +63,16 @@ def think(
     use_cfg = llm_config
     if model_id and model_id in models_config:
         use_cfg = models_config[model_id]
-    if image_list and not use_cfg.get("vision", False):
-        for _, model_cfg in models_config.items():
-            if model_cfg.get("vision", False):
-                use_cfg = model_cfg
-                break
 
     system_prompt, user_prompt = build_think_prompts_fn(prompt, context, mode)
-
     if image_list:
-        messages = [{"role": "system", "content": system_prompt}]
-        user_content = [{"type": "text", "text": user_prompt}]
-        for item in image_list:
-            url = item if item.startswith("http") else f"data:image/png;base64,{item}"
-            user_content.append({"type": "image_url", "image_url": {"url": url}})
-        messages.append({"role": "user", "content": user_content})
-        call_fn = llm_call_openai_fn
-    else:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        call_fn = llm_call_fn
+        user_prompt = f"{user_prompt}\n\n{_build_uploaded_image_context(prompt, image_list)}"
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    call_fn = llm_call_fn
 
     for attempt in range(2):
         try:
@@ -145,21 +151,10 @@ def think_stream(
     use_cfg = llm_config
     if model_id and model_id in models_config:
         use_cfg = models_config[model_id]
-    if image_list and not use_cfg.get("vision", False):
-        for _, model_cfg in models_config.items():
-            if model_cfg.get("vision", False):
-                use_cfg = model_cfg
-                break
 
     system_prompt, user_prompt = build_think_prompts_fn(prompt, context, mode)
-
     if image_list:
-        result = think_fn(prompt, context=context, image=image, model_id=model_id, images=images)
-        reply = result.get("reply", "")
-        if reply:
-            yield reply
-        yield {"_done": True, "usage": {}}
-        return
+        user_prompt = f"{user_prompt}\n\n{_build_uploaded_image_context(prompt, image_list)}"
 
     messages = [
         {"role": "system", "content": system_prompt},

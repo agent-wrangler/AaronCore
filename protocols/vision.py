@@ -8,6 +8,11 @@ import time
 from datetime import datetime
 
 from storage.paths import PERSONA_FILE
+from .vision_local import (
+    build_screen_description as _build_local_screen_description,
+    build_user_image_context as _build_local_user_image_context,
+    has_local_image_support as _has_local_image_support,
+)
 
 # ── 依赖注入 ──
 _llm_call = None  # (prompt, images) -> str
@@ -65,6 +70,44 @@ def get_proactive_message() -> dict:
     return {"message": msg, "ts": ts}
 
 
+def has_local_image_support() -> bool:
+    return _has_local_image_support()
+
+
+def can_autostart_background_capture(chat_config: dict | None = None) -> tuple[bool, str]:
+    return False, "background_autocapture_disabled"
+
+
+def build_user_image_context(images: list[str] | None, *, user_text: str = "") -> str:
+    return _build_local_user_image_context(
+        images,
+        user_text=user_text,
+        debug_write=_debug_write,
+    )
+
+
+def build_uploaded_image_prompt_context(images: list[str] | None, *, user_text: str = "") -> str:
+    image_list = [str(item or "").strip() for item in (images or []) if str(item or "").strip()]
+    if not image_list:
+        return ""
+    try:
+        context = build_user_image_context(image_list, user_text=user_text)
+        context_text = str(context or "").strip()
+        if context_text:
+            return context_text
+    except Exception as exc:
+        _debug_write(
+            "vision_user_image_context_error",
+            {"error": str(exc)[:240], "image_count": len(image_list)},
+        )
+    return (
+        "[LOCAL_IMAGE_CONTEXT]\n"
+        "The user attached image content, but local image analysis is unavailable right now.\n"
+        "Do not claim direct visual access.\n"
+        "If the answer depends on image text or fine detail, ask for a clearer screenshot or the relevant region."
+    )
+
+
 def _capture_screen() -> str:
     """截屏并返回 base64 编码的 PNG"""
     try:
@@ -85,19 +128,10 @@ def _capture_screen() -> str:
 
 def _describe_screen(image_b64: str) -> str:
     """调用多模态 LLM 描述屏幕内容"""
-    if not _llm_call or not image_b64:
+    if not image_b64:
         return ""
-    prompt = (
-        "\u4f60\u662f\u4e00\u4e2a\u684c\u9762\u52a9\u624b\u7684\u89c6\u89c9\u6a21\u5757\u3002\u8bf7\u7b80\u6d01\u63cf\u8ff0\u8fd9\u5f20\u5c4f\u5e55\u622a\u56fe\u4e2d\u7528\u6237\u6b63\u5728\u505a\u4ec0\u4e48\u3002\n"
-        "\u8981\u6c42\uff1a\n"
-        "1. \u7528\u4e00\u4e24\u53e5\u4e2d\u6587\u63cf\u8ff0\u7528\u6237\u5f53\u524d\u7684\u6d3b\u52a8\n"
-        "2. \u5982\u679c\u80fd\u8bc6\u522b\u51fa\u5177\u4f53\u5e94\u7528\u6216\u7f51\u7ad9\uff0c\u63d0\u4e00\u4e0b\n"
-        "3. \u4e0d\u8981\u63cf\u8ff0\u7cfb\u7edfUI\u7ec6\u8282\uff0c\u53ea\u5173\u6ce8\u7528\u6237\u7684\u4e3b\u8981\u6d3b\u52a8\n"
-        "4. \u5982\u679c\u5c4f\u5e55\u4e0a\u6709\u654f\u611f\u4fe1\u606f\uff0c\u53ea\u8bf4\u201c\u7528\u6237\u5728\u5904\u7406\u79c1\u4eba\u4e8b\u52a1\u201d"
-    )
     try:
-        result = _llm_call(prompt, [image_b64])
-        return str(result or "").strip()
+        return _build_local_screen_description(image_b64, debug_write=_debug_write)
     except Exception as e:
         _debug_write("vision_describe_error", {"error": str(e)})
         return ""
