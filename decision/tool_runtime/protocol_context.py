@@ -41,23 +41,57 @@ PROTOCOL_CONTEXT_MANIFESTS = {
 
 _FILE_LIKE_TOOLS = {"write_file", "edit_file", "search_replace", "apply_unified_diff"}
 _GENERIC_SHELL_TAILS = {"desktop", "documents", "downloads"}
-_FOLLOWUP_MARKERS = (
+_DIRECT_FOLLOWUP_COMMANDS = {
     "continue",
+    "resume",
     "again",
+    "\u7ee7\u7eed",
+    "\u63a5\u7740",
+}
+_FOLLOWUP_RESUME_CUES = (
+    "continue",
+    "resume",
+    "again",
+    "\u7ee7\u7eed",
+    "\u63a5\u7740",
+)
+_FOLLOWUP_REFERENCE_CUES = (
     "same",
     "previous",
     "that",
     "this",
     "it",
-    "继续",
-    "接着",
-    "刚才",
-    "之前",
-    "上次",
-    "那个",
-    "这个",
-    "那里",
-    "它",
+    "there",
+    "\u4e4b\u524d",
+    "\u521a\u624d",
+    "\u4e0a\u6b21",
+    "\u90a3\u4e2a",
+    "\u8fd9\u4e2a",
+    "\u5b83",
+    "\u90a3\u91cc",
+)
+_FOLLOWUP_FS_FOCUS_CUES = (
+    "where",
+    "open",
+    "show",
+    "check",
+    "look",
+    "browse",
+    "inside",
+    "path",
+    "folder",
+    "directory",
+    "file",
+    "\u5728\u54ea",
+    "\u54ea",
+    "\u8def\u5f84",
+    "\u6253\u5f00",
+    "\u770b",
+    "\u68c0\u67e5",
+    "\u91cc\u9762",
+    "\u6587\u4ef6",
+    "\u6587\u4ef6\u5939",
+    "\u76ee\u5f55",
 )
 _RECENT_PATH_PATTERNS = (
     _re.compile(r'[A-Za-z]:[\\/][^\s`<>"\]]+\.(?:md|html|txt|json|py|js|css)', _re.I),
@@ -240,11 +274,39 @@ def _is_generic_shell_directory(path: str) -> bool:
     return tail in _GENERIC_SHELL_TAILS
 
 
-def _looks_like_referential_followup(user_input: str) -> bool:
+def _normalize_followup_text(user_input: str) -> str:
     raw = str(user_input or "").strip().lower()
     if not raw:
+        return ""
+    return _re.sub(r"[^\w\u4e00-\u9fff]+", " ", raw).strip()
+
+
+def _contains_followup_cue(raw: str, cues: tuple[str, ...] | set[str]) -> bool:
+    return bool(raw) and any(cue in raw for cue in cues)
+
+
+def _looks_like_short_followup(raw: str) -> bool:
+    if not raw or "\n" in raw or len(raw) > 72:
         return False
-    return any(marker in raw for marker in _FOLLOWUP_MARKERS)
+    return len(raw.split()) <= 8
+
+
+def _looks_like_referential_followup(user_input: str) -> bool:
+    raw = _normalize_followup_text(user_input)
+    if not raw:
+        return False
+    if raw in _DIRECT_FOLLOWUP_COMMANDS:
+        return True
+    if not _looks_like_short_followup(raw):
+        return False
+    has_resume = _contains_followup_cue(raw, _FOLLOWUP_RESUME_CUES)
+    has_reference = _contains_followup_cue(raw, _FOLLOWUP_REFERENCE_CUES)
+    has_fs_focus = _contains_followup_cue(raw, _FOLLOWUP_FS_FOCUS_CUES)
+    if has_reference and has_fs_focus:
+        return True
+    if has_resume and (has_reference or has_fs_focus):
+        return True
+    return False
 
 
 def _allow_generic_target_reuse(user_input: str, explicit_target: dict | None = None) -> bool:

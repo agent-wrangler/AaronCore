@@ -9,6 +9,22 @@ from pathlib import Path
 
 from protocols.fs import WORKSPACE_ROOT
 from protocols.target import extract_explicit_local_path
+from tasks.continuity import (
+    looks_like_long_referential_followup,
+    looks_like_short_referential_followup,
+)
+
+
+_EXPLICIT_LOCATION_REQUEST_PATTERNS = (
+    re.compile(r"(?:\u5728\u54ea|\u5728\u54ea\u91cc|\u5728\u54ea\u513f)\s*[？?]?$"),
+    re.compile(r"(?:\u6587\u4ef6\u5939|\u76ee\u5f55|\u8def\u5f84|\u4f4d\u7f6e).{0,8}(?:\u5728\u54ea|\u5728\u54ea\u91cc|\u5728\u54ea\u513f|\u53d1\u6211|\u7ed9\u6211|\u544a\u8bc9\u6211)"),
+    re.compile(r"(?:\u5b58\u5230\u54ea|\u653e\u5230\u54ea|\u653e\u54ea|\u4fdd\u5b58\u5230\u54ea|\u4fdd\u5b58\u5728\u54ea)"),
+    re.compile(r"(?:where is|which folder|which directory|what path|saved where|located where)", re.I),
+)
+_LOCATION_QUERY_RE = re.compile(
+    r"(?:\bwhere\b|\bpath\b|\bfolder\b|\bdirectory\b|\blocation\b|\u54ea|\u8def\u5f84|\u4f4d\u7f6e|\u76ee\u5f55|\u6587\u4ef6\u5939)",
+    re.I,
+)
 
 
 def extract_recent_file_paths(bundle: dict) -> list[str]:
@@ -84,22 +100,11 @@ def looks_like_directory_resolution_request(user_input: str, *, has_structured_t
     if re.search(r"[A-Za-z]:[\\/]", raw):
         return False
 
-    lowered = raw.lower()
-    explicit_location_patterns = (
-        r"(在哪|在哪里|在哪儿)\s*[？?]?$",
-        r"(文件夹|目录|路径|位置).{0,8}(在哪|在哪里|在哪儿|发我|给我|告诉我)",
-        r"(存到哪|放到哪|放哪|保存到哪|保存在哪)",
-        r"(where is|which folder|which directory|what path|saved where|located where)",
-    )
-    if any(re.search(pattern, raw, re.I) for pattern in explicit_location_patterns):
+    if any(pattern.search(raw) for pattern in _EXPLICIT_LOCATION_REQUEST_PATTERNS):
         return True
-
-    has_referential_followup = any(
-        token in raw for token in ("它", "这个", "那个", "之前那个", "刚才那个", "上次那个")
-    )
-    asks_where = ("哪" in raw or "where" in lowered)
-    asks_location_noun = any(token in raw for token in ("文件夹", "目录", "路径", "位置"))
-    return has_referential_followup and (asks_where or asks_location_noun)
+    if not _LOCATION_QUERY_RE.search(raw):
+        return False
+    return looks_like_short_referential_followup(raw) or looks_like_long_referential_followup(raw)
 
 
 def reply_already_contains_location(

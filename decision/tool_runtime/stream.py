@@ -35,12 +35,6 @@ _MISSING_EXECUTION_RETRY_GUIDANCE = (
     "In this tool-call turn, do not answer from stale memory, prior guesses, or claimed local inspection. "
     "If the user is asking you to verify, inspect, read, list, search, or check something and suitable tools are available, emit the concrete tool call now."
 )
-_MISSING_EXECUTION_CLOSEOUT_GUIDANCE = (
-    "The previous answer did not produce a real tool result and must not be treated as verified. "
-    "Do not call tools in this closeout. Briefly tell the user in natural language that the previous answer should not be treated as a confirmed result, "
-    "that the actual check/open/read/search did not complete successfully in this turn, and that the next correct move is to re-run the real action rather than rely on that answer. "
-    "Do not mention internal classifiers, server fallback copy, or hidden runtime details."
-)
 _BACKGROUND_DIALOGUE_ONLY_GUIDANCE = (
     "The dialogue context in this turn is background only. "
     "The current user prompt does not include the explicit task continuity block, "
@@ -187,49 +181,18 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 ),
             )
 
-        def _emit_missing_execution_closeout(prior_reply: str, *, reasoning_details=None):
+        def _emit_missing_execution_closeout(prior_reply: str, *, missing_execution_gap: dict | None = None):
             nonlocal latest_visible_chunks
-            final_messages = list(messages)
-            if str(prior_reply or "").strip() or reasoning_details:
-                final_messages.append(
-                    formatter._build_assistant_history_message(
-                        prior_reply,
-                        reasoning_details=reasoning_details,
-                    )
-                )
-            formatter._append_runtime_guidance(
-                final_messages,
-                _MISSING_EXECUTION_CLOSEOUT_GUIDANCE,
+            reply = formatter._build_missing_execution_closeout_reply(
+                reason=str((missing_execution_gap or {}).get("reason") or "").strip(),
+                summary=str((missing_execution_gap or {}).get("summary") or "").strip(),
             )
-            emitted = False
-            usage_closeout = {}
             latest_visible_chunks = []
             if prior_reply:
                 yield {"_stream_reset": {"reason": "missing_execution_closeout"}}
-            for chunk in formatter._llm_call_stream(
-                cfg,
-                final_messages,
-                temperature=0.7,
-                max_tokens=500,
-                timeout=25,
-            ):
-                if isinstance(chunk, dict):
-                    if chunk.get("_usage"):
-                        usage_closeout = chunk["_usage"]
-                    elif chunk.get("_stream_reset"):
-                        emitted = False
-                        latest_visible_chunks = []
-                        yield chunk
-                else:
-                    emitted = True
-                    latest_visible_chunks.append(chunk)
-                    yield chunk
-            formatter._record_tool_call_usage_stats(cfg, usage_closeout)
-            formatter._merge_tool_call_usage_totals(usage, usage_closeout)
-            if not emitted:
-                fallback = "刚才那段不能算结果，这轮没有真正跑到可确认的执行结果。"
-                latest_visible_chunks = [fallback]
-                yield fallback
+            if reply:
+                latest_visible_chunks = [reply]
+                yield reply
 
         system_prompt = (
             formatter._build_cod_system_prompt(bundle)
@@ -360,6 +323,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                 user_input=str(bundle.get("user_input") or ""),
                 tool_used="",
                 stream_had_output=bool(collected_tokens),
+                has_tool_capability=bool(followup_tools),
             )
             if (
                 missing_execution_retry_budget > 0
@@ -391,10 +355,9 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                     latest_visible_chunks = []
                     yield {"_stream_reset": {"reason": "missing_execution_retry"}}
             elif missing_execution_gap:
-                reasoning_details = formatter._reasoning_details_from_chunks(initial_reasoning_chunks)
                 yield from _emit_missing_execution_closeout(
                     visible_joined or _joined,
-                    reasoning_details=reasoning_details,
+                    missing_execution_gap=missing_execution_gap,
                 )
                 yield _turn_done(None)
                 return
@@ -666,6 +629,7 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                         user_input=str(bundle.get("user_input") or ""),
                         tool_used="",
                         stream_had_output=bool(collected_n),
+                        has_tool_capability=True,
                     )
                 ):
                     reasoning_details = formatter._reasoning_details_from_chunks(round_reasoning_chunks)
@@ -686,17 +650,20 @@ def run_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor):
                         yield {"_stream_reset": {"reason": "missing_execution_retry"}}
                     round_index += 1
                     continue
-                if current_record is None and classify_missing_tool_execution(
-                    visible_n or joined_n,
-                    history=bundle.get("l1") if isinstance(bundle.get("l1"), list) else [],
-                    user_input=str(bundle.get("user_input") or ""),
-                    tool_used="",
-                    stream_had_output=bool(collected_n),
-                ):
-                    reasoning_details = formatter._reasoning_details_from_chunks(round_reasoning_chunks)
+                missing_execution_gap = {}
+                if current_record is None:
+                    missing_execution_gap = classify_missing_tool_execution(
+                        visible_n or joined_n,
+                        history=bundle.get("l1") if isinstance(bundle.get("l1"), list) else [],
+                        user_input=str(bundle.get("user_input") or ""),
+                        tool_used="",
+                        stream_had_output=bool(collected_n),
+                        has_tool_capability=bool(followup_tools),
+                    )
+                if missing_execution_gap:
                     yield from _emit_missing_execution_closeout(
                         visible_n or joined_n,
-                        reasoning_details=reasoning_details,
+                        missing_execution_gap=missing_execution_gap,
                     )
                     yield _turn_done(None)
                     return

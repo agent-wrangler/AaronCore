@@ -16,6 +16,8 @@ class ChatToolStepTests(unittest.TestCase):
             skill_display="调用工具",
             process_meta={
                 "attempt_kind": "fallback",
+                "execution_lane": "inspect",
+                "current_step_task_title": "Inspect the current chain",
                 "previous_tool": "run_command",
                 "parallel_index": 1,
                 "parallel_size": 2,
@@ -24,6 +26,8 @@ class ChatToolStepTests(unittest.TestCase):
 
         self.assertIn("search_text", detail)
         self.assertIn("run_command", detail)
+        self.assertIn("lane: inspect", detail)
+        self.assertIn("step: Inspect the current chain", detail)
         self.assertIn("parallel batch 1/2", detail)
         self.assertIn("目标: router.py 里的 route 关键字", detail)
 
@@ -75,11 +79,18 @@ class ChatToolStepTests(unittest.TestCase):
             success=True,
             action_summary="找到 6 条结果",
             response="",
-            process_meta={"attempt_kind": "fallback"},
+            process_meta={
+                "attempt_kind": "fallback",
+                "execution_lane": "inspect",
+                "current_step_task_title": "Inspect the current chain",
+            },
         )
 
         self.assertIn("参数还不完整", retry_detail)
         self.assertIn("切换路径后完成", fallback_success)
+
+        self.assertIn("lane: inspect", fallback_success)
+        self.assertIn("step: Inspect the current chain", fallback_success)
 
     def test_verify_failed_does_not_render_as_success(self):
         label = build_tool_done_label(
@@ -128,36 +139,38 @@ class ChatToolStepTests(unittest.TestCase):
             "parallel_success_count": 1,
             "parallel_failure_count": 0,
             "parallel_tools": ["folder_explore", "search_text"],
+            "execution_lane": "inspect",
+            "current_step_task_title": "Inspect the current chain",
         }
 
+        execution_detail = build_tool_execution_trace_detail(
+            tool_name="folder_explore",
+            preview="",
+            skill_display="调用工具",
+            process_meta=group_meta,
+        )
         self.assertEqual(
             build_tool_execution_trace_label("调用工具", process_meta=group_meta),
             "PARALLEL CALL",
         )
-        self.assertIn(
-            "这一批同时起跑 2 个工具",
-            build_tool_execution_trace_detail(
-                tool_name="folder_explore",
-                preview="",
-                skill_display="调用工具",
-                process_meta=group_meta,
-            ),
-        )
+        self.assertIn("这一批同时起跑 2 个工具", execution_detail)
+        self.assertIn("lane: inspect", execution_detail)
+        self.assertIn("step: Inspect the current chain", execution_detail)
         self.assertEqual(
             build_tool_done_label("技能完成", success=True, process_meta=group_meta),
             "PARALLEL RUN",
         )
-        self.assertIn(
-            "已收回 1/2",
-            build_tool_done_trace_detail(
-                tool_name="search_text",
-                preview="",
-                success=True,
-                action_summary="",
-                response="",
-                process_meta=group_meta,
-            ),
+        done_detail = build_tool_done_trace_detail(
+            tool_name="search_text",
+            preview="",
+            success=True,
+            action_summary="",
+            response="",
+            process_meta=group_meta,
         )
+        self.assertIn("已收回 1/2", done_detail)
+        self.assertIn("lane: inspect", done_detail)
+        self.assertIn("step: Inspect the current chain", done_detail)
 
         final_meta = {
             **group_meta,

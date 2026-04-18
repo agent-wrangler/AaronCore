@@ -69,6 +69,27 @@ def _record_result_message(tool_call: dict, response: str) -> dict:
     }
 
 
+def _bundle_working_state(bundle: dict | None) -> dict:
+    bundle = bundle if isinstance(bundle, dict) else {}
+    l2_session = bundle.get("l2") if isinstance(bundle.get("l2"), dict) else {}
+    return l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
+
+
+def _working_state_execution_lane(working_state: dict | None) -> str:
+    working_state = working_state if isinstance(working_state, dict) else {}
+    current_step_task = working_state.get("current_step_task")
+    if isinstance(current_step_task, dict):
+        lane = str(current_step_task.get("execution_lane") or "").strip().lower()
+        if lane:
+            return lane
+    return str(working_state.get("execution_lane") or "").strip().lower()
+
+
+def _allow_auto_parallel_batch(bundle: dict | None) -> bool:
+    lane = _working_state_execution_lane(_bundle_working_state(bundle))
+    return not lane or lane == "inspect"
+
+
 def _resolve_context_char_budget(
     bundle: dict | None,
     *,
@@ -300,6 +321,7 @@ def _update_state_after_record(
         state.tool_args,
         bundle,
         current_tool_name=record.tool_name,
+        tool_run_meta=state.run_meta,
     )
 
 
@@ -442,6 +464,7 @@ def _handle_repeated_invalid_args(
         round_index=round_index,
         batch_index=batch_index,
         batch_size=batch_size,
+        working_state=_bundle_working_state(bundle),
     )
     terminal = ledger.mark_terminal(
         record.call_id,
@@ -566,6 +589,7 @@ def _close_remaining_prepared_calls(
             round_index=round_index,
             batch_index=relative_index,
             batch_size=len(prepared_calls),
+            working_state=_bundle_working_state(bundle),
         )
         done_process_meta = build_done_process_meta(
             record=blocked_record,
@@ -712,6 +736,7 @@ def _apply_exec_result(
                 round_index=round_index,
                 batch_index=blocked_batch_index,
                 batch_size=len(prepared_calls),
+                working_state=_bundle_working_state(bundle),
             )
             done_process_meta = build_done_process_meta(
                 record=blocked_record,
@@ -860,6 +885,7 @@ def execute_tool_call_batch(
         )
         for (_tool_call, tool_name, tool_args, _preview, _record) in prepared_calls
     ]
+    allow_auto_parallel_batch = _allow_auto_parallel_batch(bundle)
 
     if tool_runtime_cancelled(skill_context, bundle):
         _close_remaining_prepared_calls(
@@ -927,6 +953,8 @@ def execute_tool_call_batch(
             next_plan = call_plans[scan]
             if next_plan.get("repeated_invalid_args") or not is_parallel_safe_tool(next_tool_name):
                 break
+            if scan > index and not allow_auto_parallel_batch:
+                break
             parallel_group.append(
                 ParallelCallSpec(
                     index=scan,
@@ -984,6 +1012,7 @@ def execute_tool_call_batch(
                     parallel_size=len(parallel_group),
                     parallel_group_id=parallel_group_id,
                     parallel_tools=parallel_tools,
+                    working_state=_bundle_working_state(bundle),
                 )
                 attempt_meta_by_call_id[spec.record.call_id] = attempt_meta
                 ledger.mark_executing(spec.record.call_id)
@@ -1170,6 +1199,7 @@ def execute_tool_call_batch(
             round_index=round_index,
             batch_index=index + 1,
             batch_size=len(prepared_calls),
+            working_state=_bundle_working_state(bundle),
         )
         ledger.mark_executing(record.call_id)
         _emit_batch_event(

@@ -70,6 +70,22 @@ def _parallel_text(process_meta: dict | None) -> str:
     return f"parallel batch {parallel_size} actions"
 
 
+def _execution_lane_text(process_meta: dict | None) -> str:
+    meta = process_meta if isinstance(process_meta, dict) else {}
+    lane = _clean_text(meta.get("execution_lane"))
+    if not lane:
+        return ""
+    return f"lane: {lane}"
+
+
+def _current_step_task_text(process_meta: dict | None) -> str:
+    meta = process_meta if isinstance(process_meta, dict) else {}
+    title = _clean_text(meta.get("current_step_task_title"))
+    if not title:
+        return ""
+    return f"step: {title}"
+
+
 def _tool_done_presentation_kind(success: bool, process_meta: dict | None) -> str:
     meta = process_meta if isinstance(process_meta, dict) else {}
     outcome_kind = _clean_text(meta.get("outcome_kind"))
@@ -109,10 +125,16 @@ def build_tool_execution_trace_detail(
     if _parallel_group_enabled(meta):
         parallel_size = int(meta.get("parallel_size") or 0)
         names_text = _parallel_tool_names_text(meta, fallback_tool=base_name)
+        _append_unique(parts, _execution_lane_text(meta))
+        _append_unique(parts, _current_step_task_text(meta))
         if names_text:
-            return f"这一批同时起跑 {parallel_size} 个工具: {names_text}"
-        return f"这一批同时起跑 {parallel_size} 个工具"
+            parts.append(f"这一批同时起跑 {parallel_size} 个工具: {names_text}")
+        else:
+            parts.append(f"这一批同时起跑 {parallel_size} 个工具")
+        return " · ".join(parts)
     _append_unique(parts, base_name)
+    _append_unique(parts, _execution_lane_text(meta))
+    _append_unique(parts, _current_step_task_text(meta))
 
     attempt_kind = _clean_text(meta.get("attempt_kind"))
     previous_tool = _clean_text(meta.get("previous_tool"))
@@ -203,6 +225,8 @@ def build_tool_done_trace_detail(
                 parts.append("都已完成")
         if names_text:
             parts.append(f"这一批: {names_text}")
+        _append_unique(parts, _execution_lane_text(meta))
+        _append_unique(parts, _current_step_task_text(meta))
         return " · ".join(parts)
 
     _append_unique(parts, base_name)
@@ -212,6 +236,8 @@ def build_tool_done_trace_detail(
     reason = _clean_text(meta.get("reason"))
     next_hint_kind = _clean_text(meta.get("next_hint_kind"))
     summary = _clean_text(action_summary) or _summarize_text(response)
+    _append_unique(parts, _execution_lane_text(meta))
+    _append_unique(parts, _current_step_task_text(meta))
 
     if outcome_kind == "wait_for_user":
         _append_unique(parts, "需要用户接手")

@@ -44,6 +44,10 @@ def _clean_text(value: object) -> str:
     return str(value or "").strip()
 
 
+def _clean_lower_text(value: object) -> str:
+    return _clean_text(value).lower()
+
+
 def _clean_summary(value: object, *, limit: int = 160) -> str:
     text = _clean_text(value).replace("\r", "\n")
     if not text:
@@ -59,6 +63,85 @@ def _clean_summary(value: object, *, limit: int = 160) -> str:
 
 def _coerce_dict(value: object) -> dict:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _text_contains_any(text: object, tokens: tuple[str, ...]) -> bool:
+    lowered = _clean_lower_text(text)
+    if not lowered:
+        return False
+    return any(token in lowered for token in tokens)
+
+
+def _infer_execution_lane(tool_name: str, working_state: dict | None) -> str:
+    working_state = _coerce_dict(working_state)
+    current_step_task = _coerce_dict(working_state.get("current_step_task"))
+    explicit_lane = _clean_lower_text(
+        current_step_task.get("execution_lane") or working_state.get("execution_lane")
+    )
+    if explicit_lane:
+        return explicit_lane
+
+    step_text = " ".join(
+        part
+        for part in [
+            _clean_text(current_step_task.get("title")),
+            _clean_text(current_step_task.get("detail")),
+            _clean_text(working_state.get("current_step")),
+            _clean_text(working_state.get("summary")),
+            _clean_text(working_state.get("phase")),
+        ]
+        if part
+    )
+    verify_tokens = (
+        "verify", "verification", "validate", "test", "pytest", "assert",
+        "验", "验证", "核验", "测试", "回归", "检查结果",
+    )
+    inspect_tokens = (
+        "inspect", "investigate", "analy", "analysis", "debug", "diagnos", "trace",
+        "map", "gather", "context", "review", "read", "search", "look up",
+        "看", "查", "排查", "分析", "定位", "搜集", "上下文", "读取",
+    )
+    implement_tokens = (
+        "implement", "patch", "edit", "modify", "write", "refactor", "fix", "build", "code", "apply",
+        "改", "修", "实现", "补丁", "编写", "重构",
+    )
+    if _text_contains_any(step_text, verify_tokens):
+        return "verify"
+    if _text_contains_any(step_text, inspect_tokens):
+        return "inspect"
+    if _text_contains_any(step_text, implement_tokens):
+        return "implement"
+
+    clean_tool_name = _clean_lower_text(tool_name)
+    if clean_tool_name in {
+        "discover_tools",
+        "folder_explore",
+        "list_files",
+        "query_knowledge",
+        "read_file",
+        "recall_memory",
+        "search_text",
+        "sense_environment",
+        "web_search",
+    }:
+        return "inspect"
+    if clean_tool_name in {
+        "apply_unified_diff",
+        "edit_file",
+        "save_export",
+        "search_replace",
+        "write_file",
+    }:
+        return "implement"
+    if clean_tool_name == "run_command":
+        verification_status = _clean_lower_text(working_state.get("verification_status"))
+        runtime_status = _clean_lower_text(working_state.get("runtime_status"))
+        if verification_status or runtime_status in {"verify_failed", "verified"}:
+            return "verify"
+        return "execute"
+    if clean_tool_name in {"app_target", "open_target", "ui_interaction"}:
+        return "interact"
+    return ""
 
 
 def _verification_payload(meta: dict | None, runtime_state: dict | None = None) -> dict:
@@ -284,12 +367,18 @@ def build_attempt_process_meta(
     parallel_size: int = 0,
     parallel_group_id: str = "",
     parallel_tools: list[str] | None = None,
+    working_state: dict | None = None,
 ) -> dict:
     attempts = [item for item in (recent_attempts or []) if isinstance(item, dict)]
     previous = attempts[-1] if attempts else {}
     previous_tool = _clean_text(previous.get("tool"))
     previous_summary = _clean_summary(previous.get("summary"))
     previous_success = previous.get("success")
+    current_step_task = _coerce_dict(_coerce_dict(working_state).get("current_step_task"))
+    execution_lane = _infer_execution_lane(tool_name, working_state)
+    current_step_task_id = _clean_text(current_step_task.get("task_id"))
+    current_step_task_title = _clean_text(current_step_task.get("title"))
+    current_step_task_status = _clean_text(current_step_task.get("status"))
 
     attempt_kind = "initial"
     if previous_tool:
@@ -302,7 +391,7 @@ def build_attempt_process_meta(
         else:
             attempt_kind = "next_step"
 
-    return {
+    meta = {
         "attempt_kind": attempt_kind,
         "attempt_index": len(attempts) + 1,
         "round_index": int(round_index or 0) + 1,
@@ -316,6 +405,15 @@ def build_attempt_process_meta(
         "previous_success": previous_success,
         "previous_summary": previous_summary,
     }
+    if execution_lane:
+        meta["execution_lane"] = execution_lane
+    if current_step_task_id:
+        meta["current_step_task_id"] = current_step_task_id
+    if current_step_task_title:
+        meta["current_step_task_title"] = current_step_task_title
+    if current_step_task_status:
+        meta["current_step_task_status"] = current_step_task_status
+    return meta
 
 
 def build_done_process_meta(

@@ -29,12 +29,6 @@ _MISSING_EXECUTION_RETRY_GUIDANCE = (
     "In this tool-call turn, do not answer from stale memory, prior guesses, or claimed local inspection. "
     "If the user is asking you to verify, inspect, read, list, search, or check something and suitable tools are available, emit the concrete tool call now."
 )
-_MISSING_EXECUTION_CLOSEOUT_GUIDANCE = (
-    "The previous answer did not produce a real tool result and must not be treated as verified. "
-    "Do not call tools in this closeout. Briefly tell the user in natural language that the previous answer should not be treated as a confirmed result, "
-    "that the actual check/open/read/search did not complete successfully in this turn, and that the next correct move is to re-run the real action rather than rely on that answer. "
-    "Do not mention internal classifiers, server fallback copy, or hidden runtime details."
-)
 _BACKGROUND_DIALOGUE_ONLY_GUIDANCE = (
     "The dialogue context in this turn is background only. "
     "The current user prompt does not include the explicit task continuity block, "
@@ -113,28 +107,11 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
             turn_meta=_turn_meta(),
         )
 
-    def _missing_execution_closeout(prior_reply: str, *, reasoning_details=None) -> dict:
-        final_messages = list(messages)
-        if str(prior_reply or "").strip() or reasoning_details:
-            final_messages.append(
-                formatter._build_assistant_history_message(
-                    prior_reply,
-                    reasoning_details=reasoning_details,
-                )
-            )
-        formatter._append_runtime_guidance(final_messages, _MISSING_EXECUTION_CLOSEOUT_GUIDANCE)
-        closeout_result = formatter._llm_call(
-            cfg,
-            final_messages,
-            temperature=0.7,
-            max_tokens=500,
-            timeout=25,
+    def _missing_execution_closeout(missing_execution_gap: dict | None = None) -> dict:
+        reply = formatter._build_missing_execution_closeout_reply(
+            reason=str((missing_execution_gap or {}).get("reason") or "").strip(),
+            summary=str((missing_execution_gap or {}).get("summary") or "").strip(),
         )
-        formatter._merge_tool_call_usage_totals(usage, closeout_result.get("usage", {}))
-        formatter._record_tool_call_usage_stats(cfg, closeout_result.get("usage", {}))
-        reply = str(closeout_result.get("content", "") or "").strip()
-        if not reply:
-            reply = "刚才那段不能算结果，这轮没有真正跑到可确认的执行结果。"
         return _result(reply, None)
 
     def _max_turns_closeout(*, terminal_record, success: bool | None) -> dict:
@@ -214,6 +191,7 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 user_input=str(bundle.get("user_input") or ""),
                 tool_used="",
                 stream_had_output=bool(str(reply or "").strip()),
+                has_tool_capability=bool(tools),
             )
             if (
                 missing_execution_retry_budget > 0
@@ -258,17 +236,11 @@ def run_non_stream_tool_call_turn(bundle: dict, tools: list[dict], tool_executor
                 if not tool_calls:
                     reply = str(result.get("content", "") or "")
                     formatter._debug_write("tool_call_direct_reply", {"reply_len": len(reply)})
-                    return _missing_execution_closeout(
-                        reply,
-                        reasoning_details=result.get("reasoning_details"),
-                    )
+                    return _missing_execution_closeout(missing_execution_gap=missing_execution_gap)
             else:
                 formatter._debug_write("tool_call_direct_reply", {"reply_len": len(reply)})
                 if missing_execution_gap:
-                    return _missing_execution_closeout(
-                        reply,
-                        reasoning_details=result.get("reasoning_details"),
-                    )
+                    return _missing_execution_closeout(missing_execution_gap=missing_execution_gap)
                 return _result(reply, None)
 
         skill_context = formatter._build_tool_exec_context(bundle)

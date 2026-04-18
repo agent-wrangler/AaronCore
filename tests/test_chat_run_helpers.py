@@ -140,6 +140,13 @@ class ChatRunHelpersTests(unittest.TestCase):
                         "verified": False,
                         "detail": "Please finish login first",
                     },
+                    "process_meta": {
+                        "attempt_kind": "retry",
+                        "execution_lane": "verify",
+                        "previous_tool": "sense_environment",
+                        "parallel_tools": ["open_target", "read_file"],
+                        "parallel_size": 2,
+                    },
                 },
                 tool_used="open_target",
                 tool_response="Login required",
@@ -154,6 +161,13 @@ class ChatRunHelpersTests(unittest.TestCase):
         self.assertEqual(result["runtime_status"], "waiting_user")
         self.assertEqual(result["next_action"], "wait_for_user")
         self.assertEqual(result["blocker"], "Please finish login first")
+        self.assertEqual(result["last_tool"], "open_target")
+        self.assertEqual(result["last_result_summary"], "Login required")
+        self.assertEqual(result["attempt_kind"], "retry")
+        self.assertEqual(result["execution_lane"], "verify")
+        self.assertEqual(result["previous_tool"], "sense_environment")
+        self.assertEqual(result["parallel_tools"], ["open_target", "read_file"])
+        self.assertEqual(result["parallel_size"], 2)
         self.assertEqual(result["items"][0]["status"], "waiting_user")
         self.assertEqual(result["items"][0]["detail"], "Please finish login first")
         self.assertEqual(result["verification"]["status"], "failed")
@@ -215,6 +229,8 @@ class ChatRunHelpersTests(unittest.TestCase):
         self.assertEqual(result["phase"], "patch")
         self.assertEqual(result["runtime_status"], "verified")
         self.assertEqual(result["next_action"], "continue")
+        self.assertEqual(result["last_tool"], "write_file")
+        self.assertEqual(result["last_result_summary"], "Updated target module")
         self.assertEqual(result["items"][1]["status"], "running")
         self.assertEqual(result["verification"]["status"], "verified")
 

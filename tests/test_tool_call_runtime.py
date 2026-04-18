@@ -88,6 +88,29 @@ class ToolCallRuntimeTests(unittest.TestCase):
         self.assertEqual(done_event["_tool_call"]["process_meta"]["outcome_kind"], "success")
         self.assertEqual(done_event["_tool_call"]["process_meta"]["next_hint_kind"], "continue")
 
+    def test_build_attempt_process_meta_infers_execution_lane_from_current_step_task(self):
+        attempt_meta = build_attempt_process_meta(
+            recent_attempts=[],
+            tool_name="run_command",
+            round_index=1,
+            batch_index=1,
+            batch_size=1,
+            working_state={
+                "current_step": "Verify the patch",
+                "execution_lane": "verify",
+                "current_step_task": {
+                    "task_id": "task_step_verify",
+                    "title": "Verify the patch",
+                    "status": "active",
+                },
+            },
+        )
+
+        self.assertEqual(attempt_meta.get("execution_lane"), "verify")
+        self.assertEqual(attempt_meta.get("current_step_task_id"), "task_step_verify")
+        self.assertEqual(attempt_meta.get("current_step_task_title"), "Verify the patch")
+        self.assertEqual(attempt_meta.get("current_step_task_status"), "active")
+
     def test_build_done_process_meta_marks_runtime_failures_and_blocked_paths(self):
         blocked_record = ToolCallRecord(
             call_id="call_blocked_1",

@@ -269,11 +269,19 @@ def _reprioritize_tools_for_coding_focus(
     *,
     target_kind: str = "",
     current_tool_name: str = "",
+    last_tool_name: str = "",
+    runtime_status: str = "",
+    verification_status: str = "",
+    execution_lane: str = "",
 ) -> list[dict]:
     return _focus_guidance.reprioritize_tools_for_coding_focus(
         tools,
         target_kind=target_kind,
         current_tool_name=current_tool_name,
+        last_tool_name=last_tool_name,
+        runtime_status=runtime_status,
+        verification_status=verification_status,
+        execution_lane=execution_lane,
         tool_definition_name=_tool_definition_name,
         debug_write=_debug_write,
     )
@@ -285,6 +293,7 @@ def _build_followup_tools_after_arg_failure(
     tool_args: dict | None,
     bundle: dict | None = None,
     current_tool_name: str = "",
+    tool_run_meta: dict | None = None,
 ) -> list[dict]:
     return _focus_guidance.build_followup_tools_after_arg_failure(
         tools,
@@ -292,6 +301,7 @@ def _build_followup_tools_after_arg_failure(
         tool_args,
         bundle,
         current_tool_name,
+        tool_run_meta,
         resolve_known_fs_focus_target=_resolve_known_fs_focus_target,
         tool_definition_name=_tool_definition_name,
         reprioritize_tools_for_coding_focus=_reprioritize_tools_for_coding_focus,

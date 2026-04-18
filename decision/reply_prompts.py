@@ -418,6 +418,23 @@ def build_tool_call_user_prompt(bundle: dict, *, build_active_task_context) -> s
     search_context = bundle.get("search_context", "")
     recall_context = bundle.get("recall_context", "")
     parts = [msg]
+    image_list = bundle.get("images") or ([bundle.get("image")] if bundle.get("image") else [])
+    if image_list:
+        try:
+            from core.vision import build_uploaded_image_prompt_context
+
+            image_context = str(
+                build_uploaded_image_prompt_context(image_list, user_text=msg) or ""
+            ).strip()
+        except Exception:
+            image_context = (
+                "[LOCAL_IMAGE_CONTEXT]\n"
+                "The user attached image content, but local image analysis is unavailable right now.\n"
+                "Do not claim direct visual access.\n"
+                "If the answer depends on image text or fine detail, ask for a clearer screenshot or the relevant region."
+            )
+        if image_context:
+            parts.append(f"\n{image_context}")
     active_task_context = build_active_task_context(bundle)
     if active_task_context:
         parts.append(f"\n任务连续性提示（内部工作记忆）：\n{active_task_context}")

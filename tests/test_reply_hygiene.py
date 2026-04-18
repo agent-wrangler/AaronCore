@@ -142,6 +142,36 @@ class ReplyHygieneTests(unittest.TestCase):
 
         self.assertEqual(cleaned, reply)
 
+    def test_clean_visible_reply_text_trims_generic_restart_restatement(self):
+        reply = (
+            "\u524d\u9762\u90a3\u7248\u8bf4\u5f97\u592a\u7ed5\u4e86\uff0c\u4f60\u5148\u770b\u7ed3\u8bba\u3002\n\n"
+            "**\u6838\u5fc3\u95ee\u9898**\uff1a\u6587\u4ef6\u5939\u7ed3\u6784\u8fd8\u5728\u6df7\u7740\u3002\n\n"
+            "\u8fd9\u6837\u8bb2\u6e05\u695a\u4e86\u5417\uff1f\u9700\u8981\u6211\u518d\u62c6\u5f00\u4e00\u70b9\u5417\uff1f"
+            "\u6211\u7406\u89e3\u4e86\uff0c\u8ba9\u6211\u518d\u91cd\u8ff0\u4e00\u904d\u3002\n\n"
+            "\u73b0\u5728\u53ea\u7559\u4e0b\u4e24\u4ef6\u4e8b\uff1a\u5148\u6536\u76ee\u5f55\uff0c\u518d\u6536\u547d\u540d\u3002"
+        )
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertIn("\u8fd9\u6837\u8bb2\u6e05\u695a\u4e86\u5417", cleaned)
+        self.assertNotIn("\u8ba9\u6211\u518d\u91cd\u8ff0\u4e00\u904d", cleaned)
+        self.assertNotIn("\u73b0\u5728\u53ea\u7559\u4e0b\u4e24\u4ef6\u4e8b", cleaned)
+
+    def test_clean_visible_reply_text_prefers_generic_tool_result_tail(self):
+        reply = (
+            "\u6211\u5148\u7ed9\u4f60\u4e00\u4e2a\u7c97\u7565\u5224\u65ad\u3002\n\n"
+            "**\u5efa\u8bae\u65b9\u5411**\uff1a\u5148\u4e0d\u8981\u52a8\u592a\u591a\u6587\u4ef6\u3002\n\n"
+            "\u9700\u8981\u6211\u628a\u4e0a\u9762\u90a3\u6bb5\u518d\u5c55\u5f00\u5417\uff1f"
+            "\u6839\u636e\u5de5\u5177\u7ed3\u679c\uff0c\u73b0\u5728\u5df2\u7ecf\u5b9a\u4f4d\u5230 `tasks/continuity.py` \u8fd9\u6761\u94fe\u8def\u3002\n\n"
+            "\u5148\u4ece\u8fd9\u4e2a\u6587\u4ef6\u5f80\u4e0b\u6536\u5373\u53ef\u3002"
+        )
+
+        cleaned = reply_formatter_module._clean_visible_reply_text(reply)
+
+        self.assertTrue(cleaned.startswith("\u6839\u636e\u5de5\u5177\u7ed3\u679c"))
+        self.assertIn("`tasks/continuity.py`", cleaned)
+        self.assertNotIn("**\u5efa\u8bae\u65b9\u5411**", cleaned)
+
 
 if __name__ == "__main__":
     unittest.main()

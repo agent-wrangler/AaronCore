@@ -134,6 +134,7 @@ def apply_runtime_state_to_task_plan(
     meta = meta if isinstance(meta, dict) else {}
     runtime_state = _coerce_dict(meta.get("runtime_state"))
     verification = _coerce_dict(meta.get("verification"))
+    process_meta = _coerce_dict(meta.get("process_meta"))
     if not original or not items or (not runtime_state and not verification):
         return original or None
 
@@ -161,6 +162,40 @@ def apply_runtime_state_to_task_plan(
         updated["next_action"] = next_action
     if blocker:
         updated["blocker"] = blocker
+    last_tool = str(tool_used or "").strip().lower()
+    last_action_summary = summarize_execution_text(action_summary)
+    last_result_summary = summarize_execution_text(tool_response) or blocker
+    attempt_kind = str(process_meta.get("attempt_kind") or "").strip().lower()
+    previous_tool = str(process_meta.get("previous_tool") or "").strip().lower()
+    execution_lane = str(process_meta.get("execution_lane") or "").strip().lower()
+    parallel_tools = [
+        str(name or "").strip().lower()
+        for name in (process_meta.get("parallel_tools") or [])
+        if str(name or "").strip()
+    ]
+    parallel_tools = list(dict.fromkeys(parallel_tools))[:6]
+    try:
+        parallel_size = int(process_meta.get("parallel_size") or 0)
+    except Exception:
+        parallel_size = 0
+    if parallel_size <= 0:
+        parallel_size = len(parallel_tools)
+    if last_tool:
+        updated["last_tool"] = last_tool
+    if last_action_summary:
+        updated["last_action_summary"] = last_action_summary
+    if last_result_summary:
+        updated["last_result_summary"] = last_result_summary
+    if attempt_kind:
+        updated["attempt_kind"] = attempt_kind
+    if previous_tool:
+        updated["previous_tool"] = previous_tool
+    if execution_lane:
+        updated["execution_lane"] = execution_lane
+    if parallel_tools:
+        updated["parallel_tools"] = parallel_tools
+    if parallel_size > 1:
+        updated["parallel_size"] = parallel_size
 
     verification_payload = {}
     verification_status = _verification_status(verification, runtime_state)
@@ -334,6 +369,15 @@ def block_task_plan_after_failure(
     plan["phase"] = "blocked"
     if summary:
         plan["summary"] = summary
+    last_tool = str(tool_used or "").strip().lower()
+    last_action_summary = summarize_execution_text(action_summary)
+    last_result_summary = summarize_execution_text(tool_response) or summary
+    if last_tool:
+        plan["last_tool"] = last_tool
+    if last_action_summary:
+        plan["last_action_summary"] = last_action_summary
+    if last_result_summary:
+        plan["last_result_summary"] = last_result_summary
 
     try:
         from core.task_store import normalize_task_plan_snapshot, save_task_plan_snapshot

@@ -33,7 +33,7 @@ class ChatReplyCloseoutTests(unittest.TestCase):
         self.assertIn("\u5df2\u8bfb\u53d6\u5f53\u524d\u73af\u5883", result)
         self.assertNotEqual(result.strip(), "\u6211\u5148\u53bb\u770b\u770b\u5f53\u524d\u73af\u5883\u3002")
 
-    def test_finalize_tool_call_reply_converts_orphan_preamble_to_failure_closeout(self):
+    def test_finalize_tool_call_reply_preserves_orphan_preamble_without_runtime_capability(self):
         orphan_preamble = "\u597d\u7684\uff0c\u6211\u8fd9\u5c31\u53bbQQ\u7fa4\u91cc\u770b\u770b\u3002"
         result = finalize_tool_call_reply(
             orphan_preamble,
@@ -47,18 +47,30 @@ class ChatReplyCloseoutTests(unittest.TestCase):
             run_meta={},
             stream_had_output=True,
         )
-        self.assertIn("\u8fd9\u4e00\u8f6e\u4e2d\u65ad\u4e86", result)
-        self.assertNotEqual(result.strip(), orphan_preamble)
+        self.assertEqual(result.strip(), orphan_preamble)
 
-    def test_classify_missing_tool_execution_marks_orphan_preamble(self):
+    def test_classify_missing_tool_execution_marks_orphan_preamble_with_runtime_capability(self):
         result = classify_missing_tool_execution(
             "\u597d\u7684\uff0c\u6211\u8fd9\u5c31\u53bbQQ\u7fa4\u91cc\u770b\u770b\u3002",
+            user_input="\u53bb QQ \u7fa4\u91cc\u770b\u770b",
             tool_used="",
             stream_had_output=True,
+            has_tool_capability=True,
         )
 
         self.assertEqual(result.get("reason"), "preamble_without_tool")
         self.assertTrue(result.get("summary"))
+
+    def test_classify_missing_tool_execution_ignores_orphan_preamble_without_runtime_capability(self):
+        result = classify_missing_tool_execution(
+            "\u597d\u7684\uff0c\u6211\u8fd9\u5c31\u53bbQQ\u7fa4\u91cc\u770b\u770b\u3002",
+            user_input="\u53bb QQ \u7fa4\u91cc\u770b\u770b",
+            tool_used="",
+            stream_had_output=True,
+            has_tool_capability=False,
+        )
+
+        self.assertEqual(result, {})
 
     def test_classify_missing_tool_execution_ignores_preamble_on_non_action_followup(self):
         result = classify_missing_tool_execution(

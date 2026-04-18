@@ -13,6 +13,16 @@ def build_tool_exec_context(
     working_state = l2_session.get("working_state") if isinstance(l2_session.get("working_state"), dict) else {}
     if working_state:
         skill_context["working_state"] = dict(working_state)
+        current_step_task = working_state.get("current_step_task") if isinstance(working_state.get("current_step_task"), dict) else {}
+        if current_step_task:
+            skill_context["current_step_task"] = dict(current_step_task)
+        execution_lane = str(
+            (current_step_task.get("execution_lane") if current_step_task else "")
+            or working_state.get("execution_lane")
+            or ""
+        ).strip()
+        if execution_lane:
+            skill_context["execution_lane"] = execution_lane
     l4 = bundle.get("l4") or {}
     if isinstance(l4, dict):
         up = l4.get("user_profile") or {}

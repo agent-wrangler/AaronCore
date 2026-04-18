@@ -76,6 +76,25 @@ _LOCAL_FILE_TOOL_NAMES = {
 }
 
 
+def _looks_like_orphan_preamble_shape(text: str) -> bool:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return False
+    if any(token in cleaned for token in ("```", "http://", "https://", "|")):
+        return False
+    lines = [line.strip() for line in cleaned.replace("\r", "\n").splitlines() if line.strip()]
+    if not lines or len(lines) > 3:
+        return False
+    if any(_BULLET_LINE_RE.match(line) for line in lines):
+        return False
+    if _LOCAL_FILE_EVIDENCE_RE.search(cleaned):
+        return False
+    sentence_count = len([part for part in re.split(r"[。！？?!]\s*|\n+", cleaned) if part.strip()])
+    if sentence_count > 2:
+        return False
+    return len(cleaned) <= 120
+
+
 def _get_last_user_message(history: list) -> str:
     for item in reversed(history or []):
         if isinstance(item, dict) and item.get("role") == "user":
@@ -459,6 +478,7 @@ def classify_missing_tool_execution(
     user_input: str = "",
     tool_used: str = "",
     stream_had_output: bool = False,
+    has_tool_capability: bool = False,
 ) -> dict:
     cleaned = str(text or "").strip()
     if tool_used or not stream_had_output or not cleaned:
@@ -487,9 +507,12 @@ def classify_missing_tool_execution(
             "reason": "completion_without_tool",
             "summary": _summarize_tool_response_text(cleaned) or "claimed completion without a real tool result",
         }
-    if _looks_like_tool_preamble(cleaned):
-        if requested_text and not requested_is_action:
-            return {}
+    if (
+        has_tool_capability
+        and requested_is_action
+        and _looks_like_orphan_preamble_shape(cleaned)
+        and _looks_like_tool_preamble(cleaned)
+    ):
         return {
             "reason": "preamble_without_tool",
             "summary": _summarize_tool_response_text(cleaned),
@@ -544,15 +567,6 @@ def finalize_tool_call_reply(
         action_summary=action_summary,
         run_meta=run_meta,
     )
-    if not tool_used and stream_had_output and missing_tool_gap.get("reason") == "preamble_without_tool":
-        text = ensure_tool_call_failure_reply(
-            text,
-            tool_used="tool_call",
-            tool_success=False,
-            tool_response=tool_response or text,
-            action_summary=action_summary or _summarize_tool_response_text(text),
-            run_meta=run_meta,
-        )
     return apply_pre_reply_hygiene(
         text,
         history,

@@ -271,9 +271,9 @@ def execute_memory_tool(
     if name == "self_fix":
         return execute_self_fix(arguments)
     if name == "read_file":
-        return execute_read_file(arguments)
+        return execute_read_file(arguments, context=context)
     if name == "list_files":
-        return execute_list_files_v3(arguments)
+        return execute_list_files_v3(arguments, context=context)
     if name == "discover_tools":
         return execute_discover_tools(arguments)
     if name == "sense_environment":
