@@ -86,5 +86,21 @@ shell/node_modules/
 desktop_runtime/
 desktop_runtime_35/node_modules/
 desktop_runtime_35/package-lock.json
+desktop_runtime_35/vendor_runtime/
 desktop_runtime_35/dist/
 static/live2d/*/
+/Cache/
+/Code Cache/
+/GPUCache/
+/DawnGraphiteCache/
+/DawnWebGPUCache/
+/Local Storage/
+/Session Storage/
+/Shared Dictionary/
+/Network/
+/blob_storage/
+/Dictionaries/
+/Local State
+/Preferences
+/SharedStorage
+/DIPS

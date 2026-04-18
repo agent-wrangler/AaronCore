@@ -131,10 +131,6 @@ Then:
 4. Return to the repo root and start AaronCore:
    - `start_aaroncore.bat`
 
-Legacy compatibility note:
-
-- `start_nova.bat` still works as a thin wrapper for older local shortcuts or habits.
-
 If you only want the public site locally:
 
 - `cd website/official`

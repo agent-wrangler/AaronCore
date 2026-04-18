@@ -210,7 +210,7 @@ def qq_read_messages(group_name: str) -> str:
 def _connect_browser(port: int = 9333):
     """连接已打开的浏览器（需要用 --remote-debugging-port 启动）。"""
     if not _HAS_PLAYWRIGHT:
-        return None, None, "缺少依赖：需要 playwright（pip install playwright && playwright install chromium）"
+        return None, None, "Missing dependency: playwright (pip install playwright)"
 
     os.environ['NO_PROXY'] = 'localhost,127.0.0.1'
     os.environ['no_proxy'] = 'localhost,127.0.0.1'
@@ -223,7 +223,7 @@ def _connect_browser(port: int = 9333):
         browser = pw.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
         return pw, browser, None
     except Exception as e:
-        return None, None, f"连接浏览器失败：{e}。请用 --remote-debugging-port={port} 启动浏览器"
+        return None, None, f"Browser connection failed: {e}. Launch Chrome, Edge, or Brave with --remote-debugging-port={port}"
 
 
 def web_chat(site: str, message: str, port: int = 9333, rounds: int = 1, original_goal: str = "", duration_sec: int = 0) -> str:
