@@ -38,34 +38,6 @@ CALL_ME_BLOCKERS = (
     "\u5904\u7406",
     "\u5e2e\u6211",
 )
-
-INTERACTION_DIRECTIVE_PREFIXES = (
-    "\u4e0d\u8981",
-    "\u522b",
-    "\u4ee5\u540e",
-    "\u4e0b\u6b21",
-    "\u8bb0\u4f4f",
-    "\u8bf7",
-    "\u56de\u7b54\u65f6",
-    "\u56de\u590d\u65f6",
-    "\u5982\u679c\u6211",
-    "\u5982\u679c\u7528\u6237",
-)
-
-INTERACTION_ACTION_HINTS = (
-    "\u8c03\u7528\u5de5\u5177",
-    "\u6587\u672c\u91cc\u6a21\u62df",
-    "\u5047\u88c5\u6267\u884c",
-    "\u76f4\u63a5\u6267\u884c",
-    "\u5148\u95ee\u6211",
-    "\u5148\u786e\u8ba4",
-    "\u56de\u7b54",
-    "\u56de\u590d",
-    "\u79f0\u547c",
-    "\u53eb\u6211",
-    "\u95ee\u6211",
-)
-
 PREFERENCE_EXPLICIT_PREFIXES = (
     "\u6211\u559c\u6b22",
     "\u6211\u4e0d\u559c\u6b22",
@@ -73,33 +45,15 @@ PREFERENCE_EXPLICIT_PREFIXES = (
     "\u6211\u504f\u597d",
     "\u6211\u66f4\u559c\u6b22",
 )
-
-PREFERENCE_STYLE_HINTS = (
-    "\u804a\u5929",
-    "\u56de\u590d",
-    "\u56de\u7b54",
-    "\u8bed\u6c14",
-    "\u98ce\u683c",
-    "\u6a21\u677f\u5316",
-    "\u5b98\u65b9",
-    "\u5e9f\u8bdd",
-    "\u91cd\u590d\u786e\u8ba4",
-    "\u81ea\u7136\u4e00\u70b9",
-    "\u7b80\u6d01\u4e00\u70b9",
-    "\u76f4\u63a5\u4e00\u70b9",
-    "\u53eb\u6211",
-    "\u79f0\u547c\u6211",
-)
-
 META_DISCUSSION_HINTS = (
     "agent",
+    "llm",
     "\u67b6\u6784",
     "\u8bed\u4e49",
     "\u6279\u6b21",
     "\u56de\u704c",
     "\u8bbe\u8ba1",
     "\u6d41\u7a0b",
-    "\u7cfb\u7edf",
     "\u4e3b\u94fe",
     "\u8def\u7531",
     "\u8bb0\u5fc6",
@@ -112,6 +66,30 @@ META_DISCUSSION_HINTS = (
     "l6",
     "l7",
     "l8",
+)
+LOCAL_INTERACTION_DIRECTIVE_CUES = (
+    "\u5fc5\u987b",
+    "\u52a1\u5fc5",
+    "\u4e0d\u8981",
+    "\u522b",
+    "\u8bf7\u5148",
+    "\u5148",
+)
+LOCAL_INTERACTION_EXECUTION_CUES = (
+    "\u8c03\u7528\u5de5\u5177",
+    "\u6587\u672c\u91cc\u6a21\u62df",
+    "\u5047\u88c5\u6267\u884c",
+    "\u76f4\u63a5\u6267\u884c",
+    "\u5148\u95ee\u6211",
+    "\u5148\u786e\u8ba4",
+    "\u95ee\u6211",
+)
+EXPLICIT_CONFIRM_EXECUTION_RE = re.compile(
+    r"^(?:\u8bf7|\u4ee5\u540e\u8bf7|\u4e0b\u6b21\u8bf7|\u8bb0\u4f4f)?"
+    r"[^\n\uff0c,\u3002\uff01!\uff1f?]{0,12}"
+    r"(?:\u5148(?:\u95ee\u6211|\u786e\u8ba4)|\u95ee\u6211(?:\u540e)?|\u786e\u8ba4(?:\u540e)?)"
+    r"[^\n\uff0c,\u3002\uff01!\uff1f?]{0,16}"
+    r"(?:\u518d(?:\u6267\u884c|\u64cd\u4f5c|\u5904\u7406)|\u6267\u884c|\u64cd\u4f5c)$"
 )
 
 
@@ -202,7 +180,12 @@ def contains_any(text: str, needles: tuple[str, ...]) -> bool:
 
 def looks_like_meta_discussion(text: str) -> bool:
     lowered = str(text or "").strip().lower()
-    return contains_any(lowered, META_DISCUSSION_HINTS)
+    if not lowered:
+        return False
+    hits = sum(1 for needle in META_DISCUSSION_HINTS if needle in lowered)
+    if hits >= 2:
+        return True
+    return "\n" in str(text or "") and hits >= 1
 
 
 def is_explicit_call_me_phrase(text: str) -> bool:
@@ -220,14 +203,13 @@ def looks_like_explicit_interaction_shape(text: str) -> bool:
         return False
     if is_explicit_call_me_phrase(compact):
         return True
-    has_action = contains_any(compact, INTERACTION_ACTION_HINTS)
-    if not has_action:
+    if EXPLICIT_CONFIRM_EXECUTION_RE.fullmatch(compact):
+        return True
+    has_execution_cue = contains_any(compact, LOCAL_INTERACTION_EXECUTION_CUES)
+    if not has_execution_cue:
         return False
-    has_directive = compact.startswith(INTERACTION_DIRECTIVE_PREFIXES) or contains_any(
-        compact,
-        ("\u5fc5\u987b", "\u4f18\u5148", "\u5148"),
-    )
-    return has_directive
+    stripped = re.sub(r"^(?:\u4f60|\u8bf7\u4f60|\u4f60\u8981|\u4f60\u5f97)", "", compact).strip()
+    return stripped.startswith(LOCAL_INTERACTION_DIRECTIVE_CUES)
 
 
 def looks_like_explicit_preference_shape(text: str) -> bool:
@@ -236,13 +218,7 @@ def looks_like_explicit_preference_shape(text: str) -> bool:
         return False
     if is_explicit_call_me_phrase(compact):
         return True
-    if compact.startswith(PREFERENCE_EXPLICIT_PREFIXES):
-        return True
-    if compact.startswith("\u5e0c\u671b\u4f60") and contains_any(compact, PREFERENCE_STYLE_HINTS):
-        return True
-    if compact.startswith(("\u522b\u592a", "\u4e0d\u8981\u592a")) and contains_any(compact, PREFERENCE_STYLE_HINTS):
-        return True
-    return False
+    return compact.startswith(PREFERENCE_EXPLICIT_PREFIXES)
 
 
 def normalize_interaction_rule_text(text: str) -> str:

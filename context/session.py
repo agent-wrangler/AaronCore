@@ -31,6 +31,8 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
     blocker = _short_text((working_state or {}).get("blocker"), 120)
     recent_progress = _short_text((working_state or {}).get("recent_progress"), 120)
     summary = _short_text((working_state or {}).get("summary"), 160)
+    last_action_summary = _short_text((working_state or {}).get("last_action_summary"), 160)
+    last_result_summary = _short_text((working_state or {}).get("last_result_summary"), 160)
     verification_detail = _short_text((working_state or {}).get("verification_detail"), 160)
     query_mode = _short_text((working_state or {}).get("query_mode"), 32)
     runtime_status = _short_text((working_state or {}).get("runtime_status"), 32)
@@ -98,5 +100,5 @@ def extract_session_context(history: list, current_input: str = "") -> dict:
         "current_focus": current_focus,
         "resume_point": resume_point,
         "working_state": working_state,
-        "working_summary": summary or verification_detail or recent_progress or blocker,
+        "working_summary": summary or last_action_summary or last_result_summary or verification_detail or recent_progress or blocker,
     }

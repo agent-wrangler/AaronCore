@@ -217,22 +217,24 @@ def _execute_self_fix(arguments: dict) -> dict:
         project_root=_Path(__file__).resolve().parent.parent,
     )
 
-def _execute_read_file(arguments: dict) -> dict:
+def _execute_read_file(arguments: dict, context: dict | None = None) -> dict:
     return _inspection_tool_runtime.execute_read_file(
         arguments,
         allowed_prefixes=_SELF_FIX_ALLOWED,
         resolve_user_file_target=_resolve_user_file_target,
         is_allowed_user_target=_is_allowed_user_target,
         debug_write=_debug_write,
+        context=context,
         project_root=_Path(__file__).resolve().parent.parent,
     )
 
-def _execute_list_files_v3(arguments: dict) -> dict:
+def _execute_list_files_v3(arguments: dict, context: dict | None = None) -> dict:
     return _inspection_tool_runtime.execute_list_files_v3(
         arguments,
         resolve_user_file_target=_resolve_user_file_target,
         normalize_user_special_path=_normalize_user_special_path,
         is_allowed_user_target=_is_allowed_user_target,
+        context=context,
         project_root=_Path(__file__).resolve().parent.parent,
     )
 

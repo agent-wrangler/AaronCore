@@ -140,6 +140,35 @@ class MiniMaxOpenAICompatTests(unittest.TestCase):
         self.assertEqual(assistant_messages[0]["reasoning_details"][0]["text"], "Inspecting the task.")
         self.assertTrue(any(isinstance(chunk, str) and chunk == "Done." for chunk in chunks))
 
+    def test_unified_reply_with_tools_stream_attaches_uploaded_image_context_on_first_turn(self):
+        seen_messages = []
+
+        def fake_stream(_cfg, messages, **_kwargs):
+            seen_messages.append(messages)
+            yield "Done."
+            yield {"_usage": {"prompt_tokens": 2, "completion_tokens": 1}}
+
+        bundle = {
+            "user_input": "what is in this screenshot",
+            "image": "abc123",
+            "images": ["abc123"],
+            "l1": [],
+            "l4": {},
+            "dialogue_context": "",
+        }
+
+        with patch.object(reply_formatter_module, "_llm_call_stream", side_effect=fake_stream), patch.object(
+            reply_formatter_module, "_build_tool_call_system_prompt", return_value="system"
+        ), patch(
+            "core.vision.build_uploaded_image_prompt_context",
+            return_value="[LOCAL_IMAGE_CONTEXT]\nImage 1: settings screen.",
+        ):
+            chunks = list(reply_formatter_module.unified_reply_with_tools_stream(bundle, [], lambda *_args: {}))
+
+        self.assertIn("[LOCAL_IMAGE_CONTEXT]", seen_messages[0][-1]["content"])
+        self.assertNotIn("image_url", str(seen_messages[0]))
+        self.assertTrue(any(isinstance(chunk, str) and chunk == "Done." for chunk in chunks))
+
 
 if __name__ == "__main__":
     unittest.main()

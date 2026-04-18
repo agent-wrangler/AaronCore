@@ -95,6 +95,7 @@ def task_to_working_state(
     task_to_plan_snapshot,
     extract_task_fs_target,
     get_structured_fs_target_for_task_plan,
+    get_child_tasks,
 ) -> dict | None:
     return _views.task_to_working_state(
         task,
@@ -102,6 +103,7 @@ def task_to_working_state(
         task_to_plan_snapshot=task_to_plan_snapshot,
         extract_task_fs_target=extract_task_fs_target,
         get_structured_fs_target_for_task_plan=get_structured_fs_target_for_task_plan,
+        get_child_tasks=get_child_tasks,
     )
 
 

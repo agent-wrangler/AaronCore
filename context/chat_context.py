@@ -197,11 +197,29 @@ def build_session_context_text(l2_session: dict) -> str:
     if working_state:
         goal = str(working_state.get("goal") or "").strip()
         current_step = str(working_state.get("current_step") or "").strip()
+        current_step_task = working_state.get("current_step_task") if isinstance(working_state.get("current_step_task"), dict) else {}
         working_summary = str(l2_session.get("working_summary") or working_state.get("summary") or "").strip()
         recent_progress = str(working_state.get("recent_progress") or "").strip()
         blocker = str(working_state.get("blocker") or "").strip()
         next_step = str(working_state.get("next_step") or "").strip()
         fs_target = str(working_state.get("fs_target") or "").strip()
+        last_tool = str(working_state.get("last_tool") or "").strip()
+        last_action_summary = str(working_state.get("last_action_summary") or "").strip()
+        last_result_summary = str(working_state.get("last_result_summary") or "").strip()
+        execution_lane = str(working_state.get("execution_lane") or "").strip()
+        attempt_kind = str(working_state.get("attempt_kind") or "").strip()
+        previous_tool = str(working_state.get("previous_tool") or "").strip()
+        parallel_tools = [
+            str(name or "").strip()
+            for name in (working_state.get("parallel_tools") or [])
+            if str(name or "").strip()
+        ]
+        try:
+            parallel_size = int(working_state.get("parallel_size") or 0)
+        except Exception:
+            parallel_size = 0
+        if parallel_size <= 0:
+            parallel_size = len(parallel_tools)
         if goal:
             parts.append(f"当前工作目标：{goal}")
         if current_step:
@@ -210,6 +228,24 @@ def build_session_context_text(l2_session: dict) -> str:
             parts.append(f"工作摘要：{working_summary}")
         if recent_progress and recent_progress != current_step:
             parts.append(f"最近进展：{recent_progress}")
+        if last_tool:
+            parts.append(f"最近工具：{last_tool}")
+        if last_action_summary and last_action_summary not in {working_summary, recent_progress, current_step}:
+            parts.append(f"最近操作：{last_action_summary}")
+        if last_result_summary and last_result_summary not in {last_action_summary, working_summary, blocker}:
+            parts.append(f"最近结果：{last_result_summary}")
+        if execution_lane:
+            parts.append(f"当前执行车道：{execution_lane}")
+        if attempt_kind:
+            parts.append(f"最近尝试类型：{attempt_kind}")
+        if previous_tool and previous_tool != last_tool:
+            parts.append(f"上一个工具：{previous_tool}")
+        if parallel_tools and parallel_size > 1:
+            parts.append(f"最近并行工具：{', '.join(parallel_tools[:4])}")
+        if str(current_step_task.get("status") or "").strip():
+            parts.append(f"当前步骤子任务状态：{str(current_step_task.get('status') or '').strip()}")
+        if str(current_step_task.get("runtime_status") or "").strip():
+            parts.append(f"当前步骤执行态：{str(current_step_task.get('runtime_status') or '').strip()}")
         if blocker:
             parts.append(f"当前阻塞：{blocker}")
         if next_step and next_step != current_step:
@@ -264,6 +300,24 @@ def build_active_task_context(
     runtime_status = str((working_state.get("runtime_status") if working_state else "") or "").strip()
     verification_status = str((working_state.get("verification_status") if working_state else "") or "").strip()
     verification_detail = str((working_state.get("verification_detail") if working_state else "") or "").strip()
+    last_tool = str((working_state.get("last_tool") if working_state else "") or "").strip()
+    last_action_summary = str((working_state.get("last_action_summary") if working_state else "") or "").strip()
+    last_result_summary = str((working_state.get("last_result_summary") if working_state else "") or "").strip()
+    current_step_task = (working_state.get("current_step_task") if working_state and isinstance(working_state.get("current_step_task"), dict) else {})
+    execution_lane = str((working_state.get("execution_lane") if working_state else "") or "").strip()
+    attempt_kind = str((working_state.get("attempt_kind") if working_state else "") or "").strip()
+    previous_tool = str((working_state.get("previous_tool") if working_state else "") or "").strip()
+    parallel_tools = [
+        str(name or "").strip()
+        for name in ((working_state.get("parallel_tools") if working_state else []) or [])
+        if str(name or "").strip()
+    ]
+    try:
+        parallel_size = int((working_state.get("parallel_size") if working_state else 0) or 0)
+    except Exception:
+        parallel_size = 0
+    if parallel_size <= 0:
+        parallel_size = len(parallel_tools)
 
     if task_plan and items:
         current_item = next(
@@ -348,6 +402,24 @@ def build_active_task_context(
         lines.append(f"Current plan item: {current_item_id}")
     if recent_progress and recent_progress != current_step:
         lines.append(f"Recent progress: {recent_progress}")
+    if last_tool:
+        lines.append(f"Latest tool used: {last_tool}")
+    if last_action_summary and last_action_summary not in {summary, current_step, recent_progress}:
+        lines.append(f"Latest action summary: {last_action_summary}")
+    if last_result_summary and last_result_summary not in {summary, blocker, last_action_summary}:
+        lines.append(f"Latest result summary: {last_result_summary}")
+    if execution_lane:
+        lines.append(f"Current execution lane: {execution_lane}")
+    if attempt_kind:
+        lines.append(f"Latest attempt kind: {attempt_kind}")
+    if previous_tool and previous_tool != last_tool:
+        lines.append(f"Previous tool before latest step: {previous_tool}")
+    if parallel_tools and parallel_size > 1:
+        lines.append(f"Latest parallel tool batch: {', '.join(parallel_tools[:4])}")
+    if str(current_step_task.get("status") or "").strip():
+        lines.append(f"Current plan-step task status: {str(current_step_task.get('status') or '').strip()}")
+    if str(current_step_task.get("runtime_status") or "").strip():
+        lines.append(f"Current plan-step runtime status: {str(current_step_task.get('runtime_status') or '').strip()}")
     if blocker:
         lines.append(f"Current blocker: {blocker}")
     if runtime_status == "interrupted":

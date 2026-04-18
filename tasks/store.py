@@ -539,6 +539,7 @@ def task_to_working_state(task: dict | None) -> dict | None:
         task_to_plan_snapshot=task_to_plan_snapshot,
         extract_task_fs_target=_extract_task_fs_target,
         get_structured_fs_target_for_task_plan=get_structured_fs_target_for_task_plan,
+        get_child_tasks=get_child_tasks,
     )
 
 
