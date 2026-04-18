@@ -87,6 +87,56 @@ class ConfigRuntimeTests(unittest.TestCase):
                 "sk-live-abcdef",
             )
 
+    def test_load_raw_config_falls_back_to_template_when_external_public_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            template_path = Path(tmpdir) / "repo" / "brain" / "llm_config.json"
+            public_path = Path(tmpdir) / "data" / "brain" / "llm_config.json"
+            local_path = Path(tmpdir) / "data" / "brain" / "llm_config.local.json"
+            template_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            template_path.write_text(
+                json.dumps(
+                    {
+                        "models": {
+                            "deepseek-chat": {
+                                "api_key": "",
+                                "base_url": "https://api.deepseek.com/v1",
+                                "model": "deepseek-chat",
+                                "transport": "openai_api",
+                                "vision": False,
+                            }
+                        },
+                        "default": "deepseek-chat",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            local_path.write_text(
+                json.dumps(
+                    {"models": {"deepseek-chat": {"api_key": "sk-live-from-local"}}},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(config_runtime, "LLM_CONFIG_FILE", public_path), patch.object(
+                config_runtime, "LLM_CONFIG_TEMPLATE_FILE", template_path
+            ), patch.object(config_runtime, "LLM_LOCAL_CONFIG_FILE", local_path):
+                merged = config_runtime._load_raw_config()
+
+            self.assertEqual(merged["default"], "deepseek-chat")
+            self.assertEqual(
+                merged["models"]["deepseek-chat"]["base_url"],
+                "https://api.deepseek.com/v1",
+            )
+            self.assertEqual(
+                merged["models"]["deepseek-chat"]["api_key"],
+                "sk-live-from-local",
+            )
+
     def test_normalize_raw_config_marks_anthropic_message_mode(self):
         normalized = config_runtime._normalize_raw_config(
             {

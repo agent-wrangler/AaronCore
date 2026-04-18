@@ -49,6 +49,8 @@ async def set_chat_config(request: Request):
             patch["l1_recent_token_budget_preset"] = body.get("l1_recent_token_budget_preset")
         elif "preset" in body:
             patch["l1_recent_token_budget_preset"] = body.get("preset")
+        if "vision_auto_enabled" in body:
+            patch["vision_auto_enabled"] = bool(body.get("vision_auto_enabled"))
     config = _save_chat_config(patch)
     return {"ok": True, **_build_chat_config_payload(config)}
 

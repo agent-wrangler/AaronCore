@@ -38,6 +38,35 @@ class ModelRuntimeTests(unittest.TestCase):
         self.assertEqual(new_cfg["model"], "deepseek-chat")
         self.assertEqual(saved["default"], "deepseek-chat")
 
+    def test_pick_vision_model_config_prefers_capable_model(self):
+        picked = model_runtime.pick_vision_model_config(
+            {"model": "deepseek-chat", "vision": False},
+            {
+                "deepseek-chat": {"model": "deepseek-chat", "vision": False},
+                "gpt-4o": {"model": "gpt-4o", "vision": True},
+            },
+        )
+
+        self.assertEqual(picked, {"model": "gpt-4o", "vision": True})
+
+    def test_vision_llm_call_skips_when_no_vision_model_exists(self):
+        calls = []
+
+        def _fake_openai_call(*args, **kwargs):
+            calls.append((args, kwargs))
+            return {"content": "should-not-run", "usage": {}}
+
+        result = model_runtime.vision_llm_call(
+            "describe",
+            images=["abc123"],
+            llm_config={"model": "deepseek-chat", "vision": False},
+            models_config={"deepseek-chat": {"model": "deepseek-chat", "vision": False}},
+            llm_call_openai_fn=_fake_openai_call,
+        )
+
+        self.assertEqual(result, "")
+        self.assertEqual(calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()

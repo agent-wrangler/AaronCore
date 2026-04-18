@@ -262,6 +262,7 @@ def _normalize_chat_config(data: dict | None) -> dict:
     payload = data if isinstance(data, dict) else {}
     preset = str(payload.get("l1_recent_token_budget_preset") or "").strip().lower()
     budget = payload.get("l1_recent_token_budget")
+    vision_auto_enabled = bool(payload.get("vision_auto_enabled", False))
     if preset not in CHAT_L1_RECENT_TOKEN_BUDGET_PRESETS:
         matched_preset = ""
         try:
@@ -280,6 +281,7 @@ def _normalize_chat_config(data: dict | None) -> dict:
     return {
         "l1_recent_token_budget_preset": preset,
         "l1_recent_token_budget": resolved_budget,
+        "vision_auto_enabled": vision_auto_enabled,
     }
 
 

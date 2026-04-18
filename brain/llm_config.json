@@ -6,10 +6,10 @@
       "transport": "openai_api",
       "base_url": "https://api.deepseek.com/v1",
       "api_key": "",
+      "provider_key": "deepseek",
       "provider": "openai",
       "api_mode": "chat_completions",
-      "auth_mode": "api_key",
-      "provider_key": "deepseek"
+      "auth_mode": "api_key"
     },
     "gpt-4o": {
       "base_url": "codex://local",

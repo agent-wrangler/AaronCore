@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from . import provider_runtime as _provider_runtime
-from storage.paths import LLM_CONFIG_FILE, LLM_LOCAL_CONFIG_FILE
+from storage.paths import LLM_CONFIG_FILE, LLM_CONFIG_TEMPLATE_FILE, LLM_LOCAL_CONFIG_FILE
 
 
 DEFAULT_ASSISTANT_SYSTEM_PROMPT = "You are the assistant for the current conversation."
@@ -47,6 +47,8 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 def _load_raw_config() -> dict:
     public_config = _read_json_dict(LLM_CONFIG_FILE)
+    if not public_config and LLM_CONFIG_FILE != LLM_CONFIG_TEMPLATE_FILE:
+        public_config = _read_json_dict(LLM_CONFIG_TEMPLATE_FILE)
     local_config = _read_json_dict(LLM_LOCAL_CONFIG_FILE)
     base_config = public_config or deepcopy(_DEFAULT_RAW_CONFIG)
     return _deep_merge(base_config, local_config)

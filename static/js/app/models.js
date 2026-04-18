@@ -209,14 +209,10 @@ function _sidebarSwitchModel(mid){
 function updateImageBtnState(){
  var btn=document.getElementById('imageUploadBtn');
  if(!btn)return;
- var models=window._novaModels||{};
- var current=window._novaCurrentModel||'';
- // 只要有任何一个模型支持 vision 就启用（会自动 fallback）
- var anyVision=Object.keys(models).some(function(k){return models[k].vision;});
  btn.disabled=false;
- btn.classList.toggle('is-inactive', !anyVision);
- btn.setAttribute('aria-disabled', anyVision ? 'false' : 'true');
- btn.title=anyVision?t('model.upload.title'):t('model.no.vision');
+ btn.classList.remove('is-inactive');
+ btn.setAttribute('aria-disabled', 'false');
+ btn.title=t('model.upload.title');
 }
 
 function loadStatsData(){

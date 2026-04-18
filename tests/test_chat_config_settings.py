@@ -38,6 +38,7 @@ class ChatConfigSettingsTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["config"]["l1_recent_token_budget_preset"], "balanced")
         self.assertEqual(payload["config"]["l1_recent_token_budget"], 4000)
+        self.assertFalse(payload["config"]["vision_auto_enabled"])
         self.assertEqual(
             [item["id"] for item in payload["presets"]],
             ["save", "balanced", "deep", "immersive"],
@@ -59,6 +60,7 @@ class ChatConfigSettingsTests(unittest.TestCase):
             {
                 "l1_recent_token_budget_preset": "immersive",
                 "l1_recent_token_budget": 8000,
+                "vision_auto_enabled": False,
             },
         )
 
@@ -71,6 +73,26 @@ class ChatConfigSettingsTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["config"]["l1_recent_token_budget_preset"], "balanced")
         self.assertEqual(payload["config"]["l1_recent_token_budget"], 4000)
+        self.assertFalse(payload["config"]["vision_auto_enabled"])
+
+    def test_post_chat_config_can_enable_vision_autostart(self):
+        client = self._build_client()
+
+        response = client.post("/chat/config", json={"vision_auto_enabled": True})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["config"]["vision_auto_enabled"])
+        persisted = json.loads(self._chat_config_file.read_text(encoding="utf-8"))
+        self.assertEqual(
+            persisted,
+            {
+                "l1_recent_token_budget_preset": "balanced",
+                "l1_recent_token_budget": 4000,
+                "vision_auto_enabled": True,
+            },
+        )
 
     def test_chat_uses_runtime_chat_config_budget(self):
         seen_budgets = []

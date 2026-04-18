@@ -94,6 +94,15 @@ def raw_llm(
     return result.get("content", "")
 
 
+def pick_vision_model_config(llm_config: dict | None, models_config: dict | None) -> dict | None:
+    if isinstance(llm_config, dict) and bool(llm_config.get("vision", False)):
+        return llm_config
+    for cfg in (models_config or {}).values():
+        if isinstance(cfg, dict) and bool(cfg.get("vision", False)):
+            return cfg
+    return None
+
+
 def vision_llm_call(
     prompt: str,
     images: list | None = None,
@@ -105,10 +114,9 @@ def vision_llm_call(
     images = images or []
     use_cfg = llm_config
     if images:
-        for _, cfg in models_config.items():
-            if cfg.get("vision", False):
-                use_cfg = cfg
-                break
+        use_cfg = pick_vision_model_config(llm_config, models_config)
+        if not isinstance(use_cfg, dict):
+            return ""
 
     if images:
         user_content = [{"type": "text", "text": prompt}]
