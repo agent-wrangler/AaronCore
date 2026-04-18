@@ -8,6 +8,10 @@ const fs = require('fs');
 const path = require('path');
 const net = require('net');
 const { spawn, spawnSync } = require('child_process');
+const {
+  resolveAaronCoreDataDir,
+  resolveElectronUserDataDir,
+} = require('./runtime_paths');
 
 Menu.setApplicationMenu(null);
 
@@ -38,35 +42,10 @@ function isAaronCoreRepoRoot(candidate) {
   }
 }
 
-function resolvePackagedDevRoot() {
-  const candidates = [];
+function resolvePackagedOverrideRoot() {
   const explicitDevRoot = process.env.AARONCORE_DEV_ROOT || process.env.NOVACORE_DEV_ROOT;
-  if (explicitDevRoot) {
-    candidates.push(explicitDevRoot);
-  }
-
-  if (process.platform === 'win32') {
-    const exeDir = path.dirname(process.execPath);
-    const desktopDir = path.dirname(exeDir);
-    const desktopParentDir = path.dirname(desktopDir);
-    const desktopName = path.basename(desktopDir);
-    if (desktopName.toLowerCase().endsWith('desktop')) {
-      const repoName = desktopName.slice(0, -'Desktop'.length);
-      if (repoName) {
-        candidates.push(path.join(desktopParentDir, repoName));
-      }
-    }
-
-    // Compatibility for repo/app renames such as NovaCore -> AaronCore.
-    candidates.push(path.join(desktopParentDir, 'AaronCore'));
-    candidates.push(path.join(desktopParentDir, 'NovaCore'));
-  }
-
-  for (const candidate of candidates) {
-    const resolved = resolveExistingRoot(candidate);
-    if (isAaronCoreRepoRoot(resolved)) return resolved;
-  }
-  return '';
+  const resolved = resolveExistingRoot(explicitDevRoot);
+  return isAaronCoreRepoRoot(resolved) ? resolved : '';
 }
 
 function resolveRootDir() {
@@ -75,28 +54,78 @@ function resolveRootDir() {
     return explicitRoot;
   }
   if (app.isPackaged) {
-    const devRoot = resolvePackagedDevRoot();
-    if (devRoot) return devRoot;
+    const overrideRoot = resolvePackagedOverrideRoot();
+    if (overrideRoot) return overrideRoot;
+    const packagedRoot = resolveExistingRoot(path.join(process.resourcesPath, 'aaroncore'));
+    if (packagedRoot && isAaronCoreRepoRoot(packagedRoot)) {
+      return packagedRoot;
+    }
+    const legacyPackagedRoot = resolveExistingRoot(path.join(process.resourcesPath, 'novacore'));
+    if (legacyPackagedRoot && isAaronCoreRepoRoot(legacyPackagedRoot)) {
+      return legacyPackagedRoot;
+    }
   }
   return resolveExistingRoot(path.resolve(__dirname, '..'));
 }
 
 const ROOT_DIR = resolveRootDir();
+const DATA_DIR = resolveAaronCoreDataDir({
+  explicitDataDir: process.env.AARONCORE_DATA_DIR || process.env.NOVACORE_DATA_DIR,
+  explicitHomeDir: process.env.AARONCORE_HOME_DIR || process.env.NOVACORE_HOME_DIR,
+  homeDir: app.getPath('home'),
+  isPackaged: app.isPackaged,
+  portableExecutableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+  processExecPath: process.execPath,
+  productSlug: 'aaroncore',
+}) || ROOT_DIR;
+const USER_DATA_DIR = resolveElectronUserDataDir({
+  explicitUserDataDir: process.env.AARONCORE_USER_DATA_DIR || process.env.NOVACORE_USER_DATA_DIR,
+  appDataDir: app.getPath('appData'),
+  isPackaged: app.isPackaged,
+  dataDir: DATA_DIR,
+  rootDir: ROOT_DIR,
+  portableExecutableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+  processExecPath: process.execPath,
+  productName: 'AaronCore',
+});
+if (USER_DATA_DIR) {
+  try {
+    fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+  } catch (_err) {
+  }
+  app.setPath('userData', USER_DATA_DIR);
+}
 process.env.AARONCORE_ROOT = ROOT_DIR;
 process.env.NOVACORE_ROOT = ROOT_DIR;
+process.env.AARONCORE_DATA_DIR = DATA_DIR;
+process.env.NOVACORE_DATA_DIR = DATA_DIR;
+process.env.AARONCORE_USER_DATA_DIR = USER_DATA_DIR;
+process.env.NOVACORE_USER_DATA_DIR = USER_DATA_DIR;
 const BACKEND_ENTRY = process.env.AARONCORE_BACKEND_ENTRY || process.env.NOVACORE_BACKEND_ENTRY || path.join(ROOT_DIR, 'agent_final.py');
 process.env.AARONCORE_BACKEND_ENTRY = BACKEND_ENTRY;
 process.env.NOVACORE_BACKEND_ENTRY = BACKEND_ENTRY;
 const WINDOW_ICON = path.join(ROOT_DIR, 'static', 'icon', 'aaroncore.ico');
+const BUNDLED_RUNTIME_DIR = app.isPackaged
+  ? path.join(process.resourcesPath, 'aaroncore', 'runtime')
+  : path.join(__dirname, 'vendor_runtime');
+const BUNDLED_PYTHON = path.join(BUNDLED_RUNTIME_DIR, 'python', 'python.exe');
+const BUNDLED_PLAYWRIGHT_BROWSERS = path.join(BUNDLED_RUNTIME_DIR, 'ms-playwright');
 const LOCAL_PYTHON = 'C:\\Program Files\\Python311\\python.exe';
 const BACKEND_PORT = 8090;
-const LOG_DIR = path.join(ROOT_DIR, 'logs');
+const LOG_DIR = path.join(DATA_DIR, 'logs');
 const SHELL_LOG_FILE = path.join(LOG_DIR, 'desktop_shell.log');
 const BACKEND_OUT_LOG_FILE = path.join(LOG_DIR, 'desktop_backend.out.log');
 const BACKEND_ERR_LOG_FILE = path.join(LOG_DIR, 'desktop_backend.err.log');
 const MIN_PYTHON_MAJOR = 3;
 const MIN_PYTHON_MINOR = 10;
-const REQUIRED_PYTHON_MODULES = ['fastapi', 'uvicorn', 'requests'];
+const REQUIRED_PYTHON_MODULES = ['fastapi', 'uvicorn', 'requests', 'playwright'];
+
+if (fs.existsSync(BUNDLED_PLAYWRIGHT_BROWSERS)) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = BUNDLED_PLAYWRIGHT_BROWSERS;
+}
+if (fs.existsSync(BUNDLED_PYTHON)) {
+  process.env.PYTHONNOUSERSITE = '1';
+}
 
 function ensureLogDir() {
   try {
@@ -160,6 +189,9 @@ function buildPythonCandidates() {
     });
   };
 
+  if (fs.existsSync(BUNDLED_PYTHON)) {
+    pushCandidate(BUNDLED_PYTHON, [], 'bundled python');
+  }
   if (process.env.AARONCORE_PYTHON) {
     pushCandidate(process.env.AARONCORE_PYTHON, [], 'AARONCORE_PYTHON');
   }

@@ -312,9 +312,16 @@ def _on_shown():
         _start_theme_watch()
         print(f"[desktop] ready, hwnd={hwnd}", flush=True)
         try:
-            from core.vision import init as vi, start as vs
-            from brain import vision_llm_call
-            vi(llm_call=vision_llm_call); vs()
+            from core.vision import can_autostart_background_capture as _can_autostart_background_capture
+
+            _vision_enabled, _vision_reason = _can_autostart_background_capture()
+            if _vision_enabled:
+                from core.vision import init as vi, start as vs
+                from brain import vision_llm_call
+                vi(llm_call=vision_llm_call)
+                vs()
+            else:
+                print(f"[desktop] vision skipped: {_vision_reason}", flush=True)
         except Exception as e:
             print(f"[desktop] vision: {e}", flush=True)
     threading.Thread(target=_do, daemon=True).start()

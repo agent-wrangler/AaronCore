@@ -1,5 +1,5 @@
 {
-  "name": "aaroncore-desktop-runtime-35",
+  "name": "aaroncore",
   "version": "1.0.0",
   "private": true,
   "description": "Desktop packaging wrapper for AaronCore",
@@ -7,9 +7,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --dir",
-    "dist:portable": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win portable",
-    "dist:nsis": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win nsis"
+    "prepare:runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\prepare-runtime.ps1",
+    "pack": "npm run prepare:runtime && set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --dir --config electron-builder.bundle.cjs",
+    "pack:thin": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --dir",
+    "dist:portable": "npm run prepare:runtime && set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win portable --config electron-builder.bundle.cjs",
+    "dist:portable:thin": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win portable",
+    "dist:nsis": "npm run prepare:runtime && set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win nsis --config electron-builder.bundle.cjs",
+    "dist:nsis:thin": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --win nsis"
   },
   "dependencies": {
     "electron-updater": "^6.6.2"
@@ -39,19 +43,82 @@
       },
       {
         "from": "../brain",
-        "to": "aaroncore/brain"
+        "to": "aaroncore/brain",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
+        "from": "../brain/llm_config.local.example.json",
+        "to": "aaroncore/brain/llm_config.local.json"
       },
       {
         "from": "../configs",
         "to": "aaroncore/configs"
       },
       {
+        "from": "../capability_registry",
+        "to": "aaroncore/capability_registry",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
+        "from": "../context",
+        "to": "aaroncore/context",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
         "from": "../core",
         "to": "aaroncore/core"
       },
       {
+        "from": "../decision",
+        "to": "aaroncore/decision",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
+        "from": "../feedback",
+        "to": "aaroncore/feedback",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
+        "from": "../mcp_integration",
+        "to": "aaroncore/mcp_integration",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
         "from": "../routes",
         "to": "aaroncore/routes"
+      },
+      {
+        "from": "../protocols",
+        "to": "aaroncore/protocols",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
       },
       {
         "from": "../shell",
@@ -70,12 +137,44 @@
         "to": "aaroncore/static"
       },
       {
+        "from": "../storage",
+        "to": "aaroncore/storage",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
+        "from": "../tasks",
+        "to": "aaroncore/tasks",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
         "from": "../tools",
         "to": "aaroncore/tools"
       },
       {
-        "from": "../memory/.gitkeep",
-        "to": "aaroncore/memory/.gitkeep"
+        "from": "../workers",
+        "to": "aaroncore/workers",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
+      },
+      {
+        "from": "../memory",
+        "to": "aaroncore/memory",
+        "filter": [
+          "**/*",
+          "!**/__pycache__{,/**}",
+          "!**/*.local.json"
+        ]
       },
       {
         "from": "../state_data/.gitkeep",
@@ -102,7 +201,10 @@
       ]
     },
     "nsis": {
-      "artifactName": "AaronCore-Setup-${version}.${ext}"
+      "artifactName": "AaronCore-Setup-${version}.${ext}",
+      "include": "build/installer.nsh",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

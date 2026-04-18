@@ -1,6 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const { app, dialog } = require('electron');
+const {
+  resolveAaronCoreDataDir,
+  resolveElectronUserDataDir,
+  resolvePackagedDataDir,
+} = require(
+  app.isPackaged
+    ? path.join(process.resourcesPath, 'aaroncore', 'shell', 'runtime_paths.js')
+    : path.join(__dirname, '..', 'shell', 'runtime_paths.js')
+);
 
 function resolveExistingRoot(candidate) {
   if (!candidate) return '';
@@ -26,57 +35,121 @@ function isAaronCoreRepoRoot(candidate) {
   }
 }
 
-// Packaged desktop builds still prefer a nearby development repo when it exists.
-// Example layout:
-// - exe dir:      C:\Users\example\AaronCoreDesktop\win-unpacked
-// - dev repo dir: C:\Users\example\AaronCore
-// This keeps the desktop app connected to the live workspace and its state_data
-// instead of silently falling back to packaged resources.
-function resolvePackagedDevRoot() {
-  const candidates = [];
+function resolvePackagedOverrideRoot() {
   const explicitDevRoot = process.env.AARONCORE_DEV_ROOT || process.env.NOVACORE_DEV_ROOT;
-  if (explicitDevRoot) {
-    candidates.push(explicitDevRoot);
-  }
-
-  const exeDir = path.dirname(process.execPath);
-  const desktopDir = path.dirname(exeDir);
-  const desktopParentDir = path.dirname(desktopDir);
-  const desktopName = path.basename(desktopDir);
-  if (desktopName.toLowerCase().endsWith('desktop')) {
-    const repoName = desktopName.slice(0, -'Desktop'.length);
-    if (repoName) {
-      candidates.push(path.join(desktopParentDir, repoName));
-    }
-  }
-
-  // Compatibility for repo/app renames such as NovaCore -> AaronCore.
-  candidates.push(path.join(desktopParentDir, 'AaronCore'));
-  candidates.push(path.join(desktopParentDir, 'NovaCore'));
-
-  for (const candidate of candidates) {
-    const resolved = resolveExistingRoot(candidate);
-    if (isAaronCoreRepoRoot(resolved)) return resolved;
-  }
-  return '';
+  const resolved = resolveExistingRoot(explicitDevRoot);
+  return isAaronCoreRepoRoot(resolved) ? resolved : '';
 }
 
 function resolveAaronCoreRoot() {
   const explicitRoot = resolveExistingRoot(process.env.AARONCORE_ROOT || process.env.NOVACORE_ROOT);
   if (isAaronCoreRepoRoot(explicitRoot)) return explicitRoot;
   if (app.isPackaged) {
-    // Resolution order for packaged exe:
-    // 1. explicit AARONCORE_DEV_ROOT (or legacy NOVACORE_DEV_ROOT)
-    // 2. sibling dev repo (strip Desktop suffix, then try AaronCore / NovaCore)
-    // 3. packaged resources/aaroncore fallback
-    const devRoot = resolvePackagedDevRoot();
-    if (devRoot) return devRoot;
-
+    const overrideRoot = resolvePackagedOverrideRoot();
+    if (overrideRoot) return overrideRoot;
     const packagedAaronCore = path.join(process.resourcesPath, 'aaroncore');
     if (isAaronCoreRepoRoot(packagedAaronCore)) return packagedAaronCore;
-    return path.join(process.resourcesPath, 'novacore');
+    const legacyPackagedRoot = path.join(process.resourcesPath, 'novacore');
+    if (isAaronCoreRepoRoot(legacyPackagedRoot)) return legacyPackagedRoot;
+    return packagedAaronCore;
   }
   return resolveExistingRoot(path.resolve(__dirname, '..'));
+}
+
+function ensureDir(target) {
+  if (!target) return;
+  fs.mkdirSync(target, { recursive: true });
+}
+
+function copyFileIfMissing(source, target) {
+  if (!source || !target) return;
+  if (!fs.existsSync(source) || fs.existsSync(target)) return;
+  ensureDir(path.dirname(target));
+  fs.copyFileSync(source, target);
+}
+
+function copyDirIfMissing(source, target) {
+  if (!source || !target) return;
+  if (!fs.existsSync(source) || fs.existsSync(target)) return;
+  ensureDir(path.dirname(target));
+  fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: false });
+}
+
+function migratePackagedData(dataDir) {
+  if (!app.isPackaged || !dataDir) return;
+  const packagedRoot = path.join(process.resourcesPath, 'aaroncore');
+  const legacyPackagedDataDir = resolvePackagedDataDir(process.execPath);
+
+  if (legacyPackagedDataDir && resolveExistingRoot(legacyPackagedDataDir) !== resolveExistingRoot(dataDir)) {
+    copyFileIfMissing(
+      path.join(legacyPackagedDataDir, 'brain', 'llm_config.json'),
+      path.join(dataDir, 'brain', 'llm_config.json'),
+    );
+    copyFileIfMissing(
+      path.join(legacyPackagedDataDir, 'brain', 'llm_config.local.json'),
+      path.join(dataDir, 'brain', 'llm_config.local.json'),
+    );
+    copyDirIfMissing(
+      path.join(legacyPackagedDataDir, 'state_data'),
+      path.join(dataDir, 'state_data'),
+    );
+    copyDirIfMissing(
+      path.join(legacyPackagedDataDir, 'logs'),
+      path.join(dataDir, 'logs'),
+    );
+  }
+
+  if (!isAaronCoreRepoRoot(packagedRoot)) return;
+
+  copyFileIfMissing(
+    path.join(packagedRoot, 'brain', 'llm_config.json'),
+    path.join(dataDir, 'brain', 'llm_config.json'),
+  );
+  copyFileIfMissing(
+    path.join(packagedRoot, 'brain', 'llm_config.local.json'),
+    path.join(dataDir, 'brain', 'llm_config.local.json'),
+  );
+  copyDirIfMissing(
+    path.join(packagedRoot, 'state_data'),
+    path.join(dataDir, 'state_data'),
+  );
+  copyDirIfMissing(
+    path.join(packagedRoot, 'logs'),
+    path.join(dataDir, 'logs'),
+  );
+}
+
+const aaroncoreRoot = resolveAaronCoreRoot();
+const aaroncoreDataDir = resolveAaronCoreDataDir({
+  explicitDataDir: process.env.AARONCORE_DATA_DIR || process.env.NOVACORE_DATA_DIR,
+  explicitHomeDir: process.env.AARONCORE_HOME_DIR || process.env.NOVACORE_HOME_DIR,
+  homeDir: app.getPath('home'),
+  isPackaged: app.isPackaged,
+  portableExecutableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+  processExecPath: process.execPath,
+  productSlug: 'aaroncore',
+});
+const aaroncoreUserDataDir = resolveElectronUserDataDir({
+  explicitUserDataDir: process.env.AARONCORE_USER_DATA_DIR || process.env.NOVACORE_USER_DATA_DIR,
+  appDataDir: app.getPath('appData'),
+  isPackaged: app.isPackaged,
+  dataDir: aaroncoreDataDir,
+  rootDir: aaroncoreRoot,
+  portableExecutableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+  processExecPath: process.execPath,
+  productName: 'AaronCore',
+});
+if (aaroncoreUserDataDir) {
+  ensureDir(aaroncoreUserDataDir);
+  app.setPath('userData', aaroncoreUserDataDir);
+  process.env.AARONCORE_USER_DATA_DIR = aaroncoreUserDataDir;
+  process.env.NOVACORE_USER_DATA_DIR = aaroncoreUserDataDir;
+}
+if (aaroncoreDataDir) {
+  process.env.AARONCORE_DATA_DIR = aaroncoreDataDir;
+  process.env.NOVACORE_DATA_DIR = aaroncoreDataDir;
+  ensureDir(aaroncoreDataDir);
+  migratePackagedData(aaroncoreDataDir);
 }
 
 function shouldEnableAutoUpdate() {
@@ -153,8 +226,6 @@ function setupAutoUpdate() {
     }, 15000);
   });
 }
-
-const aaroncoreRoot = resolveAaronCoreRoot();
 
 process.env.AARONCORE_ROOT = aaroncoreRoot;
 process.env.NOVACORE_ROOT = aaroncoreRoot;
