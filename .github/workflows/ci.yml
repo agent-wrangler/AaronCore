@@ -34,7 +34,26 @@ jobs:
           node-version: "20"
 
       - name: Run smoke regression suite
-        run: python -m unittest tests.test_chat_run_helpers tests.test_task_continuity tests.test_memory_tool_runtime tests.test_desktop_shell_paths
+        run: |
+          @'
+          import sys
+          import unittest
+
+          patterns = [
+              "test_chat_run_helpers.py",
+              "test_task_continuity.py",
+              "test_memory_tool_runtime.py",
+              "test_desktop_shell_paths.py",
+          ]
+
+          loader = unittest.defaultTestLoader
+          suite = unittest.TestSuite()
+          for pattern in patterns:
+              suite.addTests(loader.discover("tests", pattern=pattern))
+
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          '@ | python -
 
   extended:
     name: Extended (Windows / py3.11 / runtime)
@@ -54,7 +73,27 @@ jobs:
           python -m pip install requests pillow
 
       - name: Run extended runtime regression suite
-        run: python -m unittest tests.test_model_runtime tests.test_chat_image_bridge tests.test_tool_call_runtime tests.test_vision_local_bridge tests.test_frontend_image_upload_bridge
+        run: |
+          @'
+          import sys
+          import unittest
+
+          patterns = [
+              "test_model_runtime.py",
+              "test_chat_image_bridge.py",
+              "test_tool_call_runtime.py",
+              "test_vision_local_bridge.py",
+              "test_frontend_image_upload_bridge.py",
+          ]
+
+          loader = unittest.defaultTestLoader
+          suite = unittest.TestSuite()
+          for pattern in patterns:
+              suite.addTests(loader.discover("tests", pattern=pattern))
+
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          '@ | python -
 
   desktop-build:
     name: Desktop Build (Windows)
