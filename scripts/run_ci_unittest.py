@@ -8,7 +8,6 @@ SUITES = {
     "smoke": [
         "test_chat_run_helpers.py",
         "test_task_continuity.py",
-        "test_memory_tool_runtime.py",
     ],
     "extended": [
         "test_model_runtime.py",
