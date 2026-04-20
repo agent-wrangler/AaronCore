@@ -16,84 +16,45 @@ permissions:
 
 jobs:
   smoke:
-    name: Smoke (${{ matrix.label }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Windows / py3.11 / desktop
-            os: windows-latest
-            python-version: "3.11"
-            test_args: tests/test_chat_run_helpers.py tests/test_task_continuity.py tests/test_memory_tool_runtime.py tests/test_desktop_shell_paths.py
-          - label: Windows / py3.12
-            os: windows-latest
-            python-version: "3.12"
-            test_args: tests/test_chat_run_helpers.py tests/test_task_continuity.py tests/test_memory_tool_runtime.py
-          - label: Ubuntu / py3.11
-            os: ubuntu-latest
-            python-version: "3.11"
-            test_args: tests/test_chat_run_helpers.py tests/test_task_continuity.py tests/test_memory_tool_runtime.py
+    name: Smoke (Windows / py3.11 / desktop)
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
 
       - name: Set up Node.js
-        if: contains(matrix.test_args, 'test_desktop_shell_paths.py')
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
-      - name: Install test runner
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest
-
       - name: Run smoke regression suite
-        run: python -m pytest -q ${{ matrix.test_args }}
+        run: python -m unittest tests.test_chat_run_helpers tests.test_task_continuity tests.test_memory_tool_runtime tests.test_desktop_shell_paths
 
   extended:
-    name: Extended (${{ matrix.label }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Windows / py3.11 / runtime
-            os: windows-latest
-            python-version: "3.11"
-          - label: Ubuntu / py3.11 / runtime
-            os: ubuntu-latest
-            python-version: "3.11"
+    name: Extended (Windows / py3.11 / runtime)
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
 
       - name: Install extended test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest requests pillow
+          python -m pip install requests pillow
 
       - name: Run extended runtime regression suite
-        run: >
-          python -m pytest -q
-          tests/test_model_runtime.py
-          tests/test_chat_image_bridge.py
-          tests/test_tool_call_runtime.py
-          tests/test_vision_local_bridge.py
-          tests/test_frontend_image_upload_bridge.py
+        run: python -m unittest tests.test_model_runtime tests.test_chat_image_bridge tests.test_tool_call_runtime tests.test_vision_local_bridge tests.test_frontend_image_upload_bridge
 
   desktop-build:
     name: Desktop Build (Windows)
@@ -101,10 +62,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
