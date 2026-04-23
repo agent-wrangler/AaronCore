@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Action Logs Are Not Task Progress</title>
+  <meta name="description" content="Why complex tasks need a skeleton, not just an action log, and why this remains an active AaronCore research direction.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="c272b9cd-280c-44b4-ae01-c354344a9fc2"></script>
+  <link rel="stylesheet" href="./styles.css?v=20260416p42">
+</head>
+<body
+  data-page="papers"
+  data-page-title="Action Logs Are Not Task Progress"
+  data-page-description="Why complex tasks need a skeleton, not just an action log, and why this remains an active AaronCore research direction."
+>
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory that comes back naturally</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">Chinese</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">Japanese</span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">Korean</span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./beta.html">Join Beta</a>
+    </div>
+  </header>
+
+  <main class="page paper-page">
+    <section class="section section-light">
+      <article class="paper-essay reveal">
+        <header class="paper-essay-header">
+          <p class="paper-meta-line">Research Note | April 23, 2026</p>
+          <h1 class="paper-essay-title">Action Logs Are Not Task Progress</h1>
+          <p class="paper-essay-deck">
+            Complex tasks need more than a list of recent actions. They need a task skeleton: an explicit sense of the goal, the current phase, the remaining work, and the blocker that explains why the next move makes sense. AaronCore is still exploring this boundary, but the distinction already matters.
+          </p>
+        </header>
+
+        <div class="paper-essay-body">
+          <p>
+            A surprising number of agents can look busy without looking coherent. They open files, search the web, click buttons, read logs, and stream back a comforting trail of activity. That can feel impressive for a few turns. Then the user asks the simplest question in the world: where are we in the task? Very often the system has no real answer. It has an action log, but not a task shape.
+          </p>
+          <p>
+            AaronCore does not claim to have fully solved that yet. This page is not a victory lap. It is a working thesis. If agents are going to handle larger jobs honestly, they cannot stop at emitting traces of motion. They need a clearer skeleton for the work itself.
+          </p>
+
+          <blockquote class="paper-essay-quote">
+            An action log can prove movement. It cannot, by itself, prove progress.
+          </blockquote>
+
+          <h2 id="paper-log-vs-skeleton">An action log answers the wrong question</h2>
+          <p>
+            Logs are useful. They tell you what the system just did. Opened a page. Read a file. Searched a query. Saved a draft. Retried a tool. For short tasks, that may be enough. The user mostly wants confirmation that something concrete happened.
+          </p>
+          <p>
+            But complex tasks are not just chains of actions. They have stages, dependencies, unresolved choices, and moments when the system needs to stop, ask, verify, or back up. Once the work stretches across multiple turns, "what happened last" stops being the same question as "where is the task now." That is where pure action logs start to run out of meaning.
+          </p>
+
+          <h2 id="paper-what-skeleton-means">A task skeleton is the shape of the work</h2>
+          <p>
+            By task skeleton, we do not mean a heavy project management panel. We mean a lightweight but explicit structure that says what the job is, which phase is active, what remains unfinished, and what kind of blocker is currently in the way. The skeleton should make the task legible before the user has to reconstruct it from a pile of recent tool calls.
+          </p>
+          <p>
+            If the user asks for a report, the skeleton might say the system is collecting sources, outlining the argument, drafting the first pass, or waiting for a publication decision. If the user asks for a coding change, the skeleton might say the system is locating the target file, implementing the fix, running verification, or blocked on an ambiguous requirement. Those states are not just nicer labels for actions. They tell the user what kind of work is underway.
+          </p>
+
+          <h2 id="paper-progress-needs-structure">Progress needs goal, phase, and blocker</h2>
+          <p>
+            This is why progress cannot be inferred from motion alone. A system may take six actions and still be stuck in the same phase. It may also take one action and resolve the real blocker. Without an explicit frame for goal, phase, and blocker, all actions start looking flatter than they are. The user sees activity, but not the structure that gives the activity meaning.
+          </p>
+          <p>
+            That is also where trust comes in. A useful agent should be able to say not only what it just touched, but why that step belonged to the task and what it unlocked next. Otherwise the user is left guessing whether the system is actually converging or just generating plausible bustle.
+          </p>
+
+          <h2 id="paper-not-yet-solved">This is still an open research direction</h2>
+          <p>
+            AaronCore is still exploring what the right task skeleton should look like in practice. The current runtime can already show steps, keep traces, and carry some explicit state forward. That matters. But it is not yet the same thing as a stable, user-legible skeleton for larger work. Pretending otherwise would only blur the line this page is trying to draw.
+          </p>
+          <p>
+            The more honest position is that action logs are a necessary layer, not a sufficient one. They help the user inspect motion. They do not yet give the user a durable map of the task. The skeleton problem begins exactly where raw traces stop answering the user's real question.
+          </p>
+
+          <h2 id="paper-why-it-matters-now">Why the distinction matters now</h2>
+          <p>
+            This matters before full implementation because it changes what we optimize for. If we keep treating complex-task UX as a prettier action feed, we will keep making agents look active without making them easier to trust. If we treat task skeletons as first-class runtime structure, then step logs, verification, ask-user moments, and continuation all start attaching to something more meaningful than a recent stream of operations.
+          </p>
+          <p>
+            That is the claim underneath this note. Complex tasks do not just need more actions. They need a clearer shape. Until agents can show that shape, users will keep doing the planning in their own heads while the software performs the movement below it.
+          </p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Contact</span>
+        <strong>
+          <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+        </strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260423p2"></script>
+</body>
+</html>
