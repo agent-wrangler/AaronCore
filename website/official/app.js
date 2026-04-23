@@ -1005,6 +1005,13 @@ function applyI18n(lang) {
     const value = t(key, l);
     if (value) node.textContent = value;
   });
+  const ariaNodes = Array.from(document.querySelectorAll("[data-i18n-aria-label]"));
+  ariaNodes.forEach((node) => {
+    const key = String(node.getAttribute("data-i18n-aria-label") || "").trim();
+    if (!key) return;
+    const value = t(key, l);
+    if (value) node.setAttribute("aria-label", value);
+  });
   // site fields that used to be injected
   setField("site", "brandSubline", t("brand.subline", l));
   syncBetaSelectLabels(l);
@@ -2215,6 +2222,12 @@ Object.assign(I18N.en, {
   "docs.index.item.taskSkeleton.date": "April 23, 2026",
   "docs.index.item.taskSkeleton.title": "Action Logs Are Not Task Progress",
   "docs.index.item.taskSkeleton.desc": "Why complex tasks need a skeleton, not just an action log, and why this remains an active AaronCore research direction.",
+  "docs.index.item.visionLocal.type": "Open Source Result",
+  "docs.index.item.visionLocal.date": "GitHub",
+  "docs.index.item.visionLocal.title": "Vision Local Context",
+  "docs.index.item.visionLocal.desc": "Windows-first local screenshot understanding for OCR, UI layout extraction, and LLM-ready prompt context.",
+  "docs.index.item.visionLocal.link": "GitHub",
+  "docs.index.item.visionLocal.linkLabel": "Open GitHub repository",
   "docs.index.item.feedbackRules.type": "Research Note",
   "docs.index.item.feedbackRules.date": "April 23, 2026",
   "docs.index.item.feedbackRules.title": "Feedback Should Become Rules",
@@ -2255,6 +2268,12 @@ Object.assign(I18N.zh, {
   "docs.index.item.taskSkeleton.date": "2026\u5e744\u670823\u65e5",
   "docs.index.item.taskSkeleton.title": "\u6b65\u9aa4\u65e5\u5fd7\u4e0d\u7b49\u4e8e\u4efb\u52a1\u8fdb\u5ea6",
   "docs.index.item.taskSkeleton.desc": "\u4e3a\u4ec0\u4e48\u590d\u6742\u4efb\u52a1\u9700\u8981\u4e00\u4e2a\u4efb\u52a1\u9aa8\u67b6\uff0c\u800c\u4e0d\u53ea\u662f\u4e00\u4e32 action log\uff0c\u4e5f\u4e3a\u4ec0\u4e48\u8fd9\u4ecd\u7136\u662f AaronCore \u6b63\u5728\u63a2\u7d22\u7684\u7814\u7a76\u65b9\u5411\u3002",
+  "docs.index.item.visionLocal.type": "\u5f00\u6e90\u6210\u679c",
+  "docs.index.item.visionLocal.date": "GitHub",
+  "docs.index.item.visionLocal.title": "Vision Local Context",
+  "docs.index.item.visionLocal.desc": "\u4e00\u4e2a\u9762\u5411 Windows \u7684\u672c\u5730\u622a\u56fe\u7406\u89e3\u5f00\u6e90\u6a21\u5757\uff0c\u7528\u4e8e OCR\u3001UI \u5e03\u5c40\u63d0\u53d6\uff0c\u4ee5\u53ca LLM-ready \u7684 prompt \u4e0a\u4e0b\u6587\u6784\u5efa\u3002",
+  "docs.index.item.visionLocal.link": "GitHub",
+  "docs.index.item.visionLocal.linkLabel": "\u6253\u5f00 GitHub \u4ed3\u5e93",
   "docs.index.item.feedbackRules.type": "\u7814\u7a76\u7b14\u8bb0",
   "docs.index.item.feedbackRules.date": "2026\u5e744\u670823\u65e5",
   "docs.index.item.feedbackRules.title": "\u53cd\u9988\u5e94\u8be5\u6c89\u6dc0\u6210\u89c4\u5219",
@@ -2295,6 +2314,12 @@ Object.assign(I18N.ja, {
   "docs.index.item.taskSkeleton.date": "2026\u5e744\u670823\u65e5",
   "docs.index.item.taskSkeleton.title": "\u30a2\u30af\u30b7\u30e7\u30f3\u30ed\u30b0\u306f\u30bf\u30b9\u30af\u9032\u6357\u3067\u306f\u306a\u3044",
   "docs.index.item.taskSkeleton.desc": "\u306a\u305c\u8907\u96d1\u306a\u4ed5\u4e8b\u306b\u306f action log \u3060\u3051\u3067\u306a\u304f task skeleton \u304c\u5fc5\u8981\u306a\u306e\u304b\u3002\u305d\u3057\u3066\u306a\u305c\u3053\u308c\u304c AaronCore \u306b\u3068\u3063\u3066\u307e\u3060\u63a2\u7d22\u4e2d\u306e\u7814\u7a76\u30c6\u30fc\u30de\u306a\u306e\u304b\u3002",
+  "docs.index.item.visionLocal.type": "\u30aa\u30fc\u30d7\u30f3\u30bd\u30fc\u30b9\u6210\u679c",
+  "docs.index.item.visionLocal.date": "GitHub",
+  "docs.index.item.visionLocal.title": "Vision Local Context",
+  "docs.index.item.visionLocal.desc": "Windows \u5411\u3051\u306e\u30ed\u30fc\u30ab\u30eb\u30b9\u30af\u30ea\u30fc\u30f3\u30b7\u30e7\u30c3\u30c8\u89e3\u6790\u30e2\u30b8\u30e5\u30fc\u30eb\u3002OCR\u3001UI \u30ec\u30a4\u30a2\u30a6\u30c8\u62bd\u51fa\u3001LLM-ready \u306a prompt \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u63d0\u4f9b\u3057\u307e\u3059\u3002",
+  "docs.index.item.visionLocal.link": "GitHub",
+  "docs.index.item.visionLocal.linkLabel": "GitHub \u30ea\u30dd\u30b8\u30c8\u30ea\u3092\u958b\u304f",
   "docs.index.item.feedbackRules.type": "\u7814\u7a76\u30ce\u30fc\u30c8",
   "docs.index.item.feedbackRules.date": "2026\u5e744\u670823\u65e5",
   "docs.index.item.feedbackRules.title": "\u30d5\u30a3\u30fc\u30c9\u30d0\u30c3\u30af\u306f\u30eb\u30fc\u30eb\u306b\u306a\u308b\u3079\u304d\u3060",
@@ -2335,6 +2360,12 @@ Object.assign(I18N.ko, {
   "docs.index.item.taskSkeleton.date": "2026\ub144 4\uc6d4 23\uc77c",
   "docs.index.item.taskSkeleton.title": "\uc561\uc158 \ub85c\uadf8\ub294 \ud0dc\uc2a4\ud06c \uc9c4\ud589\uc774 \uc544\ub2c8\ub2e4",
   "docs.index.item.taskSkeleton.desc": "\uc65c \ubcf5\uc7a1\ud55c \uc791\uc5c5\uc5d0\ub294 action log\ub9cc\uc73c\ub85c\ub294 \ubd80\uc871\ud558\uace0 task skeleton\uc774 \ud544\uc694\ud55c\uc9c0, \uadf8\ub9ac\uace0 \uc65c \uc774\uac83\uc774 AaronCore\uc5d0\uc11c \uc5ec\uc804\ud788 \ud0d0\uc0c9 \uc911\uc778 \uc5f0\uad6c \ubc29\ud5a5\uc778\uc9c0\ub97c \uc124\uba85\ud569\ub2c8\ub2e4.",
+  "docs.index.item.visionLocal.type": "\uc624\ud508\uc18c\uc2a4 \uc131\uacfc",
+  "docs.index.item.visionLocal.date": "GitHub",
+  "docs.index.item.visionLocal.title": "Vision Local Context",
+  "docs.index.item.visionLocal.desc": "Windows \uae30\ubc18 \ub85c\uceec \uc2a4\ud06c\ub9b0\uc0f7 \uc774\ud574 \ubaa8\ub4c8\ub85c, OCR\uacfc UI \ub808\uc774\uc544\uc6c3 \ucd94\ucd9c, \uadf8\ub9ac\uace0 LLM-ready \ud504\ub86c\ud504\ud2b8 \ucee8\ud14d\uc2a4\ud2b8 \uad6c\uc131\uc744 \uc81c\uacf5\ud569\ub2c8\ub2e4.",
+  "docs.index.item.visionLocal.link": "GitHub",
+  "docs.index.item.visionLocal.linkLabel": "GitHub \uc800\uc7a5\uc18c \uc5f4\uae30",
   "docs.index.item.feedbackRules.type": "\uc5f0\uad6c \ub178\ud2b8",
   "docs.index.item.feedbackRules.date": "2026\ub144 4\uc6d4 23\uc77c",
   "docs.index.item.feedbackRules.title": "\ud53c\ub4dc\ubc31\uc740 \uaddc\uce59\uc774 \ub418\uc5b4\uc57c \ud55c\ub2e4",
