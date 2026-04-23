@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Vision Local Context</title>
+  <meta name="description" content="Why AaronCore opened Vision Local Context as a standalone local screenshot-understanding layer, and what this open-source result is meant to own.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="c272b9cd-280c-44b4-ae01-c354344a9fc2"></script>
+  <link rel="stylesheet" href="./styles.css?v=20260423p4">
+</head>
+<body
+  data-page="papers"
+  data-page-title="Vision Local Context"
+  data-page-description="Why AaronCore opened Vision Local Context as a standalone local screenshot-understanding layer, and what this open-source result is meant to own."
+>
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory that comes back naturally</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">Chinese</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">Japanese</span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">Korean</span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./beta.html">Join Beta</a>
+    </div>
+  </header>
+
+  <main class="page paper-page">
+    <section class="section section-light">
+      <article class="paper-essay reveal">
+        <header class="paper-essay-header">
+          <p class="paper-meta-line">Open Source Result | April 23, 2026</p>
+          <h1 class="paper-essay-title">Vision Local Context</h1>
+          <p class="paper-essay-deck">
+            Vision Local Context is a small standalone extraction from AaronCore: a local screenshot-understanding layer that turns OCR, layout hints, and screen structure into prompt-ready context without requiring a multimodal API call for every image turn.
+          </p>
+          <div class="paper-resource-row">
+            <a class="paper-resource-link" href="https://github.com/agent-wrangler/vision-local-context" target="_blank" rel="noreferrer" data-i18n-aria-label="docs.index.item.visionLocal.linkLabel" aria-label="Open GitHub repository">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2C6.48 2 2 6.58 2 12.22C2 16.73 4.87 20.55 8.84 21.9C9.34 21.99 9.52 21.68 9.52 21.42C9.52 21.18 9.51 20.39 9.5 19.35C6.73 19.97 6.14 18.14 6.14 18.14C5.68 16.94 5.03 16.62 5.03 16.62C4.12 15.98 5.1 16 5.1 16C6.1 16.07 6.63 17.05 6.63 17.05C7.52 18.62 8.97 18.17 9.54 17.9C9.63 17.23 9.89 16.77 10.17 16.5C7.96 16.24 5.63 15.35 5.63 11.4C5.63 10.27 6.02 9.35 6.66 8.63C6.56 8.37 6.21 7.29 6.75 5.84C6.75 5.84 7.59 5.57 9.5 6.89C10.3 6.66 11.16 6.54 12 6.54C12.84 6.54 13.7 6.66 14.5 6.89C16.41 5.57 17.25 5.84 17.25 5.84C17.79 7.29 17.44 8.37 17.34 8.63C17.98 9.35 18.37 10.27 18.37 11.4C18.37 15.36 16.03 16.24 13.81 16.5C14.16 16.85 14.48 17.54 14.48 18.6C14.48 20.12 14.47 21.09 14.47 21.42C14.47 21.68 14.65 22 15.16 21.9C19.13 20.55 22 16.73 22 12.22C22 6.58 17.52 2 12 2Z" fill="currentColor"/>
+              </svg>
+              <span data-i18n="docs.index.item.visionLocal.link">GitHub Repository</span>
+            </a>
+          </div>
+        </header>
+
+        <div class="paper-essay-body">
+          <p>
+            This page is the open-source note that should have existed from the start. Vision Local Context is not the whole AaronCore system, and it does not try to be. It is one narrow layer that we believed deserved to stand on its own: the step between a raw screenshot and a useful context block that another runtime or agent can actually consume.
+          </p>
+          <p>
+            A lot of image tooling jumps from screenshot straight to a multimodal model call. That is sometimes the right move, but it is not the only move. In practice there is a valuable middle layer where local OCR, layout extraction, and lightweight scene inference can already recover enough structure to support downstream reasoning. That is the layer this repository is meant to own.
+          </p>
+
+          <blockquote class="paper-essay-quote">
+            The point is not to make screenshots look magical. The point is to make them legible enough to use.
+          </blockquote>
+
+          <h2 id="paper-why-open-source">Why open-source this at all</h2>
+          <p>
+            AaronCore has been building around runtime continuity, memory, execution flow, and verification. Along the way, a smaller question kept showing up: what should happen when the agent receives a local screenshot and only needs structured context, not a full multimodal round-trip? That smaller question turned out to have a clean enough boundary to publish separately.
+          </p>
+          <p>
+            Vision Local Context is the answer to that boundary. It exposes a compact layer for local screenshot understanding so that OCR text, page structure, visible labels, browser-style layout hints, chat-style layout hints, and basic chart cues can be turned into something another system can reuse. Releasing it separately makes the boundary clearer, both for AaronCore itself and for anyone who wants the same capability without the rest of the runtime.
+          </p>
+
+          <h2 id="paper-what-it-owns">What the module is meant to own</h2>
+          <p>
+            The repository is intentionally narrow. It takes screenshot-like input and produces structured output. In practical terms that means cleaning OCR output, inferring common screen types, extracting lightweight layout clues, and returning prompt-ready context instead of an unreadable blob of raw text. It is built for browser pages, chats, dashboards, settings screens, and document-like interfaces where local understanding already goes a long way.
+          </p>
+          <p>
+            The important part is not just text recovery. It is context shaping. A useful downstream system often needs more than copied words. It needs to know whether the screen looks like a browser, where the address bar is, what the page title might be, which labels appear interactive, and whether a chart or panel layout is present. That is why this repo sits between OCR and the final reasoning layer rather than pretending those two are the same step.
+          </p>
+
+          <h2 id="paper-local-first">Why local-first still matters</h2>
+          <p>
+            The design is deliberately local-first because not every screenshot needs to become a cloud image request. Sometimes the job is simply to recover enough structure from a UI so the rest of the runtime can ask better questions, route the next action, or build a cleaner prompt. Local OCR and lightweight heuristics are often enough for that. When they are enough, they are faster, cheaper, and easier to inspect.
+          </p>
+          <p>
+            That is also why the repository keeps the public surface small. One image in, structured context out. The module can serve as a compatibility layer inside a larger agent system, but it also stays testable as an independent component. That makes it easier to harden with regression fixtures and easier to embed without importing a whole product worldview.
+          </p>
+
+          <h2 id="paper-platform-boundary">What the current boundary looks like</h2>
+          <p>
+            Vision Local Context is Windows-first because local OCR remains strongest there, but the module does not assume Windows is the only target forever. The current package can prefer Windows OCR where available and fall back to Tesseract in environments that have the command-line engine installed. That keeps the boundary practical: local screenshot understanding first, broader portability where it is feasible, and a public API that stays small enough to evolve without turning vague.
+          </p>
+          <p>
+            Just as importantly, this repository does not claim to solve full visual intelligence. It does not replace a rich multimodal model, and it does not pretend layout hints are the same thing as deep semantic understanding. The goal is narrower and more honest: recover enough structure from a local screenshot so the next layer has something useful to work with.
+          </p>
+
+          <h2 id="paper-why-it-matters">Why this belongs on the research shelf</h2>
+          <p>
+            Open source results still say something about product philosophy. Vision Local Context shows one of AaronCore's recurring instincts: if a subsystem has a real boundary, we would rather name the boundary clearly than leave it hidden inside a larger stack. A good open-source extraction is not just code reuse. It is an architectural statement about what a layer is actually for.
+          </p>
+          <p>
+            That is why this note belongs in the Research index. The repo itself is the artifact, but the point underneath it is broader. Screenshots do not become useful just because they exist. They become useful when a system can turn them into legible local context. Vision Local Context is one small result from taking that boundary seriously.
+          </p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Contact</span>
+        <strong>
+          <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+        </strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260423p4"></script>
+</body>
+</html>

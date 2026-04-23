@@ -715,6 +715,41 @@ img {
   text-transform: uppercase;
 }
 
+.paper-resource-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.paper-resource-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 15px;
+  border: 1px solid rgba(17, 19, 18, 0.12);
+  border-radius: 999px;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.paper-resource-link:hover {
+  border-color: rgba(17, 19, 18, 0.2);
+  color: var(--cyan-deep);
+  background: rgba(17, 19, 18, 0.04);
+  transform: translateY(-1px);
+}
+
+.paper-resource-link svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
 .paper-essay-title {
   margin: 0;
   max-width: 13.5ch;
