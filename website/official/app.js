@@ -45,6 +45,10 @@ function setField(group, name, value) {
 
 function applySiteState() {
   const page = String(document.body?.dataset?.page || "").trim();
+  const pageTitle = String(document.body?.dataset?.pageTitle || "").trim();
+  const pageDescription = String(document.body?.dataset?.pageDescription || "").trim();
+  const pageOgTitle = String(document.body?.dataset?.pageOgTitle || "").trim();
+  const pageOgDescription = String(document.body?.dataset?.pageOgDescription || "").trim();
   const titleSuffix =
     page === "product"
       ? "Product"
@@ -58,10 +62,13 @@ function applySiteState() {
           ? "Changelog"
           : "AI that remembers you";
 
-  document.title = `${siteConfig.productName} | ${titleSuffix}`;
-  setMeta('meta[name="description"]', siteConfig.metaDescription);
-  setMeta('meta[property="og:title"]', `${siteConfig.productName} | ${siteConfig.brandSubline}`);
-  setMeta('meta[property="og:description"]', siteConfig.ogDescription);
+  document.title = `${siteConfig.productName} | ${pageTitle || titleSuffix}`;
+  setMeta('meta[name="description"]', pageDescription || siteConfig.metaDescription);
+  setMeta(
+    'meta[property="og:title"]',
+    pageOgTitle || `${siteConfig.productName} | ${pageTitle || siteConfig.brandSubline}`
+  );
+  setMeta('meta[property="og:description"]', pageOgDescription || pageDescription || siteConfig.ogDescription);
 
   setField("site", "primaryDomain", siteConfig.primaryDomain);
   setField("site", "contactLabel", siteConfig.contactLabel);
@@ -2204,6 +2211,10 @@ Object.assign(I18N.en, {
   "docs.index.item.state.date": "April 16, 2026",
   "docs.index.item.state.title": "State Beats Prompt Tricks",
   "docs.index.item.state.desc": "Why explicit task state matters more than clever phrasing once execution starts.",
+  "docs.index.item.feedbackRules.type": "Research Note",
+  "docs.index.item.feedbackRules.date": "April 23, 2026",
+  "docs.index.item.feedbackRules.title": "Feedback Should Become Rules",
+  "docs.index.item.feedbackRules.desc": "Why agent feedback should be classified, scoped, and turned into durable behavior instead of leaking into memory as residue.",
   "docs.index.empty.label": "No entries yet"
 });
 
@@ -2236,6 +2247,10 @@ Object.assign(I18N.zh, {
   "docs.index.item.state.date": "2026\u5e744\u670816\u65e5",
   "docs.index.item.state.title": "\u663e\u5f0f\u72b6\u6001\u6bd4 prompt \u6280\u5de7\u66f4\u91cd\u8981",
   "docs.index.item.state.desc": "\u4e00\u65e6\u5f00\u59cb\u6267\u884c\uff0c\u660e\u786e\u7684\u4efb\u52a1\u72b6\u6001\u6bd4\u66f4\u8054\u54e8\u7684\u63aa\u8f9e\u66f4\u6709\u7528\u3002",
+  "docs.index.item.feedbackRules.type": "\u7814\u7a76\u7b14\u8bb0",
+  "docs.index.item.feedbackRules.date": "2026\u5e744\u670823\u65e5",
+  "docs.index.item.feedbackRules.title": "\u53cd\u9988\u5e94\u8be5\u6c89\u6dc0\u6210\u89c4\u5219",
+  "docs.index.item.feedbackRules.desc": "\u4e3a\u4ec0\u4e48 agent \u7684\u53cd\u9988\u4e0d\u8be5\u53ea\u662f\u7559\u5728\u8bb0\u5fc6\u91cc\u7684\u6b8b\u6e23\uff0c\u800c\u5e94\u8be5\u5148\u88ab\u5206\u7c7b\u3001\u9650\u5b9a\u4f5c\u7528\u8303\u56f4\uff0c\u518d\u53d8\u6210\u53ef\u6301\u7eed\u7684\u884c\u4e3a\u89c4\u5219\u3002",
   "docs.index.empty.label": "\u6682\u65f6\u8fd8\u6ca1\u6709\u6761\u76ee"
 });
 
@@ -2268,6 +2283,10 @@ Object.assign(I18N.ja, {
   "docs.index.item.state.date": "2026\u5e744\u670816\u65e5",
   "docs.index.item.state.title": "State Beats Prompt Tricks",
   "docs.index.item.state.desc": "\u5b9f\u884c\u304c\u59cb\u307e\u3063\u305f\u5f8c\u306f\u3001\u5de7\u307f\u306a\u8a00\u3044\u56de\u3057\u3088\u308a\u3082\u660e\u793a\u7684\u306a\u30bf\u30b9\u30af\u72b6\u614b\u306e\u65b9\u304c\u91cd\u8981\u3067\u3059\u3002",
+  "docs.index.item.feedbackRules.type": "\u7814\u7a76\u30ce\u30fc\u30c8",
+  "docs.index.item.feedbackRules.date": "2026\u5e744\u670823\u65e5",
+  "docs.index.item.feedbackRules.title": "\u30d5\u30a3\u30fc\u30c9\u30d0\u30c3\u30af\u306f\u30eb\u30fc\u30eb\u306b\u306a\u308b\u3079\u304d\u3060",
+  "docs.index.item.feedbackRules.desc": "agent \u3078\u306e\u4fee\u6b63\u304c\u8a18\u61b6\u306e\u6b8b\u6e23\u3068\u3057\u3066\u6f0f\u308c\u308b\u306e\u3067\u306f\u306a\u304f\u3001\u307e\u305a\u5206\u985e\u3068\u9069\u7528\u7bc4\u56f2\u306e\u8a2d\u5b9a\u3092\u7d4c\u3066\u3001\u6301\u7d9a\u7684\u306a\u632f\u308b\u821e\u3044\u306b\u5909\u63db\u3055\u308c\u308b\u3079\u304d\u7406\u7531\u3002",
   "docs.index.empty.label": "\u307e\u3060\u9805\u76ee\u306f\u3042\u308a\u307e\u305b\u3093"
 });
 
@@ -2300,6 +2319,10 @@ Object.assign(I18N.ko, {
   "docs.index.item.state.date": "2026\ub144 4\uc6d4 16\uc77c",
   "docs.index.item.state.title": "State Beats Prompt Tricks",
   "docs.index.item.state.desc": "\uc2e4\ud589\uc774 \uc2dc\uc791\ub418\uba74, \uc601\ub9ac\ud55c \ubb38\uc7a5 \uae30\uc220\ubcf4\ub2e4 \uba85\uc2dc\uc801\uc778 \ud0dc\uc2a4\ud06c \uc0c1\ud0dc\uac00 \ub354 \uc911\uc694\ud569\ub2c8\ub2e4.",
+  "docs.index.item.feedbackRules.type": "\uc5f0\uad6c \ub178\ud2b8",
+  "docs.index.item.feedbackRules.date": "2026\ub144 4\uc6d4 23\uc77c",
+  "docs.index.item.feedbackRules.title": "\ud53c\ub4dc\ubc31\uc740 \uaddc\uce59\uc774 \ub418\uc5b4\uc57c \ud55c\ub2e4",
+  "docs.index.item.feedbackRules.desc": "agent \ud53c\ub4dc\ubc31\uc740 \uae30\uc5b5 \uc18d \uc794\uc5ec\ubb3c\ub85c \ub0a8\ub294 \ub300\uc2e0, \uba3c\uc800 \ubd84\ub958\ub418\uace0 \uc801\uc6a9 \ubc94\uc704\uac00 \uc815\ud574\uc9c4 \ub4a4 \uc9c0\uc18d \uac00\ub2a5\ud55c \ud589\ub3d9 \uaddc\uce59\uc73c\ub85c \ubc14\ub00c\uc5b4\uc57c \ud55c\ub2e4.",
   "docs.index.empty.label": "\uc544\uc9c1 \ud56d\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4"
 });
 

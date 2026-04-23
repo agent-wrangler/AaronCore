@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AaronCore | Feedback Should Become Rules</title>
+  <meta name="description" content="Why agent feedback should be classified, scoped, and turned into rules instead of leaking into memory as residue.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="c272b9cd-280c-44b4-ae01-c354344a9fc2"></script>
+  <link rel="stylesheet" href="./styles.css?v=20260416p42">
+</head>
+<body
+  data-page="papers"
+  data-page-title="Feedback Should Become Rules"
+  data-page-description="Why agent feedback should be classified, scoped, and turned into rules instead of leaking into memory as residue."
+>
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-scan"></div>
+    <div class="ambient-glow glow-a"></div>
+    <div class="ambient-glow glow-b"></div>
+    <div class="ambient-glow glow-c"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="AaronCore home">
+      <span class="brand-copy">
+        <strong>AaronCore</strong>
+        <span data-site-field="brandSubline" data-i18n="brand.subline">Memory that comes back naturally</span>
+      </span>
+      <span class="brand-mark">
+        <svg width="256" height="256" viewBox="60 68 136 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <path d="M108 82H92C82.059 82 74 90.059 74 100V156C74 165.941 82.059 174 92 174H108"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M148 82H164C173.941 82 182 90.059 182 100V156C182 165.941 173.941 174 164 174H148"
+                stroke="#F5F4EF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="128" cy="128" r="10" fill="#D97757"/>
+        </svg>
+      </span>
+    </a>
+
+    <nav class="topnav">
+      <a href="./index.html" data-i18n="nav.home">Home</a>
+      <a href="./product.html" data-i18n="nav.product">Product</a>
+      <a href="./docs.html" data-i18n="nav.docs">Research</a>
+      <a href="./changelog.html" data-i18n="nav.changelog">Changelog</a>
+    </nav>
+
+    <div class="top-actions">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-btn" id="langBtn" type="button" aria-label="Language">EN</button>
+        <div class="lang-menu" id="langMenu" role="menu" aria-label="Language menu">
+          <button class="lang-item" data-lang="en" type="button"><span data-i18n="lang.en">English</span><span class="code">EN</span></button>
+          <button class="lang-item" data-lang="zh" type="button"><span data-i18n="lang.zh">Chinese</span><span class="code">ZH</span></button>
+          <button class="lang-item" data-lang="ja" type="button"><span data-i18n="lang.ja">Japanese</span><span class="code">JA</span></button>
+          <button class="lang-item" data-lang="ko" type="button"><span data-i18n="lang.ko">Korean</span><span class="code">KO</span></button>
+        </div>
+      </div>
+      <a class="top-cta" data-link-field="betaUrl" data-i18n="cta.earlyAccess" href="./beta.html">Join Beta</a>
+    </div>
+  </header>
+
+  <main class="page paper-page">
+    <section class="section section-light">
+      <article class="paper-essay reveal">
+        <header class="paper-essay-header">
+          <p class="paper-meta-line">Research Note | April 23, 2026</p>
+          <h1 class="paper-essay-title">Feedback Should Become Rules</h1>
+          <p class="paper-essay-deck">
+            Systems do not learn just because they store corrections. They learn when feedback is classified, scoped, and translated into durable behavior without contaminating memory or leaking internal repair notes back into the reply.
+          </p>
+        </header>
+
+        <div class="paper-essay-body">
+          <p>
+            One of the easiest demos in agent design is apology. The assistant gets corrected, says thank you, retries, and sounds humble. That is not the same as learning. In most systems, feedback still lands as loose residue: another line in the transcript, another blob in memory, another prompt fragment that may or may not echo back later. The correction either disappears or survives in the wrong form.
+          </p>
+          <p>
+            AaronCore treats that as a structural problem. If a user says "that is not what I meant," "too short," "do not open that," or "remember this next time," those sentences are not four versions of the same event. They point at different failures, different scopes, and different places in the runtime. Pouring them into one bucket does not create improvement. It creates contamination.
+          </p>
+
+          <blockquote class="paper-essay-quote">
+            Feedback only becomes valuable when it changes future behavior in the right place.
+          </blockquote>
+
+          <h2 id="paper-correction-memory">Correction is not memory</h2>
+          <p>
+            A lot of systems treat correction as if it were a memory write. The user objects, the objection gets stored, and the product calls that adaptation. But many corrections are not facts about the user and not durable memories about the relationship. They are judgments about what just went wrong. Some describe a routing error. Some describe reply shape. Some describe execution posture. Some do point to real preference. Those should not all be preserved through the same path.
+          </p>
+          <p>
+            When correction gets flattened into memory, the memory layer starts carrying policy debris. That makes recall less trustworthy. The system remembers that something felt wrong once, but not what kind of wrong it was, how long it should matter, or where it should apply. The result is a memory system that stores more text while grounding less behavior.
+          </p>
+
+          <h2 id="paper-scope-contamination">Learning without scope becomes contamination</h2>
+          <p>
+            A correction does not just need meaning. It needs scope. Some feedback should affect one retry and then disappear. Some should hold for the current session. Some should remain as a short-term pattern while the user is in a particular mode of work. A smaller set deserves to become a longer-lived rule. Without that distinction, the system becomes unstable in both directions: it either forgets too fast, or it drags local repair into unrelated future situations.
+          </p>
+          <p>
+            This is where a lot of products quietly fail. They promise learning, but the learning has no level. Everything is either transient conversation noise or permanent personalization. Real growth sits in the middle. It needs explicit room for once, session, short-term, and long-term influence instead of a single undifferentiated bucket.
+          </p>
+
+          <h2 id="paper-classification-before-storage">Feedback needs type before it needs storage</h2>
+          <p>
+            Before feedback can be kept, it should be classified. Was the failure about routing the wrong capability, producing the wrong kind of answer, choosing the wrong execution posture, violating a user preference, or mishandling identity and memory? That question matters more than simply asking whether the system should save the message. Classification determines where the repair belongs and what kind of future behavior it should alter.
+          </p>
+          <p>
+            This is one reason explicit runtime state matters. A system with state can attach the correction to an active task, a current phase, a tool decision, a verification miss, or a relationship rule. A system without those anchors is forced to rely on wording alone. Then the repair becomes fragile, because the only thing holding it together is whatever the latest turn happened to sound like.
+          </p>
+
+          <h2 id="paper-reply-learning-split">The reply path and the learning path must split</h2>
+          <p>
+            Another common mistake is letting learning artifacts leak directly into the next user-facing answer. The system classifies the complaint, drafts internal notes, or records a rule candidate, and then those traces start bleeding into the reply. Suddenly the assistant sounds like it is narrating its own repair log. That is not transparency. It is boundary failure.
+          </p>
+          <p>
+            The user deserves an honest response, not the raw contents of the repair process. Internal learning should stay internal. The reply path should produce the next answer. The learning path should classify, scope, and preserve what needs to shape future behavior. Those two paths can inform each other, but they should not collapse into one stream of text.
+          </p>
+
+          <h2 id="paper-inspectable-growth">Growth should stay inspectable</h2>
+          <p>
+            Once feedback becomes typed and scoped, improvement stops looking mystical. The system can say what changed, where that change lives, and how long it should matter. That makes growth inspectable instead of theatrical. Users do not need a machine that claims to be self-improving in the abstract. They need one that can survive correction without turning every objection into sludge.
+          </p>
+          <p>
+            That is the larger point behind this page. Agents do not improve by accumulating more text. They improve when feedback becomes stateful enough to shape the future without polluting the past. Memory preserves what matters. Rules decide what should happen next. If a correction never crosses that boundary, the system has not really learned yet.
+          </p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer reveal">
+    <div class="footer-brand">
+      <img src="./assets/aaroncore-logo-mark-bracket.svg?v=20260407p6" alt="AaronCore mark">
+      <div>
+        <strong>AaronCore</strong>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <div class="footer-item">
+        <span class="fact-label">Contact</span>
+        <strong>
+          <a data-site-field="contactLabel" data-link-field="contactUrl" data-link-label="contactLabel" href="mailto:hello@aaroncore.com">hello@aaroncore.com</a>
+        </strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=20260423p1"></script>
+</body>
+</html>
