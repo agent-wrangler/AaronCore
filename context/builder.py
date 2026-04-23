@@ -8,6 +8,7 @@ from core.runtime_state.state_loader import (
     get_recent_messages, load_l3_long_term, load_l4_persona, load_l5_knowledge,
 )
 from core.feedback_classifier import search_relevant_rules
+from storage.persona_profile import get_persona_assistant_name
 
 # ── 注入依赖 ──────────────────────────────────────────────
 _find_relevant_knowledge = lambda msg, limit=3, touch=True: []
@@ -49,15 +50,15 @@ def build_persona_events(persona_data: dict, event_time: str) -> list[dict]:
 
     events = []
 
-    nova_name = str(persona_data.get("nova_name") or persona_data.get("name") or "").strip()
-    if nova_name:
+    assistant_name = get_persona_assistant_name(persona_data)
+    if assistant_name:
         events.append(
             {
                 "time": event_time,
                 "layer": "L4",
                 "event_type": "persona",
                 "title": "人格图谱",
-                "content": f"确立了自己的名字「{nova_name}」，从这一刻起有了独立身份",
+                "content": f"确立了自己的名字「{assistant_name}」，从这一刻起有了独立身份",
             }
         )
 

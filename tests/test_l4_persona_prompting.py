@@ -9,6 +9,27 @@ from storage import state_loader
 
 
 class L4PersonaPromptingTests(unittest.TestCase):
+    def test_load_l4_persona_promotes_assistant_name_from_legacy_field(self):
+        persona = {
+            "nova_name": "小夏",
+            "interaction_rules": ["别假装已经执行"],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            persona_file = Path(tmpdir) / "persona.json"
+            persona_file.write_text(json.dumps(persona, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(state_loader, "PERSONA_FILE", persona_file):
+                loaded = state_loader.load_l4_persona()
+
+            saved = json.loads(persona_file.read_text(encoding="utf-8"))
+
+        self.assertEqual(loaded.get("assistant_name"), "小夏")
+        self.assertEqual((loaded.get("local_persona") or {}).get("assistant_name"), "小夏")
+        self.assertEqual(loaded.get("style_rules"), ["别假装已经执行"])
+        self.assertEqual(saved.get("assistant_name"), "小夏")
+        self.assertEqual(saved.get("nova_name"), "小夏")
+
     def test_load_l4_persona_keeps_flat_fields_and_local_persona(self):
         persona = {
             "active_mode": "sweet",
@@ -65,7 +86,7 @@ class L4PersonaPromptingTests(unittest.TestCase):
                 "ai_profile": {"identity": "我是 Nova。"},
                 "user_profile": {
                     "identity": "用户是主人",
-                    "preference": "喜欢自然一点、别太模板化",
+                    "preference": "喜欢自然一点，别太模板化",
                     "dislike": "不喜欢废话和重复确认",
                     "city": "常州",
                 },
@@ -76,7 +97,7 @@ class L4PersonaPromptingTests(unittest.TestCase):
         text = reply_prompts.condense_l4(l4)
 
         self.assertIn("用户：用户是主人", text)
-        self.assertIn("用户偏好：喜欢自然一点、别太模板化", text)
+        self.assertIn("用户偏好：喜欢自然一点，别太模板化", text)
         self.assertIn("用户反感：不喜欢废话和重复确认", text)
         self.assertIn("用户所在位置：常州", text)
 

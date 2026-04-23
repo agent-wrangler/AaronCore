@@ -17,6 +17,7 @@ class _Companion:
     activity = "thinking"
     reply_id = ""
     last_reply = ""
+    last_reply_summary = ""
     last_reply_full = ""
     emotion = "neutral"
 
@@ -30,6 +31,7 @@ class ChatPostReplyTests(unittest.TestCase):
             detect_emotion=lambda text: "happy",
         )
         self.assertEqual(companion.activity, "idle")
+        self.assertEqual(companion.last_reply_summary, companion.last_reply)
         self.assertEqual(companion.last_reply_full, "这是 一条回复")
         self.assertEqual(companion.emotion, "happy")
         self.assertTrue(companion.reply_id)

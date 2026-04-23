@@ -71,6 +71,38 @@ def test_update_stats_forwards_cache_and_model_fields():
     }
 
 
+def test_load_assistant_name_payload_prefers_new_field(tmp_path, monkeypatch):
+    (tmp_path / "persona.json").write_text(
+        json.dumps(
+            {
+                "assistant_name": "小夏",
+                "nova_name": "旧名",
+                "name": "旧品牌名",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(data, "S", SimpleNamespace(PRIMARY_STATE_DIR=tmp_path))
+
+    payload = data._load_assistant_name_payload()
+
+    assert payload == {"name": "小夏"}
+
+
+def test_nova_name_route_keeps_legacy_alias_but_returns_assistant_name(tmp_path, monkeypatch):
+    (tmp_path / "persona.json").write_text(
+        json.dumps({"assistant_name": "小夏", "nova_name": "旧名"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(data, "S", SimpleNamespace(PRIMARY_STATE_DIR=tmp_path))
+
+    assert asyncio.run(data.get_assistant_name()) == {"name": "小夏"}
+    assert asyncio.run(data.get_nova_name()) == {"name": "小夏"}
+
+
 def test_migrate_stats_data_backfills_model_cache_fields():
     stats, changed = state_loader.migrate_stats_data(
         {

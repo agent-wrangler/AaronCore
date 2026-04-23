@@ -20,6 +20,16 @@ function _createStreamRuntime(bindings){
   streamTailTimer:0
  };
 
+ function _emitAssistantReplyFinal(text){
+  var replyText=String(text||'').trim();
+  if(!replyText) return;
+  try{
+   window.dispatchEvent(new CustomEvent('aaroncore:assistant-reply-final', {
+    detail:{text:replyText}
+   }));
+  }catch(err){}
+ }
+
  function _syncStreamAutoFollow(){
   var nearBottom=(typeof window._isChatNearBottom==='function')
    ? !!window._isChatNearBottom(180)
@@ -309,6 +319,7 @@ function _createStreamRuntime(bindings){
   bindings.collapseSteps();
   bindings.syncRunPanelHeader();
   _followStreamToBottom({threshold:220});
+  _emitAssistantReplyFinal(finalRenderText);
   if(!pendingState.persisted){
    bindings.snapshotChatHistory();
    if(pendingState.steps&&pendingState.steps.length>0){

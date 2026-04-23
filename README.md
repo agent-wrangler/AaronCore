@@ -71,7 +71,7 @@ Current local entrypoints in this repo:
 - `start_aaroncore.bat` - current local desktop launch script in this workspace
 - `agent_final.py` - Python backend entrypoint
 - `desktop_runtime_35/` - Electron desktop wrapper and packaging runtime
-- `website/official/` - static official site source, ready for GitHub Pages style deployment
+- `website/official/` - static official site source
 
 The desktop/runtime surface is still being organized, and packaging details may continue to evolve as the public release matures.
 
@@ -80,9 +80,9 @@ The desktop/runtime surface is still being organized, and packaging details may 
 The static official site lives in `website/official/`.
 
 - local preview: `cd website/official` then `python -m http.server 8080`
-- GitHub Pages workflow: `.github/workflows/deploy-site.yml`
+- current tracked workflows: `.github/workflows/ci.yml`, `.github/workflows/release-desktop.yml`
 
-If the repository is public, GitHub Pages can deploy this directory through GitHub Actions without needing a separate application server.
+There is currently no site deployment workflow checked into `.github/workflows/`. Add a separate deploy workflow later if the public site needs automated publishing.
 
 ## Local Config Overrides
 

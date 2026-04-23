@@ -1,4 +1,4 @@
-"""数据查询路由：memory, docs, history, stats, nova_name"""
+"""数据查询路由：memory, docs, history, stats, assistant_name"""
 import ast
 import json
 import re
@@ -11,6 +11,7 @@ from core.process_history import normalize_process_payload
 from memory.l2_memory import classify_retention_bucket
 from memory.l8_learning import classify_l8_entry_kind, should_show_l8_timeline_entry
 from storage.chat_attachments import build_public_chat_attachments
+from storage.persona_profile import DEFAULT_ASSISTANT_NAME, get_persona_assistant_name
 from storage.stats_store import MODEL_PRICES, get_model_price
 
 router = APIRouter()
@@ -1430,13 +1431,22 @@ async def update_stats(request: dict):
     return {"ok": True, "stats": stats}
 
 
-@router.get("/nova_name")
-async def get_nova_name():
+def _load_assistant_name_payload() -> dict:
     persona_path = S.PRIMARY_STATE_DIR / "persona.json"
     if persona_path.exists():
         try:
             persona = json.loads(persona_path.read_text(encoding="utf-8"))
-            return {"name": persona.get("nova_name", "Nova")}
+            return {"name": get_persona_assistant_name(persona, default=DEFAULT_ASSISTANT_NAME)}
         except Exception:
             pass
-    return {"name": "Nova"}
+    return {"name": DEFAULT_ASSISTANT_NAME}
+
+
+@router.get("/assistant_name")
+async def get_assistant_name():
+    return _load_assistant_name_payload()
+
+
+@router.get("/nova_name")
+async def get_nova_name():
+    return _load_assistant_name_payload()

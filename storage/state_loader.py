@@ -7,6 +7,7 @@ from storage import stats_store as _stats_store
 from storage import task_files as _task_files
 from storage.json_store import load_json, write_json
 from storage.model_config import load_current_model as _default_load_current_model
+from storage.persona_profile import normalize_persona_assistant_name_fields
 from storage.paths import (
     AUTOLEARN_CONFIG_FILE,
     CHAT_CONFIG_FILE,
@@ -383,7 +384,13 @@ def load_l3_long_term(limit=8, query: str | None = None):
 
 
 def load_l4_persona():
-    local_persona = load_json(PERSONA_FILE, {})
+    stored_persona = load_json(PERSONA_FILE, {})
+    local_persona = normalize_persona_assistant_name_fields(stored_persona)
+    if isinstance(stored_persona, dict) and local_persona != stored_persona:
+        try:
+            write_json(PERSONA_FILE, local_persona)
+        except Exception:
+            pass
     interaction_rules = local_persona.get("interaction_rules") or []
     payload = dict(local_persona) if isinstance(local_persona, dict) else {}
     payload["local_persona"] = local_persona if isinstance(local_persona, dict) else {}

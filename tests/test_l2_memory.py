@@ -439,6 +439,41 @@ class L2MemoryTests(unittest.TestCase):
             self.assertIn("_changelog", stored)
             self.assertEqual(len(stored["_changelog"]), 1)
 
+    def test_to_l4_stores_assistant_rename_profile_update(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            persona_file = tmp / "persona.json"
+            persona_file.write_text(
+                json.dumps(
+                    {
+                        "assistant_name": "Nova",
+                        "nova_name": "Nova",
+                        "ai_profile": {"identity": "我是Nova，是主人的本地智能助手。"},
+                        "relationship_profile": {
+                            "relationship": "Nova和主人是亲近、长期相处的关系。",
+                            "goal": "让主人感觉是在和熟悉的Nova对话。",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(l2_memory, "L4_FILE", persona_file):
+                l2_memory._to_l4(
+                    "以后你就叫念念",
+                    "preference",
+                    profile_updates={"assistant_name": "念念"},
+                )
+
+            stored = json.loads(persona_file.read_text(encoding="utf-8"))
+            self.assertEqual(stored.get("assistant_name"), "念念")
+            self.assertEqual(stored.get("nova_name"), "念念")
+            self.assertIn("念念", (stored.get("ai_profile") or {}).get("identity", ""))
+            self.assertIn("念念", (stored.get("relationship_profile") or {}).get("relationship", ""))
+            self.assertIn("_changelog", stored)
+            self.assertIn("更新了助手名字", stored["_changelog"][0]["content"])
+
     def test_to_l4_stores_explicit_call_me_rule(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -544,6 +579,21 @@ class L2MemoryTests(unittest.TestCase):
 
         self.assertEqual(result["memory_type"], "fact")
         self.assertEqual(result["profile_updates"], {"user_profile": {"location": "Seattle", "city": "Seattle"}})
+
+    def test_infer_memory_meta_detects_assistant_rename_without_llm(self):
+        result = meta_inference.infer_memory_meta(
+            "以后你就叫 念念",
+            "好呀，以后我就叫念念。",
+            llm_call=None,
+            think=None,
+            debug_write=lambda *_: None,
+            build_signal_profile=lambda _text: set(),
+            normalize_signal_text=lambda text: str(text or "").strip(),
+        )
+
+        self.assertEqual(result["memory_type"], "preference")
+        self.assertGreaterEqual(result["importance"], 0.92)
+        self.assertEqual(result["profile_updates"], {"assistant_name": "念念"})
 
     def test_to_l4_skips_architecture_discussion_misclassified_as_preference(self):
         with tempfile.TemporaryDirectory() as tmpdir:

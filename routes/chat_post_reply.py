@@ -10,6 +10,8 @@ def update_companion_reply_state(companion, response: str, *, detect_emotion) ->
     companion.reply_id = datetime.now().isoformat()
     summary = str(response or "").replace("\n", " ").strip()
     companion.last_reply = summary[:60] + ("..." if len(summary) > 60 else "")
+    if hasattr(companion, "last_reply_summary"):
+        companion.last_reply_summary = companion.last_reply
     companion.last_reply_full = summary
     try:
         companion.emotion = detect_emotion(response) if callable(detect_emotion) else "neutral"
@@ -156,6 +158,12 @@ def persist_reply_artifacts(
     include_empty_steps_with_plan: bool = False,
 ) -> str:
     text = str(response or "")
+
+    if is_transient_assistant_notice({"role": "nova", "content": text}):
+        if callable(debug_write):
+            debug_write("reply_skip_transient_notice_persist", {"content": text[:120]})
+        return text
+
     try:
         from core.reply_formatter import l1_hygiene_clean
 

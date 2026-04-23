@@ -7,6 +7,8 @@ import time
 from collections.abc import Callable
 from datetime import datetime
 
+from storage.persona_profile import apply_assistant_name_to_persona
+
 
 def try_crystallize(
     entry,
@@ -197,8 +199,20 @@ def to_l4(
         persona = load_json_fn(l4_file, {})
         updated = False
         profile_updates = profile_updates if isinstance(profile_updates, dict) else {}
+        assistant_name_update = str(profile_updates.get("assistant_name") or "").strip()
+        assistant_name_before = str(persona.get("assistant_name") or "").strip()
+        legacy_name_before = str(persona.get("nova_name") or "").strip()
         user_profile_updates = profile_updates.get("user_profile") if isinstance(profile_updates.get("user_profile"), dict) else {}
         update_labels: list[str] = []
+
+        if assistant_name_update:
+            resolved_name = apply_assistant_name_to_persona(persona, assistant_name_update)
+            if resolved_name and (
+                assistant_name_before != resolved_name
+                or legacy_name_before != resolved_name
+            ):
+                updated = True
+                update_labels.append("更新了助手名字")
 
         if user_profile_updates:
             user_profile = persona.setdefault("user_profile", {})

@@ -59,7 +59,7 @@ _dict.zh = {
   'input.send': '\u53d1\u9001\u6d88\u606f',
   'input.stop': '\u505c\u6b62\u56de\u590d',
   'input.upload': '\u4e0a\u4f20\u56fe\u7247',
-  'input.voice': '\u6309\u4f4f\u8bf4\u8bdd',
+  'input.voice': '\u8bed\u97f3\u5bf9\u8bdd',
   'input.listening': '\u6b63\u5728\u542c...',
   'input.waiting': '\u7b49\u5f85\u56de\u590d...',
   // 通用
@@ -659,7 +659,7 @@ _dict.en = {
   'input.send': 'Send message',
   'input.stop': 'Stop response',
   'input.upload': 'Upload image',
-  'input.voice': 'Hold to speak',
+  'input.voice': 'Voice chat',
   'input.listening': 'Listening...',
   'input.waiting': 'Waiting for reply...',
   // Common

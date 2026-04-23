@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 
 from storage.paths import PERSONA_FILE
+from storage.persona_profile import DEFAULT_ASSISTANT_NAME, get_persona_assistant_name
 from .vision_local import (
     build_screen_description as _build_local_screen_description,
     build_user_image_context as _build_local_user_image_context,
@@ -159,12 +160,15 @@ def _should_proactive_talk(description: str) -> str:
     try:
         if os.path.exists(persona_path):
             data = json.load(open(persona_path, "r", encoding="utf-8"))
-            nova_name = data.get("nova_name", "Nova")
+            assistant_name = get_persona_assistant_name(data, default=DEFAULT_ASSISTANT_NAME)
             user_name = data.get("user", "\u4e3b\u4eba")
             style = data.get("style_prompt", "\u6e29\u67d4\u81ea\u7136")
-            persona_snippet = f"\u4f60\u662f{nova_name}\uff0c{user_name}\u7684AI\u4f34\u4fa3\u3002\u98ce\u683c\uff1a{style}"
+            persona_snippet = f"\u4f60\u662f{assistant_name}\uff0c{user_name}\u7684AI\u4f34\u4fa3\u3002\u98ce\u683c\uff1a{style}"
     except Exception:
-        persona_snippet = "\u4f60\u662fNova\uff0c\u4e3b\u4eba\u7684AI\u4f34\u4fa3\u3002\u98ce\u683c\uff1a\u6e29\u67d4\u81ea\u7136"
+        persona_snippet = (
+            f"\u4f60\u662f{DEFAULT_ASSISTANT_NAME}\uff0c\u4e3b\u4eba\u7684AI\u4f34\u4fa3\u3002"
+            "\u98ce\u683c\uff1a\u6e29\u67d4\u81ea\u7136"
+        )
 
     idle_minutes = int((now - _last_user_input_time) / 60)
 

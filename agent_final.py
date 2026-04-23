@@ -534,6 +534,7 @@ from routes.models import router as _models_router
 from routes.data import router as _data_router
 from routes.skills import router as _skills_router
 from routes.settings import router as _settings_router
+from routes.companion import router as _companion_router
 from routes.chat import router as _chat_router
 from routes.lab import router as _lab_router
 
@@ -557,6 +558,7 @@ app.include_router(_models_router)
 app.include_router(_data_router)
 app.include_router(_skills_router)
 app.include_router(_settings_router)
+app.include_router(_companion_router)
 app.include_router(_chat_router)
 app.include_router(_lab_router)
 

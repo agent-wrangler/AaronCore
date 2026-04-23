@@ -2,6 +2,8 @@ import json
 import os
 import re
 
+from storage.persona_profile import apply_assistant_name_to_persona
+
 
 _PERSONA_FILE = ""
 _sync_name_in_persona = None
@@ -36,7 +38,7 @@ def auto_learn(user_input: str, ai_response: str = "") -> str:
                     if os.path.exists(config_path):
                         with open(config_path, "r", encoding="utf-8") as handle:
                             persona = json.load(handle)
-                    persona["nova_name"] = new_name
+                    new_name = apply_assistant_name_to_persona(persona, new_name)
                     if _sync_name_in_persona:
                         _sync_name_in_persona(persona, new_name)
                     with open(config_path, "w", encoding="utf-8") as handle:
@@ -66,7 +68,7 @@ def auto_learn(user_input: str, ai_response: str = "") -> str:
                             new_name = persona["waiting_name"][1]
                         elif new_name == "3":
                             new_name = persona["waiting_name"][2]
-                        persona["nova_name"] = new_name
+                        new_name = apply_assistant_name_to_persona(persona, new_name)
                         del persona["waiting_name"]
                         if _sync_name_in_persona:
                             _sync_name_in_persona(persona, new_name)

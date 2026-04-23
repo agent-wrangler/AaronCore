@@ -11,6 +11,14 @@ var _stopSvg = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/20
 var _taskProgressWorkingSvg = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.5"/><circle cx="8" cy="8" r="2.4" fill="currentColor"/></svg>';
 var _taskProgressDoneSvg = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/><path d="M5.1 8.1L7.1 10.1L11 6.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+function _dispatchChatRequestState(state, detail){
+ try{
+  window.dispatchEvent(new CustomEvent('aaroncore:chat-request-state', {
+   detail:Object.assign({state:String(state||'')}, detail||{})
+  }));
+ }catch(e){}
+}
+
 function _processMarkerText(label, status){
  var text=String(label||'');
  if(status==='error') return '!';

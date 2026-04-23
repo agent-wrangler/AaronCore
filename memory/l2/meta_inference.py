@@ -6,6 +6,8 @@ import json
 import re
 from collections.abc import Callable
 
+from storage.persona_profile import normalize_assistant_name_candidate
+
 
 MEMORY_TYPES = {
     "general",
@@ -91,6 +93,13 @@ EXPLICIT_CONFIRM_EXECUTION_RE = re.compile(
     r"[^\n\uff0c,\u3002\uff01!\uff1f?]{0,16}"
     r"(?:\u518d(?:\u6267\u884c|\u64cd\u4f5c|\u5904\u7406)|\u6267\u884c|\u64cd\u4f5c)$"
 )
+ASSISTANT_RENAME_PATTERNS = (
+    re.compile(r"^你以后(?:就)?叫(.+)$"),
+    re.compile(r"^以后你(?:就)?叫(.+)$"),
+    re.compile(r"^你改名叫(.+)$"),
+    re.compile(r"^以后叫你(.+)$"),
+    re.compile(r"^以后就叫你(.+)$"),
+)
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -120,6 +129,10 @@ def extract_json_object(raw: str) -> dict | None:
 
 def normalize_profile_updates(payload: dict | None) -> dict:
     data = payload if isinstance(payload, dict) else {}
+    normalized = {}
+    assistant_name = normalize_assistant_name_candidate(data.get("assistant_name"), max_length=12)
+    if assistant_name:
+        normalized["assistant_name"] = assistant_name
     user_profile = data.get("user_profile") if isinstance(data.get("user_profile"), dict) else {}
     normalized_user_profile = {}
     for field in ("location", "city"):
@@ -132,7 +145,9 @@ def normalize_profile_updates(payload: dict | None) -> dict:
         normalized_user_profile[field] = value
     if normalized_user_profile.get("city") and not normalized_user_profile.get("location"):
         normalized_user_profile["location"] = normalized_user_profile["city"]
-    return {"user_profile": normalized_user_profile} if normalized_user_profile else {}
+    if normalized_user_profile:
+        normalized["user_profile"] = normalized_user_profile
+    return normalized
 
 
 def call_memory_meta_llm(prompt: str, *, llm_call, think, debug_write: Callable[[str, dict], None]) -> dict | None:
@@ -195,6 +210,21 @@ def is_explicit_call_me_phrase(text: str) -> bool:
         return False
     target = match.group(1)
     return not contains_any(target, CALL_ME_BLOCKERS)
+
+
+def extract_explicit_assistant_name(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw or "\n" in raw:
+        return ""
+    compact = re.sub(r"\s+", "", raw)
+    for pattern in ASSISTANT_RENAME_PATTERNS:
+        match = pattern.fullmatch(compact)
+        if not match:
+            continue
+        candidate = normalize_assistant_name_candidate(match.group(1), max_length=12)
+        if candidate and not contains_any(candidate, CALL_ME_BLOCKERS):
+            return candidate
+    return ""
 
 
 def looks_like_explicit_interaction_shape(text: str) -> bool:
@@ -402,6 +432,7 @@ def infer_memory_meta(
     build_signal_profile: Callable[[str], set[str]],
     normalize_signal_text: Callable[[str], str],
 ) -> dict:
+    assistant_name = extract_explicit_assistant_name(text)
     default = {
         "importance": score_importance_structural(
             text,
@@ -429,6 +460,11 @@ def infer_memory_meta(
         ),
         "profile_updates": {},
     }
+    if assistant_name:
+        default["importance"] = max(float(default["importance"]), 0.92)
+        default["memory_type"] = "preference"
+        default["context_tag"] = RECORD_TAG
+        default["profile_updates"] = {"assistant_name": assistant_name}
     if not (llm_call or think):
         return default
 
@@ -438,7 +474,7 @@ def infer_memory_meta(
         f"User message: {str(text or '')[:280]}\n"
         f"Assistant reply: {str(ai_text or '')[:320]}\n\n"
         "Return exactly one JSON object with the following fields:\n"
-        f'{{"importance": 0.0, "memory_type": "general", "knowledge_query": false, "context_tag": "{DAILY_TAG}", "profile_updates": {{"user_profile": {{"location": "", "city": ""}}}}}}\n'
+        f'{{"importance": 0.0, "memory_type": "general", "knowledge_query": false, "context_tag": "{DAILY_TAG}", "profile_updates": {{"assistant_name": "", "user_profile": {{"location": "", "city": ""}}}}}}\n'
         "Requirements:\n"
         "- importance must be between 0 and 1.\n"
         "- memory_type must be one of "
@@ -452,6 +488,8 @@ def infer_memory_meta(
         "explicitly reveals their own stable current location or base in this "
         "message. Do not infer it from requests, examples, travel plans, or "
         "casual mentions.\n"
+        "- profile_updates.assistant_name may be set only when the user explicitly "
+        "renames the assistant in this message.\n"
         "- profile_updates.user_profile.city may be set only when that explicit "
         "location is clearly a city. Leave it empty for regions, countries, "
         "neighborhoods, or ambiguous places.\n"
@@ -482,10 +520,17 @@ def infer_memory_meta(
     else:
         knowledge_query = bool(knowledge_query)
 
+    normalized_profile_updates = normalize_profile_updates(payload.get("profile_updates"))
+    if assistant_name:
+        normalized_profile_updates["assistant_name"] = assistant_name
+        importance = max(float(importance), 0.92)
+        if memory_type == "general":
+            memory_type = "preference"
+
     return {
         "importance": importance,
         "memory_type": memory_type,
         "knowledge_query": knowledge_query,
         "context_tag": context_tag,
-        "profile_updates": normalize_profile_updates(payload.get("profile_updates")),
+        "profile_updates": normalized_profile_updates,
     }

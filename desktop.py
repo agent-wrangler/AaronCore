@@ -5,9 +5,12 @@ import webview
 import time
 import os
 import json
+import base64
+import atexit
 import ctypes
 import ctypes.wintypes
 import subprocess
+import threading
 from pathlib import Path
 try:
     import winreg
@@ -77,6 +80,14 @@ _hwnd = None
 _original_wndproc = None
 _theme_watch_started = False
 _last_system_theme = ""
+_voice_bridge_lock = threading.RLock()
+_voice_capabilities_cache = None
+_voice_listen_process = None
+_voice_speak_process = None
+_voice_listen_cancelled_ids = set()
+_voice_speak_cancelled_ids = set()
+_voice_state = {"listening": False, "speaking": False}
+_PS_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # 64 位 WNDPROC 签名
 WNDPROC = ctypes.WINFUNCTYPE(
@@ -187,16 +198,22 @@ def get_system_theme():
     except Exception:
         return "light"
 
-def _emit_system_theme(theme: str):
+def _dispatch_window_event(name: str, detail: dict | None = None):
     try:
-        payload = json.dumps({"theme": str(theme or "light")}, ensure_ascii=True)
+        payload = json.dumps(detail or {}, ensure_ascii=True)
+        event_name = json.dumps(str(name or ""), ensure_ascii=True)
         window.evaluate_js(
-            "window.dispatchEvent(new CustomEvent('aaroncore-system-theme', { detail: "
+            "window.dispatchEvent(new CustomEvent("
+            + event_name
+            + ", { detail: "
             + payload
             + " }));"
         )
     except Exception:
         pass
+
+def _emit_system_theme(theme: str):
+    _dispatch_window_event("aaroncore-system-theme", {"theme": str(theme or "light")})
 
 def _start_theme_watch():
     global _theme_watch_started, _last_system_theme
@@ -216,8 +233,430 @@ def _start_theme_watch():
             except Exception:
                 time.sleep(2.0)
 
-    import threading
     threading.Thread(target=_watch, daemon=True).start()
+
+
+def _powershell_path() -> str:
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    candidate = os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    return candidate if os.path.isfile(candidate) else "powershell"
+
+
+def _spawn_powershell(script: str) -> subprocess.Popen:
+    wrapped = (
+        "$ErrorActionPreference='Stop'\n"
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+        "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+        + str(script or "")
+    )
+    encoded = base64.b64encode(wrapped.encode("utf-16le")).decode("ascii")
+    return subprocess.Popen(
+        [
+            _powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-EncodedCommand",
+            encoded,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+        creationflags=_PS_CREATE_NO_WINDOW,
+    )
+
+
+def _parse_powershell_json(stdout_text: str, stderr_text: str, *, default_code: str) -> dict:
+    stdout_lines = [line.strip() for line in str(stdout_text or "").splitlines() if line.strip()]
+    for candidate in reversed(stdout_lines):
+        try:
+            payload = json.loads(candidate)
+            if isinstance(payload, dict):
+                return payload
+        except Exception:
+            continue
+    message = str(stderr_text or stdout_text or "").strip() or "PowerShell command failed."
+    return {"ok": False, "code": default_code, "message": message}
+
+
+def _normalize_lang_list(values) -> list[str]:
+    items = values if isinstance(values, list) else ([values] if values else [])
+    normalized = []
+    seen = set()
+    for value in items:
+        lang = str(value or "").strip()
+        key = lang.lower()
+        if not lang or key in seen:
+            continue
+        seen.add(key)
+        normalized.append(lang)
+    return normalized
+
+
+def _select_native_lang(requested_lang: str | None, available_langs: list[str]) -> str:
+    langs = _normalize_lang_list(available_langs)
+    requested = str(requested_lang or "").strip()
+    if not langs:
+        return ""
+    if not requested:
+        return langs[0]
+    lowered = requested.lower()
+    for lang in langs:
+        if lang.lower() == lowered:
+            return lang
+    prefix = lowered.split("-", 1)[0]
+    if prefix:
+        for lang in langs:
+            lang_lower = lang.lower()
+            if lang_lower == prefix or lang_lower.startswith(prefix + "-"):
+                return lang
+    return ""
+
+
+def _build_voice_capabilities_script() -> str:
+    return r"""
+Add-Type -AssemblyName System.Speech
+$sttLangs = @()
+$ttsLangs = @()
+try {
+  $sttLangs = @([System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers() | ForEach-Object { $_.Culture.Name } | Select-Object -Unique)
+} catch {}
+try {
+  $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+  $ttsLangs = @($synth.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Culture.Name } | Select-Object -Unique)
+  $synth.Dispose()
+} catch {}
+([PSCustomObject]@{
+  ok = $true
+  stt_available = @($sttLangs).Count -gt 0
+  tts_available = @($ttsLangs).Count -gt 0
+  stt_langs = @($sttLangs)
+  tts_langs = @($ttsLangs)
+} | ConvertTo-Json -Compress)
+""".strip()
+
+
+def _build_voice_listen_script(lang: str) -> str:
+    requested = json.dumps(str(lang or "").strip(), ensure_ascii=True)
+    return f"""
+Add-Type -AssemblyName System.Speech
+$targetLang = {requested}
+$recognizerInfo = [System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers() | Where-Object {{ $_.Culture.Name -ieq $targetLang }} | Select-Object -First 1
+if (-not $recognizerInfo) {{
+  throw "Recognizer unavailable for $targetLang"
+}}
+$engine = New-Object System.Speech.Recognition.SpeechRecognitionEngine($recognizerInfo.Culture)
+$engine.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))
+$engine.InitialSilenceTimeout = [TimeSpan]::FromSeconds(5)
+$engine.BabbleTimeout = [TimeSpan]::FromSeconds(3)
+$engine.EndSilenceTimeout = [TimeSpan]::FromMilliseconds(900)
+$engine.EndSilenceTimeoutAmbiguous = [TimeSpan]::FromMilliseconds(1200)
+$engine.SetInputToDefaultAudioDevice()
+$result = $engine.Recognize([TimeSpan]::FromSeconds(12))
+$engine.Dispose()
+if ($result -and -not [string]::IsNullOrWhiteSpace($result.Text)) {{
+  ([PSCustomObject]@{{
+    ok = $true
+    lang = $targetLang
+    text = $result.Text
+    confidence = [Math]::Round($result.Confidence, 4)
+  }} | ConvertTo-Json -Compress)
+}} else {{
+  ([PSCustomObject]@{{
+    ok = $false
+    code = "no-speech"
+    lang = $targetLang
+    message = "No speech recognized."
+  }} | ConvertTo-Json -Compress)
+}}
+""".strip()
+
+
+def _build_voice_speak_script(text: str, lang: str) -> str:
+    requested_text = json.dumps(str(text or ""), ensure_ascii=True)
+    requested_lang = json.dumps(str(lang or "").strip(), ensure_ascii=True)
+    return f"""
+Add-Type -AssemblyName System.Speech
+$targetText = {requested_text}
+$targetLang = {requested_lang}
+if ([string]::IsNullOrWhiteSpace($targetText)) {{
+  ([PSCustomObject]@{{ ok = $true; skipped = $true; lang = $targetLang }} | ConvertTo-Json -Compress)
+  return
+}}
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$voice = $null
+if (-not [string]::IsNullOrWhiteSpace($targetLang)) {{
+  $voice = $synth.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Culture.Name -ieq $targetLang }} | Select-Object -First 1
+  if (-not $voice) {{
+    $prefix = if ($targetLang.Length -ge 2) {{ $targetLang.Substring(0, 2) }} else {{ $targetLang }}
+    if (-not [string]::IsNullOrWhiteSpace($prefix)) {{
+      $voice = $synth.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Culture.Name -like ($prefix + "*") }} | Select-Object -First 1
+    }}
+  }}
+}}
+if ($voice) {{
+  $synth.SelectVoice($voice.VoiceInfo.Name)
+}}
+$synth.Speak($targetText)
+$synth.Dispose()
+([PSCustomObject]@{{
+  ok = $true
+  lang = if ($voice) {{ $voice.VoiceInfo.Culture.Name }} else {{ $targetLang }}
+}} | ConvertTo-Json -Compress)
+""".strip()
+
+
+def _get_voice_capabilities(*, force: bool = False) -> dict:
+    global _voice_capabilities_cache
+    with _voice_bridge_lock:
+        if _voice_capabilities_cache is not None and not force:
+            return dict(_voice_capabilities_cache)
+    try:
+        proc = _spawn_powershell(_build_voice_capabilities_script())
+        stdout_text, stderr_text = proc.communicate(timeout=12)
+        payload = _parse_powershell_json(stdout_text, stderr_text, default_code="voice_capabilities_failed")
+    except Exception as exc:
+        payload = {"ok": False, "code": "voice_capabilities_failed", "message": str(exc)}
+    caps = {
+        "native_host": True,
+        "stt_available": bool(payload.get("stt_available")),
+        "tts_available": bool(payload.get("tts_available")),
+        "stt_langs": _normalize_lang_list(payload.get("stt_langs")),
+        "tts_langs": _normalize_lang_list(payload.get("tts_langs")),
+    }
+    if not payload.get("ok", True):
+        caps["error"] = str(payload.get("message") or payload.get("code") or "")
+    with _voice_bridge_lock:
+        _voice_capabilities_cache = dict(caps)
+    return dict(caps)
+
+
+def _emit_native_voice_state():
+    caps = _get_voice_capabilities()
+    with _voice_bridge_lock:
+        detail = {
+            "native_host": True,
+            "listening": bool(_voice_state.get("listening")),
+            "speaking": bool(_voice_state.get("speaking")),
+            "stt_available": bool(caps.get("stt_available")),
+            "tts_available": bool(caps.get("tts_available")),
+            "stt_langs": list(caps.get("stt_langs") or []),
+            "tts_langs": list(caps.get("tts_langs") or []),
+        }
+    _dispatch_window_event("aaroncore-native-voice-state", detail)
+
+
+def voice_bridge_status():
+    caps = _get_voice_capabilities()
+    with _voice_bridge_lock:
+        return {
+            "ok": True,
+            "native_host": True,
+            "listening": bool(_voice_state.get("listening")),
+            "speaking": bool(_voice_state.get("speaking")),
+            "stt_available": bool(caps.get("stt_available")),
+            "tts_available": bool(caps.get("tts_available")),
+            "stt_langs": list(caps.get("stt_langs") or []),
+            "tts_langs": list(caps.get("tts_langs") or []),
+            "error": str(caps.get("error") or ""),
+        }
+
+
+def voice_listen_stop():
+    global _voice_listen_process
+    proc = None
+    should_emit = False
+    with _voice_bridge_lock:
+        proc = _voice_listen_process
+        if proc is not None:
+            _voice_listen_cancelled_ids.add(id(proc))
+            _voice_listen_process = None
+        if _voice_state.get("listening"):
+            _voice_state["listening"] = False
+            should_emit = True
+    if proc is not None:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        should_emit = True
+    if should_emit:
+        _emit_native_voice_state()
+    return {"ok": True, "stopped": bool(proc)}
+
+
+def voice_speak_stop():
+    global _voice_speak_process
+    proc = None
+    should_emit = False
+    with _voice_bridge_lock:
+        proc = _voice_speak_process
+        if proc is not None:
+            _voice_speak_cancelled_ids.add(id(proc))
+            _voice_speak_process = None
+        if _voice_state.get("speaking"):
+            _voice_state["speaking"] = False
+            should_emit = True
+    if proc is not None:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        should_emit = True
+    if should_emit:
+        _emit_native_voice_state()
+    return {"ok": True, "stopped": bool(proc)}
+
+
+def voice_listen_start(lang=None):
+    global _voice_listen_process
+    caps = _get_voice_capabilities()
+    requested_lang = str(lang or "").strip()
+    selected_lang = _select_native_lang(requested_lang, caps.get("stt_langs") or [])
+    if not caps.get("stt_available"):
+        return {
+            "ok": False,
+            "reason": "stt_unavailable",
+            "available_langs": list(caps.get("stt_langs") or []),
+        }
+    if not selected_lang:
+        return {
+            "ok": False,
+            "reason": "language_unavailable",
+            "available_langs": list(caps.get("stt_langs") or []),
+        }
+    voice_listen_stop()
+    try:
+        proc = _spawn_powershell(_build_voice_listen_script(selected_lang))
+    except Exception as exc:
+        _dispatch_window_event(
+            "aaroncore-native-voice-error",
+            {"phase": "listen", "code": "start_failed", "lang": selected_lang, "message": str(exc)},
+        )
+        return {"ok": False, "reason": "start_failed", "message": str(exc)}
+
+    with _voice_bridge_lock:
+        _voice_listen_process = proc
+        _voice_state["listening"] = True
+    _emit_native_voice_state()
+
+    def _worker(process: subprocess.Popen, target_lang: str):
+        global _voice_listen_process
+        stdout_text, stderr_text = process.communicate()
+        payload = _parse_powershell_json(stdout_text, stderr_text, default_code="listen_failed")
+        should_emit = False
+        with _voice_bridge_lock:
+            cancelled = id(process) in _voice_listen_cancelled_ids
+            _voice_listen_cancelled_ids.discard(id(process))
+            if _voice_listen_process is process:
+                _voice_listen_process = None
+                _voice_state["listening"] = False
+                should_emit = True
+        if should_emit:
+            _emit_native_voice_state()
+        if cancelled:
+            return
+        if payload.get("ok") and str(payload.get("text") or "").strip():
+            _dispatch_window_event(
+                "aaroncore-native-voice-result",
+                {
+                    "text": str(payload.get("text") or "").strip(),
+                    "lang": str(payload.get("lang") or target_lang),
+                    "confidence": float(payload.get("confidence") or 0.0),
+                },
+            )
+            return
+        _dispatch_window_event(
+            "aaroncore-native-voice-error",
+            {
+                "phase": "listen",
+                "code": str(payload.get("code") or "listen_failed"),
+                "lang": str(payload.get("lang") or target_lang),
+                "message": str(payload.get("message") or "Native speech recognition failed."),
+            },
+        )
+
+    threading.Thread(target=_worker, args=(proc, selected_lang), daemon=True).start()
+    return {"ok": True, "started": True, "lang": selected_lang}
+
+
+def voice_speak(text, lang=None):
+    global _voice_speak_process
+    caps = _get_voice_capabilities()
+    utterance = str(text or "").strip()
+    requested_lang = str(lang or "").strip()
+    selected_lang = _select_native_lang(requested_lang, caps.get("tts_langs") or [])
+    if not utterance:
+        return {"ok": False, "reason": "empty"}
+    if not caps.get("tts_available"):
+        return {
+            "ok": False,
+            "reason": "tts_unavailable",
+            "available_langs": list(caps.get("tts_langs") or []),
+        }
+    if requested_lang and not selected_lang:
+        return {
+            "ok": False,
+            "reason": "language_unavailable",
+            "available_langs": list(caps.get("tts_langs") or []),
+        }
+    if not selected_lang:
+        selected_lang = requested_lang or _select_native_lang("", caps.get("tts_langs") or [])
+    voice_speak_stop()
+    try:
+        proc = _spawn_powershell(_build_voice_speak_script(utterance, selected_lang))
+    except Exception as exc:
+        _dispatch_window_event(
+            "aaroncore-native-voice-error",
+            {"phase": "speak", "code": "start_failed", "lang": selected_lang, "message": str(exc)},
+        )
+        return {"ok": False, "reason": "start_failed", "message": str(exc)}
+
+    with _voice_bridge_lock:
+        _voice_speak_process = proc
+        _voice_state["speaking"] = True
+    _emit_native_voice_state()
+
+    def _worker(process: subprocess.Popen, target_lang: str):
+        global _voice_speak_process
+        stdout_text, stderr_text = process.communicate()
+        payload = _parse_powershell_json(stdout_text, stderr_text, default_code="speak_failed")
+        should_emit = False
+        with _voice_bridge_lock:
+            cancelled = id(process) in _voice_speak_cancelled_ids
+            _voice_speak_cancelled_ids.discard(id(process))
+            if _voice_speak_process is process:
+                _voice_speak_process = None
+                _voice_state["speaking"] = False
+                should_emit = True
+        if should_emit:
+            _emit_native_voice_state()
+        if cancelled:
+            return
+        if payload.get("ok"):
+            return
+        _dispatch_window_event(
+            "aaroncore-native-voice-error",
+            {
+                "phase": "speak",
+                "code": str(payload.get("code") or "speak_failed"),
+                "lang": str(payload.get("lang") or target_lang),
+                "message": str(payload.get("message") or "Native speech synthesis failed."),
+            },
+        )
+
+    threading.Thread(target=_worker, args=(proc, selected_lang), daemon=True).start()
+    return {"ok": True, "started": True, "lang": selected_lang}
+
+
+def _cleanup_native_voice_processes():
+    voice_listen_stop()
+    voice_speak_stop()
+
+
+atexit.register(_cleanup_native_voice_processes)
 
 def set_theme(theme):
     _set_titlebar_theme(theme == 'dark')
@@ -301,6 +740,11 @@ def _on_shown():
         window.expose(close_window)
         window.expose(start_drag)
         window.expose(start_resize)
+        window.expose(voice_bridge_status)
+        window.expose(voice_listen_start)
+        window.expose(voice_listen_stop)
+        window.expose(voice_speak)
+        window.expose(voice_speak_stop)
         hwnd = _find_hwnd()
         if hwnd:
             window.set_title("")

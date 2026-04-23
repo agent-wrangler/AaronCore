@@ -67,6 +67,7 @@ from routes.chat_trace_semantics import (
 from routes.chat_thinking_trace import ChatThinkingTraceState
 from routes.chat_trace_state import ChatTraceState
 from routes.chat_stream_markdown import MarkdownIncrementalStream
+from storage.persona_profile import get_persona_assistant_name
 from storage.chat_attachments import (
     delete_chat_attachments as _delete_chat_attachments,
     persist_inline_chat_images as _persist_inline_chat_images,
@@ -285,7 +286,7 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         persona_name = ""
         if isinstance(l4, dict):
             lp = l4.get("local_persona") or l4
-            persona_name = str(lp.get("nova_name") or lp.get("name") or "")
+            persona_name = get_persona_assistant_name(lp)
         skill_count = len(l5.get("skills", {})) if isinstance(l5, dict) else 0
 
         # Step 3: 检索知识（CoD 模式跳过，由 LLM 按需调用 query_knowledge）

@@ -23,6 +23,12 @@ async function send(){
  btn.classList.add('sending');
  setTimeout(function(){btn.classList.remove('sending');},500);
  _enterStopMode();
+ _dispatchChatRequestState('started', {
+  source:'send',
+  text_length:text.length,
+  image_count:images.length,
+  voice_mode:!!window._voiceMode
+ });
 var pendingState=buildPendingAssistantMessage();
 var chat=document.getElementById('chat');
 var _runPanelEls=_getRunPanelEls();
@@ -908,10 +914,16 @@ if(_streamRuntime.hasStarted() && finalText){
  }else if(finalText){
    _streamRuntime.renderReplyViaStream(finalText);
    if(!(pendingState.steps&&pendingState.steps.length)) _setRunPanelEmptyState('quiet');
-  }else{
+ }else{
    _setRunPanelEmptyState('quiet');
    finalizePendingAssistantMessage(pendingState, t('chat.error.retry'));
   }
+  _dispatchChatRequestState('completed', {
+   source:'send',
+   has_reply:!!finalText,
+   reply_text:finalText,
+   voice_mode:!!window._voiceMode
+  });
   _flushPendingModelSwitchNote();
   if(repairData && repairData.show){ showRepairBar(repairData); }
   _completeTaskProgress();
@@ -928,9 +940,21 @@ if(_streamRuntime.hasStarted() && finalText){
    }else{
     finalizePendingAssistantMessage(pendingState, t('chat.stopped')||'\u5df2\u505c\u6b62');
    }
+   _dispatchChatRequestState('aborted', {
+    source:'send',
+    has_reply:!!abortText,
+    reply_text:abortText,
+    voice_mode:!!window._voiceMode
+   });
   }else{
    _setRunPanelEmptyState('error');
    finalizePendingAssistantMessage(pendingState, t('chat.error.noconnect'));
+   _dispatchChatRequestState('error', {
+    source:'send',
+    error_name:String(e&&e.name||'Error'),
+    error_message:String(e&&e.message||''),
+    voice_mode:!!window._voiceMode
+   });
   }
   _pendingModelSwitchNote=null;
  }

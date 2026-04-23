@@ -310,6 +310,10 @@ function _exitStopMode(){
 
 function _stopGeneration(){
  if(_abortController){
+  _dispatchChatRequestState('stopping', {
+   source:'stop_button',
+   voice_mode:!!window._voiceMode
+  });
   _abortController.abort();
   _abortController=null;
  }
