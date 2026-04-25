@@ -1,6 +1,6 @@
 {
   "name": "aaroncore",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Desktop packaging wrapper for AaronCore",
   "author": "AaronCore",
