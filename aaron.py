@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import contextlib
+import io
 import json
 import os
+import queue
 import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib import error, request
@@ -14,7 +19,7 @@ from urllib import error, request
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_BASE_URL = "http://127.0.0.1:8090"
 DEFAULT_TIMEOUT = 10
-CLI_VERSION = "0.2.0"
+CLI_VERSION = "0.3.0"
 
 ANSI = {
     "reset": "\033[0m",
@@ -183,6 +188,13 @@ def start_backend_process(*, color: bool) -> subprocess.Popen | None:
 
 def ensure_backend(args: argparse.Namespace, *, color: bool) -> tuple[AaronCoreClient, dict | None, str]:
     client = build_client(args)
+    if isinstance(client, DirectAaronCoreClient):
+        try:
+            health = client.get_json("/health", timeout=args.timeout)
+        except AaronCoreError as exc:
+            raise AaronCoreError(f"Direct AaronCore runtime failed to load: {exc}") from exc
+        return client, health, "direct runtime"
+
     health = try_health(client, timeout=1)
     if health:
         return client, health, "ready"
@@ -206,6 +218,108 @@ def ensure_backend(args: argparse.Namespace, *, color: bool) -> tuple[AaronCoreC
     raise AaronCoreError(
         "AaronCore runtime did not become ready. Check logs/cli_backend.err.log and logs/cli_backend.out.log."
     )
+
+
+class DirectAaronCoreClient:
+    def __init__(self, timeout: int = DEFAULT_TIMEOUT):
+        self.base_url = "direct"
+        self.timeout = timeout
+        self._runtime_loaded = False
+        self._agent_final = None
+        self._import_output = ""
+
+    def _load_runtime(self) -> None:
+        if self._runtime_loaded:
+            return
+        env = os.environ
+        env.setdefault("AARONCORE_ROOT", str(ROOT_DIR))
+        env.setdefault("NOVACORE_ROOT", str(ROOT_DIR))
+        env.setdefault("AARONCORE_DATA_DIR", str(ROOT_DIR))
+        env.setdefault("NOVACORE_DATA_DIR", str(ROOT_DIR))
+        if str(ROOT_DIR) not in sys.path:
+            sys.path.insert(0, str(ROOT_DIR))
+
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+                import agent_final
+        except Exception as exc:
+            captured = (stdout_capture.getvalue() + stderr_capture.getvalue()).strip()
+            detail = f"{exc}"
+            if captured:
+                detail = f"{detail}\n{captured}"
+            raise AaronCoreError(detail) from exc
+
+        self._agent_final = agent_final
+        self._import_output = (stdout_capture.getvalue() + stderr_capture.getvalue()).strip()
+        if os.environ.get("AARON_DEBUG_IMPORT") and self._import_output:
+            print(self._import_output, file=sys.stderr)
+        self._runtime_loaded = True
+
+    @staticmethod
+    def _run(coro):
+        return asyncio.run(coro)
+
+    def get_json(self, path: str, *, timeout: int | None = None) -> dict:
+        self._load_runtime()
+        normalized = path if path.startswith("/") else "/" + path
+        if normalized == "/health":
+            from routes.health import get_health
+
+            result = self._run(get_health())
+            return result if isinstance(result, dict) else {}
+        raise AaronCoreError(f"Direct runtime does not expose {normalized}. Use --transport http for legacy HTTP endpoints.")
+
+    def post_json(self, path: str, payload: dict, *, timeout: int | None = None) -> dict:
+        self._load_runtime()
+        normalized = path if path.startswith("/") else "/" + path
+        if normalized == "/chat/answer":
+            from routes.chat import ChatAnswerRequest, chat_answer
+
+            result = self._run(chat_answer(ChatAnswerRequest(**payload)))
+            return result if isinstance(result, dict) else {}
+        raise AaronCoreError(f"Direct runtime does not expose {normalized}. Use --transport http for legacy HTTP endpoints.")
+
+    def chat_events(self, message: str, *, ui_lang: str = "cli"):
+        self._load_runtime()
+        done = object()
+        items: queue.Queue = queue.Queue()
+
+        def worker() -> None:
+            async def run_chat_stream() -> None:
+                from fastapi import BackgroundTasks
+                from routes.chat import ChatRequest, chat
+
+                background_tasks = BackgroundTasks()
+                response = await chat(ChatRequest(message=message, ui_lang=ui_lang), background_tasks)
+                async for item in response.body_iterator:
+                    items.put(normalize_direct_event(item))
+                background = getattr(response, "background", None)
+                if background is not None:
+                    await background()
+
+            try:
+                asyncio.run(run_chat_stream())
+            except BaseException as exc:
+                items.put(exc)
+            finally:
+                items.put(done)
+
+        thread = threading.Thread(target=worker, name="aaroncore-direct-chat", daemon=True)
+        thread.start()
+
+        while True:
+            item = items.get()
+            if item is done:
+                break
+            if isinstance(item, BaseException):
+                raise AaronCoreError(str(item)) from item
+            yield item
+
+    def submit_answer(self, question_id: str, answer: str) -> bool:
+        result = self.post_json("/chat/answer", {"question_id": question_id, "answer": answer})
+        return bool(result.get("ok"))
 
 
 class AaronCoreClient:
@@ -278,6 +392,23 @@ class AaronCoreClient:
     def submit_answer(self, question_id: str, answer: str) -> bool:
         result = self.post_json("/chat/answer", {"question_id": question_id, "answer": answer})
         return bool(result.get("ok"))
+
+
+def normalize_direct_event(item) -> tuple[str, str]:
+    if isinstance(item, dict):
+        event_name = str(item.get("event") or "message")
+        data = item.get("data", "")
+        if not isinstance(data, str):
+            data = json.dumps(data, ensure_ascii=False)
+        return event_name, data
+
+    event_name = str(getattr(item, "event", "") or "message")
+    data = getattr(item, "data", item)
+    if isinstance(data, bytes):
+        data = data.decode("utf-8", errors="replace")
+    elif not isinstance(data, str):
+        data = json.dumps(data, ensure_ascii=False)
+    return event_name, data
 
 
 def iter_sse_events(resp):
@@ -523,7 +654,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     client = build_client(args)
     color = should_color(sys.stdout, no_color=args.no_color)
     print(paint("AaronCore CLI doctor", "bold", "cyan", enabled=color))
-    print(status_line("backend", client.base_url, color=color))
+    print(status_line("transport", getattr(client, "base_url", "direct"), color=color))
     ok = True
     try:
         health = client.get_json("/health", timeout=3)
@@ -534,7 +665,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     except AaronCoreError as exc:
         ok = False
         print(status_line("/health", str(exc), status="fail", color=color))
-        print(status_line("hint", "start the backend with `python agent_final.py`", status="warn", color=color))
+        print(status_line("hint", "try `aaron doctor --transport http` for the legacy localhost path", status="warn", color=color))
 
     required = ["agent_final.py", "routes/chat.py", "memory", "state_data"]
     for rel in required:
@@ -620,8 +751,15 @@ def tail_text(path: Path, lines: int) -> str:
     return "\n".join(selected) + ("\n" if selected else "")
 
 
-def build_client(args: argparse.Namespace) -> AaronCoreClient:
-    return AaronCoreClient(base_url=args.url, timeout=args.timeout)
+def build_client(args: argparse.Namespace):
+    transport = str(getattr(args, "transport", "") or os.environ.get("AARONCORE_TRANSPORT") or "").strip().lower()
+    if not transport:
+        transport = "http" if getattr(args, "url", None) else "direct"
+    if transport == "http":
+        return AaronCoreClient(base_url=args.url or os.environ.get("AARONCORE_URL") or DEFAULT_BASE_URL, timeout=args.timeout)
+    if transport != "direct":
+        raise AaronCoreError(f"Unknown transport: {transport}")
+    return DirectAaronCoreClient(timeout=args.timeout)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -629,27 +767,28 @@ def build_parser() -> argparse.ArgumentParser:
         prog="aaron",
         description="AaronCore CLI: a thin terminal shell over the local memory-first agent runtime.",
     )
-    parser.add_argument("--url", default=os.environ.get("AARONCORE_URL", DEFAULT_BASE_URL), help="AaronCore backend URL.")
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout for non-streaming checks.")
+    parser.add_argument("--transport", choices=("direct", "http"), default=os.environ.get("AARONCORE_TRANSPORT", ""), help="Runtime transport. Default: direct in-process runtime.")
+    parser.add_argument("--url", default=os.environ.get("AARONCORE_URL"), help="Legacy HTTP backend URL. Setting this uses the HTTP transport.")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout for non-streaming checks.")
     parser.add_argument("--steps", action="store_true", help="Print backend process events to stderr.")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI color and styled output.")
-    parser.add_argument("--no-start", action="store_true", help="Do not auto-start the local runtime.")
+    parser.add_argument("--no-start", action="store_true", help="HTTP transport only: do not auto-start the localhost runtime.")
 
     subparsers = parser.add_subparsers(dest="command")
 
-    run_parser = subparsers.add_parser("run", help="Send one message to the local AaronCore backend.")
+    run_parser = subparsers.add_parser("run", help="Send one message to the local AaronCore runtime.")
     run_parser.add_argument("message", nargs=argparse.REMAINDER)
     run_parser.set_defaults(func=command_run)
 
     chat_parser = subparsers.add_parser("chat", help="Start an interactive AaronCore terminal chat.")
     chat_parser.set_defaults(func=command_shell)
 
-    doctor_parser = subparsers.add_parser("doctor", help="Check backend and local runtime files.")
+    doctor_parser = subparsers.add_parser("doctor", help="Check runtime and local files.")
     doctor_parser.set_defaults(func=command_doctor)
 
     memory_parser = subparsers.add_parser("memory", help="Memory-oriented commands.")
     memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
-    memory_search = memory_sub.add_parser("search", help="Ask AaronCore to search its memory through /chat.")
+    memory_search = memory_sub.add_parser("search", help="Ask AaronCore to search its memory through the normal chat runtime.")
     memory_search.add_argument("query", nargs=argparse.REMAINDER)
     memory_search.set_defaults(func=command_memory_search)
 

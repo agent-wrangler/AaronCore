@@ -38,11 +38,11 @@ AaronCore CLI
 a memory-first local agent shell
 ```
 
-The first CLI version is intentionally a thin shell over the existing local runtime:
+The CLI now runs the existing AaronCore runtime in-process by default:
 
 ```text
 terminal input
-  -> local AaronCore runtime
+  -> in-process AaronCore runtime
   -> streamed terminal reply
   -> existing L1-L8 / tool_call / MCP runtime
 ```
@@ -139,9 +139,9 @@ That means the codebase already reflects the actual direction, but the packaging
 
 Current local entrypoints in this repo:
 
-- `aaron.py` / `aaron.bat` - CLI shell over the local `/chat` runtime
+- `aaron.py` / `aaron.bat` - CLI shell over the local runtime, direct in-process by default
 - `start_aaroncore.bat` - current local desktop launch script in this workspace
-- `agent_final.py` - Python backend entrypoint
+- `agent_final.py` - Python runtime/backend entrypoint
 - `desktop_runtime_35/` - Electron desktop wrapper and packaging runtime
 - `website/official/` - static official site source
 
