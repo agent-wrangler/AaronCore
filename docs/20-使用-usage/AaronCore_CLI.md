@@ -16,7 +16,8 @@ terminal input
 
 ## Commands
 
-For normal Windows users, install from PowerShell:
+For normal Windows users, install from PowerShell. There is no desktop `.exe`
+package in the mainline; the public path is the CLI installer:
 
 ```powershell
 irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex

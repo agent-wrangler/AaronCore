@@ -54,8 +54,9 @@ Release-state values stay in `releaseConfig`:
 
 - Primary domain: `aaroncore.com`
 - Public contact: `hello@aaroncore.com`
-- Current state: official site first, no public build yet
+- Current state: official site plus public CLI install path
 - Current tone: memory, continuity, action
+- Public install: `irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex`
 
 ## Local preview
 

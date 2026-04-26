@@ -5,8 +5,8 @@ const siteConfig = {
   contactLabel: "hello@aaroncore.com",
   contactUrl: "mailto:hello@aaroncore.com",
   contactStatus: "direct email for access, partnerships, and questions",
-  launchState: "Official site first",
-  releaseRoute: "aaroncore.com / future download channel",
+  launchState: "CLI install live",
+  releaseRoute: "GitHub README / one-line PowerShell install",
   metaDescription:
     "A memory-first agent project exploring how understanding, continuity, and action can grow from memory.",
   ogDescription:
@@ -21,13 +21,13 @@ const siteConfig = {
 };
 
 const releaseConfig = {
-  available: false,
-  url: "",
-  label: "Download AaronCore",
-  fallbackLabel: "Download Pending",
-  version: "Beta pending",
-  noteWhenLocked: "Public build is not attached yet.",
-  noteWhenOpen: "Direct download is now live."
+  available: true,
+  url: "https://github.com/agent-wrangler/AaronCore#install",
+  label: "Install AaronCore CLI",
+  fallbackLabel: "Install from GitHub",
+  version: "CLI public install",
+  noteWhenLocked: "Use the one-line PowerShell installer from GitHub.",
+  noteWhenOpen: "AaronCore now installs from the terminal, not an exe package."
 };
 
 function setMeta(selector, value) {
@@ -109,15 +109,15 @@ const I18N = {
     "hero.subtitle": "Familiarity, context, and task state should not be wiped clean every turn.",
     "hero.lede": "AaronCore does not treat memory as a standalone feature. It turns memory into the starting point for understanding, continuity, and action.",
     "hero.note": "Memory · Continuity · Action",
-    "home.stage.kicker": "Desktop runtime",
-    "home.stage.h": "One desktop loop for memory, tools, task state, and verification.",
+    "home.stage.kicker": "CLI runtime",
+    "home.stage.h": "One terminal loop for memory, tools, task state, and verification.",
     "home.stage.p": "AaronCore keeps context live while it routes the next step, runs tools, tracks progress, and leaves a result you can actually check.",
     "home.panel.exec.label": "What it does",
     "home.panel.exec.h": "The runtime can hold context, call tools, and keep moving without dropping the thread.",
     "home.panel.exec.p": "Task state, routing, and tool results stay attached while the work advances.",
     "home.panel.posture.label": "Why it matters",
     "home.panel.posture.h": "Continuity turns into forward motion",
-    "home.panel.posture.p": "Memory matters because it stays connected to execution, verification, and the current desktop session.",
+    "home.panel.posture.p": "Memory matters because it stays connected to execution, verification, and the current local session.",
     "home.rail.1.h": "Anchor",
     "home.rail.1.p": "load current context, task state, and user intent",
     "home.rail.2.h": "Route",
@@ -179,6 +179,12 @@ const I18N = {
     "home.docs.h": "Go deeper when you want the runtime model, memory system, and execution details",
     "home.cta.h": "If you want AI that remembers, start here",
     "home.cta.p": "AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.",
+    "install.kicker": "Public CLI install",
+    "install.h": "No desktop installer package. Open PowerShell and run one line.",
+    "install.p": "AaronCore downloads the latest public source, creates a local Python environment, and adds `aaron` / `aaroncore` to your user PATH.",
+    "install.github": "Open GitHub install guide",
+    "install.term.title": "Windows PowerShell",
+    "install.term.note": "Then open a new terminal and type `aaroncore`.",
     "product.title": "Memory that comes back when it matters",
     "product.subtitle": "AaronCore turns memory into a live part of conversation and work: recall, continuity, persona, and a clearer path to action.",
     "product.card.continuity.h": "Flashback can feel natural",
@@ -212,8 +218,8 @@ const I18N = {
     "docs.card.repair.p": "Flashback is driven by resonance and continuity, not just plain keyword hits.",
     "docs.card.bounds.h": "Boundaries",
     "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
-    "docs.card.release.h": "Beta + download",
-    "docs.card.release.p": "Public builds attach when ready. Until then, GitHub is the honest path.",
+    "docs.card.release.h": "CLI install",
+    "docs.card.release.p": "The public path is the GitHub one-line PowerShell installer. There is no desktop exe package in the mainline.",
     "docs.deep.h": "Want the deeper architecture write-up?",
     "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
@@ -223,8 +229,8 @@ const I18N = {
     "changelog.r1.p": "Split Home / Product / Research / Changelog, tightened copy toward continuity + verification, and reduced “demo UI” noise on the homepage.",
     "changelog.r2.h": "Official landing refresh",
     "changelog.r2.p": "Expanded the landing narrative with stronger sections for capabilities, proof, trust, and release posture.",
-    "changelog.r3.h": "Public beta build",
-    "changelog.r3.p": "Not attached yet. The honest default: GitHub-first early access until downloads are wired.",
+    "changelog.r3.h": "CLI install path",
+    "changelog.r3.p": "Public access now points to the GitHub CLI installer instead of desktop release assets.",
 
     "lang.button": "Lang",
     "lang.en": "English",
@@ -249,15 +255,15 @@ const I18N = {
     "hero.subtitle": "关系感、上下文、任务状态，不该每一轮都被清空。",
     "hero.lede": "AaronCore 不把记忆当成一个孤立功能，而是把它变成理解、延续与行动的起点。",
     "hero.note": "记忆 · 延续 · 行动",
-    "home.stage.kicker": "桌面运行时",
-    "home.stage.h": "把记忆、工具、任务状态和验证收进同一条桌面链路。",
+    "home.stage.kicker": "CLI 运行时",
+    "home.stage.h": "把记忆、工具、任务状态和验证收进同一条终端链路。",
     "home.stage.p": "AaronCore 让上下文持续在线，在同一轮里决定下一步、调用工具、跟踪进度，并留下真正可检查的结果。",
     "home.panel.exec.label": "它实际在做什么",
     "home.panel.exec.h": "这个运行时能挂住上下文、调起工具，并且不断线地往前推进。",
     "home.panel.exec.p": "任务状态、路由结果和工具输出会一起挂着，不会做一步丢一步。",
     "home.panel.posture.label": "为什么这很重要",
     "home.panel.posture.h": "延续感会真正变成推进力",
-    "home.panel.posture.p": "记忆之所以有价值，是因为它始终连着执行、验证和当前桌面会话。",
+    "home.panel.posture.p": "记忆之所以有价值，是因为它始终连着执行、验证和当前本地会话。",
     "home.rail.1.h": "锚定当前",
     "home.rail.1.p": "装入当前上下文、任务状态和用户意图",
     "home.rail.2.h": "路由",
@@ -319,6 +325,12 @@ const I18N = {
     "home.docs.h": "当你想看运行时模型、记忆系统与执行细节时，再深入",
     "home.cta.h": "如果你想要一个真的会记住你的 AI，就从这里开始",
     "home.cta.p": "AaronCore 想做的是一件事：让对话能积累、能回来、能越来越像认识你，而不是最后变成一锅记忆糊。",
+    "install.kicker": "公开 CLI 安装",
+    "install.h": "不用桌面安装包。打开 PowerShell，运行一行命令。",
+    "install.p": "AaronCore 会下载最新公开源码，创建本地 Python 环境，并把 `aaron` / `aaroncore` 加到用户 PATH。",
+    "install.github": "打开 GitHub 安装说明",
+    "install.term.title": "Windows PowerShell",
+    "install.term.note": "完成后打开一个新终端，输入 `aaroncore`。",
     "product.title": "会在需要时想起你的记忆",
     "product.subtitle": "AaronCore 让记忆真正参与对话：记忆闪回、时间回忆、人格连续性，以及记忆卫生。",
     "product.card.continuity.h": "闪回可以很自然",
@@ -352,8 +364,8 @@ const I18N = {
     "docs.card.repair.p": "flashback 的主体是状态共振和任务连续性，不是普通关键词检索。",
     "docs.card.bounds.h": "边界",
     "docs.card.bounds.p": "各层记忆职责分开，事实、经历、规则和知识不会混成一个桶。",
-    "docs.card.release.h": "内测与下载",
-    "docs.card.release.p": "公开构建准备好才挂。现在的诚实路径是邮箱内测。",
+    "docs.card.release.h": "CLI 安装",
+    "docs.card.release.p": "公开路径是 GitHub 上的一行 PowerShell 安装命令。主线不再提供桌面 exe 安装包。",
     "docs.deep.h": "想看更深的架构写法？",
     "docs.deep.p": "公开文档以后可以继续展开，这里先做一张用户能快速理解的记忆地图。",
 
@@ -363,8 +375,8 @@ const I18N = {
     "changelog.r1.p": "\u62c6\u5206 Home/Product/Research/Changelog\uff0c\u6587\u6848\u805a\u7126\u8fde\u7eed\u6027\u4e0e\u53ef\u9a8c\u8bc1\uff0c\u5e76\u964d\u4f4e\u9996\u9875\u201c\u6f14\u793a UI\u201d\u566a\u97f3\u3002",
     "changelog.r2.h": "官网基础版落地",
     "changelog.r2.p": "补齐能力、证明、信任与发布姿态的基本结构。",
-    "changelog.r3.h": "公开内测构建",
-    "changelog.r3.p": "暂未挂载。默认走邮箱内测，下载链路准备好再公开。",
+    "changelog.r3.h": "CLI 安装路径",
+    "changelog.r3.p": "公开访问现在指向 GitHub CLI 安装器，而不是桌面 release 资产。",
 
     "lang.button": "语言",
     "lang.en": "English",
@@ -452,6 +464,12 @@ const I18N = {
     "home.docs.h": "Go deeper when you want the runtime model, memory system, and execution details",
     "home.cta.h": "If you want AI that remembers, start here",
     "home.cta.p": "AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.",
+    "install.kicker": "Public CLI install",
+    "install.h": "No desktop installer package. Open PowerShell and run one line.",
+    "install.p": "AaronCore downloads the latest public source, creates a local Python environment, and adds `aaron` / `aaroncore` to your user PATH.",
+    "install.github": "Open GitHub install guide",
+    "install.term.title": "Windows PowerShell",
+    "install.term.note": "Then open a new terminal and type `aaroncore`.",
     "product.title": "Memory that comes back when it matters",
     "product.subtitle": "AaronCore turns memory into a live part of conversation and work: recall, continuity, persona, and a clearer path to action.",
     "product.card.continuity.h": "Flashback can feel natural",
@@ -485,8 +503,8 @@ const I18N = {
     "docs.card.repair.p": "Flashback is driven by resonance and continuity, not just plain keyword hits.",
     "docs.card.bounds.h": "境界",
     "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
-    "docs.card.release.h": "ベータとダウンロード",
-    "docs.card.release.p": "公開ビルドは準備が整ってから。今はメールボックスが正直な導線。",
+    "docs.card.release.h": "CLI install",
+    "docs.card.release.p": "The public path is the GitHub one-line PowerShell installer, not a desktop exe package.",
     "docs.deep.h": "Want the deeper architecture write-up?",
     "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
@@ -496,8 +514,8 @@ const I18N = {
     "changelog.r1.p": "Home/Product/Research/Changelog \u306b\u5206\u5272\u3057\u3001\u7d99\u7d9a\u6027\u3068\u691c\u8a3c\u306b\u7126\u70b9\u3092\u5408\u308f\u305b\u3001\u30db\u30fc\u30e0\u306e\u30c7\u30e2\u611f\u3092\u6291\u5236\u3002",
     "changelog.r2.h": "公式ランディング整備",
     "changelog.r2.p": "能力、証拠、信頼、リリース姿勢の基本セクションを追加。",
-    "changelog.r3.h": "公開ベータビルド",
-    "changelog.r3.p": "まだ未添付。整うまでメール導線を維持。",
+    "changelog.r3.h": "CLI install path",
+    "changelog.r3.p": "Public access now points to the GitHub CLI installer instead of desktop release assets.",
 
     "lang.button": "言語",
     "lang.en": "English",
@@ -585,6 +603,12 @@ const I18N = {
     "home.docs.h": "Go deeper when you want the runtime model, memory system, and execution details",
     "home.cta.h": "If you want AI that remembers, start here",
     "home.cta.p": "AaronCore is being built around one promise: conversations should accumulate, return, and feel personal without turning into memory sludge.",
+    "install.kicker": "Public CLI install",
+    "install.h": "No desktop installer package. Open PowerShell and run one line.",
+    "install.p": "AaronCore downloads the latest public source, creates a local Python environment, and adds `aaron` / `aaroncore` to your user PATH.",
+    "install.github": "Open GitHub install guide",
+    "install.term.title": "Windows PowerShell",
+    "install.term.note": "Then open a new terminal and type `aaroncore`.",
     "product.title": "Memory that comes back when it matters",
     "product.subtitle": "AaronCore turns memory into a live part of conversation and work: recall, continuity, persona, and a clearer path to action.",
     "product.card.continuity.h": "Flashback can feel natural",
@@ -618,8 +642,8 @@ const I18N = {
     "docs.card.repair.p": "Flashback is driven by resonance and continuity, not just plain keyword hits.",
     "docs.card.bounds.h": "경계",
     "docs.card.bounds.p": "The memory layers stay split by role so facts, experiences, rules, and knowledge do not collapse into one bucket.",
-    "docs.card.release.h": "베타와 다운로드",
-    "docs.card.release.p": "공개 빌드는 준비되면 연결합니다. 그전엔 메일 베타가 정직한 경로입니다.",
+    "docs.card.release.h": "CLI install",
+    "docs.card.release.p": "The public path is the GitHub one-line PowerShell installer, not a desktop exe package.",
     "docs.deep.h": "Want the deeper architecture write-up?",
     "docs.deep.p": "The public docs can expand later. This page is the short map to the memory features users actually feel.",
 
@@ -629,8 +653,8 @@ const I18N = {
     "changelog.r1.p": "Home/Product/Research/Changelog\ub85c \ubd84\ub9ac\ud558\uace0 \uc5f0\uc18d\uc131\uacfc \uac80\uc99d\uc5d0 \ucd08\uc810\uc744 \ub9de\ucdb0 \ud648\uc758 \ub370\ubaa8 \ub290\ub08c\uc744 \uc904\uc600\uc2b5\ub2c8\ub2e4.",
     "changelog.r2.h": "공식 랜딩 정리",
     "changelog.r2.p": "능력, 증거, 신뢰, 릴리즈 자세 섹션을 보강했습니다.",
-    "changelog.r3.h": "공개 베타 빌드",
-    "changelog.r3.p": "아직 미연결. 준비될 때까지 메일 경로를 유지합니다.",
+    "changelog.r3.h": "CLI install path",
+    "changelog.r3.p": "Public access now points to the GitHub CLI installer instead of desktop release assets.",
 
     "lang.button": "언어",
     "lang.en": "English",
@@ -2522,8 +2546,8 @@ Object.assign(I18N.en, {
   "changelog.r1.p": "The official site is now live, followed by a round of copy, structure, and access-flow refinements.",
   "changelog.r2.h": "Homepage and runtime story tightened",
   "changelog.r2.p": "The landing page now leans harder on runtime flow, token savings, and a calmer visual hierarchy.",
-  "changelog.r3.h": "Waitlist-first beta access",
-  "changelog.r3.p": "Beta access now starts from a dedicated waitlist page while the direct download path stays closed."
+  "changelog.r3.h": "CLI install path",
+  "changelog.r3.p": "Public access now points to the GitHub one-line CLI installer instead of desktop release assets."
 });
 
 Object.assign(I18N.zh, {
@@ -2547,8 +2571,8 @@ Object.assign(I18N.zh, {
   "changelog.r1.p": "官方网站现已上线，随后对页面文案、结构和访问体验做了一轮优化。",
   "changelog.r2.h": "首页和运行时叙事收紧",
   "changelog.r2.p": "首页现在更集中在运行时链路、token 节省和更克制的视觉层级上。",
-  "changelog.r3.h": "先走等待名单的内测入口",
-  "changelog.r3.p": "内测访问现在从独立等待名单页进入，直接下载路径继续保持关闭。"
+  "changelog.r3.h": "CLI 安装路径",
+  "changelog.r3.p": "公开访问现在指向 GitHub 的一行 CLI 安装命令，而不是桌面 release 资产。"
 });
 
 Object.assign(I18N.ja, {
@@ -2572,8 +2596,8 @@ Object.assign(I18N.ja, {
   "changelog.r1.p": "公開サイトをより明快なページに分け、それぞれが一つの役割を持つようにしました。",
   "changelog.r2.h": "ホームとランタイム叙述を整理",
   "changelog.r2.p": "ホームはランタイムの流れ、トークン節約、落ち着いた視覚階層により集中する構成になりました。",
-  "changelog.r3.h": "ウェイトリスト先行のベータ導線",
-  "changelog.r3.p": "ベータ参加は専用のウェイトリストページから始まり、直接ダウンロードはまだ閉じています。"
+  "changelog.r3.h": "CLI install path",
+  "changelog.r3.p": "Public access now points to the GitHub one-line CLI installer instead of desktop release assets."
 });
 
 Object.assign(I18N.ko, {
@@ -2597,8 +2621,8 @@ Object.assign(I18N.ko, {
   "changelog.r1.p": "공개 사이트를 더 분명한 페이지로 나누어 각 페이지가 한 가지 역할만 맡도록 정리했습니다.",
   "changelog.r2.h": "홈페이지와 런타임 서사 정리",
   "changelog.r2.p": "홈페이지는 이제 런타임 흐름, 토큰 절감, 더 차분한 시각 계층에 더 집중합니다.",
-  "changelog.r3.h": "대기 명단 우선 베타 접근",
-  "changelog.r3.p": "베타 접근은 전용 대기 명단 페이지에서 시작하고, 직접 다운로드 경로는 아직 닫혀 있습니다."
+  "changelog.r3.h": "CLI install path",
+  "changelog.r3.p": "Public access now points to the GitHub one-line CLI installer instead of desktop release assets."
 });
 
 Object.assign(I18N.en, {

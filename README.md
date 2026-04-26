@@ -12,8 +12,12 @@ Technical support and thoughtful collaboration are warmly welcome.
 
 ## Install
 
-For Windows users, install AaronCore from PowerShell. No Git clone is required.
-You only need Python 3.11+ installed first.
+For Windows users, AaronCore is installed from the terminal. No Git clone and no
+`.exe` package are required.
+
+1. Install Python 3.11+.
+2. Open PowerShell.
+3. Run this one command:
 
 ```powershell
 irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex
@@ -22,6 +26,9 @@ irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps
 The installer downloads the latest public AaronCore source, creates a local Python
 environment under `%LOCALAPPDATA%\AaronCore`, installs CLI dependencies, and adds
 `aaron` / `aaroncore` to your user PATH.
+
+This is the current public download path: install the CLI, then run AaronCore
+from the terminal.
 
 Open a new terminal, then start chatting:
 

@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script defer src="https://cloud.umami.is/script.js" data-website-id="c272b9cd-280c-44b4-ae01-c354344a9fc2"></script>
-  <link rel="stylesheet" href="./styles.css?v=20260416p42">
+  <link rel="stylesheet" href="./styles.css?v=20260426cli1">
 </head>
 <body data-page="home">
   <div class="ambient" aria-hidden="true">
@@ -182,7 +182,7 @@
                 <span class="dot amber"></span>
                 <span class="dot green"></span>
               </div>
-              <span class="stage-address">aaroncore://memory-runtime</span>
+              <span class="stage-address">powershell://aaroncore</span>
               <span class="stage-state" data-site-field="launchState">Official site first</span>
             </div>
           </div>
@@ -194,7 +194,7 @@
             <div class="stage-main">
               <section class="stage-display runtime-overview">
                 <div class="display-copy">
-                  <h2 data-i18n="home.stage.h">One desktop loop for memory, tools, task state, and verification.</h2>
+                  <h2 data-i18n="home.stage.h">One terminal loop for memory, tools, task state, and verification.</h2>
                   <p>
                     <span data-i18n="home.stage.p">AaronCore keeps context live while it routes the next step, runs tools, tracks progress, and leaves a result you can actually check.</span>
                   </p>
@@ -267,6 +267,33 @@
             </div>
 
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-install" id="install">
+      <div class="install-shell reveal">
+        <div class="install-copy">
+          <span class="section-tag" data-i18n="install.kicker">Public CLI install</span>
+          <h2 data-i18n="install.h">No desktop installer package. Open PowerShell and run one line.</h2>
+          <p data-i18n="install.p">AaronCore downloads the latest public source, creates a local Python environment, and adds `aaron` / `aaroncore` to your user PATH.</p>
+          <div class="install-actions">
+            <a class="button button-primary" href="https://github.com/agent-wrangler/AaronCore#install" target="_blank" rel="noreferrer" data-i18n="install.github">Open GitHub install guide</a>
+          </div>
+        </div>
+
+        <div class="install-terminal" aria-label="AaronCore terminal install command">
+          <div class="install-terminal-bar">
+            <span></span>
+            <span></span>
+            <span></span>
+            <strong data-i18n="install.term.title">Windows PowerShell</strong>
+          </div>
+          <pre><code>irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex
+
+# then open a new terminal
+aaroncore</code></pre>
+          <p data-i18n="install.term.note">Then open a new terminal and type `aaroncore`.</p>
         </div>
       </div>
     </section>
@@ -347,7 +374,7 @@
     </div>
   </footer>
 
-  <script src="./app.js?v=20260423p1"></script>
+  <script src="./app.js?v=20260426cli1"></script>
 </body>
 </html>
 
