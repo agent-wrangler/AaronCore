@@ -3,13 +3,12 @@
 > Target: AaronCore CLI, a memory-first local agent shell.
 
 The CLI is intentionally thin in the first phase. It does not replace the existing
-runtime, memory system, tool-call chain, or desktop wrapper. It talks to the
-already-running local backend at `localhost:8090` and streams `/chat` replies back
-to the terminal.
+runtime, memory system, tool-call chain, or desktop wrapper. It auto-starts or
+attaches to the local runtime and streams `/chat` replies back to the terminal.
 
 ```text
 terminal input
-  -> POST localhost:8090/chat
+  -> local AaronCore runtime
   -> stream reply text
   -> existing L1-L8 / tool_call / MCP runtime keeps doing the real work
 ```
@@ -36,20 +35,28 @@ aaron memory search "..."
 aaron logs
 ```
 
-## Start Backend
+## Install The Command
 
-The CLI expects the AaronCore backend to be running first:
-
-```powershell
-python agent_final.py
-```
-
-Then, in another terminal:
+From the repo root:
 
 ```powershell
-.\aaron.bat doctor
-.\aaron.bat run "hello"
+.\install-aaron-cli.bat
 ```
+
+Open a new terminal, then:
+
+```powershell
+aaron
+```
+
+This adds the repo root to your user `PATH`, so Windows can find `aaron.bat`
+without `.\`.
+
+## Runtime Startup
+
+`aaron` now auto-starts the local runtime when the default local backend is not
+already running. The localhost HTTP layer still exists internally for phase 1, but
+it is no longer a user-facing step.
 
 ## Phase 1 Boundary
 
@@ -59,12 +66,14 @@ This first version only adds a terminal shell.
 - Do not add a new pre-LLM router.
 - Do not duplicate memory search as a separate local keyword search system.
 - Keep Electron as an optional UI while the CLI path is validated.
+- Hide the local HTTP gateway as implementation detail until the runtime can be
+  safely extracted into a direct callable service.
 
 ## Command Notes
 
 `aaron`
 
-Starts a simple interactive terminal shell.
+Starts or attaches to the local runtime and opens the interactive terminal shell.
 
 `aaron chat`
 
@@ -73,7 +82,8 @@ discover.
 
 `aaron run "..."`
 
-Sends one message to `/chat`, streams the response, then returns to the terminal.
+Starts or attaches to the local runtime, sends one message, streams the response,
+then returns to the terminal.
 Use `aaron` or `aaron chat` for continuous conversation.
 
 `aaron doctor`

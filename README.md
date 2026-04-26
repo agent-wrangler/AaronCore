@@ -46,6 +46,18 @@ Current CLI commands:
 On Windows from the repo root, use `.\aaron.bat ...` until the command is installed on `PATH`.
 Use `aaron` or `aaron chat` for continuous conversation. `aaron run "..."` is a one-shot command.
 
+To make it behave like `claude` from any terminal:
+
+```powershell
+.\install-aaron-cli.bat
+```
+
+Open a new terminal after installation, then run:
+
+```powershell
+aaron
+```
+
 ## What AaronCore Is Trying To Do
 
 Most agent systems are good at one or more of these:
@@ -167,10 +179,10 @@ Then:
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
 2. Fill in your own local API keys and machine-specific settings.
 3. Start the backend:
-   - `python agent_final.py`
-4. In another terminal, run the CLI:
+   - this is now optional because `aaron` auto-starts the local runtime when needed
+4. Run the CLI:
    - `.\aaron.bat doctor`
-   - `.\aaron.bat run "hello"`
+   - `.\aaron.bat`
 
 If you want to use the desktop wrapper:
 

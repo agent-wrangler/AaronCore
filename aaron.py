@@ -4,7 +4,9 @@ import argparse
 import json
 import os
 import shlex
+import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib import error, request
 
@@ -12,6 +14,7 @@ from urllib import error, request
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_BASE_URL = "http://127.0.0.1:8090"
 DEFAULT_TIMEOUT = 10
+CLI_VERSION = "0.2.0"
 
 ANSI = {
     "reset": "\033[0m",
@@ -57,10 +60,15 @@ def paint(text: str, *styles: str, enabled: bool = True) -> str:
     return f"{prefix}{text}{ANSI['reset']}" if prefix else text
 
 
-def print_banner(*, base_url: str, color: bool) -> None:
-    width = 58
-    title = "AaronCore CLI"
+def print_banner(*, health: dict | None, runtime_state: str, color: bool) -> None:
+    width = 68
+    title = f"AaronCore CLI v{CLI_VERSION}"
     subtitle = "memory-first local agent shell"
+    model = str((health or {}).get("current_model") or "unknown")
+    core_ready = bool((health or {}).get("core_ready"))
+    status = "runtime ready" if runtime_state == "ready" else runtime_state
+    meta = f"{model}  |  {'core ready' if core_ready else 'core warming'}  |  {status}"
+    location = compact_path(ROOT_DIR)
     print(paint("+" + "-" * width + "+", "cyan", enabled=color))
     print(
         paint("| ", "cyan", enabled=color)
@@ -72,9 +80,45 @@ def print_banner(*, base_url: str, color: bool) -> None:
         + paint(subtitle.ljust(width - 2), "dim", enabled=color)
         + paint(" |", "cyan", enabled=color)
     )
+    print(
+        paint("| ", "cyan", enabled=color)
+        + paint(meta[: width - 2].ljust(width - 2), "gray", enabled=color)
+        + paint(" |", "cyan", enabled=color)
+    )
+    print(
+        paint("| ", "cyan", enabled=color)
+        + paint(location[: width - 2].ljust(width - 2), "gray", enabled=color)
+        + paint(" |", "cyan", enabled=color)
+    )
     print(paint("+" + "-" * width + "+", "cyan", enabled=color))
-    print(paint("backend ", "gray", enabled=color) + paint(base_url, "green", enabled=color))
-    print(paint("commands ", "gray", enabled=color) + "/exit  /doctor  /logs --lines 40")
+    print(paint("? ", "gray", enabled=color) + "for shortcuts")
+
+
+def print_shortcuts(*, color: bool) -> None:
+    rows = [
+        ("/help", "show shortcuts"),
+        ("/status", "check local runtime"),
+        ("/logs --lines 40", "tail recent logs"),
+        ("/clear", "clear the terminal"),
+        ("/exit", "leave AaronCore"),
+    ]
+    print()
+    for command, detail in rows:
+        print(paint(command.ljust(18), "cyan", "bold", enabled=color) + paint(detail, "gray", enabled=color))
+    print()
+
+
+def compact_path(path: Path) -> str:
+    try:
+        home = Path.home().resolve()
+        resolved = path.resolve()
+        try:
+            rel = resolved.relative_to(home)
+            return "~" + os.sep + str(rel)
+        except ValueError:
+            return str(resolved)
+    except Exception:
+        return str(path)
 
 
 def status_line(label: str, value: str, *, status: str = "info", color: bool = True) -> str:
@@ -91,6 +135,76 @@ def status_line(label: str, value: str, *, status: str = "info", color: bool = T
         + paint(label.ljust(14), "gray", enabled=color)
         + " "
         + value
+    )
+
+
+def is_default_local_backend(client: "AaronCoreClient") -> bool:
+    return client.base_url in {
+        "http://127.0.0.1:8090",
+        "http://localhost:8090",
+    }
+
+
+def try_health(client: "AaronCoreClient", *, timeout: int = 1) -> dict | None:
+    try:
+        health = client.get_json("/health", timeout=timeout)
+    except AaronCoreError:
+        return None
+    return health if isinstance(health, dict) and health.get("status") else None
+
+
+def start_backend_process(*, color: bool) -> subprocess.Popen | None:
+    logs_dir = ROOT_DIR / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = logs_dir / "cli_backend.out.log"
+    stderr_path = logs_dir / "cli_backend.err.log"
+    env = os.environ.copy()
+    env.setdefault("AARONCORE_ROOT", str(ROOT_DIR))
+    env.setdefault("NOVACORE_ROOT", str(ROOT_DIR))
+    env.setdefault("AARONCORE_DATA_DIR", str(ROOT_DIR))
+    env.setdefault("NOVACORE_DATA_DIR", str(ROOT_DIR))
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+
+    print(paint("starting ", "yellow", "bold", enabled=color) + "local AaronCore runtime...")
+    with stdout_path.open("ab") as stdout, stderr_path.open("ab") as stderr:
+        return subprocess.Popen(
+            [sys.executable, str(ROOT_DIR / "agent_final.py")],
+            cwd=str(ROOT_DIR),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout,
+            stderr=stderr,
+            creationflags=creationflags,
+        )
+
+
+def ensure_backend(args: argparse.Namespace, *, color: bool) -> tuple[AaronCoreClient, dict | None, str]:
+    client = build_client(args)
+    health = try_health(client, timeout=1)
+    if health:
+        return client, health, "ready"
+
+    if getattr(args, "no_start", False) or not is_default_local_backend(client):
+        return client, None, "offline"
+
+    start_backend_process(color=color)
+    deadline = time.time() + 35
+    tick = 0
+    while time.time() < deadline:
+        health = try_health(client, timeout=2)
+        if health:
+            print(paint("ready ", "green", "bold", enabled=color) + "local runtime attached.")
+            return client, health, "ready"
+        tick += 1
+        if tick % 4 == 0:
+            print(paint(".", "gray", enabled=color), end="", flush=True)
+        time.sleep(0.5)
+    print()
+    raise AaronCoreError(
+        "AaronCore runtime did not become ready. Check logs/cli_backend.err.log and logs/cli_backend.out.log."
     )
 
 
@@ -334,18 +448,21 @@ def run_chat(client: AaronCoreClient, message: str, *, show_steps: bool = False,
         return 130
     except AaronCoreError as exc:
         print(str(exc), file=sys.stderr)
-        print("Start the backend first, for example: python agent_final.py", file=sys.stderr)
         return 1
     return 0
 
 
 def command_shell(args: argparse.Namespace) -> int:
-    client = build_client(args)
     color = should_color(sys.stdout, no_color=args.no_color)
-    print_banner(base_url=client.base_url, color=color)
+    try:
+        client, health, runtime_state = ensure_backend(args, color=color)
+    except AaronCoreError as exc:
+        print(status_line("runtime", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+    print_banner(health=health, runtime_state=runtime_state, color=color)
     while True:
         try:
-            message = input(paint("aaron", "cyan", "bold", enabled=color) + paint("> ", "gray", enabled=color)).strip()
+            message = input(paint("> ", "cyan", "bold", enabled=color)).strip()
         except EOFError:
             print()
             return 0
@@ -356,8 +473,15 @@ def command_shell(args: argparse.Namespace) -> int:
             continue
         if message in {"/exit", "/quit"}:
             return 0
-        if message == "/doctor":
+        if message in {"/help", "?"}:
+            print_shortcuts(color=color)
+            continue
+        if message in {"/doctor", "/status"}:
             command_doctor(args)
+            continue
+        if message == "/clear":
+            os.system("cls" if os.name == "nt" else "clear")
+            print_banner(health=try_health(client, timeout=1), runtime_state="ready", color=color)
             continue
         if message.startswith("/logs"):
             try:
@@ -378,9 +502,13 @@ def command_run(args: argparse.Namespace) -> int:
         print("Usage: aaron run \"your message\"", file=sys.stderr)
         return 2
     color = should_color(sys.stdout, no_color=args.no_color)
-    client = build_client(args)
+    try:
+        client, _, _ = ensure_backend(args, color=color)
+    except AaronCoreError as exc:
+        print(status_line("runtime", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
     if color:
-        print(paint("AaronCore", "cyan", "bold", enabled=color) + paint(" /chat streaming", "gray", enabled=color))
+        print(paint("AaronCore", "cyan", "bold", enabled=color) + paint(" running one-shot", "gray", enabled=color))
     code = run_chat(client, message, show_steps=args.steps, color=color)
     if code == 0 and getattr(sys.stdin, "isatty", lambda: False)():
         print(
@@ -427,12 +555,13 @@ def command_memory_search(args: argparse.Namespace) -> int:
         "items with memory layer, source, and time if available. Do not browse the web.\n\n"
         f"Query: {query}"
     )
-    return run_chat(
-        build_client(args),
-        message,
-        show_steps=args.steps,
-        color=should_color(sys.stdout, no_color=args.no_color),
-    )
+    color = should_color(sys.stdout, no_color=args.no_color)
+    try:
+        client, _, _ = ensure_backend(args, color=color)
+    except AaronCoreError as exc:
+        print(status_line("runtime", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+    return run_chat(client, message, show_steps=args.steps, color=color)
 
 
 def command_logs(args: argparse.Namespace) -> int:
@@ -504,6 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout for non-streaming checks.")
     parser.add_argument("--steps", action="store_true", help="Print backend process events to stderr.")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI color and styled output.")
+    parser.add_argument("--no-start", action="store_true", help="Do not auto-start the local runtime.")
 
     subparsers = parser.add_subparsers(dest="command")
 
