@@ -76,6 +76,7 @@ state_data/task_store/task_projects.json
 state_data/task_store/task_relations.json
 brain/llm_config.local.json
 *.png
+!assets/readme/*.png
 output.html.codex_backup
 archive/backups/
 .claude/

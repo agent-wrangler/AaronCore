@@ -1,5 +1,9 @@
 # AaronCore
 
+<p align="center">
+  <img src="assets/readme/aaroncore-readme-banner.png" alt="AaronCore memory runtime banner" width="100%">
+</p>
+
 AaronCore is a memory-first agent project.
 
 It explores how understanding, continuity, and action can grow from memory. The goal is to help agents move beyond isolated, one-off responses and develop a more persistent, coherent sense of progress through memory.
