@@ -21,6 +21,7 @@ if "%INSTALL_CODE%"=="0" (
   echo Install finished.
   echo Open a new PowerShell window, then run: aaron
   echo Or run: aaroncore
+  echo If AaronCore asks for model setup, run: aaron setup
 ) else (
   echo Install failed. Please check the message above.
 )

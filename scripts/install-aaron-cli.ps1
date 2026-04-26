@@ -100,3 +100,5 @@ Write-Host "  2. Type:" -ForegroundColor White
 Write-Host "  aaron" -ForegroundColor White
 Write-Host "  or:" -ForegroundColor White
 Write-Host "  aaroncore" -ForegroundColor White
+Write-Host "  If AaronCore asks for model setup:" -ForegroundColor White
+Write-Host "  aaron setup" -ForegroundColor White

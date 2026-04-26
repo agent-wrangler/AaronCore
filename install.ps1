@@ -159,6 +159,8 @@ try {
     Write-Host "  1. Open a new PowerShell window." -ForegroundColor White
     Write-Host "  2. Type:" -ForegroundColor White
     Write-Host "     aaroncore" -ForegroundColor White
+    Write-Host "  3. If AaronCore asks for model setup, run:" -ForegroundColor White
+    Write-Host "     aaron setup" -ForegroundColor White
     Write-Host ""
 } finally {
     if (Test-Path -LiteralPath $TempRoot) {

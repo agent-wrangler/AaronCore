@@ -53,6 +53,7 @@ After that, the command shape is:
 aaron
 aaroncore
 aaron chat
+aaron setup
 aaron run "..."
 aaron doctor
 aaron memory search "..."
@@ -92,6 +93,35 @@ aaroncore
 New users do not need to understand `PATH`; they only need to run the installer
 once and open a new terminal.
 
+## First Model Setup
+
+If the opening screen or `aaron doctor` says model setup is needed, run:
+
+```powershell
+aaron setup
+```
+
+The setup wizard lets the user choose a provider/model, enter an API key with
+hidden terminal input, and optionally test the connection. Secrets are saved
+through the existing model-config runtime into the local-only config file, not
+into tracked public defaults.
+
+Inside the full-screen terminal UI, `/setup` temporarily returns to a normal
+terminal prompt for hidden key input, then drops back into AaronCore when the
+wizard finishes.
+
+## Terminal UI
+
+`aaron` / `aaroncore` opens an interactive terminal UI by default. The input bar
+stays fixed at the bottom, while the conversation, memory/tool progress, and
+assistant response stay above it.
+
+If a terminal does not render the UI well, use the simple print-style fallback:
+
+```powershell
+aaron --plain
+```
+
 ## Runtime Startup
 
 `aaron` now loads the local runtime directly in the CLI process. The legacy
@@ -122,6 +152,12 @@ Starts or attaches to the local runtime and opens the interactive terminal shell
 
 Same as `aaron`. This explicit alias exists so the interactive mode is easier to
 discover.
+
+`aaron setup`
+
+Runs the terminal model setup wizard. Use this when a fresh install has no API
+key yet, or when switching to another provider. The same wizard is available
+from inside chat with `/setup`.
 
 `aaron run "..."`
 

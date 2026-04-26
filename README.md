@@ -58,6 +58,7 @@ Current CLI commands:
 
 - `aaron`
 - `aaron chat`
+- `aaron setup`
 - `aaron run "..."`
 - `aaron doctor`
 - `aaron memory search "..."`
@@ -65,6 +66,10 @@ Current CLI commands:
 
 If you already cloned the repository, run the local installer once, then open a new terminal and type `aaroncore`.
 Use `aaron` for continuous conversation. `aaron run "..."` is a one-shot command.
+Interactive chat opens a terminal UI with a fixed bottom input bar. Use
+`aaron --plain` if you want the simpler print-style terminal mode.
+Use `aaron setup` to choose a model provider and save your API key into the
+local-only config file. You can also type `/setup` inside the terminal UI.
 
 Local install command:
 
@@ -200,11 +205,11 @@ Then:
    - `irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex`
 2. Open a new terminal and start AaronCore:
    - `aaroncore`
-3. If you need your own model/API-key setup, create local config from the examples:
-   - `brain/llm_config.local.example.json` -> `brain/llm_config.local.json`
+3. Configure your local model/API key:
+   - `aaron setup`
+4. If you need lower-level runtime overrides, copy local config from the examples:
    - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
-4. Fill in your own local API keys and machine-specific settings.
 
 If you only want the public site locally:
 
