@@ -1,7 +1,7 @@
-// Shared app shell markup for the desktop client.
+// Shared app shell markup for the web UI.
 // Keeps only the window chrome and shared navigation. Page content mounts separately.
 document.write(String.raw`
-<div class="window-shell" id="windowShell">
+<div class="app-shell" id="appShell">
  <div class="top-bar" id="topBar">
   <div class="top-bar-brand">
    <div class="nova-mark" aria-hidden="true">
@@ -13,18 +13,7 @@ document.write(String.raw`
    </div>
   </div>
   <div class="top-bar-spacer top-bar-hit-area" aria-hidden="true"></div>
-  <div class="top-bar-controls">
-   <button class="top-btn win-btn" onclick="_winMinimize()" title="Minimize" data-i18n-title="window.minimize">
-    <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-   </button>
-   <button class="top-btn win-btn" onclick="_winMaximize()" title="Maximize" data-i18n-title="window.maximize">
-    <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/></svg>
-   </button>
-   <button class="top-btn win-btn win-close" onclick="_winClose()" title="Close" data-i18n-title="close">
-    <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-   </button>
   </div>
- </div>
 
  <div class="main-container">
   <div class="sidebar">

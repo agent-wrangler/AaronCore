@@ -103,7 +103,7 @@ AaronCore currently follows these design ideas:
 2. memory as runtime substrate, not an optional add-on
 3. explicit task state instead of purely prompt-time continuation tricks
 4. on-demand knowledge retrieval instead of blindly preloading everything
-5. a terminal-first local shell, with desktop UI becoming optional
+5. a terminal-first local shell with direct in-process runtime startup
 
 ## Architecture Snapshot
 
@@ -133,26 +133,25 @@ Right now it is still closer to a real working repo than a polished public open-
 - the documentation is being cleaned up
 - the public/private boundary is still being prepared
 
-That means the codebase already reflects the actual direction, but the packaging and open-source surface are still being organized.
+That means the codebase already reflects the actual direction, but the public CLI and open-source surface are still being organized.
 
 ## Entrypoints
 
 Current local entrypoints in this repo:
 
 - `aaron.py` / `aaron.bat` - CLI shell over the local runtime, direct in-process by default
-- `start_aaroncore.bat` - current local desktop launch script in this workspace
+- `aaroncore.bat` - Windows command alias for the CLI shell
 - `agent_final.py` - Python runtime/backend entrypoint
-- `desktop_runtime_35/` - Electron desktop wrapper and packaging runtime
 - `website/official/` - static official site source
 
-The CLI/runtime surface is now the primary direction. The desktop wrapper can remain as an optional interface while the terminal path is validated.
+The CLI/runtime surface is now the primary direction. The old desktop wrapper and installer packaging path are no longer part of the repository mainline.
 
 ## Official Site
 
 The static official site lives in `website/official/`.
 
 - local preview: `cd website/official` then `python -m http.server 8080`
-- current tracked workflows: `.github/workflows/ci.yml`, `.github/workflows/release-desktop.yml`
+- current tracked workflow: `.github/workflows/ci.yml`
 
 There is currently no site deployment workflow checked into `.github/workflows/`. Add a separate deploy workflow later if the public site needs automated publishing.
 
@@ -199,15 +198,6 @@ Then:
    - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
 4. Fill in your own local API keys and machine-specific settings.
-
-If you want to use the desktop wrapper:
-
-1. Use the legacy desktop preview release only if you specifically want the old desktop UI.
-2. For local desktop development, install the desktop wrapper dependencies:
-   - `cd desktop_runtime_35`
-   - `npm install`
-3. Return to the repo root and start AaronCore:
-   - `start_aaroncore.bat`
 
 If you only want the public site locally:
 

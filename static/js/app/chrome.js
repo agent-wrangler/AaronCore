@@ -7,30 +7,23 @@ var _themeMode='light';
 var _resolvedTheme='light';
 var _themeMediaQuery=null;
 var _themeMediaBound=false;
-var _nativeSystemTheme='';
-var _systemThemePollTimer=0;
-var _systemThemeRequest=null;
-var _nativeThemeEventBound=false;
 function _syncThemeIcon(){
  var btn=document.getElementById('themeBtn');
  if(!btn) return;
  btn.innerHTML=document.body.classList.contains('light')?_SVG_SUN:_SVG_MOON;
 }
 function _syncTitleBar(theme){
- if(window.novaShell) window.novaShell.setTheme(theme);
- else if(window.pywebview&&window.pywebview.api&&window.pywebview.api.set_theme)
-  window.pywebview.api.set_theme(theme);
+ return theme;
 }
 
 function _syncWindowBackdrop(theme){
  var bg=theme==='light'?'#ffffff':'#262521';
- var useTransparentShell=!!(window.novaShell&&window.novaShell.transparentShell===true);
  document.documentElement.classList.remove('theme-light','theme-dark');
  document.documentElement.classList.add(theme==='light'?'theme-light':'theme-dark');
- document.documentElement.style.backgroundColor=useTransparentShell?'transparent':bg;
- if(document.body) document.body.style.backgroundColor=useTransparentShell?'transparent':bg;
-  var shell=document.getElementById('windowShell');
-  if(shell) shell.style.backgroundColor=bg;
+ document.documentElement.style.backgroundColor=bg;
+ if(document.body) document.body.style.backgroundColor=bg;
+ var shell=document.getElementById('appShell');
+ if(shell) shell.style.backgroundColor=bg;
 }
 
 function _normalizeThemeMode(theme){
@@ -53,7 +46,7 @@ function _themeChangeRerender(){
 
 function _handleSystemThemeChange(){
  if(_themeMode!=='system') return;
- _applyTheme('system', {persist:false, skipNativeSync:true});
+ _applyTheme('system', {persist:false, skipSystemTracking:true});
  _themeChangeRerender();
 }
 
@@ -72,105 +65,13 @@ function _ensureThemeMediaQuery(){
  return _themeMediaQuery;
 }
 
-function _normalizeResolvedTheme(theme){
- return String(theme||'').toLowerCase()==='dark' ? 'dark' : 'light';
-}
-
-function _bindNativeThemeEvents(){
- if(_nativeThemeEventBound || typeof window==='undefined' || !window.addEventListener) return;
- if(window.novaShell&&typeof window.novaShell.onSystemTheme==='function'){
-  window.novaShell.onSystemTheme(function(detail){
-   var theme=_normalizeResolvedTheme(detail&&detail.theme);
-   var changed=_nativeSystemTheme!==theme;
-   _nativeSystemTheme=theme;
-   if(changed && _themeMode==='system'){
-    _applyTheme('system', {persist:false, skipNativeSync:true});
-    _themeChangeRerender();
-   }
-  });
- }
- window.addEventListener('aaroncore-system-theme', function(event){
-  var detail=event&&event.detail ? event.detail : {};
-  var theme=_normalizeResolvedTheme(detail&&detail.theme);
-  var changed=_nativeSystemTheme!==theme;
-  _nativeSystemTheme=theme;
-  if(changed && _themeMode==='system'){
-   _applyTheme('system', {persist:false, skipNativeSync:true});
-   _themeChangeRerender();
-  }
- });
- _nativeThemeEventBound=true;
-}
-
-function _readNativeSystemTheme(){
- try{
-  if(window.pywebview&&window.pywebview.api&&typeof window.pywebview.api.get_system_theme==='function'){
-   return Promise.resolve(window.pywebview.api.get_system_theme()).then(function(theme){
-    return _normalizeResolvedTheme(theme);
-   });
-  }
- }catch(e){}
- try{
-  if(window.novaShell&&typeof window.novaShell.getSystemTheme==='function'){
-   return Promise.resolve(window.novaShell.getSystemTheme()).then(function(theme){
-    return _normalizeResolvedTheme(theme);
-   });
-  }
- }catch(e){}
- return Promise.resolve('');
-}
-
-function _clearSystemThemePolling(){
- if(_systemThemePollTimer){
-  clearInterval(_systemThemePollTimer);
-  _systemThemePollTimer=0;
- }
-}
-
-function _refreshNativeSystemTheme(options){
- if(_systemThemeRequest) return _systemThemeRequest;
- _systemThemeRequest=_readNativeSystemTheme().then(function(theme){
-  if(theme==='dark' || theme==='light'){
-   var changed=_nativeSystemTheme!==theme;
-   _nativeSystemTheme=theme;
-   if(changed && _themeMode==='system'){
-    _applyTheme('system', {
-     persist:false,
-     skipNativeSync:true,
-     deferTitlebar:!!(options&&options.deferTitlebar)
-    });
-    _themeChangeRerender();
-   }
-  }
-  return _nativeSystemTheme||'';
- }).catch(function(){
-  return _nativeSystemTheme||'';
- }).finally(function(){
-  _systemThemeRequest=null;
- });
- return _systemThemeRequest;
-}
-
 function _syncSystemThemeTracking(options){
- _bindNativeThemeEvents();
- if(_themeMode!=='system'){
-  _clearSystemThemePolling();
-  return;
- }
- _refreshNativeSystemTheme(options);
- if(!_systemThemePollTimer){
-  _systemThemePollTimer=setInterval(function(){
-   _refreshNativeSystemTheme();
-  },3000);
- }
+ if(_themeMode==='system') _ensureThemeMediaQuery();
 }
 
 function _resolveTheme(themeMode){
  var mode=_normalizeThemeMode(themeMode);
  if(mode!=='system') return mode;
- if(_nativeSystemTheme==='dark' || _nativeSystemTheme==='light'){
-  return _nativeSystemTheme;
- }
  var media=_ensureThemeMediaQuery();
  return media&&media.matches ? 'dark' : 'light';
 }
@@ -190,10 +91,8 @@ function _applyTheme(theme, options){
   }
  }catch(e){}
  if(!document.body){
-  if(!(options&&options.skipNativeSync)){
+  if(!(options&&options.skipSystemTracking)){
    _syncSystemThemeTracking(options);
-  }else if(_themeMode!=='system'){
-   _clearSystemThemePolling();
   }
   if(!options||!options.deferTitlebar){
    _syncTitleBar(target);
@@ -208,10 +107,8 @@ function _applyTheme(theme, options){
  if(!options||!options.deferTitlebar){
   _syncTitleBar(target);
  }
- if(!(options&&options.skipNativeSync)){
+ if(!(options&&options.skipSystemTracking)){
   _syncSystemThemeTracking(options);
- }else if(_themeMode!=='system'){
-  _clearSystemThemePolling();
  }
  return target;
 }

@@ -1,11 +1,8 @@
 # AaronCore 仓库结构与目录职责
 
-最后更新：2026-04-01
+最后更新：2026-04-26
 
 这份文档只回答一件事：仓库里每个主要目录负责什么。
-
-相关专题：
-- [Desktop_启动链与数据目录.md](Desktop_启动链与数据目录.md)
 
 ## 根目录原则
 
@@ -25,8 +22,6 @@
   模型配置、人格和高层思考相关逻辑。
 - `/static`
   前端静态资源。
-- `/shell`
-  真正的 Electron shell 源码。
 
 ### 技能与能力
 
@@ -48,15 +43,6 @@
 - `/logs`
   运行日志、调试截图和其他输出产物。
 
-### 桌面运行时
-
-- `/desktop_runtime_35`
-  当前有效的 Electron 35 启动与打包 wrapper。
-- `/shell`
-  被 `desktop_runtime_35` 调用的实际 Electron shell。
-- `/desktop_runtime`
-  遗留 Electron 依赖目录，目前不在主启动链上。
-
 ### 归档与文档
 
 - `/archive`
@@ -68,17 +54,17 @@
 
 ## 当前关键入口
 
-- `start_aaroncore.bat`
-  桌面启动入口。
+- `aaron.py` / `aaron.bat` / `aaroncore.bat`
+  终端 CLI 入口，默认走 direct in-process runtime。
 - `agent_final.py`
-  Python 后端入口。
+  Python 后端/API 调试入口。
 - `output.html`
   服务端拼装的首页外壳。
 
 ## 已做的根目录清理
 
 - 根目录日志移动到 `/logs/root-legacy/`
-- 调试截图移动到 `/logs/screenshots/desktop-debug/`
+- 调试截图移动到 `/logs/screenshots/`
 - scratch html/js/txt/测试脚本/备份移动到 `/archive/backups/root-scratch/`
 
 ## 当前最容易混的几个点
@@ -87,11 +73,7 @@
   前者是一级类目；真实 builtin 技能实现在 `skills/builtin/`，`core/skills/` 只是兼容层。
 - `state_data/` 和 `memory/` 不是一回事。
   前者是当前主状态目录，后者是旧接口层。
-- `.exe` 不一定直接吃打包资源。
-  这一点单独见 [Desktop_启动链与数据目录.md](Desktop_启动链与数据目录.md)。
-
 ## 后续整理方向
 
 - 继续把 `/core` 按运行时职责拆成更清楚的子包。
-- 在确认没有启动链依赖后，再处理 `/desktop_runtime` 是否归档。
 - 让新增 skill 统一落到 `/skills/<skill-id>/SKILL.md` 这套结构。

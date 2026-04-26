@@ -22,7 +22,7 @@
 
 ## 项目一句话
 
-AaronCore 是一个以 LLM / native `tool_call` 为主导的桌面 AI 系统。
+AaronCore 是一个以 LLM / native `tool_call` 为主导的本地 Agent runtime。
 
 - 主链入口：`routes/chat.py`
 - 回复执行：`core/reply_formatter.py`
@@ -44,11 +44,11 @@ AaronCore 是一个以 LLM / native `tool_call` 为主导的桌面 AI 系统。
 ## 快速运行
 
 ```bash
-# backend
-python agent_final.py
+# interactive CLI
+aaroncore
 
-# desktop
-start_aaroncore.bat
+# backend/API debugging
+python agent_final.py
 
 # all tests
 python -m unittest discover tests/

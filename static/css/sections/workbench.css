@@ -114,121 +114,6 @@
   text-overflow:ellipsis;
 }
 
-.top-bar-controls{
-  display:flex;
-  align-items:center;
-  align-self:stretch;
-  height:100%;
-  gap:0;
-  margin-left:auto;
-  margin-right:-1px;
-  padding-left:0;
-  border-left:none;
-  overflow:hidden;
-  border-top-right-radius:16px;
-}
-
-.top-btn{
-  width:42px;
-  height:100%;
-  align-self:stretch;
-  border-radius:0;
-  position:relative;
-  background:transparent !important;
-  border:none !important;
-  box-shadow:none !important;
-  color:rgba(203,213,225,0.78);
-  transition:background 0.16s ease,color 0.16s ease,opacity 0.16s ease;
-  overflow:visible;
-}
-
-.top-btn svg{
-  width:14px;
-  height:14px;
-  position:relative;
-  z-index:1;
-}
-
-.win-btn{
-  width:42px;
-  height:100%;
-  border-radius:0;
-  background:transparent !important;
-}
-
-.top-bar .win-close{
-  width:46px;
-  margin-right:-1px;
-  padding-right:1px;
-  border-top-right-radius:16px;
-}
-
-.top-bar .win-close::after{
-  content:"";
-  position:absolute;
-  top:0;
-  right:-14px;
-  bottom:0;
-  width:18px;
-  border-top-right-radius:16px;
-  background:transparent;
-  pointer-events:none;
-  transition:background 0.16s ease;
-}
-
-.window-shell.is-maximized .top-bar-controls{
-  border-top-right-radius:0;
-}
-
-.window-shell.is-maximized .top-bar .win-close{
-  border-top-right-radius:0;
-}
-
-.top-bar .top-btn:hover{
-  background:rgba(255,255,255,0.09) !important;
-  color:#e2e8f0;
-  transform:none;
-}
-
-.top-bar .top-btn:active{
-  background:rgba(255,255,255,0.12);
-  transform:none;
-}
-
-.top-bar .win-close:hover{
-  background:rgba(239,68,68,0.22) !important;
-  color:#fda4af;
-}
-
-.top-bar .win-close:hover::after{
-  background:rgba(239,68,68,0.22);
-}
-
-body.light .top-bar .top-btn{
-  background:transparent;
-  border:none;
-  color:#5f6b7b;
-  box-shadow:none;
-}
-
-body.light .top-bar .top-btn:hover{
-  background:rgba(15,23,42,0.08) !important;
-  color:#334155;
-}
-
-body.light .top-bar .top-btn:active{
-  background:rgba(15,23,42,0.09);
-}
-
-body.light .top-bar .win-close:hover{
-  background:rgba(239,68,68,0.16) !important;
-  color:#dc2626;
-}
-
-body.light .top-bar .win-close:hover::after{
-  background:rgba(239,68,68,0.16);
-}
-
 .sidebar{
   padding:14px 10px 12px;
 }
@@ -939,7 +824,7 @@ body.is-resizing-run-panel *{
   padding:8px 14px 14px;
 }
 
-body.light .window-shell{
+body.light .app-shell{
   background:#f4f1eb;
 }
 
@@ -1241,8 +1126,7 @@ body.light .inp-actions{
   padding:8px 14px 14px;
 }
 
-body.light .image-upload-btn,
-body.light .voice-btn{
+body.light .image-upload-btn{
   width:36px;
   height:36px;
   border-radius:12px;
@@ -1251,8 +1135,7 @@ body.light .voice-btn{
   color:#8a8174;
 }
 
-body.light .image-upload-btn:hover,
-body.light .voice-btn:hover{
+body.light .image-upload-btn:hover{
   background:rgba(122,116,107,0.08);
   border-color:rgba(114,105,94,0.12);
   color:#2f2b25;

@@ -30,7 +30,6 @@ RUNTIME_GRAPH_EXCLUDED_DIRS = {
     "brain",
     "home",
     "desktop_runtime",
-    "desktop_runtime_35",
 }
 RUNTIME_GRAPH_CLUSTER_META = {
     "runtime": {"label": "运行节点", "rank": 0, "color": "#0f766e"},
@@ -120,7 +119,6 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "static/js/chat/composer.js": "聊天输入与消息壳",
     "static/js/chat/stream.js": "聊天流式与步骤渲染",
     "static/js/chat/task-ui.js": "聊天任务与提问卡片",
-    "static/js/chat/voice.js": "聊天语音与 CoD 状态",
     "static/js/companion.js": "陪伴页脚本",
     "static/js/docs.js": "文档页脚本",
     "static/js/entity.js": "实体页脚本",
@@ -128,7 +126,6 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "static/js/lab.js": "实验页脚本",
     "static/js/memory.js": "记忆页脚本",
     "static/js/runtime_graph.js": "运行图谱脚本",
-    "static/js/window-shell.js": "窗口壳层脚本",
     "static/js/output-init.js": "首页收尾启动脚本",
     "static/js/settings.js": "设置页脚本索引",
     "static/js/settings/models-base.js": "设置页模型管理基础脚本",

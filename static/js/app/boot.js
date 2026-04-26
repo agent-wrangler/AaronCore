@@ -36,7 +36,7 @@ window.onload=function(){
    if(target) markScrolling(target);
   },{capture:true,passive:true});
  })();
- // 输入框右键菜单（pywebview 不提供原生右键）
+ // 输入框右键菜单（浏览器环境下提供一致的编辑菜单）
  (function(){
   var menu=document.createElement('div');
   menu.id='ctx-menu';
@@ -70,7 +70,7 @@ var savedTheme=_applyTheme(
  localStorage.getItem('nova_theme') || localStorage.getItem('novaTheme') || 'light',
  {deferTitlebar:true}
 );
- // pywebview API 可能延迟就绪，等一下再同步标题栏颜色
+ // 主题初始化后再同步一次页面外壳颜色
  setTimeout(function(){
   _syncTitleBar(savedTheme);
  },800);

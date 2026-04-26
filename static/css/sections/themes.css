@@ -69,7 +69,7 @@ body.light{
   --process-detail-color:#4f4c46;
 }
 
-body.light .window-shell{
+body.light .app-shell{
   background:#faf9f5;
 }
 
@@ -90,19 +90,6 @@ body.light .nova-logo{
 
 body.light .nova-caption{
   color:#7e7a72;
-}
-
-body.light .top-btn{
-  background:rgba(21,21,20,0.03);
-  border-color:rgba(21,21,20,0.08);
-  color:#7e7a72;
-  box-shadow:none;
-}
-
-body.light .top-btn:hover{
-  background:rgba(21,21,20,0.06);
-  border-color:rgba(21,21,20,0.12);
-  color:#151514;
 }
 
 body.light .sidebar{
@@ -425,7 +412,7 @@ body.dark{
   --glow-line:none;
 }
 
-body.dark .window-shell{
+body.dark .app-shell{
   background:#262624;
 }
 
@@ -446,19 +433,6 @@ body.dark .nova-logo{
 
 body.dark .nova-caption{
   color:#a9a49b;
-}
-
-body.dark .top-btn{
-  background:rgba(255,255,255,0.03);
-  border-color:rgba(255,255,255,0.06);
-  color:#b9b6af;
-  box-shadow:none;
-}
-
-body.dark .top-btn:hover{
-  background:rgba(255,255,255,0.06);
-  border-color:rgba(255,255,255,0.1);
-  color:#faf9f5;
 }
 
 body.dark .sidebar{
@@ -683,15 +657,13 @@ body.dark .input textarea::placeholder{
   color:rgba(185,182,175,0.56);
 }
 
-body.dark .image-upload-btn,
-body.dark .voice-btn{
+body.dark .image-upload-btn{
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(255,255,255,0.05);
   color:#b9b6af;
 }
 
-body.dark .image-upload-btn:hover,
-body.dark .voice-btn:hover{
+body.dark .image-upload-btn:hover{
   background:rgba(255,255,255,0.06);
   color:#faf9f5;
   box-shadow:none;
@@ -1575,9 +1547,7 @@ body.dark .settings-preset-option-check{
 }
 
 body.light .image-upload-btn,
-body.light .voice-btn,
-body.dark .image-upload-btn,
-body.dark .voice-btn{
+body.dark .image-upload-btn{
   width:36px;
   height:36px;
   border-radius:12px;

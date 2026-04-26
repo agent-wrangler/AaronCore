@@ -4,5 +4,3 @@
 // - /static/js/chat/composer.js
 // - /static/js/chat/stream.js
 // - /static/js/chat/task-ui.js
-// - /static/js/chat/voice.js
-

@@ -14,13 +14,13 @@
 
 ## 1. 一句话结论
 
-**AaronCore 当前是一个以 `LLM / native tool_call` 为主导的桌面 AI 系统。**
+**AaronCore 当前是一个以 `LLM / native tool_call` 为主导的本地 Agent runtime。**
 
 它的真实主链不是旧时代的“规则先分流、LLM 再兜底”，而是：
 
 ```text
-桌面启动入口
-  -> agent_final.py 挂载 FastAPI app 和 routes/*
+aaron / aaroncore CLI
+  -> 直接加载 AaronCore runtime
   -> /chat 进入 routes/chat.py
   -> 构建最小必要上下文 bundle
   -> 主 LLM 在同一上下文里决定直接回复或调用工具
@@ -101,28 +101,30 @@
 
 ---
 
-## 3. 运行时堆栈：从桌面到后端
+## 3. 运行时堆栈：从 CLI 到后端
 
-## 3.1 桌面启动链
+## 3.1 CLI 直接运行链
 
-当前推荐的 Windows 桌面启动入口是：
+当前推荐的 Windows 终端入口是：
 
-- `start_aaroncore.bat`
+- `aaron`
+- `aaroncore`
 
-打包桌面链路以 Electron wrapper 为主，相关目录是：
+这条链路以 CLI 为主入口，默认不经过 localhost 网关：
 
-- `desktop_runtime_35/`
-- `shell/`
+```text
+terminal input
+  -> aaron.py
+  -> in-process AaronCore runtime
+  -> routes/chat.py 的现有 tool_call 主链
+  -> 流式终端回复
+```
 
-专题说明单独见：
+它主要解决：
 
-- `Desktop_启动链与数据目录.md`
-
-这条链路主要解决：
-
-- 桌面 `.exe` 怎么找到仓库根目录
-- 怎么启动 Python 后端
-- 怎么连接 `http://localhost:8090/`
+- 用户只输入 `aaron` / `aaroncore` 就能对话
+- 默认只依赖 Python CLI 运行环境，不走本地 HTTP 网关
+- 后端 `agent_final.py` 继续作为 API 调试入口保留
 
 ## 3.2 Python 后端入口
 
@@ -546,8 +548,6 @@
 2. `docs/10-架构-architecture/AaronCore_当前系统架构详解.md`（本文）
 3. `docs/10-架构-architecture/8层Brain架构详解.md`
 4. `docs/10-架构-architecture/AaronCore_仓库结构与目录职责.md`
-5. `docs/10-架构-architecture/Desktop_启动链与数据目录.md`
-
 如果你是在追历史，再回头看：
 
 - `docs/99-归档-archive/*`
@@ -562,4 +562,4 @@
 
 这比旧 `NovaCore` 时代更接近一个：
 
-**LLM 主导、runtime 锚定、工具按需调用、状态显式落盘的桌面 agent 系统。**
+**LLM 主导、runtime 锚定、工具按需调用、状态显式落盘的本地 agent runtime。**

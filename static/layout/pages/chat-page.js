@@ -107,10 +107,7 @@
      </button>
      <div class="inp-actions-spacer"></div>
      <span class="inp-shortcut-hint" data-i18n="input.shortcutHint">Enter to send · Shift+Enter for newline</span>
-     <button class="voice-btn" id="voiceBtn" title="语音对话" data-i18n-title="input.voice">
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" fill="currentColor"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M12 19v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>
-     </button>
-     <button class="send-btn" onclick="if(this.classList.contains('stop-mode')){_stopGeneration();}else{send();}" id="sendBtn" title="发送消息" data-i18n-title="input.send">
+      <button class="send-btn" onclick="if(this.classList.contains('stop-mode')){_stopGeneration();}else{send();}" id="sendBtn" title="发送消息" data-i18n-title="input.send">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
        <path d="M12 18V6.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
        <path d="M7 11.2L12 6.5L17 11.2" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>

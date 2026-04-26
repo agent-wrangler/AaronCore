@@ -55,24 +55,3 @@ jobs:
 
       - name: Run extended runtime regression suite
         run: python scripts/run_ci_unittest.py extended
-
-  desktop-build:
-    name: Desktop Build (Windows)
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: "20"
-
-      - name: Install desktop dependencies
-        working-directory: desktop_runtime_35
-        run: npm install
-
-      - name: Build unpacked desktop shell
-        working-directory: desktop_runtime_35
-        run: npm run pack:thin

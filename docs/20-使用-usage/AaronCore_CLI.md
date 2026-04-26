@@ -3,9 +3,9 @@
 > Target: AaronCore CLI, a memory-first local agent shell.
 
 The CLI is intentionally thin in the first phase. It does not replace the existing
-runtime, memory system, tool-call chain, or desktop wrapper. It now loads the
-existing runtime in the same Python process by default and streams chat events
-back to the terminal without requiring a localhost server.
+runtime, memory system, or tool-call chain. It loads the existing runtime in the
+same Python process by default and streams chat events back to the terminal
+without requiring a localhost server.
 
 ```text
 terminal input
@@ -108,7 +108,6 @@ This first version only adds a terminal shell.
 - Do not refactor `routes/chat.py`.
 - Do not add a new pre-LLM router.
 - Do not duplicate memory search as a separate local keyword search system.
-- Keep Electron as an optional UI while the CLI path is validated.
 - Keep the CLI direct runtime path as the default user-facing path; use the
   localhost HTTP transport only as a legacy/debug fallback.
 
