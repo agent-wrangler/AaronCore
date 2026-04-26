@@ -4,6 +4,12 @@
   <img src="assets/readme/aaroncore-readme-banner.png" alt="AaronCore memory runtime banner" width="100%">
 </p>
 
+<p align="center">
+  <a href="https://github.com/agent-wrangler/AaronCore/releases/latest">
+    <img src="https://img.shields.io/badge/Download-AaronCore%20Desktop%20for%20Windows-101820?style=for-the-badge&logo=windows&logoColor=white" alt="Download AaronCore Desktop for Windows">
+  </a>
+</p>
+
 AaronCore is a memory-first agent project.
 
 It explores how understanding, continuity, and action can grow from memory. The goal is to help agents move beyond isolated, one-off responses and develop a more persistent, coherent sense of progress through memory.
