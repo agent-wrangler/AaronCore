@@ -16,18 +16,26 @@ terminal input
 ## Commands
 
 ```powershell
-.\aaron.bat
-.\aaron.bat chat
-.\aaron.bat run "summarize what we were doing"
-.\aaron.bat doctor
-.\aaron.bat memory search "CLI direction"
-.\aaron.bat logs
+.\install.bat
 ```
 
-When the repo root is on `PATH`, the intended command shape is:
+Open a new terminal, then:
 
 ```powershell
 aaron
+```
+
+or:
+
+```powershell
+aaroncore
+```
+
+After that, the command shape is:
+
+```powershell
+aaron
+aaroncore
 aaron chat
 aaron run "..."
 aaron doctor
@@ -40,7 +48,7 @@ aaron logs
 From the repo root:
 
 ```powershell
-.\install-aaron-cli.bat
+.\install.bat
 ```
 
 Open a new terminal, then:
@@ -49,8 +57,15 @@ Open a new terminal, then:
 aaron
 ```
 
-This adds the repo root to your user `PATH`, so Windows can find `aaron.bat`
-without `.\`.
+or:
+
+```powershell
+aaroncore
+```
+
+This installs the `aaron` command for the current Windows user. New users do not
+need to understand `PATH`; they only need to run the installer once and open a new
+terminal.
 
 ## Runtime Startup
 

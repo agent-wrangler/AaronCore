@@ -37,19 +37,25 @@ Current CLI commands:
 - `aaron memory search "..."`
 - `aaron logs`
 
-On Windows from the repo root, use `.\aaron.bat ...` until the command is installed on `PATH`.
-Use `aaron` or `aaron chat` for continuous conversation. `aaron run "..."` is a one-shot command.
+On Windows from the repo root, run the installer once, then open a new terminal and type `aaron`.
+Use `aaron` for continuous conversation. `aaron run "..."` is a one-shot command.
 
-To make it behave like `claude` from any terminal:
+Install the command:
 
 ```powershell
-.\install-aaron-cli.bat
+.\install.bat
 ```
 
-Open a new terminal after installation, then run:
+Then open a new terminal and run:
 
 ```powershell
 aaron
+```
+
+or:
+
+```powershell
+aaroncore
 ```
 
 ## What AaronCore Is Trying To Do
@@ -170,8 +176,11 @@ Then:
    - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
 2. Fill in your own local API keys and machine-specific settings.
-3. Start AaronCore CLI:
-   - `.\aaron.bat`
+3. Install the command:
+   - `.\install.bat`
+4. Open a new terminal and start AaronCore:
+   - `aaron`
+   - or `aaroncore`
 
 If you want to use the desktop wrapper:
 
