@@ -16,6 +16,34 @@ It explores how understanding, continuity, and action can grow from memory. The 
 
 Technical support and thoughtful collaboration are warmly welcome.
 
+## AaronCore CLI Direction
+
+The next product shape is narrowing toward:
+
+```text
+AaronCore CLI
+a memory-first local agent shell
+```
+
+The first CLI version is intentionally a thin shell over the existing local runtime:
+
+```text
+terminal input
+  -> localhost:8090 /chat
+  -> streamed terminal reply
+  -> existing L1-L8 / tool_call / MCP runtime
+```
+
+Current CLI commands:
+
+- `aaron`
+- `aaron run "..."`
+- `aaron doctor`
+- `aaron memory search "..."`
+- `aaron logs`
+
+On Windows from the repo root, use `.\aaron.bat ...` until the command is installed on `PATH`.
+
 ## What AaronCore Is Trying To Do
 
 Most agent systems are good at one or more of these:
@@ -42,7 +70,7 @@ AaronCore currently follows these design ideas:
 2. memory as runtime substrate, not an optional add-on
 3. explicit task state instead of purely prompt-time continuation tricks
 4. on-demand knowledge retrieval instead of blindly preloading everything
-5. a desktop runtime around a Python backend
+5. a terminal-first local shell, with desktop UI becoming optional
 
 ## Architecture Snapshot
 
@@ -78,12 +106,13 @@ That means the codebase already reflects the actual direction, but the packaging
 
 Current local entrypoints in this repo:
 
+- `aaron.py` / `aaron.bat` - CLI shell over the local `/chat` runtime
 - `start_aaroncore.bat` - current local desktop launch script in this workspace
 - `agent_final.py` - Python backend entrypoint
 - `desktop_runtime_35/` - Electron desktop wrapper and packaging runtime
 - `website/official/` - static official site source
 
-The desktop/runtime surface is still being organized, and packaging details may continue to evolve as the public release matures.
+The CLI/runtime surface is now the primary direction. The desktop wrapper can remain as an optional interface while the terminal path is validated.
 
 ## Official Site
 
@@ -135,10 +164,18 @@ Then:
    - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
 2. Fill in your own local API keys and machine-specific settings.
-3. Install the desktop wrapper dependencies:
+3. Start the backend:
+   - `python agent_final.py`
+4. In another terminal, run the CLI:
+   - `.\aaron.bat doctor`
+   - `.\aaron.bat run "hello"`
+
+If you want to use the desktop wrapper:
+
+1. Install the desktop wrapper dependencies:
    - `cd desktop_runtime_35`
    - `npm install`
-4. Return to the repo root and start AaronCore:
+2. Return to the repo root and start AaronCore:
    - `start_aaroncore.bat`
 
 If you only want the public site locally:
@@ -152,6 +189,7 @@ If you want the most accurate picture of how AaronCore currently runs, start her
 
 - [RUNTIME.md](RUNTIME.md)
 - [Docs Index](docs/README.md)
+- [AaronCore CLI](docs/20-使用-usage/AaronCore_CLI.md)
 - [8-Layer Brain Architecture](docs/10-架构-architecture/8层Brain架构详解.md)
 - [Open-Source Prep Draft](docs/30-开源-open-source/AaronCore_开源整理草案.md)
 - [state_data Public Boundary](docs/30-开源-open-source/AaronCore_state_data_public_boundary.md)
