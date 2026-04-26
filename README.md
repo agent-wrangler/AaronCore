@@ -4,12 +4,6 @@
   <img src="assets/readme/aaroncore-readme-banner.png" alt="AaronCore memory runtime banner" width="100%">
 </p>
 
-<p align="center">
-  <a href="https://github.com/agent-wrangler/AaronCore/releases/latest">
-    <img src="https://img.shields.io/badge/Download-AaronCore%20Desktop%20for%20Windows-101820?style=for-the-badge&logo=windows&logoColor=white" alt="Download AaronCore Desktop for Windows">
-  </a>
-</p>
-
 AaronCore is a memory-first agent project.
 
 It explores how understanding, continuity, and action can grow from memory. The goal is to help agents move beyond isolated, one-off responses and develop a more persistent, coherent sense of progress through memory.
@@ -29,7 +23,7 @@ The first CLI version is intentionally a thin shell over the existing local runt
 
 ```text
 terminal input
-  -> localhost:8090 /chat
+  -> local AaronCore runtime
   -> streamed terminal reply
   -> existing L1-L8 / tool_call / MCP runtime
 ```
@@ -168,8 +162,6 @@ For public-repo hygiene, templates and defaults should be committed, while perso
 For a clean local checkout today, assume:
 
 - Python 3.11+
-- Node.js 20+
-- Windows for the desktop wrapper path
 
 Then:
 
@@ -178,18 +170,16 @@ Then:
    - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
 2. Fill in your own local API keys and machine-specific settings.
-3. Start the backend:
-   - this is now optional because `aaron` auto-starts the local runtime when needed
-4. Run the CLI:
-   - `.\aaron.bat doctor`
+3. Start AaronCore CLI:
    - `.\aaron.bat`
 
 If you want to use the desktop wrapper:
 
-1. Install the desktop wrapper dependencies:
+1. Use the legacy desktop preview release only if you specifically want the old desktop UI.
+2. For local desktop development, install the desktop wrapper dependencies:
    - `cd desktop_runtime_35`
    - `npm install`
-2. Return to the repo root and start AaronCore:
+3. Return to the repo root and start AaronCore:
    - `start_aaroncore.bat`
 
 If you only want the public site locally:
