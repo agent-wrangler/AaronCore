@@ -13,9 +13,85 @@ ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_BASE_URL = "http://127.0.0.1:8090"
 DEFAULT_TIMEOUT = 10
 
+ANSI = {
+    "reset": "\033[0m",
+    "bold": "\033[1m",
+    "dim": "\033[2m",
+    "red": "\033[31m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "blue": "\033[34m",
+    "magenta": "\033[35m",
+    "cyan": "\033[36m",
+    "gray": "\033[90m",
+}
+
+
+def configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
 
 class AaronCoreError(RuntimeError):
     pass
+
+
+def should_color(stream=None, *, no_color: bool = False) -> bool:
+    if no_color or os.environ.get("NO_COLOR") or os.environ.get("AARON_NO_COLOR"):
+        return False
+    if os.environ.get("AARON_FORCE_COLOR"):
+        return True
+    stream = stream or sys.stdout
+    return bool(getattr(stream, "isatty", lambda: False)())
+
+
+def paint(text: str, *styles: str, enabled: bool = True) -> str:
+    if not enabled:
+        return text
+    prefix = "".join(ANSI.get(style, "") for style in styles)
+    return f"{prefix}{text}{ANSI['reset']}" if prefix else text
+
+
+def print_banner(*, base_url: str, color: bool) -> None:
+    width = 58
+    title = "AaronCore CLI"
+    subtitle = "memory-first local agent shell"
+    print(paint("+" + "-" * width + "+", "cyan", enabled=color))
+    print(
+        paint("| ", "cyan", enabled=color)
+        + paint(title.ljust(width - 2), "bold", "cyan", enabled=color)
+        + paint(" |", "cyan", enabled=color)
+    )
+    print(
+        paint("| ", "cyan", enabled=color)
+        + paint(subtitle.ljust(width - 2), "dim", enabled=color)
+        + paint(" |", "cyan", enabled=color)
+    )
+    print(paint("+" + "-" * width + "+", "cyan", enabled=color))
+    print(paint("backend ", "gray", enabled=color) + paint(base_url, "green", enabled=color))
+    print(paint("commands ", "gray", enabled=color) + "/exit  /doctor  /logs --lines 40")
+
+
+def status_line(label: str, value: str, *, status: str = "info", color: bool = True) -> str:
+    palette = {
+        "ok": ("ok", "green"),
+        "fail": ("fail", "red"),
+        "warn": ("warn", "yellow"),
+        "info": ("info", "cyan"),
+    }
+    badge, style = palette.get(status, palette["info"])
+    return (
+        paint(f"[{badge}]", style, "bold", enabled=color)
+        + " "
+        + paint(label.ljust(14), "gray", enabled=color)
+        + " "
+        + value
+    )
 
 
 class AaronCoreClient:
@@ -117,9 +193,10 @@ def iter_sse_events(resp):
 
 
 class ChatPrinter:
-    def __init__(self, *, show_steps: bool = False, stream_reset_notice: bool = True):
+    def __init__(self, *, show_steps: bool = False, stream_reset_notice: bool = True, color: bool = False):
         self.show_steps = show_steps
         self.stream_reset_notice = stream_reset_notice
+        self.color = color
         self.printed_text = ""
         self.saw_stream = False
 
@@ -127,7 +204,10 @@ class ChatPrinter:
         payload = parse_event_json(data)
         if event_name == "stream_reset":
             if self.stream_reset_notice and self.printed_text.strip():
-                print("\n[stream reset: restarting reply]\n", file=sys.stderr)
+                print(
+                    "\n" + paint("[stream reset] restarting reply", "yellow", enabled=self.color) + "\n",
+                    file=sys.stderr,
+                )
             self.printed_text = ""
             self.saw_stream = False
             return
@@ -142,7 +222,7 @@ class ChatPrinter:
             self._handle_ask_user(payload, client)
             return
         if self.show_steps and event_name not in {"message"}:
-            print(format_step_event(event_name, payload), file=sys.stderr)
+            print(format_step_event(event_name, payload, color=self.color), file=sys.stderr)
 
     def _print_stream_payload(self, payload: dict) -> None:
         full_text = payload.get("full_text")
@@ -190,24 +270,24 @@ class ChatPrinter:
         question = first_text(payload, "question", "message", "prompt", "content", "text")
         if not question:
             question = "AaronCore needs your input."
-        print(f"\n? {question}", file=sys.stderr)
+        print("\n" + paint("? ", "cyan", "bold", enabled=self.color) + question, file=sys.stderr)
         options = payload.get("options") or payload.get("choices")
         if isinstance(options, list):
             for index, item in enumerate(options, 1):
                 label = item.get("label") if isinstance(item, dict) else item
-                print(f"  {index}. {label}", file=sys.stderr)
+                print(paint(f"  {index}. ", "gray", enabled=self.color) + str(label), file=sys.stderr)
         if not question_id:
-            print("Cannot answer: backend did not provide a question id.", file=sys.stderr)
+            print(paint("Cannot answer: backend did not provide a question id.", "red", enabled=self.color), file=sys.stderr)
             return
         try:
-            answer = input("> ").strip()
+            answer = input(paint("> ", "cyan", enabled=self.color)).strip()
         except EOFError:
             answer = ""
         if not answer:
-            print("Skipped empty answer.", file=sys.stderr)
+            print(paint("Skipped empty answer.", "yellow", enabled=self.color), file=sys.stderr)
             return
         if not client.submit_answer(question_id, answer):
-            print("Backend did not accept the answer.", file=sys.stderr)
+            print(paint("Backend did not accept the answer.", "red", enabled=self.color), file=sys.stderr)
 
     def _write(self, text: str) -> None:
         if not text:
@@ -231,20 +311,21 @@ def first_text(payload: dict, *keys: str) -> str:
     return ""
 
 
-def format_step_event(event_name: str, payload: dict) -> str:
+def format_step_event(event_name: str, payload: dict, *, color: bool = False) -> str:
     label = first_text(payload, "label", "title", "name", "status")
     detail = first_text(payload, "detail", "message", "text")
+    head = paint(f"[{event_name}]", "magenta", enabled=color)
     if label and detail:
-        return f"[{event_name}] {label}: {detail}"
+        return f"{head} {paint(label, 'bold', enabled=color)}: {detail}"
     if label:
-        return f"[{event_name}] {label}"
+        return f"{head} {paint(label, 'bold', enabled=color)}"
     if detail:
-        return f"[{event_name}] {detail}"
-    return f"[{event_name}] {json.dumps(payload, ensure_ascii=False)}"
+        return f"{head} {detail}"
+    return f"{head} {json.dumps(payload, ensure_ascii=False)}"
 
 
-def run_chat(client: AaronCoreClient, message: str, *, show_steps: bool = False) -> int:
-    printer = ChatPrinter(show_steps=show_steps)
+def run_chat(client: AaronCoreClient, message: str, *, show_steps: bool = False, color: bool = False) -> int:
+    printer = ChatPrinter(show_steps=show_steps, color=color)
     try:
         for event_name, data in client.chat_events(message):
             printer.handle_event(event_name, data, client)
@@ -260,12 +341,11 @@ def run_chat(client: AaronCoreClient, message: str, *, show_steps: bool = False)
 
 def command_shell(args: argparse.Namespace) -> int:
     client = build_client(args)
-    print("AaronCore CLI")
-    print(f"Backend: {client.base_url}")
-    print("Type /exit to quit, /doctor to check backend, /logs to tail logs.")
+    color = should_color(sys.stdout, no_color=args.no_color)
+    print_banner(base_url=client.base_url, color=color)
     while True:
         try:
-            message = input("aaron> ").strip()
+            message = input(paint("aaron", "cyan", "bold", enabled=color) + paint("> ", "gray", enabled=color)).strip()
         except EOFError:
             print()
             return 0
@@ -284,9 +364,10 @@ def command_shell(args: argparse.Namespace) -> int:
                 logs_args = build_parser().parse_args(["logs", *shlex.split(message)[1:]])
             except SystemExit:
                 continue
+            logs_args.no_color = args.no_color
             command_logs(logs_args)
             continue
-        code = run_chat(client, message, show_steps=args.steps)
+        code = run_chat(client, message, show_steps=args.steps, color=color)
         if code not in {0, 130}:
             return code
 
@@ -296,31 +377,43 @@ def command_run(args: argparse.Namespace) -> int:
     if not message:
         print("Usage: aaron run \"your message\"", file=sys.stderr)
         return 2
-    return run_chat(build_client(args), message, show_steps=args.steps)
+    color = should_color(sys.stdout, no_color=args.no_color)
+    client = build_client(args)
+    if color:
+        print(paint("AaronCore", "cyan", "bold", enabled=color) + paint(" /chat streaming", "gray", enabled=color))
+    code = run_chat(client, message, show_steps=args.steps, color=color)
+    if code == 0 and getattr(sys.stdin, "isatty", lambda: False)():
+        print(
+            paint("tip ", "yellow", "bold", enabled=color)
+            + "use `aaron chat` or just `aaron` for a continuous conversation.",
+            file=sys.stderr,
+        )
+    return code
 
 
 def command_doctor(args: argparse.Namespace) -> int:
     client = build_client(args)
-    print("AaronCore CLI doctor")
-    print(f"- backend: {client.base_url}")
+    color = should_color(sys.stdout, no_color=args.no_color)
+    print(paint("AaronCore CLI doctor", "bold", "cyan", enabled=color))
+    print(status_line("backend", client.base_url, color=color))
     ok = True
     try:
         health = client.get_json("/health", timeout=3)
-        print(f"- /health: {health.get('status', 'unknown')}")
-        print(f"- core_ready: {health.get('core_ready')}")
-        print(f"- current_model: {health.get('current_model')}")
-        print(f"- state_dir: {health.get('state_dir')}")
+        print(status_line("/health", str(health.get("status", "unknown")), status="ok", color=color))
+        print(status_line("core_ready", str(health.get("core_ready")), status="ok" if health.get("core_ready") else "warn", color=color))
+        print(status_line("model", str(health.get("current_model")), color=color))
+        print(status_line("state_dir", str(health.get("state_dir")), color=color))
     except AaronCoreError as exc:
         ok = False
-        print(f"- /health: failed ({exc})")
-        print("- hint: start the backend with `python agent_final.py`")
+        print(status_line("/health", str(exc), status="fail", color=color))
+        print(status_line("hint", "start the backend with `python agent_final.py`", status="warn", color=color))
 
     required = ["agent_final.py", "routes/chat.py", "memory", "state_data"]
     for rel in required:
         path = ROOT_DIR / rel
         exists = path.exists()
         ok = ok and exists
-        print(f"- local {rel}: {'ok' if exists else 'missing'}")
+        print(status_line(rel, "ok" if exists else "missing", status="ok" if exists else "fail", color=color))
     return 0 if ok else 1
 
 
@@ -334,17 +427,23 @@ def command_memory_search(args: argparse.Namespace) -> int:
         "items with memory layer, source, and time if available. Do not browse the web.\n\n"
         f"Query: {query}"
     )
-    return run_chat(build_client(args), message, show_steps=args.steps)
+    return run_chat(
+        build_client(args),
+        message,
+        show_steps=args.steps,
+        color=should_color(sys.stdout, no_color=args.no_color),
+    )
 
 
 def command_logs(args: argparse.Namespace) -> int:
+    color = should_color(sys.stdout, no_color=args.no_color)
     files = discover_log_files()
     if args.list:
         if not files:
             print("No log files found.")
             return 1
         for path in files:
-            print(path)
+            print(paint("- ", "gray", enabled=color) + str(path))
         return 0
 
     target = Path(args.file).expanduser() if args.file else (files[0] if files else None)
@@ -354,7 +453,7 @@ def command_logs(args: argparse.Namespace) -> int:
     if not target.exists():
         print(f"Log file not found: {target}", file=sys.stderr)
         return 1
-    print(f"==> {target}")
+    print(paint("==> ", "cyan", "bold", enabled=color) + paint(str(target), "gray", enabled=color))
     print(tail_text(target, args.lines), end="")
     return 0
 
@@ -404,12 +503,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", default=os.environ.get("AARONCORE_URL", DEFAULT_BASE_URL), help="AaronCore backend URL.")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout for non-streaming checks.")
     parser.add_argument("--steps", action="store_true", help="Print backend process events to stderr.")
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI color and styled output.")
 
     subparsers = parser.add_subparsers(dest="command")
 
     run_parser = subparsers.add_parser("run", help="Send one message to the local AaronCore backend.")
     run_parser.add_argument("message", nargs=argparse.REMAINDER)
     run_parser.set_defaults(func=command_run)
+
+    chat_parser = subparsers.add_parser("chat", help="Start an interactive AaronCore terminal chat.")
+    chat_parser.set_defaults(func=command_shell)
 
     doctor_parser = subparsers.add_parser("doctor", help="Check backend and local runtime files.")
     doctor_parser.set_defaults(func=command_doctor)
@@ -431,6 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     return int(args.func(args))

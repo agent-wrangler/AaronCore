@@ -18,6 +18,7 @@ terminal input
 
 ```powershell
 .\aaron.bat
+.\aaron.bat chat
 .\aaron.bat run "summarize what we were doing"
 .\aaron.bat doctor
 .\aaron.bat memory search "CLI direction"
@@ -28,6 +29,7 @@ When the repo root is on `PATH`, the intended command shape is:
 
 ```powershell
 aaron
+aaron chat
 aaron run "..."
 aaron doctor
 aaron memory search "..."
@@ -64,9 +66,15 @@ This first version only adds a terminal shell.
 
 Starts a simple interactive terminal shell.
 
+`aaron chat`
+
+Same as `aaron`. This explicit alias exists so the interactive mode is easier to
+discover.
+
 `aaron run "..."`
 
-Sends one message to `/chat` and streams the response.
+Sends one message to `/chat`, streams the response, then returns to the terminal.
+Use `aaron` or `aaron chat` for continuous conversation.
 
 `aaron doctor`
 

@@ -37,12 +37,14 @@ terminal input
 Current CLI commands:
 
 - `aaron`
+- `aaron chat`
 - `aaron run "..."`
 - `aaron doctor`
 - `aaron memory search "..."`
 - `aaron logs`
 
 On Windows from the repo root, use `.\aaron.bat ...` until the command is installed on `PATH`.
+Use `aaron` or `aaron chat` for continuous conversation. `aaron run "..."` is a one-shot command.
 
 ## What AaronCore Is Trying To Do
 
