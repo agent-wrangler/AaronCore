@@ -15,6 +15,20 @@ terminal input
 
 ## Commands
 
+For normal Windows users, install from PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex
+```
+
+Open a new terminal, then:
+
+```powershell
+aaroncore
+```
+
+If you already cloned the repository, run the local installer instead:
+
 ```powershell
 .\install.bat
 ```
@@ -45,7 +59,17 @@ aaron logs
 
 ## Install The Command
 
-From the repo root:
+Recommended public install:
+
+```powershell
+irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex
+```
+
+This downloads the latest public AaronCore source, creates a local Python
+environment under `%LOCALAPPDATA%\AaronCore`, installs CLI dependencies, and adds
+`aaron` / `aaroncore` to the current Windows user's PATH.
+
+From a cloned repo root:
 
 ```powershell
 .\install.bat
@@ -63,9 +87,8 @@ or:
 aaroncore
 ```
 
-This installs the `aaron` command for the current Windows user. New users do not
-need to understand `PATH`; they only need to run the installer once and open a new
-terminal.
+New users do not need to understand `PATH`; they only need to run the installer
+once and open a new terminal.
 
 ## Runtime Startup
 

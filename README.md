@@ -10,6 +10,25 @@ It explores how understanding, continuity, and action can grow from memory. The 
 
 Technical support and thoughtful collaboration are warmly welcome.
 
+## Install
+
+For Windows users, install AaronCore from PowerShell. No Git clone is required.
+You only need Python 3.11+ installed first.
+
+```powershell
+irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex
+```
+
+The installer downloads the latest public AaronCore source, creates a local Python
+environment under `%LOCALAPPDATA%\AaronCore`, installs CLI dependencies, and adds
+`aaron` / `aaroncore` to your user PATH.
+
+Open a new terminal, then start chatting:
+
+```powershell
+aaroncore
+```
+
 ## AaronCore CLI Direction
 
 The next product shape is narrowing toward:
@@ -37,10 +56,10 @@ Current CLI commands:
 - `aaron memory search "..."`
 - `aaron logs`
 
-On Windows from the repo root, run the installer once, then open a new terminal and type `aaron`.
+If you already cloned the repository, run the local installer once, then open a new terminal and type `aaroncore`.
 Use `aaron` for continuous conversation. `aaron run "..."` is a one-shot command.
 
-Install the command:
+Local install command:
 
 ```powershell
 .\install.bat
@@ -171,16 +190,15 @@ For a clean local checkout today, assume:
 
 Then:
 
-1. Copy the local example configs into real local-only files:
+1. Install AaronCore:
+   - `irm https://raw.githubusercontent.com/agent-wrangler/AaronCore/master/install.ps1 | iex`
+2. Open a new terminal and start AaronCore:
+   - `aaroncore`
+3. If you need your own model/API-key setup, create local config from the examples:
    - `brain/llm_config.local.example.json` -> `brain/llm_config.local.json`
    - `state_data/runtime_store/autolearn_config.local.example.json` -> `state_data/runtime_store/autolearn_config.local.json`
    - `state_data/runtime_store/mcp_servers.example.json` -> `state_data/runtime_store/mcp_servers.json`
-2. Fill in your own local API keys and machine-specific settings.
-3. Install the command:
-   - `.\install.bat`
-4. Open a new terminal and start AaronCore:
-   - `aaron`
-   - or `aaroncore`
+4. Fill in your own local API keys and machine-specific settings.
 
 If you want to use the desktop wrapper:
 
