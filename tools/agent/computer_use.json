@@ -1,21 +1,17 @@
 {
-  "name": "澶╂皵鏌ヨ",
+  "name": "computer_use",
   "keywords": [],
   "anti_keywords": [],
-  "description": "Fetch weather information for a location when current conditions or forecast are needed.",
-  "priority": 6,
-  "category": "淇℃伅鏌ヨ",
-  "icon": "馃尋",
+  "description": "Control local desktop apps through the existing Computer Use skill. Use this for explicit QQ or WeChat messaging, QQ or WeChat listening and auto-reply sessions, reading chat messages, listing or opening social/communication platform handoff targets, browser chat handoffs, and desktop window inspection.",
+  "priority": 8,
+  "category": "desktop",
+  "icon": "terminal",
   "parameters": {
     "type": "object",
     "properties": {
       "user_input": {
         "type": "string",
-        "description": "Original user request."
-      },
-      "city": {
-        "type": "string",
-        "description": "Location inferred from user intent and context."
+        "description": "Original user request, including the target app/chat and the requested action."
       }
     },
     "required": [

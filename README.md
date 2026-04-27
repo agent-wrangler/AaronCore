@@ -59,6 +59,9 @@ Current CLI commands:
 - `aaron`
 - `aaron chat`
 - `aaron setup`
+- `aaron qq`
+- `aaron wechat`
+- `aaron social`
 - `aaron mcp`
 - `aaron run "..."`
 - `aaron doctor`
@@ -71,6 +74,17 @@ Interactive chat opens a terminal UI with a fixed bottom input bar. Use
 `aaron --plain` if you want the simpler print-style terminal mode.
 Use `aaron setup` to choose a model provider and save your API key into the
 local-only config file. You can also type `/setup` inside the terminal UI.
+QQ listening is intentionally LLM-led: start it by saying something like
+`帮我监听 QQ 群「群名」` in AaronCore chat. Use `aaron qq status` or `/qq status`
+to inspect the current listener, and `aaron qq stop` or `/qq stop` to stop the
+listeners tracked by the current AaronCore process.
+WeChat follows the same boundary: start it by saying `帮我监听微信「聊天名」`.
+Use `aaron wechat status` / `/wechat status` or the shorter `aaron wx status`
+to inspect, stop, or view WeChat monitor logs.
+Use `aaron social list` or `/social list` to see social/communication handoff
+targets such as Slack, 飞书, 钉钉, Telegram, WhatsApp, X, 微博, 小红书, and email.
+`aaron social open Slack` opens the platform entry only; sending or posting still
+continues through the normal chat/tool flow.
 Use `aaron mcp` to manage local MCP servers from the terminal. The same wizard
 is available inside chat with `/mcp`.
 

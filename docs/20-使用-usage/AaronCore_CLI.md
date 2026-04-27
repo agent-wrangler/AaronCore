@@ -54,6 +54,9 @@ aaron
 aaroncore
 aaron chat
 aaron setup
+aaron qq status
+aaron wechat status
+aaron social list
 aaron run "..."
 aaron doctor
 aaron memory search "..."
@@ -158,6 +161,31 @@ discover.
 Runs the terminal model setup wizard. Use this when a fresh install has no API
 key yet, or when switching to another provider. The same wizard is available
 from inside chat with `/setup`.
+
+`aaron qq`
+
+Shows and manages QQ listening state. QQ monitoring itself should be started
+through the normal chat path, for example by saying `帮我监听 QQ 群「群名」` inside
+AaronCore. That keeps the request on the existing LLM-led tool-call chain.
+Use `aaron qq status` / `/qq status` to inspect listeners, `aaron qq stop` /
+`/qq stop` to stop listeners tracked by the current AaronCore process, and
+`aaron qq logs` to inspect monitor logs.
+
+`aaron wechat`
+
+Shows and manages WeChat listening state. WeChat monitoring is also started
+through the normal chat path, for example by saying `帮我监听微信「聊天名」`.
+Use `aaron wechat status` / `/wechat status` or `aaron wx status` to inspect
+listeners, `aaron wechat stop` / `/wechat stop` to stop them, and
+`aaron wechat logs` to inspect monitor logs.
+
+`aaron social`
+
+Lists or opens social/communication handoff targets. Use `aaron social list` /
+`/social list` to see the current platform catalog, or `aaron social open Slack`
+to open one platform entry. QQ and WeChat have deeper local messaging/listening
+support; the other platforms are browser/app handoff targets, so sending and
+posting continue through the normal chat/tool flow.
 
 `aaron mcp`
 

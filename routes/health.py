@@ -25,3 +25,12 @@ async def get_qq_monitor_status():
         return qq_monitor_status()
     except Exception:
         return {"active": False, "group": None}
+
+
+@router.get("/wechat/monitor")
+async def get_wechat_monitor_status():
+    try:
+        from core.skills.computer_use import wechat_monitor_status
+        return wechat_monitor_status()
+    except Exception:
+        return {"active": False, "group": None, "chat": None}

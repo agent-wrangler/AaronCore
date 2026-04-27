@@ -12,7 +12,7 @@ from storage.paths import CHAT_UPLOADS_DIR
 from core.runtime_state.state_loader import (
     ENGINE_DIR, CORE_DIR, PRIMARY_STATE_DIR, LOGS_DIR,
     CONTENT_STORE_DIR, MCP_REGISTRY_CACHE_FILE, MCP_SERVERS_FILE,
-    QQ_MONITOR_STATE_FILE, RUNTIME_STORE_DIR, STATE_DATA_DIR,
+    QQ_MONITOR_STATE_FILE, WECHAT_MONITOR_STATE_FILE, RUNTIME_STORE_DIR, STATE_DATA_DIR,
     TASK_STORE_DIR,
     load_current_model,
     load_msg_history, save_msg_history, get_recent_messages,
@@ -504,10 +504,10 @@ app = FastAPI(lifespan=_app_lifespan)
 # 启动时清理残留的监听状态（重启后旧的监听进程已死）
 try:
     import json as _json
-    _monitor_state = QQ_MONITOR_STATE_FILE
-    if _monitor_state.exists():
-        _json.dump({"active": False, "groups": [], "group": None},
-                   open(_monitor_state, "w", encoding="utf-8"), ensure_ascii=False)
+    for _monitor_state in (QQ_MONITOR_STATE_FILE, WECHAT_MONITOR_STATE_FILE):
+        if _monitor_state.exists():
+            _json.dump({"active": False, "groups": [], "group": None},
+                       open(_monitor_state, "w", encoding="utf-8"), ensure_ascii=False)
 except Exception:
     pass
 

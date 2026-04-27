@@ -28,10 +28,207 @@ _PINYIN_MAP = {
     '微信': 'weixin', '钉钉': 'dingding', '飞书': 'feishu', '豆包': 'doubao',
     '网易': 'netease', '百度': 'baidu', '淘宝': 'taobao', '京东': 'jingdong',
     '抖音': 'douyin', '快手': 'kuaishou', '哔哩': 'bilibili', '知乎': 'zhihu',
+    '微博': 'weibo', '小红书': 'xiaohongshu', '领英': 'linkedin',
+    '推特': 'twitter', '电报': 'telegram', '邮箱': 'email',
     '腾讯': 'tencent', '阿里': 'ali', '字节': 'bytedance', '美团': 'meituan',
     '高德': 'amap', '有道': 'youdao', '网易云': 'neteasecloud', '酷狗': 'kugou',
     '迅雷': 'xunlei', '搜狗': 'sougou', '夸克': 'quark',
 }
+
+_SOCIAL_WEB_TARGETS = (
+    {
+        "key": "feishu",
+        "label": "飞书",
+        "url": "https://www.feishu.cn/messenger",
+        "aliases": ("飞书", "feishu", "lark", "larksuite", "飞书网页版", "飞书消息"),
+        "category": "work_chat",
+    },
+    {
+        "key": "dingtalk",
+        "label": "钉钉",
+        "url": "https://im.dingtalk.com",
+        "aliases": ("钉钉", "dingding", "dingtalk", "钉钉网页版"),
+        "category": "work_chat",
+    },
+    {
+        "key": "slack",
+        "label": "Slack",
+        "url": "https://app.slack.com/client",
+        "aliases": ("slack", "Slack"),
+        "category": "work_chat",
+    },
+    {
+        "key": "teams",
+        "label": "Microsoft Teams",
+        "url": "https://teams.microsoft.com",
+        "aliases": ("teams", "microsoft teams", "微软teams", "微软 team"),
+        "category": "work_chat",
+    },
+    {
+        "key": "discord",
+        "label": "Discord",
+        "url": "https://discord.com/app",
+        "aliases": ("discord", "Discord"),
+        "category": "chat",
+    },
+    {
+        "key": "telegram",
+        "label": "Telegram",
+        "url": "https://web.telegram.org",
+        "aliases": ("telegram", "tg", "电报", "telegram web", "telegram网页版"),
+        "category": "chat",
+    },
+    {
+        "key": "whatsapp",
+        "label": "WhatsApp",
+        "url": "https://web.whatsapp.com",
+        "aliases": ("whatsapp", "wa", "whatsapp web", "whatsapp网页版"),
+        "category": "chat",
+    },
+    {
+        "key": "x",
+        "label": "X",
+        "url": "https://x.com",
+        "aliases": ("x", "twitter", "推特", "x.com"),
+        "category": "social",
+    },
+    {
+        "key": "weibo",
+        "label": "微博",
+        "url": "https://weibo.com",
+        "aliases": ("微博", "weibo", "新浪微博"),
+        "category": "social",
+    },
+    {
+        "key": "linkedin",
+        "label": "LinkedIn",
+        "url": "https://www.linkedin.com",
+        "aliases": ("linkedin", "领英", "linked in"),
+        "category": "social",
+    },
+    {
+        "key": "facebook",
+        "label": "Facebook",
+        "url": "https://www.facebook.com",
+        "aliases": ("facebook", "fb", "脸书"),
+        "category": "social",
+    },
+    {
+        "key": "instagram",
+        "label": "Instagram",
+        "url": "https://www.instagram.com",
+        "aliases": ("instagram", "ig", "ins"),
+        "category": "social",
+    },
+    {
+        "key": "threads",
+        "label": "Threads",
+        "url": "https://www.threads.net",
+        "aliases": ("threads", "threads.net"),
+        "category": "social",
+    },
+    {
+        "key": "xiaohongshu",
+        "label": "小红书",
+        "url": "https://www.xiaohongshu.com",
+        "aliases": ("小红书", "xiaohongshu", "rednote", "red note", "xhs"),
+        "category": "social",
+    },
+    {
+        "key": "douyin",
+        "label": "抖音",
+        "url": "https://www.douyin.com",
+        "aliases": ("抖音", "douyin", "tiktok china"),
+        "category": "social",
+    },
+    {
+        "key": "kuaishou",
+        "label": "快手",
+        "url": "https://www.kuaishou.com",
+        "aliases": ("快手", "kuaishou"),
+        "category": "social",
+    },
+    {
+        "key": "bilibili",
+        "label": "Bilibili",
+        "url": "https://www.bilibili.com",
+        "aliases": ("bilibili", "b站", "哔哩哔哩", "哔哩"),
+        "category": "social",
+    },
+    {
+        "key": "zhihu",
+        "label": "知乎",
+        "url": "https://www.zhihu.com",
+        "aliases": ("知乎", "zhihu"),
+        "category": "social",
+    },
+    {
+        "key": "gmail",
+        "label": "Gmail",
+        "url": "https://mail.google.com",
+        "aliases": ("gmail", "谷歌邮箱", "google mail", "gmail邮箱"),
+        "category": "email",
+    },
+    {
+        "key": "outlook",
+        "label": "Outlook",
+        "url": "https://outlook.live.com/mail",
+        "aliases": ("outlook", "hotmail", "微软邮箱", "outlook邮箱"),
+        "category": "email",
+    },
+)
+
+
+def list_social_web_targets() -> list[dict]:
+    return [
+        {
+            "key": item["key"],
+            "label": item["label"],
+            "url": item["url"],
+            "aliases": list(item["aliases"]),
+            "category": item["category"],
+        }
+        for item in _SOCIAL_WEB_TARGETS
+    ]
+
+
+def resolve_social_platform_reference(raw: str) -> dict | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    candidates = {text, _strip_action_words(text)}
+    normalized = {_normalize(item) for item in candidates if item}
+    text_norm = _normalize(text)
+    lowered = text.lower()
+    for target in _SOCIAL_WEB_TARGETS:
+        for alias in target["aliases"]:
+            alias_norm = _normalize(alias)
+            if not alias_norm:
+                continue
+            is_ascii_alias = bool(re.fullmatch(r"[a-z0-9.]+", alias_norm))
+            matched = alias_norm in normalized
+            if not matched and is_ascii_alias:
+                matched = bool(re.search(rf"(?<![a-z0-9]){re.escape(alias_norm)}(?![a-z0-9])", lowered))
+            if not matched and not is_ascii_alias and len(alias_norm) >= 2 and alias_norm in text_norm:
+                matched = True
+            if matched:
+                return {
+                    "target_type": "url",
+                    "value": target["url"],
+                    "label": target["label"],
+                    "key": target["key"],
+                    "category": target["category"],
+                    "resolution": "resolved",
+                    "source": "social_platform_catalog",
+                }
+    return None
+
+
+_KNOWN_SOCIAL_WEB_TARGETS = tuple(
+    (alias, target["url"])
+    for target in _SOCIAL_WEB_TARGETS
+    for alias in target["aliases"]
+)
 
 _KNOWN_WEB_TARGETS = (
     ("百度地图", "https://map.baidu.com"),
@@ -49,7 +246,7 @@ _KNOWN_WEB_TARGETS = (
     ("bilibili", "https://www.bilibili.com"),
     ("知乎", "https://www.zhihu.com"),
     ("微博", "https://weibo.com"),
-)
+) + _KNOWN_SOCIAL_WEB_TARGETS
 
 _WEB_HINT_TOKENS = (
     "网页",
@@ -220,7 +417,11 @@ def _resolve_known_web_target(text: str) -> dict | None:
     for alias, url in _KNOWN_WEB_TARGETS:
         alias_norm = _normalize(alias)
         alias_lower = alias.lower()
-        if alias_lower in lowered or alias_norm in clean_norm:
+        if re.fullmatch(r"[a-z0-9.]+", alias_norm):
+            matched = bool(re.search(rf"(?<![a-z0-9]){re.escape(alias_norm)}(?![a-z0-9])", lowered))
+        else:
+            matched = alias_lower in lowered or alias_norm in clean_norm
+        if matched:
             return {
                 "target_type": "url",
                 "value": url,

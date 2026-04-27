@@ -175,6 +175,9 @@ def print_shortcuts(*, color: bool) -> None:
     rows = [
         ("/help", "show shortcuts"),
         ("/setup", "configure model provider and API key"),
+        ("/qq status", "check or stop QQ listening sessions"),
+        ("/wechat status", "check or stop WeChat listening sessions"),
+        ("/social list", "list social and communication handoff targets"),
         ("/status", "check local runtime"),
         ("/steps", "toggle verbose backend events"),
         ("/quiet", "toggle compact process lines"),
@@ -1395,6 +1398,14 @@ def command_shell_tui(args: argparse.Namespace) -> int:
                 ui.add_system(
                     "/help        show shortcuts\n"
                     "/setup       configure model provider and API key\n"
+                    "/qq status   check QQ listening state\n"
+                    "/qq stop     stop QQ listening in this AaronCore session\n"
+                    "             start by saying: 帮我监听 QQ 群「群名」\n"
+                    "/wechat status check WeChat listening state\n"
+                    "/wechat stop   stop WeChat listening in this AaronCore session\n"
+                    "               start by saying: 帮我监听微信「聊天名」\n"
+                    "/social list   list social/communication platform targets\n"
+                    "/social open Slack  open a platform handoff entry\n"
                     "/mcp         manage MCP servers\n"
                     "/status      check local runtime\n"
                     "/steps       toggle verbose backend events\n"
@@ -1432,6 +1443,56 @@ def command_shell_tui(args: argparse.Namespace) -> int:
                         pass
                 ui.clear()
                 ui.add_system("MCP command finished" if code == 0 else "MCP command did not complete")
+                continue
+            if message == "/qq" or message.startswith("/qq "):
+                with ui.suspended():
+                    try:
+                        qq_args = build_parser().parse_args(["qq", *shlex.split(message)[1:]])
+                        code = command_qq(qq_args)
+                    except SystemExit:
+                        code = 2
+                        print("Usage: /qq [status|stop|logs]")
+                    print()
+                    try:
+                        input("Press Enter to return to AaronCore...")
+                    except EOFError:
+                        pass
+                ui.clear()
+                ui.add_system("QQ command finished" if code == 0 else "QQ command did not complete")
+                continue
+            if message == "/wechat" or message.startswith("/wechat ") or message == "/wx" or message.startswith("/wx ") or message == "/微信" or message.startswith("/微信 "):
+                with ui.suspended():
+                    try:
+                        parts = shlex.split(message)
+                        wechat_args = build_parser().parse_args(["wechat", *parts[1:]])
+                        code = command_wechat(wechat_args)
+                    except SystemExit:
+                        code = 2
+                        print("Usage: /wechat [status|stop|logs]")
+                    print()
+                    try:
+                        input("Press Enter to return to AaronCore...")
+                    except EOFError:
+                        pass
+                ui.clear()
+                ui.add_system("WeChat command finished" if code == 0 else "WeChat command did not complete")
+                continue
+            if message == "/social" or message.startswith("/social ") or message == "/comm" or message.startswith("/comm "):
+                with ui.suspended():
+                    try:
+                        parts = shlex.split(message)
+                        social_args = build_parser().parse_args(["social", *parts[1:]])
+                        code = command_social(social_args)
+                    except SystemExit:
+                        code = 2
+                        print("Usage: /social [list|open <platform>]")
+                    print()
+                    try:
+                        input("Press Enter to return to AaronCore...")
+                    except EOFError:
+                        pass
+                ui.clear()
+                ui.add_system("Social command finished" if code == 0 else "Social command did not complete")
                 continue
             if message in {"/steps", "/verbose"}:
                 args.steps = not bool(args.steps)
@@ -1508,6 +1569,35 @@ def command_shell(args: argparse.Namespace) -> int:
             continue
         if message == "/setup":
             command_setup(args)
+            continue
+        if message == "/qq" or message.startswith("/qq "):
+            try:
+                qq_args = build_parser().parse_args(["qq", *shlex.split(message)[1:]])
+            except SystemExit:
+                print("Usage: /qq [status|stop|logs]")
+                continue
+            qq_args.no_color = args.no_color
+            command_qq(qq_args)
+            continue
+        if message == "/wechat" or message.startswith("/wechat ") or message == "/wx" or message.startswith("/wx ") or message == "/微信" or message.startswith("/微信 "):
+            try:
+                parts = shlex.split(message)
+                wechat_args = build_parser().parse_args(["wechat", *parts[1:]])
+            except SystemExit:
+                print("Usage: /wechat [status|stop|logs]")
+                continue
+            wechat_args.no_color = args.no_color
+            command_wechat(wechat_args)
+            continue
+        if message == "/social" or message.startswith("/social ") or message == "/comm" or message.startswith("/comm "):
+            try:
+                parts = shlex.split(message)
+                social_args = build_parser().parse_args(["social", *parts[1:]])
+            except SystemExit:
+                print("Usage: /social [list|open <platform>]")
+                continue
+            social_args.no_color = args.no_color
+            command_social(social_args)
             continue
         if message in {"/steps", "/verbose"}:
             args.steps = not bool(args.steps)
@@ -2247,6 +2337,271 @@ def command_mcp(args: argparse.Namespace) -> int:
     return 2
 
 
+def _init_qq_cli_runtime():
+    try:
+        from tools.agent import computer_use as qq_runtime
+        from storage.paths import CU_DEBUG_LOG_FILE, QQ_MONITOR_DEBUG_LOG_FILE
+    except Exception as exc:
+        raise AaronCoreError(f"cannot load QQ runtime: {exc}") from exc
+    return qq_runtime, QQ_MONITOR_DEBUG_LOG_FILE, CU_DEBUG_LOG_FILE
+
+
+def _print_qq_status(status: dict, *, color: bool) -> None:
+    active = bool((status or {}).get("active"))
+    groups = (status or {}).get("groups") or []
+    if isinstance(groups, str):
+        groups = [groups]
+    group_text = ", ".join(str(item) for item in groups if str(item).strip())
+    if not group_text:
+        group_text = str((status or {}).get("group") or "")
+    print(status_line("qq monitor", "active" if active else "inactive", status="ok" if active else "info", color=color))
+    print(status_line("groups", group_text or "-", status="info", color=color))
+    pids = (status or {}).get("pids") or {}
+    if isinstance(pids, dict) and pids:
+        pid_text = ", ".join(f"{name}:{pid}" for name, pid in pids.items())
+        print(status_line("worker pids", pid_text, status="info", color=color))
+    updated_at = str((status or {}).get("updated_at") or "").strip()
+    if updated_at:
+        print(status_line("updated", updated_at, status="info", color=color))
+
+
+def _qq_log_paths() -> list[Path]:
+    _qq_runtime, monitor_log, cu_log = _init_qq_cli_runtime()
+    return [Path(monitor_log), Path(cu_log)]
+
+
+def _print_qq_logs(*, lines: int, color: bool) -> int:
+    paths = [path for path in _qq_log_paths() if path.exists()]
+    if not paths:
+        print("No QQ log files found.")
+        return 1
+    for index, path in enumerate(paths):
+        if index:
+            print()
+        print(paint("==> ", "cyan", "bold", enabled=color) + paint(str(path), "gray", enabled=color))
+        print(tail_text(path, lines), end="")
+    return 0
+
+
+def _qq_interactive(args: argparse.Namespace, qq_runtime, *, color: bool) -> int:
+    while True:
+        print()
+        print(paint("AaronCore QQ", "cyan", "bold", enabled=color))
+        print(paint("Say in chat: 帮我监听 QQ 群「群名」. This menu only manages sessions.", "gray", enabled=color))
+        choice = prompt_choice(
+            "Choose an action",
+            [
+                ("status", "show QQ listening status"),
+                ("stop", "stop QQ listening in this AaronCore process"),
+                ("logs", "show QQ monitor logs"),
+                ("quit", "return"),
+            ],
+            default=1,
+            color=color,
+        )
+        if choice == "quit":
+            return 0
+        if choice == "status":
+            _print_qq_status(qq_runtime.qq_monitor_status(), color=color)
+        elif choice == "stop":
+            group = prompt_text("Group name (empty stops all)").strip() or None
+            print(status_line("qq stop", qq_runtime.qq_stop_monitor(group), status="ok", color=color))
+        elif choice == "logs":
+            _print_qq_logs(lines=80, color=color)
+        print()
+        try:
+            input("Press Enter to continue...")
+        except EOFError:
+            return 0
+
+
+def command_qq(args: argparse.Namespace) -> int:
+    color = should_color(sys.stdout, no_color=getattr(args, "no_color", False))
+    try:
+        qq_runtime, _monitor_log, _cu_log = _init_qq_cli_runtime()
+    except AaronCoreError as exc:
+        print(status_line("qq", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+
+    action = str(getattr(args, "qq_command", "") or "")
+    if not action:
+        return _qq_interactive(args, qq_runtime, color=color)
+    if action in {"status", "st"}:
+        _print_qq_status(qq_runtime.qq_monitor_status(), color=color)
+        return 0
+    if action == "stop":
+        group = " ".join(getattr(args, "group", []) or []).strip() or None
+        result = qq_runtime.qq_stop_monitor(group)
+        print(status_line("qq stop", result, status="ok", color=color))
+        return 0
+    if action == "logs":
+        return _print_qq_logs(lines=max(1, int(getattr(args, "lines", 80) or 80)), color=color)
+    return 2
+
+
+def _init_wechat_cli_runtime():
+    try:
+        from tools.agent import computer_use as wechat_runtime
+        from storage.paths import CU_DEBUG_LOG_FILE, WECHAT_MONITOR_DEBUG_LOG_FILE
+    except Exception as exc:
+        raise AaronCoreError(f"cannot load WeChat runtime: {exc}") from exc
+    return wechat_runtime, WECHAT_MONITOR_DEBUG_LOG_FILE, CU_DEBUG_LOG_FILE
+
+
+def _print_wechat_status(status: dict, *, color: bool) -> None:
+    active = bool((status or {}).get("active"))
+    chats = (status or {}).get("chats") or (status or {}).get("groups") or []
+    if isinstance(chats, str):
+        chats = [chats]
+    chat_text = ", ".join(str(item) for item in chats if str(item).strip())
+    if not chat_text:
+        chat_text = str((status or {}).get("chat") or (status or {}).get("group") or "")
+    print(status_line("wechat monitor", "active" if active else "inactive", status="ok" if active else "info", color=color))
+    print(status_line("chats", chat_text or "-", status="info", color=color))
+    pids = (status or {}).get("pids") or {}
+    if isinstance(pids, dict) and pids:
+        pid_text = ", ".join(f"{name}:{pid}" for name, pid in pids.items())
+        print(status_line("worker pids", pid_text, status="info", color=color))
+    updated_at = str((status or {}).get("updated_at") or "").strip()
+    if updated_at:
+        print(status_line("updated", updated_at, status="info", color=color))
+
+
+def _wechat_log_paths() -> list[Path]:
+    _wechat_runtime, monitor_log, cu_log = _init_wechat_cli_runtime()
+    return [Path(monitor_log), Path(cu_log)]
+
+
+def _print_wechat_logs(*, lines: int, color: bool) -> int:
+    paths = [path for path in _wechat_log_paths() if path.exists()]
+    if not paths:
+        print("No WeChat log files found.")
+        return 1
+    for index, path in enumerate(paths):
+        if index:
+            print()
+        print(paint("==> ", "cyan", "bold", enabled=color) + paint(str(path), "gray", enabled=color))
+        print(tail_text(path, lines), end="")
+    return 0
+
+
+def _wechat_interactive(args: argparse.Namespace, wechat_runtime, *, color: bool) -> int:
+    while True:
+        print()
+        print(paint("AaronCore WeChat", "cyan", "bold", enabled=color))
+        print(paint("Say in chat: 帮我监听微信「聊天名」. This menu only manages sessions.", "gray", enabled=color))
+        choice = prompt_choice(
+            "Choose an action",
+            [
+                ("status", "show WeChat listening status"),
+                ("stop", "stop WeChat listening in this AaronCore process"),
+                ("logs", "show WeChat monitor logs"),
+                ("quit", "return"),
+            ],
+            default=1,
+            color=color,
+        )
+        if choice == "quit":
+            return 0
+        if choice == "status":
+            _print_wechat_status(wechat_runtime.wechat_monitor_status(), color=color)
+        elif choice == "stop":
+            chat = prompt_text("Chat name (empty stops all)").strip() or None
+            print(status_line("wechat stop", wechat_runtime.wechat_stop_monitor(chat), status="ok", color=color))
+        elif choice == "logs":
+            _print_wechat_logs(lines=80, color=color)
+        print()
+        try:
+            input("Press Enter to continue...")
+        except EOFError:
+            return 0
+
+
+def command_wechat(args: argparse.Namespace) -> int:
+    color = should_color(sys.stdout, no_color=getattr(args, "no_color", False))
+    try:
+        wechat_runtime, _monitor_log, _cu_log = _init_wechat_cli_runtime()
+    except AaronCoreError as exc:
+        print(status_line("wechat", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+
+    action = str(getattr(args, "wechat_command", "") or "")
+    if not action:
+        return _wechat_interactive(args, wechat_runtime, color=color)
+    if action in {"status", "st"}:
+        _print_wechat_status(wechat_runtime.wechat_monitor_status(), color=color)
+        return 0
+    if action == "stop":
+        chat = " ".join(getattr(args, "chat", []) or []).strip() or None
+        result = wechat_runtime.wechat_stop_monitor(chat)
+        print(status_line("wechat stop", result, status="ok", color=color))
+        return 0
+    if action == "logs":
+        return _print_wechat_logs(lines=max(1, int(getattr(args, "lines", 80) or 80)), color=color)
+    return 2
+
+
+def _init_social_cli_runtime():
+    try:
+        from tools.agent import computer_use as social_runtime
+    except Exception as exc:
+        raise AaronCoreError(f"cannot load social runtime: {exc}") from exc
+    return social_runtime
+
+
+def _social_interactive(args: argparse.Namespace, social_runtime, *, color: bool) -> int:
+    while True:
+        print()
+        print(paint("AaronCore Social", "cyan", "bold", enabled=color))
+        print(paint("List/open handoff targets. Sending and posting continue through normal chat/tool flow.", "gray", enabled=color))
+        choice = prompt_choice(
+            "Choose an action",
+            [
+                ("list", "list social and communication targets"),
+                ("open", "open a platform handoff entry"),
+                ("quit", "return"),
+            ],
+            default=1,
+            color=color,
+        )
+        if choice == "quit":
+            return 0
+        if choice == "list":
+            print(social_runtime.list_social_platforms())
+        elif choice == "open":
+            platform = prompt_text("Platform name", required=True).strip()
+            print(status_line("social open", social_runtime.open_social_platform(platform), status="ok", color=color))
+        print()
+        try:
+            input("Press Enter to continue...")
+        except EOFError:
+            return 0
+
+
+def command_social(args: argparse.Namespace) -> int:
+    color = should_color(sys.stdout, no_color=getattr(args, "no_color", False))
+    try:
+        social_runtime = _init_social_cli_runtime()
+    except AaronCoreError as exc:
+        print(status_line("social", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+
+    action = str(getattr(args, "social_command", "") or "")
+    if not action:
+        return _social_interactive(args, social_runtime, color=color)
+    if action in {"list", "ls"}:
+        print(social_runtime.list_social_platforms())
+        return 0
+    if action == "open":
+        platform = " ".join(getattr(args, "platform", []) or []).strip()
+        if not platform:
+            print("Usage: aaron social open <platform>", file=sys.stderr)
+            return 2
+        print(status_line("social open", social_runtime.open_social_platform(platform), status="ok", color=color))
+        return 0
+    return 2
+
+
 def build_client(args: argparse.Namespace):
     transport = str(getattr(args, "transport", "") or os.environ.get("AARONCORE_TRANSPORT") or "").strip().lower()
     if not transport:
@@ -2284,6 +2639,47 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser = subparsers.add_parser("setup", help="Configure the default LLM provider and API key.")
     setup_parser.add_argument("--test", action="store_true", help="Test the selected model after saving.")
     setup_parser.set_defaults(func=command_setup)
+
+    qq_parser = subparsers.add_parser("qq", help="Inspect and manage QQ listening sessions.")
+    qq_sub = qq_parser.add_subparsers(dest="qq_command")
+    qq_parser.set_defaults(func=command_qq)
+
+    qq_status = qq_sub.add_parser("status", aliases=["st"], help="Show QQ listening status.")
+    qq_status.set_defaults(func=command_qq)
+
+    qq_stop = qq_sub.add_parser("stop", help="Stop QQ listening in this AaronCore process.")
+    qq_stop.add_argument("group", nargs=argparse.REMAINDER, help="Optional group name. Empty stops all tracked QQ monitors.")
+    qq_stop.set_defaults(func=command_qq)
+
+    qq_logs = qq_sub.add_parser("logs", help="Show QQ monitor logs.")
+    qq_logs.add_argument("--lines", type=int, default=80, help="Number of lines to print.")
+    qq_logs.set_defaults(func=command_qq)
+
+    wechat_parser = subparsers.add_parser("wechat", aliases=["wx"], help="Inspect and manage WeChat listening sessions.")
+    wechat_sub = wechat_parser.add_subparsers(dest="wechat_command")
+    wechat_parser.set_defaults(func=command_wechat)
+
+    wechat_status = wechat_sub.add_parser("status", aliases=["st"], help="Show WeChat listening status.")
+    wechat_status.set_defaults(func=command_wechat)
+
+    wechat_stop = wechat_sub.add_parser("stop", help="Stop WeChat listening in this AaronCore process.")
+    wechat_stop.add_argument("chat", nargs=argparse.REMAINDER, help="Optional chat name. Empty stops all tracked WeChat monitors.")
+    wechat_stop.set_defaults(func=command_wechat)
+
+    wechat_logs = wechat_sub.add_parser("logs", help="Show WeChat monitor logs.")
+    wechat_logs.add_argument("--lines", type=int, default=80, help="Number of lines to print.")
+    wechat_logs.set_defaults(func=command_wechat)
+
+    social_parser = subparsers.add_parser("social", aliases=["comm"], help="List or open social/communication handoff targets.")
+    social_sub = social_parser.add_subparsers(dest="social_command")
+    social_parser.set_defaults(func=command_social)
+
+    social_list = social_sub.add_parser("list", aliases=["ls"], help="List supported social/communication targets.")
+    social_list.set_defaults(func=command_social)
+
+    social_open = social_sub.add_parser("open", help="Open a platform handoff target.")
+    social_open.add_argument("platform", nargs=argparse.REMAINDER, help="Platform name, for example Slack or 飞书.")
+    social_open.set_defaults(func=command_social)
 
     mcp_parser = subparsers.add_parser("mcp", help="Manage local MCP servers from the terminal.")
     mcp_sub = mcp_parser.add_subparsers(dest="mcp_command")
