@@ -137,18 +137,18 @@ terminal input
 - 初始化 shared/runtime 依赖
 - 初始化 memory / feedback / route / reply formatter 等模块
 - 创建 FastAPI app
-- 挂载静态资源
+- 挂载 API 路由和工具结果所需的媒体文件路由
 - `include_router(...)` 挂上 `routes/*`
 
 也就是说，`agent_final.py` **现在更像 app composition root**，而不是继续承担大块业务逻辑。
 
-## 3.3 HTTP / 页面托管
+## 3.3 HTTP / API 边界
 
-当前页面和资源托管边界是：
+当前 HTTP 边界主要服务 CLI/direct runtime 和兼容 API：
 
-- `output.html`：前端页面外壳
-- `/static`：静态资源挂载
-- `routes/*.py`：API 路由
+- `/chat` / `/health` / `/models` 等 `routes/*.py` API 路由
+- `/screenshots` / `/chat-uploads`：工具结果和附件 URL 所需的媒体路由
+- `/`：轻量运行状态 JSON，不再托管 Web 客户端首页
 
 当前已知关键 route 族包括：
 

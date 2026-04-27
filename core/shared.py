@@ -150,8 +150,6 @@ ENGINE_DIR = None
 PRIMARY_STATE_DIR = None
 PRIMARY_HISTORY_FILE = None
 LEGACY_HISTORY_FILE = None
-HTML_FILE = None
-RESTORED_OUTPUT_JS_FILE = None
 
 # load_json
 load_json = None

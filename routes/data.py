@@ -29,14 +29,10 @@ RUNTIME_GRAPH_EXCLUDED_DIRS = {
     "archive",
     "brain",
     "home",
-    "desktop_runtime",
 }
 RUNTIME_GRAPH_CLUSTER_META = {
     "runtime": {"label": "运行节点", "rank": 0, "color": "#0f766e"},
     "root": {"label": "主入口", "rank": 10, "color": "#334155"},
-    "pages": {"label": "页面壳子", "rank": 20, "color": "#7c3aed"},
-    "static_js": {"label": "前端脚本", "rank": 30, "color": "#2563eb"},
-    "static_css": {"label": "页面样式", "rank": 40, "color": "#0f766e"},
     "routes": {"label": "路由层", "rank": 50, "color": "#ea580c"},
     "core": {"label": "核心执行", "rank": 60, "color": "#dc2626"},
     "tools": {"label": "辅助工具", "rank": 70, "color": "#0891b2"},
@@ -47,10 +43,6 @@ RUNTIME_GRAPH_CLUSTER_META = {
 }
 RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "agent_final.py": "后端主入口",
-    "output.html": "主聊天页面",
-    "runtime_graph_view.html": "独立图谱页面",
-    "companion.html": "陪伴页面",
-    "AI_Agent研究进展.html": "研究进展页面",
     "routes/__init__.py": "路由层初始化",
     "routes/chat.py": "聊天主路由",
     "routes/chat_recovered.py": "恢复聊天路由",
@@ -107,33 +99,6 @@ RUNTIME_GRAPH_FILE_ZH_OVERRIDES = {
     "skills/builtin/story.py": "故事技能",
     "skills/builtin/task_plan.py": "任务规划技能",
     "skills/builtin/weather.py": "天气技能",
-    "static/js/app.js": "主页面控制脚本",
-    "static/js/app/chrome.js": "主页面主题与壳层脚本",
-    "static/js/app/boot.js": "主页面启动与恢复脚本",
-    "static/js/app/views.js": "主页面视图切换脚本",
-    "static/js/app/skills.js": "主页面技能商店脚本",
-    "static/js/app/models.js": "主页面模型与统计脚本",
-    "static/js/awareness.js": "感知面板脚本",
-    "static/js/chat.js": "聊天脚本索引",
-    "static/js/chat/process.js": "聊天过程工具",
-    "static/js/chat/composer.js": "聊天输入与消息壳",
-    "static/js/chat/stream.js": "聊天流式与步骤渲染",
-    "static/js/chat/task-ui.js": "聊天任务与提问卡片",
-    "static/js/companion.js": "陪伴页脚本",
-    "static/js/docs.js": "文档页脚本",
-    "static/js/entity.js": "实体页脚本",
-    "static/js/i18n.js": "国际化脚本",
-    "static/js/lab.js": "实验页脚本",
-    "static/js/memory.js": "记忆页脚本",
-    "static/js/runtime_graph.js": "运行图谱脚本",
-    "static/js/output-init.js": "首页收尾启动脚本",
-    "static/js/settings.js": "设置页脚本索引",
-    "static/js/settings/models-base.js": "设置页模型管理基础脚本",
-    "static/js/settings/models-ui.js": "设置页模型管理界面脚本",
-    "static/js/stats.js": "统计页脚本",
-    "static/js/utils.js": "前端工具集",
-    "static/css/main.css": "主页面样式",
-    "static/css/companion.css": "陪伴页样式",
     "tests/test_runtime_graph_route.py": "图谱路由测试",
 }
 RUNTIME_GRAPH_TOKEN_ZH = {
@@ -257,12 +222,6 @@ def _runtime_graph_cluster_meta(cluster: str) -> dict:
 
 def _runtime_graph_cluster_for(rel_path: Path) -> str:
     rel_posix = rel_path.as_posix()
-    if rel_posix.endswith(".html"):
-        return "pages"
-    if rel_posix.startswith("static/js/"):
-        return "static_js"
-    if rel_posix.startswith("static/css/"):
-        return "static_css"
     if rel_posix.startswith("routes/"):
         return "routes"
     if rel_posix.startswith("capability_registry/"):
@@ -343,12 +302,6 @@ def _runtime_graph_file_subtitle(rel_path: Path, cluster: str) -> str:
         return f"{base}路由"
     if cluster == "core":
         return f"{base}核心模块"
-    if cluster == "static_js":
-        return f"{base}前端脚本"
-    if cluster == "static_css":
-        return f"{base}页面样式"
-    if cluster == "pages":
-        return f"{base}页面"
     if cluster == "tests":
         return f"{base}测试"
     if cluster == "tools":

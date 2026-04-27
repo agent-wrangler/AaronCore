@@ -13,20 +13,13 @@ class RuntimeGraphRouteTests(unittest.TestCase):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
 
-    def test_runtime_graph_builds_static_map_and_recent_run(self):
+    def test_runtime_graph_builds_runtime_map_and_recent_run(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             self._write(root, "agent_final.py", "from routes import data\n")
             self._write(root, "routes/data.py", 'from core import shared\n@router.get("/memory")\ndef x():\n    return {}\n')
             self._write(root, "core/shared.py", "VALUE = 1\n")
-            self._write(
-                root,
-                "output.html",
-                '<link rel="stylesheet" href="/static/css/main.css">\n<script src="/static/js/app.js"></script>\n',
-            )
-            self._write(root, "static/js/app.js", "import './graph.js';\nfetch('/memory')\n")
-            self._write(root, "static/js/graph.js", "console.log('graph');\n")
-            self._write(root, "static/css/main.css", "body{color:#111;}\n")
+            self._write(root, "aaron.py", "from routes import data\n")
             self._write(root, "state_data/should_hide.py", "print('ignore')\n")
 
             repo_file = str(root / "routes" / "data.py").replace("/", "\\")
@@ -59,20 +52,18 @@ class RuntimeGraphRouteTests(unittest.TestCase):
         edge_set = {(edge["source"], edge["target"], edge["kind"]) for edge in result["edges"]}
 
         self.assertIn("agent_final.py", node_ids)
+        self.assertIn("aaron.py", node_ids)
         self.assertIn("routes/data.py", node_ids)
-        self.assertIn("output.html", node_ids)
-        self.assertIn("static/js/app.js", node_ids)
         self.assertIn("tool:folder_explore", node_ids)
         self.assertNotIn("state_data/should_hide.py", node_ids)
 
         self.assertIn(("agent_final.py", "routes/data.py", "import"), edge_set)
-        self.assertIn(("output.html", "static/js/app.js", "asset"), edge_set)
-        self.assertIn(("static/js/app.js", "routes/data.py", "api"), edge_set)
+        self.assertIn(("aaron.py", "routes/data.py", "import"), edge_set)
         self.assertEqual(node_map["agent_final.py"]["subtitle"], "后端主入口")
         self.assertEqual(node_map["routes/data.py"]["subtitle"], "数据路由")
-        self.assertEqual(node_map["static/js/app.js"]["subtitle"], "主页面控制脚本")
+        self.assertEqual(node_map["aaron.py"]["subtitle"], "aaron根目录文件")
 
-        self.assertEqual(result["summary"]["file_count"], 7)
+        self.assertEqual(result["summary"]["file_count"], 4)
         self.assertEqual(len(result["runs"]), 1)
         run = result["runs"][0]
         self.assertEqual(run["status"], "error")
@@ -82,27 +73,10 @@ class RuntimeGraphRouteTests(unittest.TestCase):
         self.assertIn("routes/data.py", run["node_ids"])
         self.assertEqual(len(run["external_nodes"]), 1)
 
-    def test_runtime_graph_matches_route_prefixes_from_frontend_calls(self):
+    def test_runtime_graph_keeps_api_route_nodes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             self._write(root, "routes/lab.py", '@router.post("/lab/start/{exp_id}")\ndef x():\n    return {}\n')
-            self._write(root, "static/js/lab.js", "fetch('/lab/start/' + expId, {method:'POST'})\n")
-
-            with patch.object(data_module.S, "ENGINE_DIR", root), patch.object(
-                data_module.S,
-                "load_msg_history",
-                lambda: [],
-            ):
-                result = asyncio.run(data_module.get_runtime_graph(limit=2))
-
-        edge_set = {(edge["source"], edge["target"], edge["kind"]) for edge in result["edges"]}
-        self.assertIn(("static/js/lab.js", "routes/lab.py", "api"), edge_set)
-
-    def test_runtime_graph_ignores_root_only_asset_refs(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            self._write(root, "output.html", '<a href="/">home</a>\n<script src="/static/js/app.js"></script>\n')
-            self._write(root, "static/js/app.js", "console.log('ok')\n")
 
             with patch.object(data_module.S, "ENGINE_DIR", root), patch.object(
                 data_module.S,
@@ -112,5 +86,20 @@ class RuntimeGraphRouteTests(unittest.TestCase):
                 result = asyncio.run(data_module.get_runtime_graph(limit=2))
 
         node_ids = {node["id"] for node in result["nodes"]}
-        self.assertIn("output.html", node_ids)
-        self.assertIn("static/js/app.js", node_ids)
+        self.assertIn("routes/lab.py", node_ids)
+
+    def test_runtime_graph_excludes_removed_web_client_files_when_absent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._write(root, "aaron.py", "print('cli')\n")
+
+            with patch.object(data_module.S, "ENGINE_DIR", root), patch.object(
+                data_module.S,
+                "load_msg_history",
+                lambda: [],
+            ):
+                result = asyncio.run(data_module.get_runtime_graph(limit=2))
+
+        node_ids = {node["id"] for node in result["nodes"]}
+        self.assertIn("aaron.py", node_ids)
+        self.assertNotIn("output.html", node_ids)

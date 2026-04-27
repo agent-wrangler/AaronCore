@@ -1,6 +1,7 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
 requests>=2.31
+mcp>=1.0
 pydantic>=2
 sse-starlette>=2
 jinja2>=3.1

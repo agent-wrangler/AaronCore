@@ -441,15 +441,9 @@ L4 不负责生成任务清单，但会影响任务计划的风格和取向。
   - 发 `plan` SSE
   - 保存到 `process.plan`
 
-- `static/js/chat.js`
-  - 处理 `plan` SSE
-  - 把 plan 渲染到 pending assistant message 顶部
-
-- `static/js/app.js`
-  - 历史回放时渲染 `process.plan`
-
-- `static/css/main.css`
-  - 补轻量 plan-strip 样式
+- `aaron.py`
+  - 在终端 TUI 中呈现 `plan` / process 事件
+  - 历史与运行状态保持终端原生显示，不再依赖 Web 前端资源
 
 ## 15. 一句话总结
 

@@ -20,8 +20,6 @@
   FastAPI 路由层。
 - `/brain`
   模型配置、人格和高层思考相关逻辑。
-- `/static`
-  前端静态资源。
 
 ### 技能与能力
 
@@ -58,8 +56,8 @@
   终端 CLI 入口，默认走 direct in-process runtime。
 - `agent_final.py`
   Python 后端/API 调试入口。
-- `output.html`
-  服务端拼装的首页外壳。
+- `requirements-cli.txt`
+  终端运行依赖清单。
 
 ## 已做的根目录清理
 

@@ -885,7 +885,7 @@ executor 统一执行
 - `fs_protocol / executor` 统一产出 `verification_detail`
 - `routes/chat.py` 的 `run_event` 会带上它
 - `memory/__init__.py` 的 `L6 skill_runs` 会落它
-- `routes/data.py + static/js/memory.js` 会把它展示到 `L6（执行轨迹）` 卡片
+- `routes/data.py` 会把它暴露给运行时/调试 API
 
 所以现在 `verification_detail` 不再只是底座里的一段内部字段，而开始变成：
 

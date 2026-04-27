@@ -7,7 +7,6 @@ import sys
 import requests
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, Response
 from storage.paths import CHAT_UPLOADS_DIR
 
 from core.runtime_state.state_loader import (
@@ -15,7 +14,6 @@ from core.runtime_state.state_loader import (
     CONTENT_STORE_DIR, MCP_REGISTRY_CACHE_FILE, MCP_SERVERS_FILE,
     QQ_MONITOR_STATE_FILE, RUNTIME_STORE_DIR, STATE_DATA_DIR,
     TASK_STORE_DIR,
-    HTML_FILE, RESTORED_OUTPUT_JS_FILE,
     load_current_model,
     load_msg_history, save_msg_history, get_recent_messages,
     load_l3_long_term, load_l4_persona, load_l5_knowledge,
@@ -44,8 +42,6 @@ S.debug_log = LOGS_DIR / "chat_debug.log"
 S.ENGINE_DIR = ENGINE_DIR
 S.PRIMARY_STATE_DIR = PRIMARY_STATE_DIR
 S.PRIMARY_HISTORY_FILE = PRIMARY_HISTORY_FILE
-S.HTML_FILE = HTML_FILE
-S.RESTORED_OUTPUT_JS_FILE = RESTORED_OUTPUT_JS_FILE
 
 # ── 便捷别名（保持向后兼容，测试 patch agent_final.debug_write 等） ──
 debug_write = S.debug_write
@@ -516,12 +512,8 @@ except Exception:
     pass
 
 from fastapi.staticfiles import StaticFiles as _StaticFiles
-_static_dir = ENGINE_DIR / "static"
-_runtime_graph_view_file = ENGINE_DIR / "runtime_graph_view.html"
-if _static_dir.is_dir():
-    app.mount("/static", _StaticFiles(directory=str(_static_dir)), name="static")
 
-# 截图文件服务（供前端内联显示）
+# Media routes used by tool results and attachment URLs.
 from pathlib import Path as _Path
 _screenshots_dir = _Path.home() / 'Desktop' / 'Nova截图'
 _screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -563,62 +555,13 @@ app.include_router(_chat_router)
 app.include_router(_lab_router)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def home():
-    if HTML_FILE.exists():
-        try:
-            html = HTML_FILE.read_text(encoding="utf-8")
-            static_dir = ENGINE_DIR / "static"
-            css_file = static_dir / "css" / "main.css"
-            if css_file.exists():
-                css = css_file.read_text(encoding="utf-8")
-                import re as _re_inline
-                css_pattern = r'<link rel="stylesheet" href="/static/css/main\.css[^"]*">'
-                css_match = _re_inline.search(css_pattern, html)
-                if css_match:
-                    html = html[:css_match.start()] + f"<style>{css}</style>" + html[css_match.end():]
-            js_dir = static_dir / "js"
-            js_order = ["i18n.js", "utils.js", "awareness.js", "chat.js", "memory.js", "settings.js", "docs.js", "stats.js", "app.js"]
-            for js_name in js_order:
-                js_file = js_dir / js_name
-                if js_file.exists():
-                    js = js_file.read_text(encoding="utf-8")
-                    pattern = f'<script src="/static/js/{_re_inline.escape(js_name)}[^"]*"></script>'
-                    match = _re_inline.search(pattern, html)
-                    if match:
-                        html = html[:match.start()] + f"<script>{js}</script>" + html[match.end():]
-            return Response(content=html, media_type="text/html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
-        except Exception:
-            pass
-    return Response(content="<html><head><meta charset='UTF-8'><title>AaronCore</title></head><body><h1>AaronCore</h1><p>\u670d\u52a1\u8fd0\u884c\u4e2d</p></body></html>", media_type="text/html", headers={"Cache-Control": "no-cache"})
-
-
-@app.get("/runtime_graph_view", response_class=HTMLResponse)
-async def runtime_graph_view():
-    if _runtime_graph_view_file.exists():
-        return Response(
-            content=_runtime_graph_view_file.read_text(encoding="utf-8"),
-            media_type="text/html",
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
-        )
-    return Response(
-        content="<html><head><meta charset='UTF-8'><title>Runtime Graph</title></head><body><p>runtime_graph_view.html missing</p></body></html>",
-        media_type="text/html",
-        headers={"Cache-Control": "no-cache"},
-    )
-
-
-@app.get("/__restored_output.js")
-async def get_restored_output_js():
-    if not RESTORED_OUTPUT_JS_FILE.exists():
-        return Response(
-            content="console.error('missing restored output js');",
-            media_type="application/javascript; charset=utf-8",
-        )
-    return Response(
-        content=RESTORED_OUTPUT_JS_FILE.read_text(encoding="utf-8"),
-        media_type="application/javascript; charset=utf-8",
-    )
+    return {
+        "status": "ok",
+        "surface": "cli",
+        "message": "AaronCore runtime is running. Use `aaron` for the terminal UI.",
+    }
 
 
 if __name__ == "__main__":

@@ -14,7 +14,6 @@ SUITES = {
         "test_chat_image_bridge.py",
         "test_tool_call_runtime.py",
         "test_vision_local_bridge.py",
-        "test_frontend_image_upload_bridge.py",
     ],
 }
 

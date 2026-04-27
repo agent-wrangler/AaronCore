@@ -1395,6 +1395,7 @@ def command_shell_tui(args: argparse.Namespace) -> int:
                 ui.add_system(
                     "/help        show shortcuts\n"
                     "/setup       configure model provider and API key\n"
+                    "/mcp         manage MCP servers\n"
                     "/status      check local runtime\n"
                     "/steps       toggle verbose backend events\n"
                     "/quiet       toggle compact process lines\n"
@@ -1415,6 +1416,22 @@ def command_shell_tui(args: argparse.Namespace) -> int:
                 ui.config_status = model_config_status()
                 ui.clear()
                 ui.add_system("model setup finished" if code == 0 else "model setup did not complete")
+                continue
+            if message == "/mcp" or message.startswith("/mcp "):
+                with ui.suspended():
+                    try:
+                        mcp_args = build_parser().parse_args(["mcp", *shlex.split(message)[1:]])
+                        code = command_mcp(mcp_args)
+                    except SystemExit:
+                        code = 2
+                        print("Usage: /mcp [list|add|search|install|connect|disconnect|remove]")
+                    print()
+                    try:
+                        input("Press Enter to return to AaronCore...")
+                    except EOFError:
+                        pass
+                ui.clear()
+                ui.add_system("MCP command finished" if code == 0 else "MCP command did not complete")
                 continue
             if message in {"/steps", "/verbose"}:
                 args.steps = not bool(args.steps)
@@ -1876,6 +1893,360 @@ def command_setup(args: argparse.Namespace) -> int:
     return 0
 
 
+def _init_mcp_cli_runtime():
+    try:
+        from core import mcp_client, mcp_registry
+        from storage.paths import MCP_REGISTRY_CACHE_FILE, MCP_SERVERS_FILE
+    except Exception as exc:
+        raise AaronCoreError(f"cannot load MCP runtime: {exc}") from exc
+
+    mcp_client.init(debug_write=lambda _stage, _data: None, servers_path=MCP_SERVERS_FILE)
+    mcp_registry.init(debug_write=lambda _stage, _data: None, cache_path=MCP_REGISTRY_CACHE_FILE)
+    return mcp_client, mcp_registry, MCP_SERVERS_FILE
+
+
+def _run_async_blocking(coro):
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        result_queue: queue.Queue = queue.Queue(maxsize=1)
+
+        def runner():
+            try:
+                result_queue.put((True, asyncio.run(coro)))
+            except Exception as exc:
+                result_queue.put((False, exc))
+
+        thread = threading.Thread(target=runner, daemon=True)
+        thread.start()
+        thread.join()
+        ok, payload = result_queue.get()
+        if ok:
+            return payload
+        raise payload
+    return asyncio.run(coro)
+
+
+def _parse_env_overrides(values: list[str] | None) -> dict:
+    env = {}
+    for item in values or []:
+        key, sep, value = str(item or "").partition("=")
+        key = key.strip()
+        if not sep or not key:
+            raise AaronCoreError("Environment values must use KEY=VALUE.")
+        env[key] = value
+    return env
+
+
+def _is_secret_env_name(name: str) -> bool:
+    upper = str(name or "").upper()
+    return any(token in upper for token in ("KEY", "TOKEN", "SECRET", "PASSWORD", "AUTH", "CREDENTIAL"))
+
+
+def _prompt_env_value(name: str, *, description: str = "", required: bool = False) -> str:
+    label = name
+    if description:
+        label += f" - {description}"
+    while True:
+        if _is_secret_env_name(name):
+            value = getpass.getpass(f"{label} (input hidden): ").strip()
+        else:
+            value = input(f"{label}: ").strip()
+        if value or not required:
+            return value
+        print("This value is required.")
+
+
+def _prompt_env_vars(env_vars: list[dict] | None) -> dict:
+    env = {}
+    for item in env_vars or []:
+        name = str((item or {}).get("name") or "").strip()
+        if not name:
+            continue
+        value = _prompt_env_value(
+            name,
+            description=str((item or {}).get("description") or "").strip(),
+            required=bool((item or {}).get("required")),
+        )
+        if value:
+            env[name] = value
+    return env
+
+
+def _print_mcp_servers(mcp_client, *, color: bool, servers_file: Path | None = None) -> None:
+    available = mcp_client.is_available()
+    print(status_line("mcp package", "available" if available else "missing: pip install mcp", status="ok" if available else "warn", color=color))
+    if servers_file:
+        print(status_line("config file", str(servers_file), status="ok", color=color))
+
+    status = mcp_client.get_server_status()
+    if not status:
+        print("No MCP servers configured.")
+        return
+
+    for name, info in status.items():
+        connected = bool(info.get("connected"))
+        enabled = bool(info.get("enabled", True))
+        tools = info.get("tools") or []
+        state = "connected" if connected else ("enabled" if enabled else "disabled")
+        print()
+        print(paint(name, "cyan", "bold", enabled=color))
+        print(f"  state: {state}")
+        print(f"  transport: {info.get('transport', 'stdio')}")
+        print(f"  tools: {len(tools)}")
+        for tool in tools[:8]:
+            if isinstance(tool, dict):
+                desc = str(tool.get("description") or "").strip()
+                desc = f" - {desc[:80]}" if desc else ""
+                print(f"    - {tool.get('name')}{desc}")
+        if len(tools) > 8:
+            print(f"    ... {len(tools) - 8} more")
+
+
+def _print_mcp_result(label: str, result: dict, *, color: bool) -> int:
+    ok = bool((result or {}).get("ok"))
+    detail = "ok" if ok else str((result or {}).get("error") or result)
+    print(status_line(label, detail, status="ok" if ok else "fail", color=color))
+    tools = (result or {}).get("tools") or (result or {}).get("connect", {}).get("tools") or []
+    if tools:
+        print(f"tools discovered: {len(tools)}")
+        for tool in tools[:10]:
+            if isinstance(tool, dict):
+                print(f"  - {tool.get('name')}")
+    return 0 if ok else 1
+
+
+def _mcp_select_configured_server(mcp_client, title: str, *, color: bool) -> str:
+    config = mcp_client.load_mcp_config()
+    servers = sorted((config.get("servers") or {}).keys())
+    if not servers:
+        print("No MCP servers configured.")
+        return ""
+    choices = [(name, name) for name in servers]
+    return prompt_choice(title, choices, default=1, color=color)
+
+
+def _mcp_add_manual(mcp_client, *, color: bool) -> int:
+    print()
+    print(paint("Add MCP server", "cyan", "bold", enabled=color))
+    name = prompt_text("Name", required=True)
+    command = prompt_text("Command", default="npx", required=True)
+    raw_args = prompt_text("Arguments (shell syntax, optional)")
+    try:
+        mcp_args = shlex.split(raw_args) if raw_args else []
+    except ValueError as exc:
+        print(status_line("args", str(exc), status="fail", color=color))
+        return 1
+
+    env = {}
+    raw_env_names = prompt_text("Environment variable names (comma-separated, optional)")
+    for env_name in [part.strip() for part in raw_env_names.split(",") if part.strip()]:
+        value = _prompt_env_value(env_name)
+        if value:
+            env[env_name] = value
+
+    result = mcp_client.add_server(name, command, mcp_args, "stdio", env if env else None)
+    code = _print_mcp_result("saved", result, color=color)
+    if code == 0 and ask_yes_no("Connect now? This starts the configured MCP command on this machine.", default=False):
+        connect_result = _run_async_blocking(mcp_client.connect_server(name))
+        return _print_mcp_result("connect", connect_result, color=color)
+    return code
+
+
+def _mcp_search_registry(mcp_registry, query: str, *, color: bool, limit: int = 12) -> list[dict]:
+    print(status_line("registry", "searching...", status="info", color=color))
+    results = mcp_registry.search_registry(query)[:limit]
+    if not results:
+        print("No registry matches found.")
+        return []
+    print()
+    print(paint("Registry matches", "cyan", "bold", enabled=color))
+    for index, item in enumerate(results, 1):
+        title = item.get("title") or item.get("name")
+        npm = item.get("npm_package") or ""
+        desc = str(item.get("description") or "").strip()
+        print(f"  {index}. {title}")
+        if npm:
+            print(f"     package: {npm}")
+        if desc:
+            print(f"     {desc[:120]}")
+    return results
+
+
+def _mcp_install_registry(mcp_client, mcp_registry, name: str, *, color: bool, env_overrides: dict | None = None, prompt_env: bool = False, connect: bool = False) -> int:
+    config = mcp_registry.get_install_config(name)
+    if not config:
+        print(status_line("registry", f"not found: {name}", status="fail", color=color))
+        return 1
+
+    meta = config.get("_meta") or {}
+    env = dict(config.get("env") or {})
+    if prompt_env:
+        prompted = _prompt_env_vars(meta.get("env_vars") or [])
+        env.update(prompted)
+    if env_overrides:
+        env.update(env_overrides)
+    env = {key: value for key, value in env.items() if value}
+
+    result = mcp_client.add_server(
+        config["name"],
+        config["command"],
+        config["args"],
+        config["transport"],
+        env if env else None,
+    )
+    code = _print_mcp_result("saved", result, color=color)
+    if code != 0:
+        return code
+    print(status_line("command", " ".join([config["command"], *config["args"]]), status="info", color=color))
+    if connect:
+        connect_result = _run_async_blocking(mcp_client.connect_server(config["name"]))
+        return _print_mcp_result("connect", connect_result, color=color)
+    return 0
+
+
+def _mcp_install_from_search(mcp_client, mcp_registry, *, color: bool) -> int:
+    query = prompt_text("Search MCP registry", required=True)
+    results = _mcp_search_registry(mcp_registry, query, color=color)
+    if not results:
+        return 1
+    choices = [(str(index), f"{item.get('title') or item.get('name')} ({item.get('name')})") for index, item in enumerate(results, 1)]
+    selected = prompt_choice("Install which MCP?", choices, default=1, color=color)
+    target = results[int(selected) - 1]
+    connect = ask_yes_no("Connect after saving? This may download/start the MCP package.", default=False)
+    return _mcp_install_registry(
+        mcp_client,
+        mcp_registry,
+        str(target.get("name") or ""),
+        color=color,
+        prompt_env=True,
+        connect=connect,
+    )
+
+
+def _mcp_interactive(args: argparse.Namespace, mcp_client, mcp_registry, servers_file: Path) -> int:
+    color = should_color(sys.stdout, no_color=getattr(args, "no_color", False))
+    while True:
+        print()
+        print(paint("AaronCore MCP", "cyan", "bold", enabled=color))
+        print(paint("Terminal-native MCP management. Servers are saved locally.", "gray", enabled=color))
+        choice = prompt_choice(
+            "Choose an action",
+            [
+                ("list", "list configured MCP servers"),
+                ("add", "add a MCP server manually"),
+                ("search", "search registry and install"),
+                ("connect", "connect a configured server"),
+                ("disconnect", "disconnect a server"),
+                ("remove", "remove a saved server"),
+                ("quit", "return"),
+            ],
+            default=1,
+            color=color,
+        )
+        if choice == "quit":
+            return 0
+        if choice == "list":
+            _print_mcp_servers(mcp_client, color=color, servers_file=servers_file)
+        elif choice == "add":
+            _mcp_add_manual(mcp_client, color=color)
+        elif choice == "search":
+            _mcp_install_from_search(mcp_client, mcp_registry, color=color)
+        elif choice == "connect":
+            name = _mcp_select_configured_server(mcp_client, "Connect which server?", color=color)
+            if name:
+                result = _run_async_blocking(mcp_client.connect_server(name))
+                _print_mcp_result("connect", result, color=color)
+        elif choice == "disconnect":
+            name = _mcp_select_configured_server(mcp_client, "Disconnect which server?", color=color)
+            if name:
+                result = _run_async_blocking(mcp_client.disconnect_server(name))
+                _print_mcp_result("disconnect", result, color=color)
+        elif choice == "remove":
+            name = _mcp_select_configured_server(mcp_client, "Remove which server?", color=color)
+            if name and ask_yes_no(f"Remove saved MCP server '{name}'?", default=False):
+                _run_async_blocking(mcp_client.disconnect_server(name))
+                result = mcp_client.remove_server(name)
+                _print_mcp_result("remove", result, color=color)
+        print()
+        try:
+            input("Press Enter to continue...")
+        except EOFError:
+            return 0
+
+
+def command_mcp(args: argparse.Namespace) -> int:
+    color = should_color(sys.stdout, no_color=getattr(args, "no_color", False))
+    try:
+        mcp_client, mcp_registry, servers_file = _init_mcp_cli_runtime()
+    except AaronCoreError as exc:
+        print(status_line("mcp", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+
+    action = str(getattr(args, "mcp_command", "") or "")
+    try:
+        if not action:
+            return _mcp_interactive(args, mcp_client, mcp_registry, servers_file)
+        if action in {"list", "ls"}:
+            _print_mcp_servers(mcp_client, color=color, servers_file=servers_file)
+            return 0
+        if action == "add":
+            env = _parse_env_overrides(getattr(args, "env", []))
+            mcp_args = []
+            raw_args = str(getattr(args, "mcp_arg_string", "") or "").strip()
+            if raw_args:
+                try:
+                    mcp_args.extend(shlex.split(raw_args))
+                except ValueError as exc:
+                    raise AaronCoreError(f"Cannot parse --args: {exc}") from exc
+            mcp_args.extend(getattr(args, "mcp_args", []) or [])
+            result = mcp_client.add_server(
+                args.name,
+                args.command,
+                mcp_args,
+                "stdio",
+                env if env else None,
+            )
+            code = _print_mcp_result("saved", result, color=color)
+            if code == 0 and getattr(args, "connect", False):
+                connect_result = _run_async_blocking(mcp_client.connect_server(args.name))
+                return _print_mcp_result("connect", connect_result, color=color)
+            return code
+        if action == "search":
+            query = " ".join(getattr(args, "query", [])).strip()
+            _mcp_search_registry(mcp_registry, query, color=color, limit=20)
+            return 0
+        if action == "install":
+            env = _parse_env_overrides(getattr(args, "env", []))
+            return _mcp_install_registry(
+                mcp_client,
+                mcp_registry,
+                args.name,
+                color=color,
+                env_overrides=env,
+                connect=bool(getattr(args, "connect", False)),
+            )
+        if action == "connect":
+            result = _run_async_blocking(mcp_client.connect_server(args.name))
+            return _print_mcp_result("connect", result, color=color)
+        if action == "disconnect":
+            result = _run_async_blocking(mcp_client.disconnect_server(args.name))
+            return _print_mcp_result("disconnect", result, color=color)
+        if action == "remove":
+            if not getattr(args, "yes", False) and not ask_yes_no(f"Remove saved MCP server '{args.name}'?", default=False):
+                print("Cancelled.")
+                return 1
+            _run_async_blocking(mcp_client.disconnect_server(args.name))
+            result = mcp_client.remove_server(args.name)
+            return _print_mcp_result("remove", result, color=color)
+    except AaronCoreError as exc:
+        print(status_line("mcp", str(exc), status="fail", color=color), file=sys.stderr)
+        return 1
+    return 2
+
+
 def build_client(args: argparse.Namespace):
     transport = str(getattr(args, "transport", "") or os.environ.get("AARONCORE_TRANSPORT") or "").strip().lower()
     if not transport:
@@ -1913,6 +2284,45 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser = subparsers.add_parser("setup", help="Configure the default LLM provider and API key.")
     setup_parser.add_argument("--test", action="store_true", help="Test the selected model after saving.")
     setup_parser.set_defaults(func=command_setup)
+
+    mcp_parser = subparsers.add_parser("mcp", help="Manage local MCP servers from the terminal.")
+    mcp_sub = mcp_parser.add_subparsers(dest="mcp_command")
+    mcp_parser.set_defaults(func=command_mcp)
+
+    mcp_list = mcp_sub.add_parser("list", aliases=["ls"], help="List configured MCP servers.")
+    mcp_list.set_defaults(func=command_mcp)
+
+    mcp_add = mcp_sub.add_parser("add", help="Add a MCP server by command.")
+    mcp_add.add_argument("name", help="Local server name.")
+    mcp_add.add_argument("--command", required=True, help="Command to start the MCP server, for example npx or node.")
+    mcp_add.add_argument("--args", dest="mcp_arg_string", default="", help='Startup args as one shell-style string, for example "-y package".')
+    mcp_add.add_argument("--arg", dest="mcp_args", action="append", default=[], help="One startup argument. Repeat for multiple args.")
+    mcp_add.add_argument("--env", action="append", default=[], help="Environment value as KEY=VALUE. Repeat for multiple vars.")
+    mcp_add.add_argument("--connect", action="store_true", help="Connect immediately after saving.")
+    mcp_add.set_defaults(func=command_mcp)
+
+    mcp_search = mcp_sub.add_parser("search", help="Search the MCP registry.")
+    mcp_search.add_argument("query", nargs=argparse.REMAINDER, help="Search terms.")
+    mcp_search.set_defaults(func=command_mcp)
+
+    mcp_install = mcp_sub.add_parser("install", help="Install a registry MCP server into local config.")
+    mcp_install.add_argument("name", help="Registry server name.")
+    mcp_install.add_argument("--env", action="append", default=[], help="Environment value as KEY=VALUE. Repeat for multiple vars.")
+    mcp_install.add_argument("--connect", action="store_true", help="Connect immediately after saving.")
+    mcp_install.set_defaults(func=command_mcp)
+
+    mcp_connect = mcp_sub.add_parser("connect", help="Connect a configured MCP server.")
+    mcp_connect.add_argument("name", help="Local server name.")
+    mcp_connect.set_defaults(func=command_mcp)
+
+    mcp_disconnect = mcp_sub.add_parser("disconnect", help="Disconnect a connected MCP server.")
+    mcp_disconnect.add_argument("name", help="Local server name.")
+    mcp_disconnect.set_defaults(func=command_mcp)
+
+    mcp_remove = mcp_sub.add_parser("remove", help="Remove a saved MCP server.")
+    mcp_remove.add_argument("name", help="Local server name.")
+    mcp_remove.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    mcp_remove.set_defaults(func=command_mcp)
 
     doctor_parser = subparsers.add_parser("doctor", help="Check runtime and local files.")
     doctor_parser.set_defaults(func=command_doctor)

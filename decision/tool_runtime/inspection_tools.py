@@ -3,12 +3,7 @@
 from pathlib import Path
 
 
-_PATH_FIXES = {
-    "frontend/css/": "static/css/",
-    "frontend/js/": "static/js/",
-    "css/": "static/css/",
-    "js/": "static/js/",
-}
+_PATH_FIXES = {}
 _SPECIAL_USER_DIRS = ("Desktop", "Documents", "Downloads")
 _BROWSER_HINTS = [
     "chrome",

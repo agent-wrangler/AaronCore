@@ -242,9 +242,9 @@ def check_model_ready(model_id: str, cfg: dict) -> str | None:
     api_key = str((cfg or {}).get("api_key") or "").strip()
     base_url = str((cfg or {}).get("base_url") or "").strip()
     if not base_url:
-        return f"{model_id} is missing Base URL. Fill it in on the Settings page first."
+        return f"{model_id} is missing Base URL. Run `aaron setup`, or use `/setup` inside chat."
     if is_placeholder_key(api_key):
-        return f"{model_id} is missing API Key. Fill it in on the Settings page first."
+        return f"{model_id} is missing API Key. Run `aaron setup`, or use `/setup` inside chat."
     return None
 
 

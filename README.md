@@ -59,6 +59,7 @@ Current CLI commands:
 - `aaron`
 - `aaron chat`
 - `aaron setup`
+- `aaron mcp`
 - `aaron run "..."`
 - `aaron doctor`
 - `aaron memory search "..."`
@@ -70,6 +71,8 @@ Interactive chat opens a terminal UI with a fixed bottom input bar. Use
 `aaron --plain` if you want the simpler print-style terminal mode.
 Use `aaron setup` to choose a model provider and save your API key into the
 local-only config file. You can also type `/setup` inside the terminal UI.
+Use `aaron mcp` to manage local MCP servers from the terminal. The same wizard
+is available inside chat with `/mcp`.
 
 Local install command:
 

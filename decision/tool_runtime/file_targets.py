@@ -15,13 +15,10 @@ _AARONCORE_PROTECTED_ROOTS = (
     Path("core"),
     Path("routes"),
     Path("shell"),
-    Path("static/js"),
-    Path("static/css"),
     Path("configs"),
 )
 _AARONCORE_PROTECTED_FILES = (
     Path("agent_final.py"),
-    Path("output.html"),
     Path("start_aaroncore.bat"),
     Path("AGENTS.md"),
     Path("CLAUDE.md"),

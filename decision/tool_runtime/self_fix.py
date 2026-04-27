@@ -5,7 +5,6 @@ import re
 
 
 SAFE_FILE_PREFIXES = [
-    "static/",
     "configs/",
     "tools/agent/",
     "skills/builtin/",
@@ -14,12 +13,7 @@ SAFE_FILE_PREFIXES = [
     "state_data/",
 ]
 
-PATH_FIXES = {
-    "frontend/css/": "static/css/",
-    "frontend/js/": "static/js/",
-    "css/": "static/css/",
-    "js/": "static/js/",
-}
+PATH_FIXES = {}
 
 
 def normalize_file_hint(file_path: str) -> str:

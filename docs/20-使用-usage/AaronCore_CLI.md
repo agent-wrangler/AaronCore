@@ -159,6 +159,13 @@ Runs the terminal model setup wizard. Use this when a fresh install has no API
 key yet, or when switching to another provider. The same wizard is available
 from inside chat with `/setup`.
 
+`aaron mcp`
+
+Opens the terminal MCP manager. It can list configured MCP servers, add a server
+manually, search the MCP registry, install a server into local config, connect,
+disconnect, or remove saved servers. The same wizard is available from inside
+chat with `/mcp`.
+
 `aaron run "..."`
 
 Starts or attaches to the local runtime, sends one message, streams the response,
